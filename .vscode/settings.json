@@ -1,0 +1,40 @@
+{
+    "editor.codeActionsOnSave": {
+        "source.organizeImports": "explicit"
+    },
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.formatOnSave": true,
+    "editor.formatOnPaste": true,
+    "prettier.configPath": ".prettierrc",
+    "prettier.prettierPath": "./node_modules/prettier",
+    "prettier.requireConfig": true,
+    "prettier.useEditorConfig": true,
+    "prettier.resolveGlobalModules": false,
+    "[typescript]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "[typescriptreact]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "[json]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "editor.detectIndentation": false,
+    "tailwindCSS.experimental.configFile": "packages/ui/src/styles/globals.css",
+    // effect repo setup 
+    "typescript.preferences.autoImportFileExcludePatterns": [
+        "repos/**"
+    ],
+    "javascript.preferences.autoImportFileExcludePatterns": [
+        "repos/**"
+    ],
+    "files.exclude": {
+        "repos/**": true
+    },
+    "files.watcherExclude": {
+        "repos/**": true
+    },
+    "search.exclude": {
+        "repos/**": true
+    }
+}
