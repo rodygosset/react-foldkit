@@ -1,0 +1,24 @@
+node_modules
+.DS_Store
+dist
+dist-ssr
+*.local
+.env*
+.tanstack
+.wrangler
+.output
+.vinxi
+__unconfig*
+
+# turbo
+.turbo
+
+# typescript
+*.tsbuildinfo
+
+packages/react-foldkit/TODO.md
+
+.pnpm-store
+packages/react-foldkit/test/docs/.generated/
+
+packages/react-foldkit/coverage/

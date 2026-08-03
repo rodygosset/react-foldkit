@@ -1,0 +1,64 @@
+{
+	"$schema": "./node_modules/@effect/tsgo/oxlint-schema.json",
+	"extends": [
+		"./node_modules/@effect/tsgo/oxlint-presets/recommended.json",
+		"./node_modules/@effect/tsgo/oxlint-presets/effect-native.json"
+	],
+	"ignorePatterns": [
+		"repos/**",
+		"**/node_modules/**",
+		"**/dist/**",
+		"**/build/**",
+		"**/.output/**",
+		"**/.tanstack/**",
+		"**/.turbo/**",
+		"**/coverage/**",
+		"packages/react-foldkit/test/docs/.generated/**",
+		"**/routeTree.gen.ts"
+	],
+	"overrides": [
+		{
+			"files": ["packages/react-foldkit/scripts/*.mjs"],
+			"rules": {
+				// Standalone verification commands use Node at their filesystem and process boundary.
+				"effecttsgo/node-builtin-import": "off"
+			}
+		},
+		{
+			"files": [
+				"packages/react-foldkit/src/react/providerSession.ts",
+				"packages/react-foldkit/src/react/react.tsx"
+			],
+			"rules": {
+				// Crash-reporting boundary: observers receive Cause<unknown>
+				// from crashed stores and the public onError callback keeps an
+				// unknown error channel by design; failures are contained
+				// with catchCause and never escape (functions return never).
+				"effecttsgo/any-unknown-in-error-context": "off"
+			}
+		},
+		{
+			"files": ["packages/react-foldkit/test/types/**"],
+			"rules": {
+				// Negative type tests: `if (false)` blocks, bare
+				// @ts-expect-error expressions, and un-awaited Effect values
+				// are the assertion idiom in this directory.
+				"no-constant-condition": "off",
+				"no-unused-expressions": "off",
+				"effecttsgo/floating-effect": "off",
+				"typescript/no-floating-promises": "off"
+			}
+		},
+		{
+			"files": [
+				"packages/react-foldkit/src/query.test.ts",
+				"apps/web/src/examples/api-cache-http-api/**"
+			],
+			"rules": {
+				// Deliberate exercise of the unstable effect/http-api surface
+				// in tests and the http-api example.
+				"effecttsgo/unstable-api-usage": "off"
+			}
+		}
+	]
+}
