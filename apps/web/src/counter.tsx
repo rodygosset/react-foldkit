@@ -1,8 +1,8 @@
-import * as Command from "@workspace/ree/command"
-import * as M from "@workspace/ree/message"
-import { make } from "@workspace/ree/react"
-import * as Struct from "@workspace/ree/struct"
-import type * as Update from "@workspace/ree/update"
+import * as Command from "@workspace/react-foldkit/command"
+import { m } from "@workspace/react-foldkit/message"
+import { make } from "@workspace/react-foldkit/react"
+import * as Struct from "@workspace/react-foldkit/struct"
+import type * as Update from "@workspace/react-foldkit/update"
 import { Button } from "@workspace/ui/components/button"
 import { Match, Schema } from "effect"
 import { MinusIcon, PlusIcon, RotateCcwIcon } from "lucide-react"
@@ -14,9 +14,9 @@ const Model = Schema.Struct({
 
 type Model = typeof Model.Type
 
-const ClickedDecrement = M.make("ClickedDecrement")
-const ClickedIncrement = M.make("ClickedIncrement")
-const ClickedReset = M.make("ClickedReset")
+const ClickedDecrement = m("ClickedDecrement")
+const ClickedIncrement = m("ClickedIncrement")
+const ClickedReset = m("ClickedReset")
 
 const Message = Schema.Union([ClickedDecrement, ClickedIncrement, ClickedReset])
 type Message = typeof Message.Type

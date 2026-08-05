@@ -1,6 +1,6 @@
 export * as Command from "./command"
 export * as Message from "./message"
-export * as Runtime from "./store"
+export * as Store from "./store"
 export * as Struct from "./struct"
 export * as Submodel from "./submodel"
 export type * as Update from "./update"

@@ -10,7 +10,7 @@
 		"strict": true,
 		"noEmit": true,
 		"paths": {
-			"@workspace/ree/*": ["./src/*"]
+			"@workspace/react-foldkit/*": ["./src/*"]
 		}
 	},
 	"include": ["."],

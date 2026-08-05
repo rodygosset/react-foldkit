@@ -23,7 +23,7 @@
 		"react": "^19.2.6",
 		"react-dom": "^19.2.6",
 		"tailwindcss": "^4",
-		"@workspace/ree": "workspace:*"
+		"@workspace/react-foldkit": "workspace:*"
 	},
 	"devDependencies": {
 		"@tanstack/devtools-vite": "latest",

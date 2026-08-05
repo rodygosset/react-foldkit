@@ -31,36 +31,23 @@ export type DelegateConfig<ParentModel, ParentMessage, ChildModel, ChildMessage,
  * Parent update helper: run a child's update, embed the next child Model, remap
  * Commands through `wrap`, and either return as-is (`Option.none`) or hand an
  * OutMessage to `onOut` (`Option.some`).
- *
- * ```ts
- * GotFormMessage: ({ message }) =>
- *   Submodel.delegate({
- *     get: (m) => m.form,
- *     set: (m, form) => Struct.evo(m, { form: () => form }),
- *     update: Form.update,
- *     wrap: (message) => GotFormMessage({ message }),
- *     onOut: (out, model, commands) =>
- *       Match.value(out).pipe(
- *         Match.tagsExhaustive({
- *           Submitted: ({ text }) => [
- *             Struct.evo(model, { items: (items) => [...items, text] }),
- *             commands,
- *           ],
- *         }),
- *       ),
- *   })(model, message)
- * ```
  */
-export const delegate = <ParentModel, ParentMessage, ChildModel, ChildMessage, OutMessage, R = never>(
+export function delegate<ParentModel, ParentMessage, ChildModel, ChildMessage, OutMessage, R = never>(
 	config: DelegateConfig<ParentModel, ParentMessage, ChildModel, ChildMessage, OutMessage, R>
-): ((parent: ParentModel, message: ChildMessage) => Update.Return<ParentModel, ParentMessage, R>) =>
-	function run(parent: ParentModel, message: ChildMessage) {
+): (parent: ParentModel, message: ChildMessage) => Update.Return<ParentModel, ParentMessage, R> {
+	return function run(parent: ParentModel, message: ChildMessage) {
 		const [nextChild, childCommands, maybeOut] = config.update(config.get(parent), message)
-		const commands = Command.mapMessages(childCommands, config.wrap)
+		// Foldkit's Command type branches on Schema.Top; mapMessages uses a simpler
+		// structural shape. Cast at this boundary so delegate stays typed for apps.
+		const commands = Command.mapMessages(childCommands as never, config.wrap) as Update.Commands<
+			ParentMessage,
+			R
+		>
 		const model = config.set(parent, nextChild)
 
 		return Option.match(maybeOut, {
-			onNone: () => [model, commands] as const,
+			onNone: () => [model, commands] as Update.Return<ParentModel, ParentMessage, R>,
 			onSome: (out: OutMessage) => config.onOut(out, model, commands),
 		})
 	}
+}

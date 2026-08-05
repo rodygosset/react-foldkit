@@ -1,7 +1,7 @@
-import * as Command from "@workspace/ree/command"
-import * as M from "@workspace/ree/message"
-import * as Struct from "@workspace/ree/struct"
-import type * as Update from "@workspace/ree/update"
+import * as Command from "@workspace/react-foldkit/command"
+import { m } from "@workspace/react-foldkit/message"
+import * as Struct from "@workspace/react-foldkit/struct"
+import type * as Update from "@workspace/react-foldkit/update"
 import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
 import { Label } from "@workspace/ui/components/label"
@@ -14,14 +14,14 @@ export const Model = Schema.Struct({
 
 export type Model = typeof Model.Type
 
-const ChangedDraft = M.make("ChangedDraft", { text: Schema.String })
-const ClickedSubmit = M.make("ClickedSubmit")
+const ChangedDraft = m("ChangedDraft", { text: Schema.String })
+const ClickedSubmit = m("ClickedSubmit")
 
 export const Message = Schema.Union([ChangedDraft, ClickedSubmit])
 export type Message = typeof Message.Type
 
 /** Fact for the parent: the user committed a non-empty draft. */
-export const Submitted = M.make("Submitted", { text: Schema.String })
+export const Submitted = m("Submitted", { text: Schema.String })
 export const OutMessage = Schema.Union([Submitted])
 export type OutMessage = typeof OutMessage.Type
 

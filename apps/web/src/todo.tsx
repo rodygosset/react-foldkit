@@ -1,11 +1,11 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import { getRouteApi, Link } from "@tanstack/react-router"
-import * as Command from "@workspace/ree/command"
-import * as M from "@workspace/ree/message"
-import { make } from "@workspace/ree/react"
-import * as Struct from "@workspace/ree/struct"
-import * as Submodel from "@workspace/ree/submodel"
-import type * as Update from "@workspace/ree/update"
+import * as Command from "@workspace/react-foldkit/command"
+import { m } from "@workspace/react-foldkit/message"
+import { make } from "@workspace/react-foldkit/react"
+import * as Struct from "@workspace/react-foldkit/struct"
+import * as Submodel from "@workspace/react-foldkit/submodel"
+import type * as Update from "@workspace/react-foldkit/update"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import { Checkbox } from "@workspace/ui/components/checkbox"
@@ -39,23 +39,23 @@ type Flags = {
 	filter: Filter
 }
 
-const GotFormMessage = M.make("GotFormMessage", { message: TodoForm.Message })
-const ToggledItem = M.make("ToggledItem", { id: Schema.Number })
-const RemovedItem = M.make("RemovedItem", { id: Schema.Number })
-const ClickedClearCompleted = M.make("ClickedClearCompleted")
-const ClickedRetryLoad = M.make("ClickedRetryLoad")
+const GotFormMessage = m("GotFormMessage", { message: TodoForm.Message })
+const ToggledItem = m("ToggledItem", { id: Schema.Number })
+const RemovedItem = m("RemovedItem", { id: Schema.Number })
+const ClickedClearCompleted = m("ClickedClearCompleted")
+const ClickedRetryLoad = m("ClickedRetryLoad")
 /** Silent ack from the NavigateFilter Command — Model already updated in update. */
-const NavigationDone = M.make("NavigationDone")
+const NavigationDone = m("NavigationDone")
 
-const SucceededFetchTodos = M.make("SucceededFetchTodos", {
+const SucceededFetchTodos = m("SucceededFetchTodos", {
 	items: Schema.Array(TodoItem),
 })
-const FailedFetchTodos = M.make("FailedFetchTodos")
-const SucceededWriteTodos = M.make("SucceededWriteTodos", {
+const FailedFetchTodos = m("FailedFetchTodos")
+const SucceededWriteTodos = m("SucceededWriteTodos", {
 	items: Schema.Array(TodoItem),
 })
-const FailedWriteTodos = M.make("FailedWriteTodos")
-const ClearedCompleted = M.make("ClearedCompleted", {
+const FailedWriteTodos = m("FailedWriteTodos")
+const ClearedCompleted = m("ClearedCompleted", {
 	items: Schema.Array(TodoItem),
 })
 

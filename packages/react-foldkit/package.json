@@ -1,0 +1,32 @@
+{
+	"name": "@workspace/react-foldkit",
+	"version": "0.0.0",
+	"type": "module",
+	"private": true,
+	"scripts": {
+		"lint": "eslint",
+		"format": "prettier --write \"**/*.{ts,tsx}\"",
+		"typecheck": "tsc --noEmit",
+		"test": "vitest run",
+		"test:watch": "vitest",
+		"coverage": "vitest run --coverage"
+	},
+	"exports": {
+		".": "./src/index.ts",
+		"./react": "./src/react.tsx",
+		"./*": "./src/*.ts"
+	},
+	"dependencies": {
+		"effect": "4.0.0-beta.103",
+		"foldkit": "workspace:*",
+		"react": "^19.2.6"
+	},
+	"devDependencies": {
+		"@effect/vitest": "4.0.0-beta.103",
+		"@types/react": "^19",
+		"@vitest/coverage-v8": "^4.1.9",
+		"happy-dom": "^20.10.4",
+		"typescript": "^6",
+		"vitest": "^4.1.9"
+	}
+}

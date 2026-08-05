@@ -4,7 +4,7 @@ import { Context, Effect, Layer, Ref } from "effect"
 import type { TodoItem } from "./model"
 
 const initialTodos: readonly TodoItem[] = [
-	{ id: 1, text: "Read the REE loop", done: true },
+	{ id: 1, text: "Read the Foldkit loop", done: true },
 	{ id: 2, text: "Wire URL search into Messages", done: false },
 	{ id: 3, text: "Keep views free of navigate()", done: false },
 ]

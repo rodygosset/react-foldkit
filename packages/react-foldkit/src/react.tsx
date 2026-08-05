@@ -1,40 +1,46 @@
 import { Equal } from "effect"
 import React from "react"
-import type * as Update from "./update"
 import * as Store from "./store"
+import type * as Update from "./update"
 
 /**
- * Builds React bindings for a store config. The Provider boots the store once
- * from the `init` prop (Flags / URL / loader data), then children subscribe
- * and dispatch as usual.
+ * Builds React bindings for a store config. The Provider boots the store in
+ * `useEffect` (Strict Mode–safe), then children subscribe and dispatch.
+ *
+ * The underlying {@link Store.boot} matches Foldkit’s command loop: cached
+ * Layer, interrupt registry, microtask-deferred forks, boot barrier, drain
+ * budget, and Scope teardown on dispose.
  */
 export function make<Model, Message, R = never>(config: Store.Config<Model, Message, R>) {
 	const StoreContext = React.createContext<Store.Store<Model, Message> | null>(null)
 
 	function useStore() {
 		const value = React.useContext(StoreContext)
-		if (value === null) throw new Error("ree hooks must be used within a <Provider>")
+		if (value === null) throw new Error("react-foldkit hooks must be used within a <Provider>")
 
 		return value
 	}
 
-	function Provider(props: {
-		init: Update.Return<Model, Message, R>
-		children: React.ReactNode
-	}) {
-		const storeRef = React.useRef<Store.Store<Model, Message> | null>(null)
-		if (storeRef.current === null) {
-			storeRef.current = Store.boot(config, props.init)
-		}
+	function Provider(props: { init: Update.Return<Model, Message, R>; children: React.ReactNode }) {
+		// Capture mount init only — parent remounts via `key` when Flags change.
+		const initRef = React.useRef(props.init)
+		const [store, setStore] = React.useState<Store.Store<Model, Message> | null>(null)
 
-		React.useEffect(function disposeStoreOnUnmount() {
+		React.useEffect(function manageStoreLifetime() {
+			// Boot in the effect so React Strict Mode's setup → cleanup → setup
+			// cycle disposes the first store and leaves a live second one. Booting
+			// during render + disposing in cleanup leaves Context pointing at a
+			// disposed store (init Commands complete as no-ops → stuck "loading").
+			const active = Store.boot(config, initRef.current)
+			setStore(active)
 			return function dispose() {
-				storeRef.current?.dispose()
-				storeRef.current = null
+				active.dispose()
 			}
 		}, [])
 
-		return <StoreContext.Provider value={storeRef.current}>{props.children}</StoreContext.Provider>
+		if (store === null) return null
+
+		return <StoreContext.Provider value={store}>{props.children}</StoreContext.Provider>
 	}
 
 	const useDispatch = () => useStore().dispatch
