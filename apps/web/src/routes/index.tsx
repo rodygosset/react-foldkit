@@ -14,8 +14,13 @@ const examples = [
 	},
 	{
 		title: "Todo",
-		blurb: "Draft input, list items, and toggles — still one update function.",
+		blurb: "AsyncData, Commands, and URL Flags — still one update function.",
 		options: linkOptions({ to: "/todo", search: { filter: "all" } }),
+	},
+	{
+		title: "Stopwatch",
+		blurb: "Subscriptions tick while a Model gate is true — Start/Stop without remounting.",
+		options: linkOptions({ to: "/stopwatch" }),
 	},
 ]
 

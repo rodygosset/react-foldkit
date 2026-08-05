@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as CounterRouteImport } from './routes/counter'
+import { Route as StopwatchRouteImport } from './routes/stopwatch'
 import { Route as TodoRouteImport } from './routes/todo'
 
 const IndexRoute = IndexRouteImport.update({
@@ -23,6 +24,11 @@ const CounterRoute = CounterRouteImport.update({
   path: '/counter',
   getParentRoute: () => rootRouteImport,
 } as any)
+const StopwatchRoute = StopwatchRouteImport.update({
+  id: '/stopwatch',
+  path: '/stopwatch',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TodoRoute = TodoRouteImport.update({
   id: '/todo',
   path: '/todo',
@@ -32,30 +38,34 @@ const TodoRoute = TodoRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/counter': typeof CounterRoute
+  '/stopwatch': typeof StopwatchRoute
   '/todo': typeof TodoRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/counter': typeof CounterRoute
+  '/stopwatch': typeof StopwatchRoute
   '/todo': typeof TodoRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/counter': typeof CounterRoute
+  '/stopwatch': typeof StopwatchRoute
   '/todo': typeof TodoRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/counter' | '/todo'
+  fullPaths: '/' | '/counter' | '/stopwatch' | '/todo'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/counter' | '/todo'
-  id: '__root__' | '/' | '/counter' | '/todo'
+  to: '/' | '/counter' | '/stopwatch' | '/todo'
+  id: '__root__' | '/' | '/counter' | '/stopwatch' | '/todo'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   CounterRoute: typeof CounterRoute
+  StopwatchRoute: typeof StopwatchRoute
   TodoRoute: typeof TodoRoute
 }
 
@@ -75,6 +85,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CounterRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/stopwatch': {
+      id: '/stopwatch'
+      path: '/stopwatch'
+      fullPath: '/stopwatch'
+      preLoaderRoute: typeof StopwatchRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/todo': {
       id: '/todo'
       path: '/todo'
@@ -88,6 +105,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CounterRoute: CounterRoute,
+  StopwatchRoute: StopwatchRoute,
   TodoRoute: TodoRoute,
 }
 export const routeTree = rootRouteImport

@@ -1,89 +1,107 @@
 {
-	"name": "@workspace/react-foldkit",
-	"version": "0.0.0",
+	"name": "@rodygosset/react-foldkit",
+	"version": "0.1.0",
+	"description": "React TEA bindings over Foldkit vocabulary (Command, Message, Update, Subscription, AsyncData).",
 	"type": "module",
-	"private": true,
+	"license": "MIT",
+	"author": "Rody Gosset",
+	"keywords": ["react", "tea", "elm-architecture", "effect", "foldkit"],
 	"scripts": {
-		"build": "tsup",
+		"build": "tsup && tsup --config tsup.eslint.config.ts",
+		"prepack": "bun run build",
 		"lint": "eslint",
 		"format": "prettier --write \"**/*.{ts,tsx}\"",
 		"typecheck": "tsc --noEmit",
 		"test": "vitest run",
 		"test:watch": "vitest",
-		"coverage": "vitest run --coverage"
+		"coverage": "vitest run --coverage",
+		"pack:dry": "bun run build && npm pack --dry-run"
 	},
 	"exports": {
-		".": "./src/index.ts",
-		"./react": "./src/react.tsx",
-		"./asyncData": "./src/asyncData.ts",
-		"./command": "./src/command.ts",
-		"./message": "./src/message.ts",
-		"./schema": "./src/schema.ts",
-		"./store": "./src/store.ts",
-		"./struct": "./src/struct.ts",
-		"./submodel": "./src/submodel.ts",
-		"./update": "./src/update.ts"
-	},
-	"publishConfig": {
-		"exports": {
-			".": {
-				"types": "./dist/index.d.ts",
-				"import": "./dist/index.js"
-			},
-			"./react": {
-				"types": "./dist/react.d.ts",
-				"import": "./dist/react.js"
-			},
-			"./asyncData": {
-				"types": "./dist/asyncData.d.ts",
-				"import": "./dist/asyncData.js"
-			},
-			"./command": {
-				"types": "./dist/command.d.ts",
-				"import": "./dist/command.js"
-			},
-			"./message": {
-				"types": "./dist/message.d.ts",
-				"import": "./dist/message.js"
-			},
-			"./schema": {
-				"types": "./dist/schema.d.ts",
-				"import": "./dist/schema.js"
-			},
-			"./store": {
-				"types": "./dist/store.d.ts",
-				"import": "./dist/store.js"
-			},
-			"./struct": {
-				"types": "./dist/struct.d.ts",
-				"import": "./dist/struct.js"
-			},
-			"./submodel": {
-				"types": "./dist/submodel.d.ts",
-				"import": "./dist/submodel.js"
-			},
-			"./update": {
-				"types": "./dist/update.d.ts",
-				"import": "./dist/update.js"
-			}
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js"
 		},
-		"main": "./dist/index.js",
-		"types": "./dist/index.d.ts"
+		"./react": {
+			"types": "./dist/react.d.ts",
+			"import": "./dist/react.js"
+		},
+		"./asyncData": {
+			"types": "./dist/asyncData.d.ts",
+			"import": "./dist/asyncData.js"
+		},
+		"./command": {
+			"types": "./dist/command.d.ts",
+			"import": "./dist/command.js"
+		},
+		"./message": {
+			"types": "./dist/message.d.ts",
+			"import": "./dist/message.js"
+		},
+		"./schema": {
+			"types": "./dist/schema.d.ts",
+			"import": "./dist/schema.js"
+		},
+		"./store": {
+			"types": "./dist/store.d.ts",
+			"import": "./dist/store.js"
+		},
+		"./struct": {
+			"types": "./dist/struct.d.ts",
+			"import": "./dist/struct.js"
+		},
+		"./submodel": {
+			"types": "./dist/submodel.d.ts",
+			"import": "./dist/submodel.js"
+		},
+		"./subscription": {
+			"types": "./dist/subscription.d.ts",
+			"import": "./dist/subscription.js"
+		},
+		"./update": {
+			"types": "./dist/update.d.ts",
+			"import": "./dist/update.js"
+		},
+		"./eslint": {
+			"types": "./eslint/dist/index.d.ts",
+			"import": "./eslint/dist/index.js",
+			"default": "./eslint/dist/index.js"
+		}
 	},
-	"files": ["dist"],
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"files": [
+		"dist",
+		"eslint/dist",
+		"eslint/README.md",
+		"LICENSE",
+		"README.md",
+		"CHANGELOG.md",
+		"THIRD-PARTY-NOTICES.md"
+	],
 	"peerDependencies": {
 		"effect": "4.0.0-beta.103",
+		"eslint": "^9",
 		"react": "^19.2.6"
 	},
+	"peerDependenciesMeta": {
+		"eslint": {
+			"optional": true
+		}
+	},
 	"dependencies": {
-		"effect": "4.0.0-beta.103",
-		"react": "^19.2.6"
+		"picomatch": "^4.0.5"
 	},
 	"devDependencies": {
 		"@effect/vitest": "4.0.0-beta.103",
+		"@types/estree": "^1.0.8",
+		"@types/picomatch": "^4.0.3",
 		"@types/react": "^19",
 		"@vitest/coverage-v8": "^4.1.9",
+		"effect": "4.0.0-beta.103",
+		"eslint": "^9",
 		"happy-dom": "^20.10.4",
+		"react": "^19.2.6",
 		"tsup": "^8.5.0",
 		"typescript": "^6",
 		"vitest": "^4.1.9"

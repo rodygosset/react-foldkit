@@ -20,6 +20,7 @@ export default defineConfig({
 		store: "src/store.ts",
 		struct: "src/struct.ts",
 		submodel: "src/submodel.ts",
+		subscription: "src/subscription.ts",
 		update: "src/update.ts",
 	},
 	format: ["esm"],
@@ -45,6 +46,7 @@ export default defineConfig({
 			"foldkit/message": path.join(foldkitSrc, "message/public.ts"),
 			"foldkit/schema": path.join(foldkitSrc, "schema/public.ts"),
 			"foldkit/struct": path.join(foldkitSrc, "struct/public.ts"),
+			"foldkit/subscription": path.join(foldkitSrc, "subscription/public.ts"),
 			"foldkit/update": path.join(foldkitSrc, "update/public.ts"),
 		}
 	},

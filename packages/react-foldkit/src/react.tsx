@@ -8,8 +8,9 @@ import type * as Update from "./update"
  * `useEffect` (Strict Mode–safe), then children subscribe and dispatch.
  *
  * The underlying {@link Store.boot} matches Foldkit’s command loop: cached
- * Layer, interrupt registry, microtask-deferred forks, boot barrier, drain
- * budget, and Scope teardown on dispose.
+ * Layer, interrupt registry, microtask scheduler + deferred forks, boot
+ * barrier, drain budget, model-gated Subscriptions, and Scope teardown on
+ * dispose.
  */
 export function make<Model, Message, R = never>(config: Store.Config<Model, Message, R>) {
 	const StoreContext = React.createContext<Store.Store<Model, Message> | null>(null)
