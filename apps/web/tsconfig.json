@@ -24,6 +24,9 @@
             ],
             "@workspace/ui/*": [
                 "../../packages/ui/src/*"
+            ],
+            "@workspace/ree/*": [
+                "../../packages/ree/src/*"
             ]
         },
         /* Bundler mode */

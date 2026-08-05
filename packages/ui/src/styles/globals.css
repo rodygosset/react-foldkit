@@ -1,7 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/inter";
 
 @custom-variant dark (&:is(.dark *));
 @source "../../../apps/**/*.{ts,tsx}";
@@ -9,7 +8,7 @@
 @source "../**/*.{ts,tsx}";
 
 @theme inline {
-	--font-heading: var(--font-sans);
+	--font-heading: "Instrument Serif", ui-serif, Georgia, serif;
 	--color-sidebar-ring: var(--sidebar-ring);
 	--color-sidebar-border: var(--sidebar-border);
 	--color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -48,7 +47,7 @@
 	--radius-2xl: calc(var(--radius) * 1.8);
 	--radius-3xl: calc(var(--radius) * 2.2);
 	--radius-4xl: calc(var(--radius) * 2.6);
-	--font-sans: "Inter Variable", sans-serif;
+	--font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
 }
 
 :root {
@@ -125,10 +124,39 @@
 		@apply border-border outline-ring/50;
 	}
 	body {
-		@apply bg-background text-foreground;
+		@apply bg-background font-sans text-foreground antialiased;
 	}
 	button:not(:disabled),
 	[role="button"]:not(:disabled) {
 		cursor: pointer;
+	}
+}
+
+@layer utilities {
+	.font-heading {
+		font-family: var(--font-heading);
+	}
+
+	.site-atmosphere {
+		background-color: oklch(0.975 0.008 200);
+		background-image:
+			radial-gradient(ellipse 90% 70% at 10% -10%, oklch(0.93 0.04 165 / 0.55), transparent 55%),
+			radial-gradient(ellipse 70% 55% at 110% 110%, oklch(0.92 0.03 250 / 0.35), transparent 50%),
+			linear-gradient(180deg, oklch(0.985 0.005 200), oklch(0.965 0.01 210));
+	}
+
+	@keyframes rise-in {
+		from {
+			opacity: 0;
+			transform: translateY(10px);
+		}
+		to {
+			opacity: 1;
+			transform: translateY(0);
+		}
+	}
+
+	.animate-rise {
+		animation: rise-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
 	}
 }

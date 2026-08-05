@@ -13,7 +13,7 @@ export const Route = createRootRoute({
 				content: "width=device-width, initial-scale=1",
 			},
 			{
-				title: "TanStack Start Starter",
+				title: "ree — React Elm Effect",
 			},
 		],
 		links: [
@@ -21,14 +21,31 @@ export const Route = createRootRoute({
 				rel: "stylesheet",
 				href: appCss,
 			},
+			{
+				rel: "preconnect",
+				href: "https://fonts.googleapis.com",
+			},
+			{
+				rel: "preconnect",
+				href: "https://fonts.gstatic.com",
+				crossOrigin: "anonymous",
+			},
+			{
+				rel: "stylesheet",
+				href: "https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Instrument+Serif:ital@0;1&display=swap",
+			},
 		],
 	}),
-	notFoundComponent: () => (
-		<main className="container mx-auto p-4 pt-16">
-			<h1>404</h1>
-			<p>The requested page could not be found.</p>
-		</main>
-	),
+	notFoundComponent: function NotFound() {
+		return (
+			<main className="site-atmosphere flex min-h-svh items-center justify-center p-6">
+				<div className="text-center">
+					<p className="font-heading text-5xl italic tracking-tight">404</p>
+					<p className="mt-2 text-muted-foreground">Page not found.</p>
+				</div>
+			</main>
+		)
+	},
 	shellComponent: RootDocument,
 })
 
