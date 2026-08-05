@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import { getRouteApi, Link } from "@tanstack/react-router"
+import * as AsyncData from "@workspace/react-foldkit/asyncData"
 import * as Command from "@workspace/react-foldkit/command"
 import { m } from "@workspace/react-foldkit/message"
 import { make } from "@workspace/react-foldkit/react"
@@ -11,7 +12,7 @@ import { Button } from "@workspace/ui/components/button"
 import { Checkbox } from "@workspace/ui/components/checkbox"
 import { Label } from "@workspace/ui/components/label"
 import { Separator } from "@workspace/ui/components/separator"
-import { Effect, Match, Schema } from "effect"
+import { Effect, Match, Option, Result, Schema } from "effect"
 import { Trash2Icon } from "lucide-react"
 import { ExampleShell } from "./components/example-shell"
 import { getRouter } from "./router"
@@ -22,14 +23,12 @@ import { TodoRepository } from "./todo/repository"
 
 const todoRoute = getRouteApi("/todo")
 
-const ItemsStatus = Schema.Literals(["loading", "ready", "failed"])
-type ItemsStatus = typeof ItemsStatus.Type
+const ItemsData = AsyncData.Schema(Schema.Array(TodoItem), Schema.String)
 
 const Model = Schema.Struct({
 	form: TodoForm.Model,
 	nextId: Schema.Number,
-	items: Schema.Array(TodoItem),
-	itemsStatus: ItemsStatus,
+	items: ItemsData.schema,
 	filter: Filter,
 })
 
@@ -47,16 +46,14 @@ const ClickedRetryLoad = m("ClickedRetryLoad")
 /** Silent ack from the NavigateFilter Command — Model already updated in update. */
 const NavigationDone = m("NavigationDone")
 
-const SucceededFetchTodos = m("SucceededFetchTodos", {
-	items: Schema.Array(TodoItem),
+const SettledFetchTodos = m("SettledFetchTodos", {
+	result: Schema.Result(Schema.Array(TodoItem), Schema.String),
 })
-const FailedFetchTodos = m("FailedFetchTodos")
-const SucceededWriteTodos = m("SucceededWriteTodos", {
-	items: Schema.Array(TodoItem),
+const SettledWriteTodos = m("SettledWriteTodos", {
+	result: Schema.Result(Schema.Array(TodoItem), Schema.String),
 })
-const FailedWriteTodos = m("FailedWriteTodos")
-const ClearedCompleted = m("ClearedCompleted", {
-	items: Schema.Array(TodoItem),
+const SettledClearCompleted = m("SettledClearCompleted", {
+	result: Schema.Result(Schema.Array(TodoItem), Schema.String),
 })
 
 const Message = Schema.Union([
@@ -66,11 +63,9 @@ const Message = Schema.Union([
 	ClickedClearCompleted,
 	ClickedRetryLoad,
 	NavigationDone,
-	SucceededFetchTodos,
-	FailedFetchTodos,
-	SucceededWriteTodos,
-	FailedWriteTodos,
-	ClearedCompleted,
+	SettledFetchTodos,
+	SettledWriteTodos,
+	SettledClearCompleted,
 ])
 type Message = typeof Message.Type
 
@@ -84,11 +79,29 @@ function nextIdFrom(items: ReadonlyArray<TodoItem>): number {
 	return max + 1
 }
 
-const withItems = (model: Model, items: ReadonlyArray<TodoItem>): Model =>
-	Struct.evo(model, {
+function applySettledItems(model: Model, result: Result.Result<ReadonlyArray<TodoItem>, string>): Model {
+	const items = AsyncData.settle(model.items, result)
+	return Struct.evo(model, {
 		items: () => items,
-		nextId: () => nextIdFrom(items),
-		itemsStatus: () => "ready" as const,
+		nextId: () =>
+			Option.match(AsyncData.getData(items), {
+				onNone: () => model.nextId,
+				onSome: nextIdFrom,
+			}),
+	})
+}
+
+/** Move Success/Stale → Refreshing when a mutation Command fires; always schedule the Command. */
+const withRevalidate = (model: Model, command: Update.Commands<Message, TodoRepository>[number]): UpdateReturn =>
+	Option.match(AsyncData.revalidate(model.items), {
+		onNone: () => [model, [command]],
+		onSome: (next) => [Struct.evo(model, { items: () => next }), [command]],
+	})
+
+const startFetch = (model: Model): UpdateReturn =>
+	Option.match(AsyncData.revalidateOrLoad(model.items), {
+		onNone: () => [model, Command.none],
+		onSome: (next) => [Struct.evo(model, { items: () => next }), [FetchTodos()]],
 	})
 
 /** Programmatic URL writes — the only place that calls `router.navigate`. */
@@ -106,15 +119,14 @@ const NavigateFilter = Command.define("NavigateFilter", {
 })
 
 const FetchTodos = Command.define("FetchTodos", {
-	messages: [SucceededFetchTodos, FailedFetchTodos],
+	messages: [SettledFetchTodos],
 	execute: Effect.gen(function* () {
 		const repo = yield* TodoRepository
 		return yield* repo.getTodos
 	}).pipe(
-		Effect.match({
-			onSuccess: (items) => SucceededFetchTodos({ items }),
-			onFailure: () => FailedFetchTodos(),
-		})
+		Effect.mapError(() => "Couldn’t load todos"),
+		Effect.result,
+		Effect.map((result) => SettledFetchTodos({ result }))
 	),
 })
 
@@ -123,22 +135,21 @@ const AddTodo = Command.define("AddTodo", {
 		id: Schema.Number,
 		text: Schema.String,
 	},
-	messages: [SucceededWriteTodos, FailedWriteTodos],
+	messages: [SettledWriteTodos],
 	execute: ({ id, text }) =>
 		Effect.gen(function* () {
 			const repo = yield* TodoRepository
 			return yield* repo.updateTodos((todos) => [...todos, { id, text, done: false }])
 		}).pipe(
-			Effect.match({
-				onSuccess: (items) => SucceededWriteTodos({ items }),
-				onFailure: () => FailedWriteTodos(),
-			})
+			Effect.mapError(() => "Couldn’t save todo"),
+			Effect.result,
+			Effect.map((result) => SettledWriteTodos({ result }))
 		),
 })
 
 const PersistToggle = Command.define("PersistToggle", {
 	args: { id: Schema.Number },
-	messages: [SucceededWriteTodos, FailedWriteTodos],
+	messages: [SettledWriteTodos],
 	execute: ({ id }) =>
 		Effect.gen(function* () {
 			const repo = yield* TodoRepository
@@ -146,38 +157,35 @@ const PersistToggle = Command.define("PersistToggle", {
 				todos.map((item) => (item.id === id ? { ...item, done: !item.done } : item))
 			)
 		}).pipe(
-			Effect.match({
-				onSuccess: (items) => SucceededWriteTodos({ items }),
-				onFailure: () => FailedWriteTodos(),
-			})
+			Effect.mapError(() => "Couldn’t update todo"),
+			Effect.result,
+			Effect.map((result) => SettledWriteTodos({ result }))
 		),
 })
 
 const PersistRemove = Command.define("PersistRemove", {
 	args: { id: Schema.Number },
-	messages: [SucceededWriteTodos, FailedWriteTodos],
+	messages: [SettledWriteTodos],
 	execute: ({ id }) =>
 		Effect.gen(function* () {
 			const repo = yield* TodoRepository
 			return yield* repo.updateTodos((todos) => todos.filter((item) => item.id !== id))
 		}).pipe(
-			Effect.match({
-				onSuccess: (items) => SucceededWriteTodos({ items }),
-				onFailure: () => FailedWriteTodos(),
-			})
+			Effect.mapError(() => "Couldn’t remove todo"),
+			Effect.result,
+			Effect.map((result) => SettledWriteTodos({ result }))
 		),
 })
 
 const PersistClearCompleted = Command.define("PersistClearCompleted", {
-	messages: [ClearedCompleted, FailedWriteTodos],
+	messages: [SettledClearCompleted],
 	execute: Effect.gen(function* () {
 		const repo = yield* TodoRepository
 		return yield* repo.updateTodos((todos) => todos.filter((item) => !item.done))
 	}).pipe(
-		Effect.match({
-			onSuccess: (items) => ClearedCompleted({ items }),
-			onFailure: () => FailedWriteTodos(),
-		})
+		Effect.mapError(() => "Couldn’t clear completed"),
+		Effect.result,
+		Effect.map((result) => SettledClearCompleted({ result }))
 	),
 })
 
@@ -187,8 +195,7 @@ const init = (flags: Flags): UpdateReturn => [
 		form: TodoForm.init(),
 		nextId: 1,
 		filter: flags.filter,
-		items: [],
-		itemsStatus: "loading",
+		items: ItemsData.Loading(),
 	},
 	[FetchTodos()],
 ]
@@ -214,29 +221,31 @@ const update = (model: Model, message: Message): UpdateReturn =>
 						Match.value(out).pipe(
 							Match.withReturnType<UpdateReturn>(),
 							Match.tagsExhaustive({
-								Submitted: ({ text }) => [
-									Struct.evo(nextModel, {
+								Submitted: ({ text }) => {
+									const withNextId = Struct.evo(nextModel, {
 										nextId: (nextId) => nextId + 1,
-									}),
-									[...commands, AddTodo({ id: nextModel.nextId, text })],
-								],
+									})
+									const [modelAfterRevalidate, revalidateCommands] = withRevalidate(
+										withNextId,
+										AddTodo({ id: nextModel.nextId, text })
+									)
+									return [modelAfterRevalidate, [...commands, ...revalidateCommands]]
+								},
 							})
 						),
 				})(model, formMessage),
-			ToggledItem: ({ id }) => [model, [PersistToggle({ id })]],
-			RemovedItem: ({ id }) => [model, [PersistRemove({ id })]],
-			ClickedClearCompleted: () => [model, [PersistClearCompleted()]],
-			ClickedRetryLoad: () => [Struct.evo(model, { itemsStatus: () => "loading" as const }), [FetchTodos()]],
+			ToggledItem: ({ id }) => withRevalidate(model, PersistToggle({ id })),
+			RemovedItem: ({ id }) => withRevalidate(model, PersistRemove({ id })),
+			ClickedClearCompleted: () => withRevalidate(model, PersistClearCompleted()),
+			ClickedRetryLoad: () => startFetch(model),
 			NavigationDone: () => [model, Command.none],
-			SucceededFetchTodos: ({ items }) => [withItems(model, items), Command.none],
-			FailedFetchTodos: () => [Struct.evo(model, { itemsStatus: () => "failed" as const }), Command.none],
-			SucceededWriteTodos: ({ items }) => [withItems(model, items), Command.none],
-			FailedWriteTodos: () => [Struct.evo(model, { itemsStatus: () => "failed" as const }), Command.none],
-			ClearedCompleted: ({ items }) => {
-				const next = withItems(model, items)
-				if (model.filter === "completed")
+			SettledFetchTodos: ({ result }) => [applySettledItems(model, result), Command.none],
+			SettledWriteTodos: ({ result }) => [applySettledItems(model, result), Command.none],
+			SettledClearCompleted: ({ result }) => {
+				const next = applySettledItems(model, result)
+				if (model.filter === "completed" && Result.isSuccess(result)) {
 					return [Struct.evo(next, { filter: () => "all" as const }), [NavigateFilter({ filter: "all" })]]
-
+				}
 				return [next, Command.none]
 			},
 		})
@@ -253,9 +262,9 @@ const filterLinks = [
 	{ filter: "completed" as const, label: "Completed" },
 ]
 
-const visibleItems = (model: Model): ReadonlyArray<TodoItem> =>
-	model.items.filter((item) =>
-		Match.value(model.filter).pipe(
+const visibleItems = (items: ReadonlyArray<TodoItem>, filter: Filter): ReadonlyArray<TodoItem> =>
+	items.filter((item) =>
+		Match.value(filter).pipe(
 			Match.withReturnType<boolean>(),
 			Match.when("all", () => true),
 			Match.when("active", () => !item.done),
@@ -267,14 +276,11 @@ const visibleItems = (model: Model): ReadonlyArray<TodoItem> =>
 function View() {
 	const model = useModel()
 	const dispatch = useDispatch()
-	const remaining = model.items.filter((item) => !item.done).length
-	const completed = model.items.length - remaining
-	const items = visibleItems(model)
 
 	return (
 		<ExampleShell
 			title="Todo"
-			description="Filter comes from URL via Provider init. List data flows through TodoRepository Commands."
+			description="List state is AsyncData: load/refresh via Commands, settle Results back into the Model."
 		>
 			<div className="mx-auto flex w-full max-w-lg flex-1 flex-col px-6 pt-10 pb-16">
 				<TodoForm.View
@@ -310,86 +316,141 @@ function View() {
 					})}
 				</nav>
 
-				<div className="mt-4 flex items-center justify-between gap-3">
-					<Badge variant="secondary">
-						{model.itemsStatus === "loading" ? "Loading…" : `${remaining} left`}
-					</Badge>
-					{completed > 0 ? (
-						<Button
-							variant="ghost"
-							size="sm"
-							onClick={function () {
-								dispatch(ClickedClearCompleted())
-							}}
-						>
-							Clear completed
-						</Button>
-					) : null}
-				</div>
-
-				<Separator className="my-5" />
-
-				{model.itemsStatus === "failed" ? (
-					<div className="flex flex-col items-center gap-3 py-12">
-						<p className="font-heading text-2xl text-muted-foreground italic">Couldn’t load todos</p>
-						<Button
-							variant="outline"
-							size="sm"
-							onClick={function () {
-								dispatch(ClickedRetryLoad())
-							}}
-						>
-							Retry
-						</Button>
-					</div>
-				) : model.itemsStatus === "loading" && model.items.length === 0 ? (
-					<p className="py-12 text-center font-heading text-2xl text-muted-foreground italic">Loading…</p>
-				) : items.length === 0 ? (
-					<p className="py-12 text-center font-heading text-2xl text-muted-foreground italic">
-						{model.items.length === 0 ? "Nothing here yet" : "Nothing in this filter"}
-					</p>
-				) : (
-					<ul className="flex flex-col gap-1">
-						{items.map(function (item) {
-							const checkboxId = `todo-${item.id}`
-							return (
-								<li
-									key={item.id}
-									className="group flex items-center gap-3 rounded-2xl px-2 py-2 transition-colors hover:bg-muted/60"
-								>
-									<Checkbox
-										id={checkboxId}
-										checked={item.done}
-										onCheckedChange={function () {
-											dispatch(ToggledItem({ id: item.id }))
-										}}
-									/>
-									<Label
-										htmlFor={checkboxId}
-										className={
-											item.done
-												? "min-w-0 flex-1 text-sm text-muted-foreground line-through"
-												: "min-w-0 flex-1 text-sm"
-										}
-									>
-										{item.text}
-									</Label>
+				{AsyncData.matchData(model.items, {
+					onEmpty() {
+						return (
+							<>
+								<div className="mt-4 flex items-center justify-between gap-3">
+									<Badge variant="secondary">Loading…</Badge>
+								</div>
+								<Separator className="my-5" />
+								<p className="py-12 text-center font-heading text-2xl text-muted-foreground italic">
+									Loading…
+								</p>
+							</>
+						)
+					},
+					onFailure(error) {
+						return (
+							<>
+								<div className="mt-4 flex items-center justify-between gap-3">
+									<Badge variant="destructive">Failed</Badge>
+								</div>
+								<Separator className="my-5" />
+								<div className="flex flex-col items-center gap-3 py-12">
+									<p className="font-heading text-2xl text-muted-foreground italic">{error}</p>
 									<Button
-										variant="ghost"
-										size="icon-xs"
-										className="opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
-										aria-label={`Remove ${item.text}`}
+										variant="outline"
+										size="sm"
 										onClick={function () {
-											dispatch(RemovedItem({ id: item.id }))
+											dispatch(ClickedRetryLoad())
 										}}
 									>
-										<Trash2Icon />
+										Retry
 									</Button>
-								</li>
-							)
-						})}
-					</ul>
-				)}
+								</div>
+							</>
+						)
+					},
+					onData(items) {
+						const remaining = items.filter((item) => !item.done).length
+						const completed = items.length - remaining
+						const filtered = visibleItems(items, model.filter)
+						const pending = AsyncData.isPending(model.items)
+						const staleError = AsyncData.getError(model.items)
+
+						return (
+							<>
+								<div className="mt-4 flex items-center justify-between gap-3">
+									<Badge variant="secondary">{pending ? "Saving…" : `${remaining} left`}</Badge>
+									{completed > 0 ? (
+										<Button
+											variant="ghost"
+											size="sm"
+											disabled={pending}
+											onClick={function () {
+												dispatch(ClickedClearCompleted())
+											}}
+										>
+											Clear completed
+										</Button>
+									) : null}
+								</div>
+
+								{Option.match(staleError, {
+									onNone: () => null,
+									onSome(error) {
+										return (
+											<p className="mt-3 text-sm text-destructive">
+												{error}{" "}
+												<button
+													type="button"
+													className="underline"
+													onClick={function () {
+														dispatch(ClickedRetryLoad())
+													}}
+												>
+													Retry
+												</button>
+											</p>
+										)
+									},
+								})}
+
+								<Separator className="my-5" />
+
+								{filtered.length === 0 ? (
+									<p className="py-12 text-center font-heading text-2xl text-muted-foreground italic">
+										{items.length === 0 ? "Nothing here yet" : "Nothing in this filter"}
+									</p>
+								) : (
+									<ul className="flex flex-col gap-1">
+										{filtered.map(function (item) {
+											const checkboxId = `todo-${item.id}`
+											return (
+												<li
+													key={item.id}
+													className="group flex items-center gap-3 rounded-2xl px-2 py-2 transition-colors hover:bg-muted/60"
+												>
+													<Checkbox
+														id={checkboxId}
+														checked={item.done}
+														disabled={pending}
+														onCheckedChange={function () {
+															dispatch(ToggledItem({ id: item.id }))
+														}}
+													/>
+													<Label
+														htmlFor={checkboxId}
+														className={
+															item.done
+																? "min-w-0 flex-1 text-sm text-muted-foreground line-through"
+																: "min-w-0 flex-1 text-sm"
+														}
+													>
+														{item.text}
+													</Label>
+													<Button
+														variant="ghost"
+														size="icon-xs"
+														disabled={pending}
+														className="opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+														aria-label={`Remove ${item.text}`}
+														onClick={function () {
+															dispatch(RemovedItem({ id: item.id }))
+														}}
+													>
+														<Trash2Icon />
+													</Button>
+												</li>
+											)
+										})}
+									</ul>
+								)}
+							</>
+						)
+					},
+				})}
 			</div>
 		</ExampleShell>
 	)

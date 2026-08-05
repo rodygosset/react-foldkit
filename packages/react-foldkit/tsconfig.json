@@ -9,10 +9,11 @@
 		"skipLibCheck": true,
 		"strict": true,
 		"noEmit": true,
+		"ignoreDeprecations": "6.0",
 		"paths": {
 			"@workspace/react-foldkit/*": ["./src/*"]
 		}
 	},
-	"include": ["."],
+	"include": ["src/**/*.ts", "src/**/*.tsx", "vitest.config.ts", "vitest.setup.ts", "tsup.config.ts"],
 	"exclude": ["node_modules", "dist"]
 }

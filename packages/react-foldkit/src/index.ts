@@ -1,3 +1,4 @@
+export * as AsyncData from "./asyncData"
 export * as Command from "./command"
 export * as Message from "./message"
 export * as Store from "./store"

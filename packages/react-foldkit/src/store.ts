@@ -1,9 +1,9 @@
 import { Cause, Context, Effect, Exit, Layer, Option, Scope } from "effect"
 import {
-	__CurrentRegistry as CurrentInterruptRegistry,
-	__makeRegistry as makeInterruptRegistry,
-	type __Registry as InterruptRegistry,
-} from "foldkit/command/interruptible"
+	CurrentInterruptRegistry,
+	type InterruptRegistry,
+	makeInterruptRegistry,
+} from "./internal/foldkit"
 import type * as Update from "./update"
 
 type ConfigBase<Model, Message, R> = {

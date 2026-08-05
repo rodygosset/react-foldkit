@@ -5,10 +5,10 @@ import * as Command from "./command"
 import { m } from "./message"
 import * as Store from "./store"
 import {
-	__CurrentRegistry,
-	__makeRegistry,
-	type __Registry,
-} from "foldkit/command/interruptible"
+	CurrentInterruptRegistry as __CurrentRegistry,
+	makeInterruptRegistry as __makeRegistry,
+	type InterruptRegistry as __Registry,
+} from "./internal/foldkit"
 
 /**
  * Interrupt registry contract — mirrored from Foldkit's

@@ -4,6 +4,7 @@
 	"type": "module",
 	"private": true,
 	"scripts": {
+		"build": "tsup",
 		"lint": "eslint",
 		"format": "prettier --write \"**/*.{ts,tsx}\"",
 		"typecheck": "tsc --noEmit",
@@ -14,11 +15,68 @@
 	"exports": {
 		".": "./src/index.ts",
 		"./react": "./src/react.tsx",
-		"./*": "./src/*.ts"
+		"./asyncData": "./src/asyncData.ts",
+		"./command": "./src/command.ts",
+		"./message": "./src/message.ts",
+		"./schema": "./src/schema.ts",
+		"./store": "./src/store.ts",
+		"./struct": "./src/struct.ts",
+		"./submodel": "./src/submodel.ts",
+		"./update": "./src/update.ts"
+	},
+	"publishConfig": {
+		"exports": {
+			".": {
+				"types": "./dist/index.d.ts",
+				"import": "./dist/index.js"
+			},
+			"./react": {
+				"types": "./dist/react.d.ts",
+				"import": "./dist/react.js"
+			},
+			"./asyncData": {
+				"types": "./dist/asyncData.d.ts",
+				"import": "./dist/asyncData.js"
+			},
+			"./command": {
+				"types": "./dist/command.d.ts",
+				"import": "./dist/command.js"
+			},
+			"./message": {
+				"types": "./dist/message.d.ts",
+				"import": "./dist/message.js"
+			},
+			"./schema": {
+				"types": "./dist/schema.d.ts",
+				"import": "./dist/schema.js"
+			},
+			"./store": {
+				"types": "./dist/store.d.ts",
+				"import": "./dist/store.js"
+			},
+			"./struct": {
+				"types": "./dist/struct.d.ts",
+				"import": "./dist/struct.js"
+			},
+			"./submodel": {
+				"types": "./dist/submodel.d.ts",
+				"import": "./dist/submodel.js"
+			},
+			"./update": {
+				"types": "./dist/update.d.ts",
+				"import": "./dist/update.js"
+			}
+		},
+		"main": "./dist/index.js",
+		"types": "./dist/index.d.ts"
+	},
+	"files": ["dist"],
+	"peerDependencies": {
+		"effect": "4.0.0-beta.103",
+		"react": "^19.2.6"
 	},
 	"dependencies": {
 		"effect": "4.0.0-beta.103",
-		"foldkit": "workspace:*",
 		"react": "^19.2.6"
 	},
 	"devDependencies": {
@@ -26,6 +84,7 @@
 		"@types/react": "^19",
 		"@vitest/coverage-v8": "^4.1.9",
 		"happy-dom": "^20.10.4",
+		"tsup": "^8.5.0",
 		"typescript": "^6",
 		"vitest": "^4.1.9"
 	}
