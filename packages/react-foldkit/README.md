@@ -1,7 +1,7 @@
 # react-foldkit
 
 React bindings for a Foldkit-style TEA program: one Model, pure `update`, Commands
-for effects, optional Subscriptions for standing orders. Built on
+for effects, optional Subscriptions for standing orders. Built on [Foldkit](https://foldkit.dev),
 [Effect](https://effect.website/) and [React](https://react.dev/).
 
 This package is **not** Foldkit. It is a React-shaped binding that reuses

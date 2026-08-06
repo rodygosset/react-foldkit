@@ -9,10 +9,11 @@ dist-ssr
 .output
 .vinxi
 __unconfig*
-todos.json
 
 # turbo
 .turbo
 
 # typescript
 *.tsbuildinfo
+
+packages/react-foldkit/TODO.md
