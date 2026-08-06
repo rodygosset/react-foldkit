@@ -1,6 +1,6 @@
 /**
  * Model-gated subscriptions (Foldkit vocabulary).
- * Apps import `@rodygosset/react-foldkit/subscription` — never `foldkit`.
+ * Apps import `react-foldkit/subscription` — never `foldkit`.
  *
  * v1 surface: `make` / `entry` (via `make`) only. Foldkit helpers such as
  * `persistent`, `aggregate`, `lift`, and `fromEvent` are intentionally omitted

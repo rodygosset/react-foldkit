@@ -3,7 +3,7 @@
 This package incorporates source from [Foldkit](https://github.com/foldkit/foldkit)
 (vendored under `repos/foldkit/` in the monorepo, currently pinned to Foldkit
 `0.138.0`). Those modules are compiled into the published `dist/` output via
-`tsup`. Application code should import `@rodygosset/react-foldkit/*` only — not
+`tsup`. Application code should import `react-foldkit/*` only — not
 `foldkit` directly.
 
 Vendored Foldkit surfaces include, in whole or in part:

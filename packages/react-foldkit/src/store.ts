@@ -53,7 +53,7 @@ export type Config<ModelSchema extends Schema.Codec<unknown, unknown, never, nev
 			layer: Layer.Layer<R, never, never>
 		}
 
-export const StoreTypeId: unique symbol = Symbol.for("@rodygosset/react-foldkit/StoreTypeId")
+export const StoreTypeId: unique symbol = Symbol.for("react-foldkit/StoreTypeId")
 export type StoreTypeId = typeof StoreTypeId
 
 export type Store<ModelSchema extends Schema.Codec<unknown, unknown, never, never>, Message> = {

@@ -1,6 +1,6 @@
 /**
  * Vendored Foldkit interrupt registry (source under `repos/foldkit`).
- * Foldkit is an implementation detail — apps import `@rodygosset/react-foldkit/*` only.
+ * Foldkit is an implementation detail — apps import `react-foldkit/*` only.
  * Relative paths bypass Foldkit's `dist` package exports (no Foldkit build required).
  */
 export {

@@ -1,7 +1,7 @@
 // @ts-check
 
 import { tanstackConfig } from "@tanstack/eslint-config"
-import { recommendedConfig } from "@rodygosset/react-foldkit/eslint"
+import { recommendedConfig } from "react-foldkit/eslint"
 
 export default [
 	...tanstackConfig,

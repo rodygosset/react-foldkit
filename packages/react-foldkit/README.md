@@ -23,13 +23,13 @@ package’s published build.
 
 ## Never import `foldkit` from app code
 
-Apps should depend on `@rodygosset/react-foldkit` (or the published package name)
+Apps should depend on `react-foldkit` (or the published package name)
 only. Foldkit is an implementation detail compiled into `dist/` at build time.
 
 ```tsx
-import { make } from "@rodygosset/react-foldkit/react"
-import * as Command from "@rodygosset/react-foldkit/command"
-import { m } from "@rodygosset/react-foldkit/message"
+import { make } from "react-foldkit/react"
+import * as Command from "react-foldkit/command"
+import { m } from "react-foldkit/message"
 ```
 
 ## Package surface
@@ -48,10 +48,10 @@ import { m } from "@rodygosset/react-foldkit/message"
 
 ```tsx
 import { Match, Schema } from "effect"
-import * as Command from "@rodygosset/react-foldkit/command"
-import { m } from "@rodygosset/react-foldkit/message"
-import { ReactFoldkit } from "@rodygosset/react-foldkit"
-import * as Struct from "@rodygosset/react-foldkit/struct"
+import * as Command from "react-foldkit/command"
+import { m } from "react-foldkit/message"
+import { ReactFoldkit } from "react-foldkit"
+import * as Struct from "react-foldkit/struct"
 
 const Model = Schema.Struct({ count: Schema.Number })
 type Model = typeof Model.Type
@@ -112,7 +112,7 @@ and decode it with the same Schema before hydrating `Provider`.
 ## ESLint
 
 ```js
-import { recommendedConfig } from "@rodygosset/react-foldkit/eslint"
+import { recommendedConfig } from "react-foldkit/eslint"
 
 export default [...recommendedConfig]
 ```

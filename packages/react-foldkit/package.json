@@ -1,11 +1,17 @@
 {
-	"name": "@rodygosset/react-foldkit",
+	"name": "react-foldkit",
 	"version": "0.1.0",
 	"description": "React TEA bindings over Foldkit vocabulary (Command, Message, Update, Subscription, AsyncData).",
 	"type": "module",
 	"license": "MIT",
 	"author": "Rody Gosset",
-	"keywords": ["react", "tea", "elm-architecture", "effect", "foldkit"],
+	"keywords": [
+		"react",
+		"tea",
+		"elm-architecture",
+		"effect",
+		"foldkit"
+	],
 	"scripts": {
 		"build": "tsup && tsup --config tsup.eslint.config.ts",
 		"prepack": "bun run build",

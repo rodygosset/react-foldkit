@@ -1,4 +1,4 @@
-# `@rodygosset/react-foldkit/eslint`
+# `react-foldkit/eslint`
 
 Flat ESLint presets that encode react-foldkit TEA boundaries.
 
@@ -14,12 +14,12 @@ Peer: `eslint` `^9`. Import the preset from the same package — no separate plu
 
 ```js
 // eslint.config.js
-import { recommendedConfig } from '@rodygosset/react-foldkit/eslint'
-// or: import { strictConfig } from '@rodygosset/react-foldkit/eslint'
+import { recommendedConfig } from "react-foldkit/eslint"
+// or: import { strictConfig } from 'react-foldkit/eslint'
 
 export default [
-  ...recommendedConfig,
-  // ...your other configs
+	...recommendedConfig,
+	// ...your other configs
 ]
 ```
 
@@ -27,12 +27,12 @@ export default [
 
 Fails CI on:
 
-| Rule | Catches |
-|------|---------|
-| `no-navigate-outside-commands` | `useNavigate`, `.navigate(`, `history.push` / `replace` outside `execute` |
-| `no-nested-store` | `Store.boot` / `boot(` in Views; `<Provider>` inside `function View` |
-| `no-effect-run-outside-commands` | `Effect.run*` in `.tsx` / `update` exports outside `execute` |
-| `no-store-hooks-in-child-view` | `useDispatch` / `useModel` / `useStore` when props already include `dispatch` |
+| Rule                             | Catches                                                                       |
+| -------------------------------- | ----------------------------------------------------------------------------- |
+| `no-navigate-outside-commands`   | `useNavigate`, `.navigate(`, `history.push` / `replace` outside `execute`     |
+| `no-nested-store`                | `Store.boot` / `boot(` in Views; `<Provider>` inside `function View`          |
+| `no-effect-run-outside-commands` | `Effect.run*` in `.tsx` / `update` exports outside `execute`                  |
+| `no-store-hooks-in-child-view`   | `useDispatch` / `useModel` / `useStore` when props already include `dispatch` |
 
 ### `strictConfig` (recommended + warn)
 

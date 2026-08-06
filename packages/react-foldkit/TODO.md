@@ -1,20 +1,20 @@
 # react-foldkit TODO
 
-Outstanding work for `@rodygosset/react-foldkit`. Credit for the TEA vocabulary and runtime contracts belongs to [Foldkit](https://github.com/foldkit/foldkit). This package is a React-shaped binding over that design.
+Outstanding work for `react-foldkit`. Credit for the TEA vocabulary and runtime contracts belongs to [Foldkit](https://github.com/foldkit/foldkit). This package is a React-shaped binding over that design.
 
 ---
 
 ## Status
 
-| Area | State |
-|------|--------|
-| Store (drain, boot, crash, Scope, interrupts) | Done |
-| Command / Message / Update / Struct / Schema / AsyncData / Submodel | Done (vendored Foldkit surfaces) |
-| React Provider + hooks | Done |
-| ESLint recommended + strict presets | Done — `@rodygosset/react-foldkit/eslint` |
-| Subscriptions + stopwatch example | Done |
-| Public share (license, docs, CI, publish) | Mostly done — pin story + remote/CONTRIBUTING open |
-| **Next (tomorrow)** | More examples + Foldkit modules · GitHub + local build guide |
+| Area                                                                | State                                                        |
+| ------------------------------------------------------------------- | ------------------------------------------------------------ |
+| Store (drain, boot, crash, Scope, interrupts)                       | Done                                                         |
+| Command / Message / Update / Struct / Schema / AsyncData / Submodel | Done (vendored Foldkit surfaces)                             |
+| React Provider + hooks                                              | Done                                                         |
+| ESLint recommended + strict presets                                 | Done — `react-foldkit/eslint`                                |
+| Subscriptions + stopwatch example                                   | Done                                                         |
+| Public share (license, docs, CI, publish)                           | Mostly done — pin story + remote/CONTRIBUTING open           |
+| **Next (tomorrow)**                                                 | More examples + Foldkit modules · GitHub + local build guide |
 
 ---
 
@@ -22,7 +22,7 @@ Outstanding work for `@rodygosset/react-foldkit`. Credit for the TEA vocabulary 
 
 1. **More examples + Foldkit modules** — expand `apps/web` with additional demos; integrate remaining important vendored Foldkit surfaces (e.g. Subscription helpers `persistent` / `lift` / `fromEvent`, URL-as-subscription, whatever else is high-value for the React binding).
 2. **Push to GitHub** — add remote, push `main`, confirm CI green.
-3. **Pre-npm share guide** — document how recipients clone, install, build, test, and run examples locally (`bun install`, `turbo build`, `test`, `apps/web` dev) until `@rodygosset/react-foldkit` is on npm. Fold into README and/or `CONTRIBUTING.md`.
+3. **Pre-npm share guide** — document how recipients clone, install, build, test, and run examples locally (`bun install`, `turbo build`, `test`, `apps/web` dev) until `react-foldkit` is on npm. Fold into README and/or `CONTRIBUTING.md`.
 
 Still deferred until after the above: Foldkit pin story (§3.9), npm publish.
 
@@ -41,15 +41,15 @@ Still deferred until after the above: Foldkit pin story (§3.9), npm publish.
 
 ### 2.1 Decisions (grill)
 
-| Topic | Decision |
-|-------|----------|
-| Ship shape | Flat ESLint config export from the **same** package: `@rodygosset/react-foldkit/eslint` |
-| Presets | **`recommended`** (errors, CI fails) + optional **`strict`** (warnings by default) |
-| Recommended rules | navigate outside Commands · nested `Store.boot` / Provider-in-View · `Effect.run*` in views/update · child↔parent Message / hook leaks |
-| Strict rules | `useState` / `useReducer` in View `*.tsx` (and similarly named view functions) |
-| Allowlists | Preset globs for URL bridge, store internals, tests, `packages/ui`, generated · rule overrides in consumer config for app bridges · comment disables rare + reasoned |
-| Agents | Rules-only (no Cursor rule / AGENTS for now) |
-| View scope (strict) | View-named files (`View*.tsx`, `*View.tsx`, …) and `View` / `*View` functions |
+| Topic               | Decision                                                                                                                                                             |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Ship shape          | Flat ESLint config export from the **same** package: `react-foldkit/eslint`                                                                                          |
+| Presets             | **`recommended`** (errors, CI fails) + optional **`strict`** (warnings by default)                                                                                   |
+| Recommended rules   | navigate outside Commands · nested `Store.boot` / Provider-in-View · `Effect.run*` in views/update · child↔parent Message / hook leaks                               |
+| Strict rules        | `useState` / `useReducer` in View `*.tsx` (and similarly named view functions)                                                                                       |
+| Allowlists          | Preset globs for URL bridge, store internals, tests, `packages/ui`, generated · rule overrides in consumer config for app bridges · comment disables rare + reasoned |
+| Agents              | Rules-only (no Cursor rule / AGENTS for now)                                                                                                                         |
+| View scope (strict) | View-named files (`View*.tsx`, `*View.tsx`, …) and `View` / `*View` functions                                                                                        |
 
 Guidance for consumers: prefer adding a path to `urlBridgePaths` (or similar settings) over `eslint-disable`. If you need a disable, you probably need a new glob.
 
@@ -87,14 +87,13 @@ Wire `apps/web/eslint.config.js` to spread `recommendedConfig` (and optionally `
 2. **Attribute merit to Foldkit** — **Done (README):** Credits + “not Foldkit” relationship section.
 3. **Short docs markdown** — **Done:** package README (mental model, never import `foldkit`, surface table, ESLint).
 4. **LICENSE** — **Done** at package root.
-5. **Real package name + versioning + CHANGELOG** — **Done:** `@rodygosset/react-foldkit@0.1.0`, `CHANGELOG.md`.
+5. **Real package name + versioning + CHANGELOG** — **Done:** `react-foldkit@0.1.0`, `CHANGELOG.md`.
 6. **Drop `private: true` / publish from `dist`** — **Done:** exports + `files` point at `dist` / `eslint/dist`; `prepack` builds.
 7. **CI** — **Done:** `.github/workflows/ci.yml` (build, typecheck, test, lint, web build, pack dry-run).
 8. **Publish boundary** — **Done:** tarball is package `files` only (no `repos/foldkit` / `repos/effect`).
-9. **Foldkit pin story** — how vendored relative source is updated / attributed. *(open)*
+9. **Foldkit pin story** — how vendored relative source is updated / attributed. _(open)_
 10. **Consume `dist` from `apps/web`** — **Done:** no `src` path override; workspace dep resolves package exports → `dist`.
-11. **Git remote + CONTRIBUTING** as needed. *(open)*
-
+11. **Git remote + CONTRIBUTING** as needed. _(open)_
 
 ---
 
