@@ -3,6 +3,9 @@ import * as Store from "../store"
 import type * as Update from "../update"
 import * as InitCommand from "./init-command"
 
+const ReactStoreTypeId: unique symbol = Symbol.for("react-foldkit/ReactStoreTypeId")
+export type ReactStoreTypeId = typeof ReactStoreTypeId
+
 type InitCommand<Message, R> = Update.Commands<Message, R>[number]
 
 type InitCommandState<Message, R> = {
@@ -10,13 +13,14 @@ type InitCommandState<Message, R> = {
 	isComplete: boolean
 }
 
-export type ReactStore<ModelSchema extends Schema.Codec<unknown, unknown, never, never>, Message> = {
-	getModel: () => Schema.Schema.Type<ModelSchema>
-	getServerModel: () => Schema.Schema.Type<ModelSchema>
+export type ReactStore<Model, Message> = Readonly<{
+	[ReactStoreTypeId]: ReactStoreTypeId
+	getModel: () => Model
+	getServerModel: () => Model
 	subscribe: (listener: () => void) => () => void
 	dispatch: (message: Message) => void
 	activate: () => () => void
-}
+}>
 
 const trackCompletion = <Message, R>(state: InitCommandState<Message, R>): InitCommand<Message, R> =>
 	InitCommand.track(state.command, function markComplete() {
@@ -26,14 +30,14 @@ const trackCompletion = <Message, R>(state: InitCommandState<Message, R>): InitC
 export function make<ModelSchema extends Schema.Codec<unknown, unknown, never, never>, Message, R = never>(
 	config: Store.Config<ModelSchema, Message, R>,
 	init: Update.Return<Schema.Schema.Type<ModelSchema>, Message, R>
-): ReactStore<ModelSchema, Message> {
+): ReactStore<Schema.Schema.Type<ModelSchema>, Message> {
 	const listeners = new Set<() => void>()
 	const [initialModel, initCommands] = init
 	const initCommandStates = initCommands.map(function (command) {
 		return { command, isComplete: false }
 	})
 	let inactiveModel = initialModel
-	let activeStore: Store.Store<ModelSchema, Message> | null = null
+	let activeStore: Store.Store<Schema.Schema.Type<ModelSchema>, Message> | null = null
 
 	function notifyListeners(): void {
 		for (const listener of listeners) listener()
@@ -66,6 +70,7 @@ export function make<ModelSchema extends Schema.Codec<unknown, unknown, never, n
 	}
 
 	return {
+		[ReactStoreTypeId]: ReactStoreTypeId,
 		getModel: () => (activeStore === null ? inactiveModel : activeStore.getModel()),
 		getServerModel: () => initialModel,
 		subscribe(listener) {

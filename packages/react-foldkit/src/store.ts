@@ -56,13 +56,13 @@ export type Config<ModelSchema extends Schema.Codec<unknown, unknown, never, nev
 export const StoreTypeId: unique symbol = Symbol.for("react-foldkit/StoreTypeId")
 export type StoreTypeId = typeof StoreTypeId
 
-export type Store<ModelSchema extends Schema.Codec<unknown, unknown, never, never>, Message> = {
-	readonly [StoreTypeId]: StoreTypeId
-	getModel: () => Schema.Schema.Type<ModelSchema>
+export type Store<Model, Message> = Readonly<{
+	[StoreTypeId]: StoreTypeId
+	getModel: () => Model
 	subscribe: (listener: () => void) => () => void
 	dispatch: (message: Message) => void
 	dispose: () => void
-}
+}>
 
 /** Sync drain yields to the browser after this much cumulative work (Foldkit). */
 const DRAIN_BUDGET_MS = 5
@@ -213,7 +213,7 @@ function forkSubscriptionFibers<Model, Message, R>(
 export function boot<ModelSchema extends Schema.Codec<unknown, unknown, never, never>, Message, R = never>(
 	config: Config<ModelSchema, Message, R>,
 	init: Update.Return<Schema.Schema.Type<ModelSchema>, Message, R>
-): Store<ModelSchema, Message> {
+): Store<Schema.Schema.Type<ModelSchema>, Message> {
 	type Model = Schema.Schema.Type<ModelSchema>
 
 	const listeners = new Set<() => void>()

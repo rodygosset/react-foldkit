@@ -18,7 +18,7 @@ export function make<ModelSchema extends Schema.Codec<unknown, unknown, never, n
 ) {
 	type Model = Schema.Schema.Type<ModelSchema>
 
-	const StoreContext = React.createContext<ReactStore.ReactStore<ModelSchema, Message> | null>(null)
+	const StoreContext = React.createContext<ReactStore.ReactStore<Model, Message> | null>(null)
 
 	function useStore() {
 		const value = React.useContext(StoreContext)
