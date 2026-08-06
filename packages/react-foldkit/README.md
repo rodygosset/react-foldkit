@@ -69,7 +69,7 @@ const update = (model: Model, message: Message) =>
   )
 
 
-const { Provider, useModel, useDispatch } = ReactFoldkit.make({ schema: Model, update })
+const { Provider, useModel, useDispatch } = ReactFoldkit.make({ update })
 
 function CounterView() {
   const count = useModel((m) => m.count)

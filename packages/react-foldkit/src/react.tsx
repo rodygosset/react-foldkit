@@ -1,4 +1,4 @@
-import { Equal, Schema } from "effect"
+import { Equal } from "effect"
 import React from "react"
 import * as ReactStore from "./internal/react-store"
 import * as Store from "./store"
@@ -13,11 +13,7 @@ import type * as Update from "./update"
  * barrier, drain budget, model-gated Subscriptions, and Scope teardown on
  * dispose.
  */
-export function make<ModelSchema extends Schema.Codec<unknown, unknown, never, never>, Message, R = never>(
-	config: Store.Config<ModelSchema, Message, R>
-) {
-	type Model = Schema.Schema.Type<ModelSchema>
-
+export function make<Model, Message, R = never>(config: Store.Config<Model, Message, R>) {
 	const StoreContext = React.createContext<ReactStore.ReactStore<Model, Message> | null>(null)
 
 	function useStore() {

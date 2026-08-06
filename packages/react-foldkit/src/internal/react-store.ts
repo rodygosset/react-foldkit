@@ -1,4 +1,3 @@
-import { Schema } from "effect"
 import * as Store from "../store"
 import type * as Update from "../update"
 import * as InitCommand from "./init-command"
@@ -27,17 +26,17 @@ const trackCompletion = <Message, R>(state: InitCommandState<Message, R>): InitC
 		state.isComplete = true
 	})
 
-export function make<ModelSchema extends Schema.Codec<unknown, unknown, never, never>, Message, R = never>(
-	config: Store.Config<ModelSchema, Message, R>,
-	init: Update.Return<Schema.Schema.Type<ModelSchema>, Message, R>
-): ReactStore<Schema.Schema.Type<ModelSchema>, Message> {
+export function make<Model, Message, R = never>(
+	config: Store.Config<Model, Message, R>,
+	init: Update.Return<Model, Message, R>
+): ReactStore<Model, Message> {
 	const listeners = new Set<() => void>()
 	const [initialModel, initCommands] = init
 	const initCommandStates = initCommands.map(function (command) {
 		return { command, isComplete: false }
 	})
 	let inactiveModel = initialModel
-	let activeStore: Store.Store<Schema.Schema.Type<ModelSchema>, Message> | null = null
+	let activeStore: Store.Store<Model, Message> | null = null
 
 	function notifyListeners(): void {
 		for (const listener of listeners) listener()

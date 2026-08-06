@@ -273,7 +273,7 @@ describe("store interrupt registry wiring", function () {
 				})
 			)
 
-		const store = Store.boot({ schema: Model, update }, [{ status: "idle", outcome: null }, []])
+		const store = Store.boot({ update }, [{ status: "idle", outcome: null }, []])
 
 		try {
 			store.dispatch(Start())

@@ -63,7 +63,7 @@ describe("React server rendering", function () {
 				layerBuilds += 1
 			})
 		)
-		const { Provider, useModel } = make({ schema: Model, update, subscriptions, layer })
+		const { Provider, useModel } = make({ update, subscriptions, layer })
 
 		function View() {
 			const status = useModel((model) => model.status)
@@ -83,7 +83,7 @@ describe("React server rendering", function () {
 	})
 
 	it("supports whole-Model and structurally selected server snapshots", function () {
-		const { Provider, useModel } = make({ schema: Model, update })
+		const { Provider, useModel } = make({ update })
 
 		function View() {
 			const model = useModel()

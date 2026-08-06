@@ -29,7 +29,7 @@ const makeInitCommand = (effect: Effect.Effect<Message>): Command.Command<Messag
 
 describe("React store lifecycle", function () {
 	it("drops dispatches while inactive and preserves the last live Model across reactivation", function () {
-		const store = ReactStore.make({ schema: Model, update }, [{ value: "initial" }, []])
+		const store = ReactStore.make({ update }, [{ value: "initial" }, []])
 
 		store.dispatch(SetValue({ value: "before activation" }))
 		expect(store.getModel()).toEqual({ value: "initial" })
@@ -53,7 +53,7 @@ describe("React store lifecycle", function () {
 				return CompletedInit({ value: "complete" })
 			})
 		)
-		const store = ReactStore.make({ schema: Model, update }, [{ value: "initial" }, [command]])
+		const store = ReactStore.make({ update }, [{ value: "initial" }, [command]])
 
 		const deactivateFirst = store.activate()
 		await vi.waitFor(function () {
@@ -80,7 +80,7 @@ describe("React store lifecycle", function () {
 				return CompletedInit({ value: "complete" })
 			})
 		)
-		const store = ReactStore.make({ schema: Model, update }, [{ value: "initial" }, [command]])
+		const store = ReactStore.make({ update }, [{ value: "initial" }, [command]])
 
 		const deactivateFirst = store.activate()
 		await vi.waitFor(function () {
@@ -129,7 +129,7 @@ describe("React store lifecycle", function () {
 				}
 			),
 		}))
-		const store = ReactStore.make({ schema: Model, update, subscriptions, layer }, [{ value: "initial" }, []])
+		const store = ReactStore.make({ update, subscriptions, layer }, [{ value: "initial" }, []])
 
 		const deactivateFirst = store.activate()
 		await vi.waitFor(function () {
@@ -151,7 +151,7 @@ describe("React store lifecycle", function () {
 	})
 
 	it("rejects overlapping activations", function () {
-		const store = ReactStore.make({ schema: Model, update }, [{ value: "initial" }, []])
+		const store = ReactStore.make({ update }, [{ value: "initial" }, []])
 		const deactivate = store.activate()
 
 		try {

@@ -56,7 +56,7 @@ describe("React Provider", function () {
 				return CompletedLoad({ value: "loaded" })
 			})
 		)
-		const { Provider, useModel } = make({ schema: Model, update })
+		const { Provider, useModel } = make({ update })
 
 		function View() {
 			const model = useModel()
@@ -93,7 +93,7 @@ describe("React Provider", function () {
 				return CompletedLoad({ value: "hydrated" })
 			})
 		)
-		const { Provider, useModel } = make({ schema: Model, update })
+		const { Provider, useModel } = make({ update })
 
 		function View() {
 			const model = useModel()
@@ -151,7 +151,7 @@ describe("React Provider", function () {
 				return CompletedLoad({ value: "strict" })
 			})
 		)
-		const { Provider, useModel } = make({ schema: Model, update })
+		const { Provider, useModel } = make({ update })
 
 		function View() {
 			return <span>{useModel().value}</span>
@@ -188,7 +188,7 @@ describe("React Provider", function () {
 				})
 			)
 		)
-		const { Provider, useModel } = make({ schema: Model, update })
+		const { Provider, useModel } = make({ update })
 
 		function View() {
 			return <span>{useModel().value}</span>
@@ -252,7 +252,6 @@ describe("React Provider", function () {
 			)
 		)
 		const { Provider, useModel } = make({
-			schema: Model,
 			update(model: Model, message: Message): UpdateReturn {
 				results += 1
 				return update(model, message)
@@ -313,7 +312,7 @@ describe("React Provider", function () {
 				),
 			}
 		})
-		const { Provider, useModel } = make({ schema: Model, update, subscriptions, layer })
+		const { Provider, useModel } = make({ update, subscriptions, layer })
 
 		function View() {
 			return <span>{useModel().status}</span>
@@ -337,7 +336,7 @@ describe("React Provider", function () {
 	})
 
 	it("uses selector equivalence to avoid unrelated rerenders", function () {
-		const { Provider, useDispatch, useModel } = make({ schema: Model, update })
+		const { Provider, useDispatch, useModel } = make({ update })
 		let selectedRenders = 0
 		let fullRenders = 0
 
@@ -384,7 +383,7 @@ describe("React Provider", function () {
 	})
 
 	it("captures init for one Provider identity and replaces it on keyed remount", function () {
-		const { Provider, useModel } = make({ schema: Model, update })
+		const { Provider, useModel } = make({ update })
 
 		function View() {
 			return <span>{useModel().value}</span>
@@ -418,7 +417,7 @@ describe("React Provider", function () {
 	})
 
 	it("infers the Model from config.schema and rejects an incompatible update", function () {
-		const bindings = make({ schema: Model, update })
+		const bindings = make({ update })
 		const IncompatibleModel = Schema.Struct({ other: Schema.Number })
 
 		if (false) {

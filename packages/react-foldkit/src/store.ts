@@ -18,18 +18,13 @@ import * as InitCommand from "./internal/init-command"
 import type * as Subscription from "./subscription"
 import type * as Update from "./update"
 
-type ConfigBase<ModelSchema extends Schema.Codec<unknown, unknown, never, never>, Message, R> = {
-	/** Schema describing the application's Model. */
-	schema: ModelSchema
-	update: (
-		model: Schema.Schema.Type<ModelSchema>,
-		message: Message
-	) => Update.Return<Schema.Schema.Type<ModelSchema>, Message, R>
+type ConfigBase<Model, Message, R> = {
+	update: (model: Model, message: Message) => Update.Return<Model, Message, R>
 	/**
 	 * Model-gated standing orders. Each entry restarts its Stream when
 	 * dependencies change (Foldkit Subscription contract).
 	 */
-	subscriptions?: Subscription.Subscriptions<Schema.Schema.Type<ModelSchema>, Message, R>
+	subscriptions?: Subscription.Subscriptions<Model, Message, R>
 	/**
 	 * Called once when update throws or a Command fiber fails. After crash the
 	 * store stops processing Messages (Foldkit crash-terminality).
@@ -43,13 +38,11 @@ type ConfigBase<ModelSchema extends Schema.Codec<unknown, unknown, never, never>
  * When `R` is `never`, `layer` is optional (defaults to {@link Layer.empty}).
  * When `R` is not `never`, `layer` is required so Command Effects can be provided.
  */
-export type Config<ModelSchema extends Schema.Codec<unknown, unknown, never, never>, Message, R = never> = [R] extends [
-	never,
-]
-	? ConfigBase<ModelSchema, Message, R> & {
+export type Config<Model, Message, R = never> = [R] extends [never]
+	? ConfigBase<Model, Message, R> & {
 			layer?: Layer.Layer<never, never, never>
 		}
-	: ConfigBase<ModelSchema, Message, R> & {
+	: ConfigBase<Model, Message, R> & {
 			layer: Layer.Layer<R, never, never>
 		}
 
@@ -210,12 +203,10 @@ function forkSubscriptionFibers<Model, Message, R>(
  * forked after the boot barrier lifts so subscribers can attach first.
  * Call from the React Provider (or tests), not at module load.
  */
-export function boot<ModelSchema extends Schema.Codec<unknown, unknown, never, never>, Message, R = never>(
-	config: Config<ModelSchema, Message, R>,
-	init: Update.Return<Schema.Schema.Type<ModelSchema>, Message, R>
-): Store<Schema.Schema.Type<ModelSchema>, Message> {
-	type Model = Schema.Schema.Type<ModelSchema>
-
+export function boot<Model, Message, R = never>(
+	config: Config<Model, Message, R>,
+	init: Update.Return<Model, Message, R>
+): Store<Model, Message> {
 	const listeners = new Set<() => void>()
 	let pendingMessages: Array<Message> = []
 	let phase: Phase = { _tag: "Booting" }

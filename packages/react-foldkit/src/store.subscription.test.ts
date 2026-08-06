@@ -96,7 +96,6 @@ describe("subscriptions", function () {
 
 		const store = Store.boot(
 			{
-				schema: Model,
 				update,
 				subscriptions: makeTrackedSubscriptions(active, acquires, releases),
 			},
@@ -121,7 +120,6 @@ describe("subscriptions", function () {
 
 		const store = Store.boot(
 			{
-				schema: Model,
 				update,
 				subscriptions: makeTrackedSubscriptions(active, acquires, releases),
 			},
@@ -151,7 +149,6 @@ describe("subscriptions", function () {
 
 		const store = Store.boot(
 			{
-				schema: Model,
 				update,
 				subscriptions: makeTrackedSubscriptions(active, acquires, releases),
 			},
@@ -181,7 +178,6 @@ describe("subscriptions", function () {
 
 		const store = Store.boot(
 			{
-				schema: Model,
 				update,
 				subscriptions: makeTrackedSubscriptions(active, acquires, releases),
 			},
@@ -218,7 +214,6 @@ describe("subscriptions", function () {
 
 		const store = Store.boot(
 			{
-				schema: Model,
 				update,
 				subscriptions: makeTrackedSubscriptions(active, acquires, releases),
 			},
@@ -254,7 +249,6 @@ describe("subscriptions", function () {
 
 		const store = Store.boot(
 			{
-				schema: Model,
 				update,
 				subscriptions: makeTrackedSubscriptions(active, acquires, releases),
 			},

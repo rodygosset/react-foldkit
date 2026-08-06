@@ -251,7 +251,6 @@ const update = (model: Model, message: Message): UpdateReturn =>
 	)
 
 const { Provider, useModel, useDispatch } = ReactFoldkit.make({
-	schema: Model,
 	update,
 	layer: TodoRepository.layer,
 })

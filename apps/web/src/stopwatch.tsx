@@ -137,7 +137,6 @@ const subscriptions = Subscription.make<Model, Message>()((entry) => ({
 }))
 
 const { Provider, useModel, useDispatch } = ReactFoldkit.make({
-	schema: Model,
 	update,
 	subscriptions,
 })

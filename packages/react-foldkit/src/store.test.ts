@@ -86,7 +86,7 @@ describe("message processing", function () {
 			)
 		}
 
-		const store = Store.boot({ schema: Model, update }, [{ log: [] }, []])
+		const store = Store.boot({ update }, [{ log: [] }, []])
 
 		try {
 			store.dispatch(AppendedFirst())
@@ -118,7 +118,7 @@ describe("message processing", function () {
 			return [{ log: [...model.log, message._tag] }, []]
 		}
 
-		const store = Store.boot({ schema: Model, update }, [{ log: [] }, []])
+		const store = Store.boot({ update }, [{ log: [] }, []])
 
 		try {
 			const labels = ["burn-1", "burn-2", "burn-3", "burn-4"]
@@ -156,7 +156,7 @@ describe("message processing", function () {
 			return [{ log: [...model.log, message._tag] }, []]
 		}
 
-		const store = Store.boot({ schema: Model, update }, [{ log: [] }, []])
+		const store = Store.boot({ update }, [{ log: [] }, []])
 
 		try {
 			const labels = ["burn-1", "burn-2", "burn-3", "burn-4"]
@@ -197,7 +197,7 @@ describe("message processing", function () {
 			return [nextModel, []]
 		}
 
-		const store = Store.boot({ schema: Model, update }, [{ log: [] }, [initCommand]])
+		const store = Store.boot({ update }, [{ log: [] }, [initCommand]])
 
 		try {
 			// Boot schedules init Commands as microtasks; the init Model is
@@ -243,7 +243,6 @@ describe("message processing", function () {
 
 		const store = Store.boot(
 			{
-				schema: Model,
 				update,
 				onCrash(cause) {
 					crashes.push(cause)
@@ -295,7 +294,6 @@ describe("message processing", function () {
 
 		const store = Store.boot(
 			{
-				schema: Model,
 				update,
 				onCrash: function () {},
 			},
@@ -441,7 +439,7 @@ describe("dispose", function () {
 			return [{ log: [...model.log, message._tag] }, []]
 		}
 
-		const store = Store.boot({ schema: Model, update }, [{ log: [] }, []])
+		const store = Store.boot({ update }, [{ log: [] }, []])
 
 		store.dispose()
 		store.dispose()
