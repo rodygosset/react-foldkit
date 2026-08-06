@@ -12,7 +12,7 @@ import * as Command from "react-foldkit/command"
 import { m } from "react-foldkit/message"
 import { evo } from "react-foldkit/struct"
 import * as Submodel from "react-foldkit/submodel"
-import type * as Update from "react-foldkit/update"
+import * as Update from "react-foldkit/update"
 import { ExampleShell } from "../../components/example-shell"
 import { getRouter } from "../../router"
 import { TodoItem } from "./model"
@@ -237,7 +237,7 @@ const update = (model: Model, message: Message): UpdateReturn =>
 			RemovedItem: ({ id }) => withRevalidate(model, PersistRemove({ id })),
 			ClickedClearCompleted: () => withRevalidate(model, PersistClearCompleted()),
 			ClickedRetryLoad: () => startFetch(model),
-			NavigationDone: () => [model, Command.none],
+			NavigationDone: Update.identity(model),
 			SettledFetchTodos: ({ result }) => [applySettledItems(model, result), Command.none],
 			SettledWriteTodos: ({ result }) => [applySettledItems(model, result), Command.none],
 			SettledClearCompleted: ({ result }) => {
