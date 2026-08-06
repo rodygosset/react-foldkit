@@ -1,6 +1,6 @@
+import { ReactFoldkit } from "@rodygosset/react-foldkit"
 import * as Command from "@rodygosset/react-foldkit/command"
 import { m } from "@rodygosset/react-foldkit/message"
-import { make } from "@rodygosset/react-foldkit/react"
 import * as Struct from "@rodygosset/react-foldkit/struct"
 import * as Subscription from "@rodygosset/react-foldkit/subscription"
 import type * as Update from "@rodygosset/react-foldkit/update"
@@ -137,7 +137,8 @@ const subscriptions = Subscription.make<Model, Message>()((entry) => ({
 	),
 }))
 
-const { Provider, useModel, useDispatch } = make({
+const { Provider, useModel, useDispatch } = ReactFoldkit.make({
+	schema: Model,
 	update,
 	subscriptions,
 })

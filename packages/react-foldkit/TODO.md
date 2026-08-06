@@ -14,6 +14,17 @@ Outstanding work for `@rodygosset/react-foldkit`. Credit for the TEA vocabulary 
 | ESLint recommended + strict presets | Done — `@rodygosset/react-foldkit/eslint` |
 | Subscriptions + stopwatch example | Done |
 | Public share (license, docs, CI, publish) | Mostly done — pin story + remote/CONTRIBUTING open |
+| **Next (tomorrow)** | More examples + Foldkit modules · GitHub + local build guide |
+
+---
+
+## Next — tomorrow
+
+1. **More examples + Foldkit modules** — expand `apps/web` with additional demos; integrate remaining important vendored Foldkit surfaces (e.g. Subscription helpers `persistent` / `lift` / `fromEvent`, URL-as-subscription, whatever else is high-value for the React binding).
+2. **Push to GitHub** — add remote, push `main`, confirm CI green.
+3. **Pre-npm share guide** — document how recipients clone, install, build, test, and run examples locally (`bun install`, `turbo build`, `test`, `apps/web` dev) until `@rodygosset/react-foldkit` is on npm. Fold into README and/or `CONTRIBUTING.md`.
+
+Still deferred until after the above: Foldkit pin story (§3.9), npm publish.
 
 ---
 

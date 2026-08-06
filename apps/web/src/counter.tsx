@@ -1,6 +1,6 @@
+import { ReactFoldkit } from "@rodygosset/react-foldkit"
 import * as Command from "@rodygosset/react-foldkit/command"
 import { m } from "@rodygosset/react-foldkit/message"
-import { make } from "@rodygosset/react-foldkit/react"
 import * as Struct from "@rodygosset/react-foldkit/struct"
 import type * as Update from "@rodygosset/react-foldkit/update"
 import { Button } from "@workspace/ui/components/button"
@@ -35,7 +35,7 @@ const update = (model: Model, message: Message): UpdateReturn =>
 		})
 	)
 
-const { Provider, useModel, useDispatch } = make({ update })
+const { Provider, useModel, useDispatch } = ReactFoldkit.make({ schema: Model, update })
 
 function View() {
 	const count = useModel((model) => model.count)

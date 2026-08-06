@@ -1,11 +1,11 @@
-import { getRouteApi, Link } from "@tanstack/react-router"
+import { ReactFoldkit } from "@rodygosset/react-foldkit"
 import * as AsyncData from "@rodygosset/react-foldkit/asyncData"
 import * as Command from "@rodygosset/react-foldkit/command"
 import { m } from "@rodygosset/react-foldkit/message"
-import { make } from "@rodygosset/react-foldkit/react"
 import * as Struct from "@rodygosset/react-foldkit/struct"
 import * as Submodel from "@rodygosset/react-foldkit/submodel"
 import type * as Update from "@rodygosset/react-foldkit/update"
+import { getRouteApi, Link } from "@tanstack/react-router"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import { Checkbox } from "@workspace/ui/components/checkbox"
@@ -250,7 +250,8 @@ const update = (model: Model, message: Message): UpdateReturn =>
 		})
 	)
 
-const { Provider, useModel, useDispatch } = make({
+const { Provider, useModel, useDispatch } = ReactFoldkit.make({
+	schema: Model,
 	update,
 	layer: TodoRepository.layer,
 })

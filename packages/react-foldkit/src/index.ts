@@ -1,6 +1,7 @@
 export * as AsyncData from "./asyncData"
 export * as Command from "./command"
 export * as Message from "./message"
+export * as ReactFoldkit from "./react"
 export * as Store from "./store"
 export * as Struct from "./struct"
 export * as Submodel from "./submodel"

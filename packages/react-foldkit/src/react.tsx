@@ -1,19 +1,24 @@
-import { Equal } from "effect"
+import { Equal, Schema } from "effect"
 import React from "react"
+import * as ReactStore from "./internal/react-store"
 import * as Store from "./store"
 import type * as Update from "./update"
 
 /**
- * Builds React bindings for a store config. The Provider boots the store in
- * `useEffect` (Strict Mode–safe), then children subscribe and dispatch.
+ * Builds React bindings for a store config. The Provider creates a cold store
+ * during render, then activates Commands and Subscriptions in `useEffect`.
  *
  * The underlying {@link Store.boot} matches Foldkit’s command loop: cached
  * Layer, interrupt registry, microtask scheduler + deferred forks, boot
  * barrier, drain budget, model-gated Subscriptions, and Scope teardown on
  * dispose.
  */
-export function make<Model, Message, R = never>(config: Store.Config<Model, Message, R>) {
-	const StoreContext = React.createContext<Store.Store<Model, Message> | null>(null)
+export function make<ModelSchema extends Schema.Codec<unknown, unknown, never, never>, Message, R = never>(
+	config: Store.Config<ModelSchema, Message, R>
+) {
+	type Model = Schema.Schema.Type<ModelSchema>
+
+	const StoreContext = React.createContext<ReactStore.ReactStore<ModelSchema, Message> | null>(null)
 
 	function useStore() {
 		const value = React.useContext(StoreContext)
@@ -23,23 +28,14 @@ export function make<Model, Message, R = never>(config: Store.Config<Model, Mess
 	}
 
 	function Provider(props: { init: Update.Return<Model, Message, R>; children: React.ReactNode }) {
-		// Capture mount init only — parent remounts via `key` when Flags change.
-		const initRef = React.useRef(props.init)
-		const [store, setStore] = React.useState<Store.Store<Model, Message> | null>(null)
+		const [store] = React.useState(() => ReactStore.make(config, props.init))
 
-		React.useEffect(function manageStoreLifetime() {
-			// Boot in the effect so React Strict Mode's setup → cleanup → setup
-			// cycle disposes the first store and leaves a live second one. Booting
-			// during render + disposing in cleanup leaves Context pointing at a
-			// disposed store (init Commands complete as no-ops → stuck "loading").
-			const active = Store.boot(config, initRef.current)
-			setStore(active)
-			return function dispose() {
-				active.dispose()
-			}
-		}, [])
-
-		if (store === null) return null
+		React.useEffect(
+			function manageStoreLifetime() {
+				return store.activate()
+			},
+			[store]
+		)
 
 		return <StoreContext.Provider value={store}>{props.children}</StoreContext.Provider>
 	}
@@ -64,8 +60,11 @@ export function make<Model, Message, R = never>(config: Store.Config<Model, Mess
 		selectorRef.current = selector
 		isEqualRef.current = isEqual
 
-		function getSnapshot(): Model | Selected {
-			const model = store.getModel()
+		const getSnapshot = (): Model | Selected => selectModel(store.getModel())
+
+		const getServerSnapshot = (): Model | Selected => selectModel(store.getServerModel())
+
+		function selectModel(model: Model): Model | Selected {
 			const currentSelector = selectorRef.current
 			if (currentSelector === undefined) return model
 
@@ -79,7 +78,7 @@ export function make<Model, Message, R = never>(config: Store.Config<Model, Mess
 			return next
 		}
 
-		return React.useSyncExternalStore(store.subscribe, getSnapshot, getSnapshot)
+		return React.useSyncExternalStore(store.subscribe, getSnapshot, getServerSnapshot)
 	}
 
 	return { Provider, useModel, useDispatch }

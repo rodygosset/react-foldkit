@@ -14,16 +14,22 @@ import {
 	Stream,
 } from "effect"
 import { CurrentInterruptRegistry, type InterruptRegistry, makeInterruptRegistry } from "./internal/foldkit"
+import * as InitCommand from "./internal/init-command"
 import type * as Subscription from "./subscription"
 import type * as Update from "./update"
 
-type ConfigBase<Model, Message, R> = {
-	update: (model: Model, message: Message) => Update.Return<Model, Message, R>
+type ConfigBase<ModelSchema extends Schema.Codec<unknown, unknown, never, never>, Message, R> = {
+	/** Schema describing the application's Model. */
+	schema: ModelSchema
+	update: (
+		model: Schema.Schema.Type<ModelSchema>,
+		message: Message
+	) => Update.Return<Schema.Schema.Type<ModelSchema>, Message, R>
 	/**
 	 * Model-gated standing orders. Each entry restarts its Stream when
 	 * dependencies change (Foldkit Subscription contract).
 	 */
-	subscriptions?: Subscription.Subscriptions<Model, Message, R>
+	subscriptions?: Subscription.Subscriptions<Schema.Schema.Type<ModelSchema>, Message, R>
 	/**
 	 * Called once when update throws or a Command fiber fails. After crash the
 	 * store stops processing Messages (Foldkit crash-terminality).
@@ -37,20 +43,22 @@ type ConfigBase<Model, Message, R> = {
  * When `R` is `never`, `layer` is optional (defaults to {@link Layer.empty}).
  * When `R` is not `never`, `layer` is required so Command Effects can be provided.
  */
-export type Config<Model, Message, R = never> = [R] extends [never]
-	? ConfigBase<Model, Message, R> & {
+export type Config<ModelSchema extends Schema.Codec<unknown, unknown, never, never>, Message, R = never> = [R] extends [
+	never,
+]
+	? ConfigBase<ModelSchema, Message, R> & {
 			layer?: Layer.Layer<never, never, never>
 		}
-	: ConfigBase<Model, Message, R> & {
+	: ConfigBase<ModelSchema, Message, R> & {
 			layer: Layer.Layer<R, never, never>
 		}
 
 export const StoreTypeId: unique symbol = Symbol.for("@rodygosset/react-foldkit/StoreTypeId")
 export type StoreTypeId = typeof StoreTypeId
 
-export type Store<Model, Message> = {
+export type Store<ModelSchema extends Schema.Codec<unknown, unknown, never, never>, Message> = {
 	readonly [StoreTypeId]: StoreTypeId
-	getModel: () => Model
+	getModel: () => Schema.Schema.Type<ModelSchema>
 	subscribe: (listener: () => void) => () => void
 	dispatch: (message: Message) => void
 	dispose: () => void
@@ -202,10 +210,12 @@ function forkSubscriptionFibers<Model, Message, R>(
  * forked after the boot barrier lifts so subscribers can attach first.
  * Call from the React Provider (or tests), not at module load.
  */
-export function boot<Model, Message, R = never>(
-	config: Config<Model, Message, R>,
-	init: Update.Return<Model, Message, R>
-): Store<Model, Message> {
+export function boot<ModelSchema extends Schema.Codec<unknown, unknown, never, never>, Message, R = never>(
+	config: Config<ModelSchema, Message, R>,
+	init: Update.Return<Schema.Schema.Type<ModelSchema>, Message, R>
+): Store<ModelSchema, Message> {
+	type Model = Schema.Schema.Type<ModelSchema>
+
 	const listeners = new Set<() => void>()
 	let pendingMessages: Array<Message> = []
 	let phase: Phase = { _tag: "Booting" }
@@ -240,11 +250,12 @@ export function boot<Model, Message, R = never>(
 		else console.error("[react-foldkit] Store crashed:", Cause.pretty(cause))
 	}
 
-	function enqueueMessage(message: Message): void {
-		if (isTerminal(phase)) return
+	function enqueueMessage(message: Message): boolean {
+		if (isTerminal(phase)) return false
 		pendingMessages.push(message)
-		if (phase._tag === "Booting") return
+		if (phase._tag === "Booting") return true
 		drainPendingMessages()
+		return true
 	}
 
 	function publishModel(nextModel: Model): void {
@@ -283,7 +294,7 @@ export function boot<Model, Message, R = never>(
 				provideAllResources,
 				Effect.flatMap(function (message) {
 					return Effect.sync(function () {
-						enqueueMessage(message)
+						if (enqueueMessage(message)) InitCommand.complete(command)
 					})
 				}),
 				Effect.catchCause(function (cause) {

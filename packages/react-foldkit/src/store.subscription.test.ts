@@ -38,44 +38,39 @@ function makeTrackedSubscriptions(
 	releases: { count: number }
 ) {
 	let seq = 0
-	return Subscription.make<Model, Message>()(function (entry) {
-		return {
-			gate: entry(
-				{ enabled: Schema.Boolean },
-				{
-					modelToDependencies: function (model) {
-						return { enabled: model.enabled }
-					},
-					dependenciesToStream: function ({ enabled }) {
-						if (!enabled) return Stream.empty
-						return Stream.callback<Message>(function (queue) {
-							return Effect.gen(function* () {
-								yield* Effect.acquireRelease(
+	return Subscription.make<Model, Message>()((entry) => ({
+		gate: entry(
+			{ enabled: Schema.Boolean },
+			{
+				modelToDependencies: (model) => ({ enabled: model.enabled }),
+				dependenciesToStream({ enabled }) {
+					if (!enabled) return Stream.empty
+					return Stream.callback<Message>((queue) =>
+						Effect.gen(function* () {
+							yield* Effect.acquireRelease(
+								Effect.sync(function () {
+									acquires.count += 1
+									active.current = true
+									seq += 1
+									Queue.offerUnsafe(queue, Emitted({ seq }))
+								}),
+								() =>
 									Effect.sync(function () {
-										acquires.count += 1
-										active.current = true
-										seq += 1
-										Queue.offerUnsafe(queue, Emitted({ seq }))
-									}),
-									function () {
-										return Effect.sync(function () {
-											releases.count += 1
-											active.current = false
-										})
-									}
-								)
-								return yield* Effect.never
-							})
+										releases.count += 1
+										active.current = false
+									})
+							)
+							return yield* Effect.never
 						})
-					},
-				}
-			),
-		}
-	})
+					)
+				},
+			}
+		),
+	}))
 }
 
-function update(model: Model, message: Message): UpdateReturn {
-	return Match.value(message).pipe(
+const update = (model: Model, message: Message): UpdateReturn =>
+	Match.value(message).pipe(
 		Match.withReturnType<UpdateReturn>(),
 		Match.tagsExhaustive({
 			Enabled: function () {
@@ -92,7 +87,6 @@ function update(model: Model, message: Message): UpdateReturn {
 			},
 		})
 	)
-}
 
 describe("subscriptions", function () {
 	it("starts from init deps with zero dispatches", async function () {
@@ -102,6 +96,7 @@ describe("subscriptions", function () {
 
 		const store = Store.boot(
 			{
+				schema: Model,
 				update,
 				subscriptions: makeTrackedSubscriptions(active, acquires, releases),
 			},
@@ -126,6 +121,7 @@ describe("subscriptions", function () {
 
 		const store = Store.boot(
 			{
+				schema: Model,
 				update,
 				subscriptions: makeTrackedSubscriptions(active, acquires, releases),
 			},
@@ -155,6 +151,7 @@ describe("subscriptions", function () {
 
 		const store = Store.boot(
 			{
+				schema: Model,
 				update,
 				subscriptions: makeTrackedSubscriptions(active, acquires, releases),
 			},
@@ -184,6 +181,7 @@ describe("subscriptions", function () {
 
 		const store = Store.boot(
 			{
+				schema: Model,
 				update,
 				subscriptions: makeTrackedSubscriptions(active, acquires, releases),
 			},
@@ -220,6 +218,7 @@ describe("subscriptions", function () {
 
 		const store = Store.boot(
 			{
+				schema: Model,
 				update,
 				subscriptions: makeTrackedSubscriptions(active, acquires, releases),
 			},
@@ -255,6 +254,7 @@ describe("subscriptions", function () {
 
 		const store = Store.boot(
 			{
+				schema: Model,
 				update,
 				subscriptions: makeTrackedSubscriptions(active, acquires, releases),
 			},

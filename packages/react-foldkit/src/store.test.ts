@@ -43,7 +43,7 @@ type Message = typeof Message.Type
 const Model = Schema.Struct({ log: Schema.Array(Schema.String) })
 type Model = typeof Model.Type
 
-type UpdateReturn = Store.Config<Model, Message>["update"] extends (model: Model, message: Message) => infer R
+type UpdateReturn = Store.Config<typeof Model, Message>["update"] extends (model: Model, message: Message) => infer R
 	? R
 	: never
 
@@ -86,7 +86,7 @@ describe("message processing", function () {
 			)
 		}
 
-		const store = Store.boot({ update }, [{ log: [] }, []])
+		const store = Store.boot({ schema: Model, update }, [{ log: [] }, []])
 
 		try {
 			store.dispatch(AppendedFirst())
@@ -118,7 +118,7 @@ describe("message processing", function () {
 			return [{ log: [...model.log, message._tag] }, []]
 		}
 
-		const store = Store.boot({ update }, [{ log: [] }, []])
+		const store = Store.boot({ schema: Model, update }, [{ log: [] }, []])
 
 		try {
 			const labels = ["burn-1", "burn-2", "burn-3", "burn-4"]
@@ -156,7 +156,7 @@ describe("message processing", function () {
 			return [{ log: [...model.log, message._tag] }, []]
 		}
 
-		const store = Store.boot({ update }, [{ log: [] }, []])
+		const store = Store.boot({ schema: Model, update }, [{ log: [] }, []])
 
 		try {
 			const labels = ["burn-1", "burn-2", "burn-3", "burn-4"]
@@ -197,7 +197,7 @@ describe("message processing", function () {
 			return [nextModel, []]
 		}
 
-		const store = Store.boot({ update }, [{ log: [] }, [initCommand]])
+		const store = Store.boot({ schema: Model, update }, [{ log: [] }, [initCommand]])
 
 		try {
 			// Boot schedules init Commands as microtasks; the init Model is
@@ -243,8 +243,9 @@ describe("message processing", function () {
 
 		const store = Store.boot(
 			{
+				schema: Model,
 				update,
-				onCrash: function (cause) {
+				onCrash(cause) {
 					crashes.push(cause)
 				},
 			},
@@ -294,6 +295,7 @@ describe("message processing", function () {
 
 		const store = Store.boot(
 			{
+				schema: Model,
 				update,
 				onCrash: function () {},
 			},
@@ -347,19 +349,14 @@ describe("resources", function () {
 		ReadonlyArray<Command.Command<ResourceMessage, never, ResourceService>>,
 	]
 
-	function resourceUpdate(model: ResourceModel, message: ResourceMessage): ResourceUpdateReturn {
-		return Match.value(message).pipe(
+	const resourceUpdate = (model: ResourceModel, message: ResourceMessage): ResourceUpdateReturn =>
+		Match.value(message).pipe(
 			Match.withReturnType<ResourceUpdateReturn>(),
 			Match.tagsExhaustive({
-				ClickedReadValue: function () {
-					return [{ label: "reading" }, [ReadValue()]]
-				},
-				SucceededReadValue: function ({ value }) {
-					return [{ label: `${model.label} ${value}` }, []]
-				},
+				ClickedReadValue: () => [{ label: "reading" }, [ReadValue()]],
+				SucceededReadValue: ({ value }) => [{ label: `${model.label} ${value}` }, []],
 			})
 		)
-	}
 
 	it("builds the Layer once, shares it across Commands, and releases it at teardown", async function () {
 		let buildCount = 0
@@ -372,16 +369,16 @@ describe("resources", function () {
 					buildCount += 1
 					return { value: `build-${buildCount}` }
 				}),
-				function () {
-					return Effect.sync(function () {
+				() =>
+					Effect.sync(function () {
 						releaseCount += 1
 					})
-				}
 			)
 		)
 
 		const store = Store.boot(
 			{
+				schema: ResourceModel,
 				update: resourceUpdate,
 				layer: CountedResourceLive,
 			},
@@ -414,9 +411,10 @@ describe("resources", function () {
 
 		const store = Store.boot(
 			{
+				schema: ResourceModel,
 				update: resourceUpdate,
 				layer: FailingResourceLive,
-				onCrash: function (cause) {
+				onCrash(cause) {
 					crashes.push(cause)
 				},
 			},
@@ -443,7 +441,7 @@ describe("dispose", function () {
 			return [{ log: [...model.log, message._tag] }, []]
 		}
 
-		const store = Store.boot({ update }, [{ log: [] }, []])
+		const store = Store.boot({ schema: Model, update }, [{ log: [] }, []])
 
 		store.dispose()
 		store.dispose()
@@ -486,7 +484,7 @@ describe("dispose", function () {
 			)
 		}
 
-		const store = Store.boot({ update }, [{ status: "idle" }, []])
+		const store = Store.boot({ schema: LongModel, update }, [{ status: "idle" }, []])
 
 		store.dispatch(Start())
 		expect(store.getModel()).toEqual({ status: "running" })
@@ -527,9 +525,7 @@ describe("command message mappers", function () {
 						return Match.value(childMessage).pipe(
 							Match.withReturnType<ParentUpdateReturn>(),
 							Match.tagsExhaustive({
-								CompletedDoChildWork: function () {
-									return [{ label: "child done" }, []]
-								},
+								CompletedDoChildWork: () => [{ label: "child done" }, []],
 							})
 						)
 					},
@@ -537,7 +533,7 @@ describe("command message mappers", function () {
 			)
 		}
 
-		const store = Store.boot({ update }, [
+		const store = Store.boot({ schema: ParentModel, update }, [
 			{ label: "start" },
 			Command.mapMessages([DoChildWork()], function (childMessage) {
 				return GotChildMessage({ message: childMessage })
