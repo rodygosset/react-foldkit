@@ -6,7 +6,7 @@ import { m } from "react-foldkit/message"
 import { evo } from "react-foldkit/struct"
 import * as Subscription from "react-foldkit/subscription"
 import type * as Update from "react-foldkit/update"
-import { ExampleShell } from "./components/example-shell"
+import { ExampleShell } from "../components/example-shell"
 
 const TICK_INTERVAL_MS = 100
 

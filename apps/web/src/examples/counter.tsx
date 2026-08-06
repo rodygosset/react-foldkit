@@ -6,7 +6,7 @@ import * as Command from "react-foldkit/command"
 import { m } from "react-foldkit/message"
 import { evo } from "react-foldkit/struct"
 import type * as Update from "react-foldkit/update"
-import { ExampleShell } from "./components/example-shell"
+import { ExampleShell } from "../components/example-shell"
 
 const Model = Schema.Struct({
 	count: Schema.Number,

@@ -1,8 +1,4 @@
 import { createFileRoute } from "@tanstack/react-router"
-import { Counter } from "../counter"
+import { Counter } from "../examples/counter"
 
-export const Route = createFileRoute("/counter")({ component: CounterPage })
-
-function CounterPage() {
-	return <Counter />
-}
+export const Route = createFileRoute("/counter")({ component: Counter })

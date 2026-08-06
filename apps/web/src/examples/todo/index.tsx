@@ -13,12 +13,12 @@ import { m } from "react-foldkit/message"
 import { evo } from "react-foldkit/struct"
 import * as Submodel from "react-foldkit/submodel"
 import type * as Update from "react-foldkit/update"
-import { ExampleShell } from "./components/example-shell"
-import { getRouter } from "./router"
+import { ExampleShell } from "../../components/example-shell"
+import { getRouter } from "../../router"
+import { TodoItem } from "./model"
+import { TodoRepository } from "./repository"
 import * as TodoForm from "./todo-form"
 import { Filter } from "./todo-search"
-import { TodoItem } from "./todo/model"
-import { TodoRepository } from "./todo/repository"
 
 const todoRoute = getRouteApi("/todo")
 
@@ -323,9 +323,7 @@ function View() {
 									<Badge variant="secondary">Loading…</Badge>
 								</div>
 								<Separator className="my-5" />
-								<p className="py-12 text-center text-2xl font-medium text-muted-foreground">
-									Loading…
-								</p>
+								<p className="py-12 text-center text-2xl font-medium text-muted-foreground">Loading…</p>
 							</>
 						)
 					},
