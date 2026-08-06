@@ -43,7 +43,7 @@ type Message = typeof Message.Type
 const Model = Schema.Struct({ log: Schema.Array(Schema.String) })
 type Model = typeof Model.Type
 
-type UpdateReturn = Store.Config<typeof Model, Message>["update"] extends (model: Model, message: Message) => infer R
+type UpdateReturn = Store.Config<Model, Message>["update"] extends (model: Model, message: Message) => infer R
 	? R
 	: never
 
@@ -376,7 +376,6 @@ describe("resources", function () {
 
 		const store = Store.boot(
 			{
-				schema: ResourceModel,
 				update: resourceUpdate,
 				layer: CountedResourceLive,
 			},
@@ -409,7 +408,6 @@ describe("resources", function () {
 
 		const store = Store.boot(
 			{
-				schema: ResourceModel,
 				update: resourceUpdate,
 				layer: FailingResourceLive,
 				onCrash(cause) {
@@ -482,7 +480,7 @@ describe("dispose", function () {
 			)
 		}
 
-		const store = Store.boot({ schema: LongModel, update }, [{ status: "idle" }, []])
+		const store = Store.boot({ update }, [{ status: "idle" }, []])
 
 		store.dispatch(Start())
 		expect(store.getModel()).toEqual({ status: "running" })
@@ -531,7 +529,7 @@ describe("command message mappers", function () {
 			)
 		}
 
-		const store = Store.boot({ schema: ParentModel, update }, [
+		const store = Store.boot({ update }, [
 			{ label: "start" },
 			Command.mapMessages([DoChildWork()], function (childMessage) {
 				return GotChildMessage({ message: childMessage })

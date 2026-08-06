@@ -415,16 +415,4 @@ describe("React Provider", function () {
 		)
 		expect(screen.getByText("second")).toBeDefined()
 	})
-
-	it("infers the Model from config.schema and rejects an incompatible update", function () {
-		const bindings = make({ update })
-		const IncompatibleModel = Schema.Struct({ other: Schema.Number })
-
-		if (false) {
-			// @ts-expect-error The update Model must match config.schema.
-			make({ schema: IncompatibleModel, update })
-		}
-
-		expect(bindings.Provider).toBeTypeOf("function")
-	})
 })
