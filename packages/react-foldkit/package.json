@@ -96,6 +96,7 @@
 		}
 	},
 	"dependencies": {
+		"foldkit": "0.139.0",
 		"picomatch": "^4.0.5"
 	},
 	"devDependencies": {

@@ -1,13 +1,9 @@
-import path from "node:path"
-import { fileURLToPath } from "node:url"
 import { defineConfig } from "tsup"
 
-const root = path.dirname(fileURLToPath(import.meta.url))
-const foldkitSrc = path.resolve(root, "../../repos/foldkit/packages/foldkit/src")
-
 /**
- * Bundles Foldkit source into this package. `effect` and `react` stay external
- * (peer deps). Apps never depend on or import `foldkit`.
+ * Foldkit is a regular dependency; Effect and React stay peer dependencies.
+ * All three remain external so the consuming application owns final bundling
+ * and tree-shaking.
  */
 export default defineConfig({
 	entry: {
@@ -34,20 +30,5 @@ export default defineConfig({
 	sourcemap: true,
 	clean: true,
 	treeshake: true,
-	external: ["effect", "react", "react/jsx-runtime", "react/jsx-dev-runtime"],
-	esbuildOptions: function (options) {
-		options.alias = {
-			...(options.alias ?? {}),
-			// Absolute aliases so any nested Foldkit `foldkit/*` import still resolves to src.
-			foldkit: path.join(foldkitSrc, "index.ts"),
-			"foldkit/asyncData": path.join(foldkitSrc, "asyncData/public.ts"),
-			"foldkit/command": path.join(foldkitSrc, "command/public.ts"),
-			"foldkit/command/interruptible": path.join(foldkitSrc, "command/interruptible/index.ts"),
-			"foldkit/message": path.join(foldkitSrc, "message/public.ts"),
-			"foldkit/schema": path.join(foldkitSrc, "schema/public.ts"),
-			"foldkit/struct": path.join(foldkitSrc, "struct/public.ts"),
-			"foldkit/subscription": path.join(foldkitSrc, "subscription/public.ts"),
-			"foldkit/update": path.join(foldkitSrc, "update/public.ts"),
-		}
-	},
+	external: ["effect", /^foldkit(?:\/.*)?$/, "react", "react/jsx-runtime", "react/jsx-dev-runtime"],
 })

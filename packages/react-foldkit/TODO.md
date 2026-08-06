@@ -9,7 +9,7 @@ Outstanding work for `react-foldkit`. Credit for the TEA vocabulary and runtime 
 | Area                                                                | State                                                        |
 | ------------------------------------------------------------------- | ------------------------------------------------------------ |
 | Store (drain, boot, crash, Scope, interrupts)                       | Done                                                         |
-| Command / Message / Update / Struct / Schema / AsyncData / Submodel | Done (vendored Foldkit surfaces)                             |
+| Command / Message / Update / Struct / Schema / AsyncData / Submodel | Done (Foldkit dependency surfaces)                           |
 | React Provider + hooks                                              | Done                                                         |
 | ESLint recommended + strict presets                                 | Done — `react-foldkit/eslint`                                |
 | Subscriptions + stopwatch example                                   | Done                                                         |
@@ -20,7 +20,7 @@ Outstanding work for `react-foldkit`. Credit for the TEA vocabulary and runtime 
 
 ## Next — tomorrow
 
-1. **More examples + Foldkit modules** — expand `apps/web` with additional demos; integrate remaining important vendored Foldkit surfaces (e.g. Subscription helpers `persistent` / `lift` / `fromEvent`, URL-as-subscription, whatever else is high-value for the React binding).
+1. **More examples + Foldkit modules** — expand `apps/web` with additional demos; integrate remaining important Foldkit surfaces (e.g. Subscription helpers `persistent` / `lift` / `fromEvent`, URL-as-subscription, whatever else is high-value for the React binding).
 2. **Push to GitHub** — add remote, push `main`, confirm CI green.
 3. **Pre-npm share guide** — document how recipients clone, install, build, test, and run examples locally (`bun install`, `turbo build`, `test`, `apps/web` dev) until `react-foldkit` is on npm. Fold into README and/or `CONTRIBUTING.md`.
 
@@ -30,7 +30,7 @@ Still deferred until after the above: Foldkit pin story (§3.9), npm publish.
 
 ## 1. Subscriptions + stopwatch example — done
 
-- `Subscription.make` / `entry` vendored; `Store.Config.subscriptions` wired (`Stream.concat` init seed, `changesWith`, `switchMap`)
+- `Subscription.make` / `entry` reexported; `Store.Config.subscriptions` wired (`Stream.concat` init seed, `changesWith`, `switchMap`)
 - Tests: init seeding / start / stop / restart / equivalence / dispose (`store.subscription.test.ts`)
 - Example: `apps/web/src/stopwatch.tsx` at `/stopwatch` (landing link added)
 - Skipped for later: `persistent` / `aggregate` / `lift` / `fromEvent`, URL-as-subscription
@@ -91,7 +91,7 @@ Wire `apps/web/eslint.config.js` to spread `recommendedConfig` (and optionally `
 6. **Drop `private: true` / publish from `dist`** — **Done:** exports + `files` point at `dist` / `eslint/dist`; `prepack` builds.
 7. **CI** — **Done:** `.github/workflows/ci.yml` (build, typecheck, test, lint, web build, pack dry-run).
 8. **Publish boundary** — **Done:** tarball is package `files` only (no `repos/foldkit` / `repos/effect`).
-9. **Foldkit pin story** — how vendored relative source is updated / attributed. _(open)_
+9. **Foldkit pin story** — **Done:** exact regular dependency on `foldkit@0.139.0`; updates are explicit and verified against package tests + example build.
 10. **Consume `dist` from `apps/web`** — **Done:** no `src` path override; workspace dep resolves package exports → `dist`.
 11. **Git remote + CONTRIBUTING** as needed. _(open)_
 

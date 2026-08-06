@@ -1,11 +1,11 @@
-import { ReactFoldkit } from "react-foldkit"
-import * as Command from "react-foldkit/command"
-import { m } from "react-foldkit/message"
-import * as Struct from "react-foldkit/struct"
-import type * as Update from "react-foldkit/update"
 import { Button } from "@workspace/ui/components/button"
 import { Match, Schema } from "effect"
 import { MinusIcon, PlusIcon, RotateCcwIcon } from "lucide-react"
+import { ReactFoldkit } from "react-foldkit"
+import * as Command from "react-foldkit/command"
+import { m } from "react-foldkit/message"
+import { evo } from "react-foldkit/struct"
+import type * as Update from "react-foldkit/update"
 import { ExampleShell } from "./components/example-shell"
 
 const Model = Schema.Struct({
@@ -29,9 +29,9 @@ const update = (model: Model, message: Message): UpdateReturn =>
 	Match.value(message).pipe(
 		Match.withReturnType<UpdateReturn>(),
 		Match.tagsExhaustive({
-			ClickedDecrement: () => [Struct.evo(model, { count: (count) => count - 1 }), Command.none],
-			ClickedIncrement: () => [Struct.evo(model, { count: (count) => count + 1 }), Command.none],
-			ClickedReset: () => [Struct.evo(model, { count: () => 0 }), Command.none],
+			ClickedDecrement: () => [evo(model, { count: (count) => count - 1 }), Command.none],
+			ClickedIncrement: () => [evo(model, { count: (count) => count + 1 }), Command.none],
+			ClickedReset: () => [evo(model, { count: () => 0 }), Command.none],
 		})
 	)
 

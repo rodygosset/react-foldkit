@@ -1,5 +1,5 @@
 {
-	"name": "ree",
+	"name": "react-foldkit-monorepo",
 	"version": "0.0.1",
 	"private": true,
 	"scripts": {
@@ -28,12 +28,6 @@
 	},
 	"workspaces": [
 		"apps/*",
-		"packages/*",
-		"repos/foldkit/packages/foldkit"
-	],
-	"dependencies": {
-		"@effect/platform-browser": "4.0.0-beta.103",
-		"@effect/platform-node": "4.0.0-beta.103",
-		"effect": "4.0.0-beta.103"
-	}
+		"packages/*"
+	]
 }

@@ -14,20 +14,21 @@ architecture background, see Foldkit’s [manifesto](https://foldkit.dev/get-sta
 ## Credits
 
 Design and TEA vocabulary credit belongs to [Foldkit](https://github.com/foldkit/foldkit)
-by Devin Jameson. Selected Foldkit modules are vendored and bundled into this
-package’s published build.
+by Devin Jameson. Foldkit is installed as a regular dependency and React Foldkit
+reexports the vocabulary used by React applications.
 
 - Foldkit: [https://foldkit.dev](https://foldkit.dev) · [GitHub](https://github.com/foldkit/foldkit)
-- Vendored code licenses: see [`THIRD-PARTY-NOTICES.md`](./THIRD-PARTY-NOTICES.md)
+- Third-party license notices: see [`THIRD-PARTY-NOTICES.md`](./THIRD-PARTY-NOTICES.md)
 - This package: MIT — see [`LICENSE`](./LICENSE)
 
 ## Never import `foldkit` from app code
 
 Apps should depend on `react-foldkit` (or the published package name)
-only. Foldkit is an implementation detail compiled into `dist/` at build time.
+only. The package manager installs Foldkit transitively; application code uses
+the stable `react-foldkit/*` facade rather than importing Foldkit directly.
 
 ```tsx
-import { make } from "react-foldkit/react"
+import { ReactFoldkit } from "react-foldkit"
 import * as Command from "react-foldkit/command"
 import { m } from "react-foldkit/message"
 ```
@@ -51,7 +52,7 @@ import { Match, Schema } from "effect"
 import * as Command from "react-foldkit/command"
 import { m } from "react-foldkit/message"
 import { ReactFoldkit } from "react-foldkit"
-import * as Struct from "react-foldkit/struct"
+import { evo } from "react-foldkit/struct"
 
 const Model = Schema.Struct({ count: Schema.Number })
 type Model = typeof Model.Type
@@ -63,7 +64,7 @@ type Message = typeof Message.Type
 const update = (model: Model, message: Message) =>
   Match.value(message).pipe(
     Match.tagsExhaustive({
-      Increment: () => [Struct.evo(model, { count: (n) => n + 1 }), Command.none],
+      Increment: () => [evo(model, { count: (n) => n + 1 }), Command.none],
     })
   )
 

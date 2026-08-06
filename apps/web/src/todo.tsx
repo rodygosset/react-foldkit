@@ -1,10 +1,3 @@
-import { ReactFoldkit } from "react-foldkit"
-import * as AsyncData from "react-foldkit/asyncData"
-import * as Command from "react-foldkit/command"
-import { m } from "react-foldkit/message"
-import * as Struct from "react-foldkit/struct"
-import * as Submodel from "react-foldkit/submodel"
-import type * as Update from "react-foldkit/update"
 import { getRouteApi, Link } from "@tanstack/react-router"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
@@ -13,6 +6,13 @@ import { Label } from "@workspace/ui/components/label"
 import { Separator } from "@workspace/ui/components/separator"
 import { Effect, Match, Option, Result, Schema } from "effect"
 import { Trash2Icon } from "lucide-react"
+import { ReactFoldkit } from "react-foldkit"
+import * as AsyncData from "react-foldkit/asyncData"
+import * as Command from "react-foldkit/command"
+import { m } from "react-foldkit/message"
+import { evo } from "react-foldkit/struct"
+import * as Submodel from "react-foldkit/submodel"
+import type * as Update from "react-foldkit/update"
 import { ExampleShell } from "./components/example-shell"
 import { getRouter } from "./router"
 import * as TodoForm from "./todo-form"
@@ -80,7 +80,7 @@ function nextIdFrom(items: ReadonlyArray<TodoItem>): number {
 
 function applySettledItems(model: Model, result: Result.Result<ReadonlyArray<TodoItem>, string>): Model {
 	const items = AsyncData.settle(model.items, result)
-	return Struct.evo(model, {
+	return evo(model, {
 		items: () => items,
 		nextId: () =>
 			Option.match(AsyncData.getData(items), {
@@ -94,13 +94,13 @@ function applySettledItems(model: Model, result: Result.Result<ReadonlyArray<Tod
 const withRevalidate = (model: Model, command: Update.Commands<Message, TodoRepository>[number]): UpdateReturn =>
 	Option.match(AsyncData.revalidate(model.items), {
 		onNone: () => [model, [command]],
-		onSome: (next) => [Struct.evo(model, { items: () => next }), [command]],
+		onSome: (next) => [evo(model, { items: () => next }), [command]],
 	})
 
 const startFetch = (model: Model): UpdateReturn =>
 	Option.match(AsyncData.revalidateOrLoad(model.items), {
 		onNone: () => [model, Command.none],
-		onSome: (next) => [Struct.evo(model, { items: () => next }), [FetchTodos()]],
+		onSome: (next) => [evo(model, { items: () => next }), [FetchTodos()]],
 	})
 
 /** Programmatic URL writes — the only place that calls `router.navigate`. */
@@ -213,7 +213,7 @@ const update = (model: Model, message: Message): UpdateReturn =>
 					TodoRepository
 				>({
 					get: (parent) => parent.form,
-					set: (parent, form) => Struct.evo(parent, { form: () => form }),
+					set: (parent, form) => evo(parent, { form: () => form }),
 					update: TodoForm.update,
 					wrap: (childMessage) => GotFormMessage({ message: childMessage }),
 					onOut: (out, nextModel, commands) =>
@@ -221,7 +221,7 @@ const update = (model: Model, message: Message): UpdateReturn =>
 							Match.withReturnType<UpdateReturn>(),
 							Match.tagsExhaustive({
 								Submitted: ({ text }) => {
-									const withNextId = Struct.evo(nextModel, {
+									const withNextId = evo(nextModel, {
 										nextId: (nextId) => nextId + 1,
 									})
 									const [modelAfterRevalidate, revalidateCommands] = withRevalidate(
@@ -243,7 +243,7 @@ const update = (model: Model, message: Message): UpdateReturn =>
 			SettledClearCompleted: ({ result }) => {
 				const next = applySettledItems(model, result)
 				if (model.filter === "completed" && Result.isSuccess(result)) {
-					return [Struct.evo(next, { filter: () => "all" as const }), [NavigateFilter({ filter: "all" })]]
+					return [evo(next, { filter: () => "all" as const }), [NavigateFilter({ filter: "all" })]]
 				}
 				return [next, Command.none]
 			},

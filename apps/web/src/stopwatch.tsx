@@ -1,11 +1,11 @@
+import { Button } from "@workspace/ui/components/button"
+import { Clock, Duration, Effect, Match, Schema, Stream } from "effect"
 import { ReactFoldkit } from "react-foldkit"
 import * as Command from "react-foldkit/command"
 import { m } from "react-foldkit/message"
-import * as Struct from "react-foldkit/struct"
+import { evo } from "react-foldkit/struct"
 import * as Subscription from "react-foldkit/subscription"
 import type * as Update from "react-foldkit/update"
-import { Button } from "@workspace/ui/components/button"
-import { Clock, Duration, Effect, Match, Schema, Stream } from "effect"
 import { ExampleShell } from "./components/example-shell"
 
 const TICK_INTERVAL_MS = 100
@@ -68,26 +68,26 @@ const DetermineTickTime = Command.define("DetermineTickTime", {
 
 // UPDATE
 
-function update(model: Model, message: Message): UpdateReturn {
-	return Match.value(message).pipe(
+const update = (model: Model, message: Message): UpdateReturn =>
+	Match.value(message).pipe(
 		Match.withReturnType<UpdateReturn>(),
 		Match.tagsExhaustive({
 			ClickedStart: () => [model, [DetermineStartTime({ elapsedMs: model.elapsedMs })]],
 			CompletedDetermineStartTime: ({ startTime }) => [
-				Struct.evo(model, {
+				evo(model, {
 					isRunning: () => true,
 					startTime: () => startTime,
 				}),
 				Command.none,
 			],
 			ClickedStop: () => [
-				Struct.evo(model, {
+				evo(model, {
 					isRunning: () => false,
 				}),
 				Command.none,
 			],
 			ClickedReset: () => [
-				Struct.evo(model, {
+				evo(model, {
 					elapsedMs: () => 0,
 					isRunning: () => false,
 					startTime: () => 0,
@@ -101,7 +101,7 @@ function update(model: Model, message: Message): UpdateReturn {
 			CompletedDetermineTickTime({ elapsedMs }) {
 				if (!model.isRunning) return [model, Command.none]
 				return [
-					Struct.evo(model, {
+					evo(model, {
 						elapsedMs: () => elapsedMs,
 					}),
 					Command.none,
@@ -109,7 +109,6 @@ function update(model: Model, message: Message): UpdateReturn {
 			},
 		})
 	)
-}
 
 // INIT
 

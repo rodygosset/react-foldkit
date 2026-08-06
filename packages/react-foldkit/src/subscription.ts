@@ -7,9 +7,9 @@
  * until something in-tree needs them — reexport from Foldkit's public barrel
  * then, rather than growing ad-hoc wrappers here.
  */
-export { make } from "../../../repos/foldkit/packages/foldkit/src/subscription/subscription.js"
+export { make } from "foldkit/subscription"
 export type {
 	EntryWithoutKeepAlive,
 	Subscription,
 	Subscriptions,
-} from "../../../repos/foldkit/packages/foldkit/src/subscription/subscription.js"
+} from "foldkit/subscription"

@@ -1,15 +1,14 @@
 # Third-Party Notices
 
-This package incorporates source from [Foldkit](https://github.com/foldkit/foldkit)
-(vendored under `repos/foldkit/` in the monorepo, currently pinned to Foldkit
-`0.138.0`). Those modules are compiled into the published `dist/` output via
-`tsup`. Application code should import `react-foldkit/*` only — not
-`foldkit` directly.
+This package depends on [Foldkit](https://github.com/foldkit/foldkit) `0.139.0`
+and reexports selected public Foldkit surfaces through `react-foldkit/*`.
+Foldkit remains an external regular dependency rather than being copied into
+React Foldkit's published `dist/` output.
 
-Vendored Foldkit surfaces include, in whole or in part:
+Reexported Foldkit surfaces include:
 
 - `asyncData`
-- `command` (including interrupt-registry internals used by the store)
+- `command`
 - `message`
 - `schema`
 - `struct`

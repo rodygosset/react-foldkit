@@ -1,12 +1,12 @@
-import * as Command from "react-foldkit/command"
-import { m } from "react-foldkit/message"
-import * as Struct from "react-foldkit/struct"
-import type * as Update from "react-foldkit/update"
 import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
 import { Label } from "@workspace/ui/components/label"
 import { Match, Option, Schema } from "effect"
 import { PlusIcon } from "lucide-react"
+import * as Command from "react-foldkit/command"
+import { m } from "react-foldkit/message"
+import { evo } from "react-foldkit/struct"
+import type * as Update from "react-foldkit/update"
 
 export const Model = Schema.Struct({
 	draft: Schema.String,
@@ -33,14 +33,14 @@ function submit(model: Model): UpdateReturn {
 	const text = model.draft.trim()
 	if (text.length === 0) return [model, Command.none, Option.none()]
 
-	return [Struct.evo(model, { draft: () => "" }), Command.none, Option.some(Submitted({ text }))]
+	return [evo(model, { draft: () => "" }), Command.none, Option.some(Submitted({ text }))]
 }
 
 export const update = (model: Model, message: Message): UpdateReturn =>
 	Match.value(message).pipe(
 		Match.withReturnType<UpdateReturn>(),
 		Match.tagsExhaustive({
-			ChangedDraft: ({ text }) => [Struct.evo(model, { draft: () => text }), Command.none, Option.none()],
+			ChangedDraft: ({ text }) => [evo(model, { draft: () => text }), Command.none, Option.none()],
 			ClickedSubmit: () => submit(model),
 		})
 	)
