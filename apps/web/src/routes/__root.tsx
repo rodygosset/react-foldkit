@@ -32,7 +32,7 @@ export const Route = createRootRoute({
 			},
 			{
 				rel: "stylesheet",
-				href: "https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Instrument+Serif:ital@0;1&display=swap",
+					href: "https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap",
 			},
 		],
 	}),
@@ -40,7 +40,7 @@ export const Route = createRootRoute({
 		return (
 			<main className="site-atmosphere flex min-h-svh items-center justify-center p-6">
 				<div className="text-center">
-					<p className="font-heading text-5xl italic tracking-tight">404</p>
+					<p className="text-5xl font-semibold tracking-tight">404</p>
 					<p className="mt-2 text-muted-foreground">Page not found.</p>
 				</div>
 			</main>

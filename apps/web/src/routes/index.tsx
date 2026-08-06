@@ -28,41 +28,30 @@ function Landing() {
 	return (
 		<main className="site-atmosphere relative flex min-h-svh flex-col">
 			<div className="mx-auto flex w-full max-w-lg flex-1 flex-col justify-center px-6 py-16">
-				<div className="animate-rise">
+				<div>
 					<Badge
 						variant="outline"
 						className="mb-6"
 					>
 						React · Elm · Effect
 					</Badge>
-					<h1 className="font-heading text-7xl leading-none tracking-tight italic sm:text-8xl">
-						react-foldkit
-					</h1>
+					<h1 className="text-6xl leading-none font-semibold tracking-tight sm:text-7xl">react-foldkit</h1>
 					<p className="mt-5 max-w-sm text-base leading-relaxed text-muted-foreground">
 						Foldkit’s TEA vocabulary on React: one Model, typed Messages, and Commands that stay outside the
 						view.
 					</p>
 				</div>
 
-				<Separator
-					className="animate-rise my-10"
-					style={{ animationDelay: "80ms" }}
-				/>
+				<Separator className="my-10" />
 
-				<section
-					className="animate-rise"
-					style={{ animationDelay: "140ms" }}
-				>
+				<section>
 					<p className="mb-4 text-xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
 						Examples
 					</p>
 					<ul className="flex flex-col gap-3">
-						{examples.map(function (example, index) {
+						{examples.map(function (example) {
 							return (
-								<li
-									key={example.options.to}
-									style={{ animationDelay: `${180 + index * 60}ms` }}
-								>
+								<li key={example.options.to}>
 									<Button
 										variant="outline"
 										size="lg"
@@ -71,7 +60,7 @@ function Landing() {
 										render={<Link {...example.options} />}
 									>
 										<span className="flex items-center justify-between gap-3">
-											<span className="font-heading text-xl tracking-tight italic">
+											<span className="text-xl font-semibold tracking-tight">
 												{example.title}
 											</span>
 											<ArrowRightIcon className="size-4 shrink-0 opacity-60 transition-transform group-hover/button:translate-x-0.5" />

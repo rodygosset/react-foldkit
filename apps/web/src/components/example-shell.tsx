@@ -10,7 +10,7 @@ export function ExampleShell(props: {
 }) {
 	return (
 		<main className="site-atmosphere relative flex min-h-svh flex-col">
-			<header className="animate-rise mx-auto flex w-full max-w-lg items-center gap-3 px-6 pt-8">
+				<header className="mx-auto flex w-full max-w-lg items-center gap-3 px-6 pt-8">
 				<Button
 					variant="ghost"
 					size="icon-sm"
@@ -24,16 +24,13 @@ export function ExampleShell(props: {
 					<p className="text-xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
 						Example
 					</p>
-					<h1 className="font-heading text-2xl tracking-tight italic">{props.title}</h1>
+					<h1 className="text-2xl font-semibold tracking-tight">{props.title}</h1>
 				</div>
 			</header>
-			<p
-				className="animate-rise mx-auto mt-2 w-full max-w-lg px-6 text-sm text-muted-foreground"
-				style={{ animationDelay: "60ms" }}
-			>
-				{props.description}
-			</p>
-			<div className="animate-rise flex flex-1 flex-col" style={{ animationDelay: "120ms" }}>
+				<p className="mx-auto mt-2 w-full max-w-lg px-6 text-sm text-muted-foreground">
+					{props.description}
+				</p>
+				<div className="flex flex-1 flex-col">
 				{props.children}
 			</div>
 		</main>

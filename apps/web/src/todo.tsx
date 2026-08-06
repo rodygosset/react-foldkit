@@ -323,7 +323,7 @@ function View() {
 									<Badge variant="secondary">Loading…</Badge>
 								</div>
 								<Separator className="my-5" />
-								<p className="py-12 text-center font-heading text-2xl text-muted-foreground italic">
+								<p className="py-12 text-center text-2xl font-medium text-muted-foreground">
 									Loading…
 								</p>
 							</>
@@ -337,7 +337,7 @@ function View() {
 								</div>
 								<Separator className="my-5" />
 								<div className="flex flex-col items-center gap-3 py-12">
-									<p className="font-heading text-2xl text-muted-foreground italic">{error}</p>
+									<p className="text-2xl font-medium text-muted-foreground">{error}</p>
 									<Button
 										variant="outline"
 										size="sm"
@@ -399,7 +399,7 @@ function View() {
 								<Separator className="my-5" />
 
 								{filtered.length === 0 ? (
-									<p className="py-12 text-center font-heading text-2xl text-muted-foreground italic">
+									<p className="py-12 text-center text-2xl font-medium text-muted-foreground">
 										{items.length === 0 ? "Nothing here yet" : "Nothing in this filter"}
 									</p>
 								) : (

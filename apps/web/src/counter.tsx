@@ -48,7 +48,7 @@ function View() {
 		>
 			<div className="mx-auto flex w-full max-w-lg flex-1 flex-col items-center justify-center px-6 pb-20">
 				<p
-					className="font-heading text-[7.5rem] leading-none tracking-tight italic tabular-nums transition-transform duration-300 sm:text-[9rem]"
+					className="text-[7.5rem] leading-none font-semibold tracking-tight tabular-nums transition-transform duration-300 sm:text-[9rem]"
 					aria-live="polite"
 				>
 					{count}
