@@ -38,6 +38,7 @@ import { defineMessageUnion } from "react-foldkit/message"
 | ------------------------------------------------------------ | ------------------------------------------------- |
 | `./react`                                                    | `make()` → `Provider`, `useModel`, `useDispatch`  |
 | `./store`                                                    | `boot()` for tests and non-React hosts            |
+| `./query`                                                    | Remote-data Submodel factory (`Query.define`, `Query.group`) |
 | `./command`, `./message`, `./update`, `./struct`, `./schema` | TEA vocabulary (`defineMessageUnion`, `Update.foldChild`, …) |
 | `./asyncData`                                                | Remote data helpers (`settle`, `revalidate`, …)              |
 | `./subscription`                                             | Model-gated standing orders (`Subscription.make`)            |
@@ -87,8 +88,8 @@ export function Counter() {
 }
 ```
 
-See `apps/web` in this monorepo for Todo (AsyncData) and Stopwatch (Subscription)
-examples.
+See `apps/web` in this monorepo for Todo (AsyncData), Stopwatch (Subscription),
+API Cache (hand-rolled AsyncData), and API Cache Query (`Query.define`).
 
 ## Server rendering
 

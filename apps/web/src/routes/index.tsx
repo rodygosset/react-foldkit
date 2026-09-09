@@ -27,6 +27,11 @@ const examples = [
 		blurb: "AsyncData as the cache — invalidate, stale-while-revalidate, and a refetch Subscription.",
 		options: linkOptions({ to: "/api-cache" }),
 	},
+	{
+		title: "API Cache (Query)",
+		blurb: "The same cache, with Query.define as a Submodel for settle, retry, and dedup.",
+		options: linkOptions({ to: "/api-cache-query" }),
+	},
 ]
 
 function Landing() {
