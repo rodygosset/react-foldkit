@@ -17,3 +17,5 @@ __unconfig*
 *.tsbuildinfo
 
 packages/react-foldkit/TODO.md
+
+.pnpm-store

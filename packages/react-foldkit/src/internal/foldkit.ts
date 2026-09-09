@@ -1,5 +1,5 @@
+import { Array, Context, Effect, Fiber } from "effect"
 import { Interruptible } from "foldkit/command"
-import { Context, Effect, Fiber } from "effect"
 
 type InterruptOutcome = typeof Interruptible.Outcome.Type
 
@@ -40,9 +40,11 @@ export const makeInterruptRegistry = (): InterruptRegistry => {
 
 	const interrupt = (key: string): Effect.Effect<InterruptOutcome> =>
 		Effect.suspend(function (): Effect.Effect<InterruptOutcome> {
-			const fibers = lookup(key)
-			if (fibers.length === 0) return Effect.succeed<InterruptOutcome>(Interruptible.NotFound())
-			return Effect.as(Fiber.interruptAll(fibers), Interruptible.Interrupted() as InterruptOutcome)
+			return Array.match(lookup(key), {
+				onEmpty: () => Effect.succeed<InterruptOutcome>(Interruptible.Outcome.NotFound()),
+				onNonEmpty: (fibers) =>
+					Effect.map(Fiber.interruptAll(fibers), (): InterruptOutcome => Interruptible.Outcome.Interrupted()),
+			})
 		})
 
 	return { lookup, register, release, interrupt }

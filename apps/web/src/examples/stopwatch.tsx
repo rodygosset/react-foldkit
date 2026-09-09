@@ -1,8 +1,8 @@
 import { Button } from "@workspace/ui/components/button"
-import { Clock, Duration, Effect, Match, Schema, Stream } from "effect"
+import { Clock, Duration, Effect, Schema, Stream } from "effect"
 import { ReactFoldkit } from "react-foldkit"
 import * as Command from "react-foldkit/command"
-import { m } from "react-foldkit/message"
+import { defineMessageUnion } from "react-foldkit/message"
 import { evo } from "react-foldkit/struct"
 import * as Subscription from "react-foldkit/subscription"
 import type * as Update from "react-foldkit/update"
@@ -21,25 +21,18 @@ type Model = typeof Model.Type
 
 // MESSAGE
 
-const ClickedStart = m("ClickedStart")
-const CompletedDetermineStartTime = m("CompletedDetermineStartTime", {
-	startTime: Schema.Number,
+const Message = defineMessageUnion({
+	ClickedStart: {},
+	CompletedDetermineStartTime: {
+		startTime: Schema.Number,
+	},
+	ClickedStop: {},
+	ClickedReset: {},
+	Ticked: {},
+	CompletedDetermineTickTime: {
+		elapsedMs: Schema.Number,
+	},
 })
-const ClickedStop = m("ClickedStop")
-const ClickedReset = m("ClickedReset")
-const Ticked = m("Ticked")
-const CompletedDetermineTickTime = m("CompletedDetermineTickTime", {
-	elapsedMs: Schema.Number,
-})
-
-const Message = Schema.Union([
-	ClickedStart,
-	CompletedDetermineStartTime,
-	ClickedStop,
-	ClickedReset,
-	Ticked,
-	CompletedDetermineTickTime,
-])
 type Message = typeof Message.Type
 
 type UpdateReturn = Update.Return<Model, Message>
@@ -48,78 +41,73 @@ type UpdateReturn = Update.Return<Model, Message>
 
 const DetermineStartTime = Command.define("DetermineStartTime", {
 	args: { elapsedMs: Schema.Number },
-	messages: [CompletedDetermineStartTime],
+	messages: [Message.CompletedDetermineStartTime],
 	execute: ({ elapsedMs }) =>
 		Effect.gen(function* () {
 			const now = yield* Clock.currentTimeMillis
-			return CompletedDetermineStartTime({ startTime: now - elapsedMs })
+			return Message.CompletedDetermineStartTime({ startTime: now - elapsedMs })
 		}),
 })
 
 const DetermineTickTime = Command.define("DetermineTickTime", {
 	args: { startTime: Schema.Number },
-	messages: [CompletedDetermineTickTime],
+	messages: [Message.CompletedDetermineTickTime],
 	execute: ({ startTime }) =>
 		Effect.gen(function* () {
 			const now = yield* Clock.currentTimeMillis
-			return CompletedDetermineTickTime({ elapsedMs: now - startTime })
+			return Message.CompletedDetermineTickTime({ elapsedMs: now - startTime })
 		}),
 })
 
 // UPDATE
 
 const update = (model: Model, message: Message): UpdateReturn =>
-	Match.value(message).pipe(
-		Match.withReturnType<UpdateReturn>(),
-		Match.tagsExhaustive({
-			ClickedStart: () => [model, [DetermineStartTime({ elapsedMs: model.elapsedMs })]],
-			CompletedDetermineStartTime: ({ startTime }) => [
-				evo(model, {
-					isRunning: () => true,
-					startTime: () => startTime,
+	Message.match<UpdateReturn>(message, {
+		ClickedStart: () => ({
+			model,
+			commands: [DetermineStartTime({ elapsedMs: model.elapsedMs })],
+		}),
+		CompletedDetermineStartTime: ({ startTime }) => ({
+			model: evo(model, {
+				isRunning: () => true,
+				startTime: () => startTime,
+			}),
+		}),
+		ClickedStop: () => ({
+			model: evo(model, {
+				isRunning: () => false,
+			}),
+		}),
+		ClickedReset: () => ({
+			model: evo(model, {
+				elapsedMs: () => 0,
+				isRunning: () => false,
+				startTime: () => 0,
+			}),
+		}),
+		Ticked() {
+			if (!model.isRunning) return { model }
+			return { model, commands: [DetermineTickTime({ startTime: model.startTime })] }
+		},
+		CompletedDetermineTickTime({ elapsedMs }) {
+			if (!model.isRunning) return { model }
+			return {
+				model: evo(model, {
+					elapsedMs: () => elapsedMs,
 				}),
-				Command.none,
-			],
-			ClickedStop: () => [
-				evo(model, {
-					isRunning: () => false,
-				}),
-				Command.none,
-			],
-			ClickedReset: () => [
-				evo(model, {
-					elapsedMs: () => 0,
-					isRunning: () => false,
-					startTime: () => 0,
-				}),
-				Command.none,
-			],
-			Ticked() {
-				if (!model.isRunning) return [model, Command.none]
-				return [model, [DetermineTickTime({ startTime: model.startTime })]]
-			},
-			CompletedDetermineTickTime({ elapsedMs }) {
-				if (!model.isRunning) return [model, Command.none]
-				return [
-					evo(model, {
-						elapsedMs: () => elapsedMs,
-					}),
-					Command.none,
-				]
-			},
-		})
-	)
+			}
+		},
+	})
 
 // INIT
 
-const init = (): UpdateReturn => [
-	{
+const init = (): UpdateReturn => ({
+	model: {
 		elapsedMs: 0,
 		isRunning: false,
 		startTime: 0,
 	},
-	Command.none,
-]
+})
 
 // SUBSCRIPTION
 
@@ -130,7 +118,7 @@ const subscriptions = Subscription.make<Model, Message>()((entry) => ({
 			modelToDependencies: (model) => ({ isRunning: model.isRunning }),
 			dependenciesToStream({ isRunning }) {
 				if (!isRunning) return Stream.empty
-				return Stream.tick(Duration.millis(TICK_INTERVAL_MS)).pipe(Stream.map(Ticked))
+				return Stream.tick(Duration.millis(TICK_INTERVAL_MS)).pipe(Stream.map(Message.Ticked))
 			},
 		}
 	),
@@ -141,11 +129,9 @@ const { Provider, useModel, useDispatch } = ReactFoldkit.make({
 	subscriptions,
 })
 
-function floorAndPad(value: number): string {
-	return Math.floor(value).toString().padStart(2, "0")
-}
+const floorAndPad = (value: number): string => Math.floor(value).toString().padStart(2, "0")
 
-function formatTime(ms: number): string {
+const formatTime = (ms: number): string => {
 	const minutes = floorAndPad(Duration.toMinutes(Duration.millis(ms)))
 	const seconds = floorAndPad(Duration.toSeconds(Duration.millis(ms % 60_000)))
 	const centiseconds = floorAndPad(Duration.toMillis(Duration.millis(ms % 1000)) / 10)
@@ -168,7 +154,7 @@ function Controls() {
 				variant="outline"
 				size="lg"
 				onClick={function () {
-					dispatch(ClickedReset())
+					dispatch(Message.ClickedReset())
 				}}
 			>
 				Reset
@@ -177,7 +163,7 @@ function Controls() {
 				<Button
 					size="lg"
 					onClick={function () {
-						dispatch(ClickedStop())
+						dispatch(Message.ClickedStop())
 					}}
 				>
 					Stop
@@ -186,7 +172,7 @@ function Controls() {
 				<Button
 					size="lg"
 					onClick={function () {
-						dispatch(ClickedStart())
+						dispatch(Message.ClickedStart())
 					}}
 				>
 					Start

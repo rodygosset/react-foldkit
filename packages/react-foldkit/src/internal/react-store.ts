@@ -31,7 +31,8 @@ export function make<Model, Message, R = never>(
 	init: Update.Return<Model, Message, R>
 ): ReactStore<Model, Message> {
 	const listeners = new Set<() => void>()
-	const [initialModel, initCommands] = init
+	const initialModel = init.model
+	const initCommands = init.commands ?? []
 	const initCommandStates = initCommands.map(function (command) {
 		return { command, isComplete: false }
 	})
@@ -51,7 +52,7 @@ export function make<Model, Message, R = never>(
 				return !state.isComplete
 			})
 			.map(trackCompletion)
-		const store = Store.boot(config, [activationModel, pendingInitCommands])
+		const store = Store.boot(config, { model: activationModel, commands: pendingInitCommands })
 		activeStore = store
 		const unsubscribe = store.subscribe(notifyListeners)
 

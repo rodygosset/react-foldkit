@@ -15,7 +15,6 @@ export default defineConfig({
 		schema: "src/schema.ts",
 		store: "src/store.ts",
 		struct: "src/struct.ts",
-		submodel: "src/submodel.ts",
 		subscription: "src/subscription.ts",
 		update: "src/update.ts",
 	},
