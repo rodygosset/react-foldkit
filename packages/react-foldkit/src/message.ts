@@ -1,1 +1,2 @@
-export { m, m as make } from "foldkit/message"
+export { defineMessageUnion } from "foldkit/message"
+export type { MessageUnion } from "foldkit/message"

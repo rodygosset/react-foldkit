@@ -1,8 +1,9 @@
-import { Cause, Context, Effect, Layer, Match, Schema } from "effect"
+import { Cause, Context, Effect, Layer, Schema } from "effect"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import * as Command from "./command"
-import { m } from "./message"
+import { defineMessageUnion } from "./message"
 import * as Store from "./store"
+import type * as Update from "./update"
 
 /**
  * Pins the message-processing / resources / dispose contract of Store.boot,
@@ -19,25 +20,16 @@ import * as Store from "./store"
  * - mapMessages lifts child results into the parent Message space.
  */
 
-const AppendedFirst = m("AppendedFirst")
-const AppendedSecond = m("AppendedSecond")
-const AppendedCommandResult = m("AppendedCommandResult")
-const AppendedInitResult = m("AppendedInitResult")
-const AppendedChainedResult = m("AppendedChainedResult")
-const AppendedAfterCrash = m("AppendedAfterCrash")
-const ThrewInUpdate = m("ThrewInUpdate")
-const BurnedBudget = m("BurnedBudget", { label: Schema.String })
-
-const Message = Schema.Union([
-	AppendedFirst,
-	AppendedSecond,
-	AppendedCommandResult,
-	AppendedInitResult,
-	AppendedChainedResult,
-	AppendedAfterCrash,
-	ThrewInUpdate,
-	BurnedBudget,
-])
+const Message = defineMessageUnion({
+	AppendedFirst: {},
+	AppendedSecond: {},
+	AppendedCommandResult: {},
+	AppendedInitResult: {},
+	AppendedChainedResult: {},
+	AppendedAfterCrash: {},
+	ThrewInUpdate: {},
+	BurnedBudget: { label: Schema.String },
+})
 type Message = typeof Message.Type
 
 const Model = Schema.Struct({ log: Schema.Array(Schema.String) })
@@ -65,35 +57,32 @@ describe("message processing", function () {
 
 		const produceCommandResult: Command.Command<Message> = {
 			name: "ProduceCommandResult",
-			effect: Effect.succeed(AppendedCommandResult()),
+			effect: Effect.succeed(Message.AppendedCommandResult()),
 		}
 
 		function update(model: Model, message: Message): UpdateReturn {
 			processedLog.push(message._tag)
 			const nextModel = { log: [...model.log, message._tag] }
-			return Match.value(message).pipe(
-				Match.withReturnType<UpdateReturn>(),
-				Match.tagsExhaustive({
-					AppendedFirst: () => [nextModel, [produceCommandResult]],
-					AppendedSecond: () => [nextModel, []],
-					AppendedCommandResult: () => [nextModel, []],
-					AppendedInitResult: () => [nextModel, []],
-					AppendedChainedResult: () => [nextModel, []],
-					AppendedAfterCrash: () => [nextModel, []],
-					ThrewInUpdate: () => [nextModel, []],
-					BurnedBudget: () => [nextModel, []],
-				})
-			)
+			return Message.match(message, {
+				AppendedFirst: () => ({ model: nextModel, commands: [produceCommandResult] }),
+				AppendedSecond: () => ({ model: nextModel }),
+				AppendedCommandResult: () => ({ model: nextModel }),
+				AppendedInitResult: () => ({ model: nextModel }),
+				AppendedChainedResult: () => ({ model: nextModel }),
+				AppendedAfterCrash: () => ({ model: nextModel }),
+				ThrewInUpdate: () => ({ model: nextModel }),
+				BurnedBudget: () => ({ model: nextModel }),
+			})
 		}
 
-		const store = Store.boot({ update }, [{ log: [] }, []])
+		const store = Store.boot({ update }, { model: { log: [] } })
 
 		try {
-			store.dispatch(AppendedFirst())
+			store.dispatch(Message.AppendedFirst())
 			// AppendedFirst has already been processed on this stack; its Command
 			// has been forked but its result cannot arrive before the next line.
 			expect(processedLog).toEqual(["AppendedFirst"])
-			store.dispatch(AppendedSecond())
+			store.dispatch(Message.AppendedSecond())
 			expect(processedLog).toEqual(["AppendedFirst", "AppendedSecond"])
 
 			await vi.waitFor(function () {
@@ -115,15 +104,15 @@ describe("message processing", function () {
 			if (message._tag === "BurnedBudget") {
 				fakeNow += BURN_MS
 			}
-			return [{ log: [...model.log, message._tag] }, []]
+			return { model: { log: [...model.log, message._tag] } }
 		}
 
-		const store = Store.boot({ update }, [{ log: [] }, []])
+		const store = Store.boot({ update }, { model: { log: [] } })
 
 		try {
 			const labels = ["burn-1", "burn-2", "burn-3", "burn-4"]
 			for (const label of labels) {
-				store.dispatch(BurnedBudget({ label }))
+				store.dispatch(Message.BurnedBudget({ label }))
 			}
 
 			// The dispatch loop holds the stack, so the mocked clock never
@@ -153,15 +142,15 @@ describe("message processing", function () {
 			if (message._tag === "BurnedBudget") {
 				fakeNow += BURN_MS
 			}
-			return [{ log: [...model.log, message._tag] }, []]
+			return { model: { log: [...model.log, message._tag] } }
 		}
 
-		const store = Store.boot({ update }, [{ log: [] }, []])
+		const store = Store.boot({ update }, { model: { log: [] } })
 
 		try {
 			const labels = ["burn-1", "burn-2", "burn-3", "burn-4"]
 			for (const label of labels) {
-				store.dispatch(BurnedBudget({ label }))
+				store.dispatch(Message.BurnedBudget({ label }))
 				// An idle gap wider than the budget between dispatches means the
 				// browser had the stack back; the accumulated budget resets and no
 				// burn ever defers.
@@ -180,24 +169,24 @@ describe("message processing", function () {
 
 		const chainedCommand: Command.Command<Message> = {
 			name: "ProduceChainedResult",
-			effect: Effect.succeed(AppendedChainedResult()),
+			effect: Effect.succeed(Message.AppendedChainedResult()),
 		}
 
 		const initCommand: Command.Command<Message> = {
 			name: "ProduceInitResult",
-			effect: Effect.succeed(AppendedInitResult()),
+			effect: Effect.succeed(Message.AppendedInitResult()),
 		}
 
 		function update(model: Model, message: Message): UpdateReturn {
 			processedLog.push(message._tag)
 			const nextModel = { log: [...model.log, message._tag] }
 			if (message._tag === "AppendedInitResult") {
-				return [nextModel, [chainedCommand]]
+				return { model: nextModel, commands: [chainedCommand] }
 			}
-			return [nextModel, []]
+			return { model: nextModel }
 		}
 
-		const store = Store.boot({ update }, [{ log: [] }, [initCommand]])
+		const store = Store.boot({ update }, { model: { log: [] }, commands: [initCommand] })
 
 		try {
 			// Boot schedules init Commands as microtasks; the init Model is
@@ -225,7 +214,7 @@ describe("message processing", function () {
 			name: "ProduceSpiedResult",
 			effect: Effect.sync(function () {
 				commandEffectSpy()
-				return AppendedCommandResult()
+				return Message.AppendedCommandResult()
 			}),
 		}
 
@@ -236,9 +225,9 @@ describe("message processing", function () {
 			}
 			const nextModel = { log: [...model.log, message._tag] }
 			if (message._tag === "AppendedAfterCrash") {
-				return [nextModel, [spiedCommand]]
+				return { model: nextModel, commands: [spiedCommand] }
 			}
-			return [nextModel, []]
+			return { model: nextModel }
 		}
 
 		const store = Store.boot(
@@ -248,14 +237,14 @@ describe("message processing", function () {
 					crashes.push(cause)
 				},
 			},
-			[{ log: [] }, []]
+			{ model: { log: [] } }
 		)
 
 		try {
-			store.dispatch(ThrewInUpdate())
+			store.dispatch(Message.ThrewInUpdate())
 			expect(crashes).toHaveLength(1)
 
-			store.dispatch(AppendedAfterCrash())
+			store.dispatch(Message.AppendedAfterCrash())
 			expect(processedLog).toEqual(["ThrewInUpdate"])
 
 			await new Promise(function (resolve) {
@@ -277,7 +266,7 @@ describe("message processing", function () {
 			name: "ProduceSpiedResult",
 			effect: Effect.sync(function () {
 				commandEffectSpy()
-				return AppendedCommandResult()
+				return Message.AppendedCommandResult()
 			}),
 		}
 
@@ -287,9 +276,9 @@ describe("message processing", function () {
 			}
 			const nextModel = { log: [...model.log, message._tag] }
 			if (message._tag === "AppendedFirst") {
-				return [nextModel, [spiedCommand]]
+				return { model: nextModel, commands: [spiedCommand] }
 			}
-			return [nextModel, []]
+			return { model: nextModel }
 		}
 
 		const store = Store.boot(
@@ -297,12 +286,12 @@ describe("message processing", function () {
 				update,
 				onCrash: function () {},
 			},
-			[{ log: [] }, []]
+			{ model: { log: [] } }
 		)
 
 		try {
-			store.dispatch(AppendedFirst())
-			store.dispatch(ThrewInUpdate())
+			store.dispatch(Message.AppendedFirst())
+			store.dispatch(Message.ThrewInUpdate())
 
 			await new Promise(function (resolve) {
 				setTimeout(resolve, 20)
@@ -316,9 +305,10 @@ describe("message processing", function () {
 })
 
 describe("resources", function () {
-	const SucceededReadValue = m("SucceededReadValue", { value: Schema.String })
-	const ClickedReadValue = m("ClickedReadValue")
-	const ResourceMessage = Schema.Union([ClickedReadValue, SucceededReadValue])
+	const ResourceMessage = defineMessageUnion({
+		SucceededReadValue: { value: Schema.String },
+		ClickedReadValue: {},
+	})
 	type ResourceMessage = typeof ResourceMessage.Type
 
 	const ResourceModel = Schema.Struct({ label: Schema.String })
@@ -335,26 +325,20 @@ describe("resources", function () {
 	})
 
 	const ReadValue = Command.define("ReadValue", {
-		messages: [SucceededReadValue],
+		messages: [ResourceMessage.SucceededReadValue],
 		execute: Effect.gen(function* () {
 			const { value } = yield* ResourceService
-			return SucceededReadValue({ value })
+			return ResourceMessage.SucceededReadValue({ value })
 		}),
 	})
 
-	type ResourceUpdateReturn = readonly [
-		ResourceModel,
-		ReadonlyArray<Command.Command<ResourceMessage, never, ResourceService>>,
-	]
+	type ResourceUpdateReturn = Update.Return<ResourceModel, ResourceMessage, ResourceService>
 
 	const resourceUpdate = (model: ResourceModel, message: ResourceMessage): ResourceUpdateReturn =>
-		Match.value(message).pipe(
-			Match.withReturnType<ResourceUpdateReturn>(),
-			Match.tagsExhaustive({
-				ClickedReadValue: () => [{ label: "reading" }, [ReadValue()]],
-				SucceededReadValue: ({ value }) => [{ label: `${model.label} ${value}` }, []],
-			})
-		)
+		ResourceMessage.match<ResourceUpdateReturn>(message, {
+			ClickedReadValue: () => ({ model: { label: "reading" }, commands: [ReadValue()] }),
+			SucceededReadValue: ({ value }) => ({ model: { label: `${model.label} ${value}` } }),
+		})
 
 	it("builds the Layer once, shares it across Commands, and releases it at teardown", async function () {
 		let buildCount = 0
@@ -379,7 +363,7 @@ describe("resources", function () {
 				update: resourceUpdate,
 				layer: CountedResourceLive,
 			},
-			[{ label: "start" }, [ReadValue()]]
+			{ model: { label: "start" }, commands: [ReadValue()] }
 		)
 
 		try {
@@ -387,7 +371,7 @@ describe("resources", function () {
 				expect(store.getModel().label).toBe("start build-1")
 			})
 
-			store.dispatch(ClickedReadValue())
+			store.dispatch(ResourceMessage.ClickedReadValue())
 
 			await vi.waitFor(function () {
 				expect(store.getModel().label).toBe("reading build-1")
@@ -414,7 +398,7 @@ describe("resources", function () {
 					crashes.push(cause)
 				},
 			},
-			[{ label: "start" }, [ReadValue(), ReadValue()]]
+			{ model: { label: "start" }, commands: [ReadValue(), ReadValue()] }
 		)
 
 		try {
@@ -434,14 +418,14 @@ describe("dispose", function () {
 
 		function update(model: Model, message: Message): UpdateReturn {
 			processedLog.push(message._tag)
-			return [{ log: [...model.log, message._tag] }, []]
+			return { model: { log: [...model.log, message._tag] } }
 		}
 
-		const store = Store.boot({ update }, [{ log: [] }, []])
+		const store = Store.boot({ update }, { model: { log: [] } })
 
 		store.dispose()
 		store.dispose()
-		store.dispatch(AppendedFirst())
+		store.dispatch(Message.AppendedFirst())
 
 		await new Promise(function (resolve) {
 			setTimeout(resolve, 20)
@@ -451,38 +435,32 @@ describe("dispose", function () {
 	})
 
 	it("dispose interrupts in-flight Commands so their results never land", async function () {
-		const Completed = m("Completed")
-		const Start = m("Start")
-		const LongMessage = Schema.Union([Start, Completed])
+		const LongMessage = defineMessageUnion({
+			Completed: {},
+			Start: {},
+		})
 		type LongMessage = typeof LongMessage.Type
 
 		const LongModel = Schema.Struct({ status: Schema.String })
 		type LongModel = typeof LongModel.Type
 
 		const LongRunning = Command.define("LongRunning", {
-			messages: [Completed],
-			execute: Effect.sleep("500 millis").pipe(Effect.as(Completed())),
+			messages: [LongMessage.Completed],
+			execute: Effect.sleep("500 millis").pipe(Effect.as(LongMessage.Completed())),
 		})
 
-		type LongUpdateReturn = readonly [LongModel, ReadonlyArray<Command.Command<LongMessage>>]
+		type LongUpdateReturn = Update.Return<LongModel, LongMessage>
 
-		function update(model: LongModel, message: LongMessage): LongUpdateReturn {
-			return Match.value(message).pipe(
-				Match.withReturnType<LongUpdateReturn>(),
-				Match.tagsExhaustive({
-					Start: function () {
-						return [{ status: "running" }, [LongRunning()]]
-					},
-					Completed: function () {
-						return [{ status: "done" }, []]
-					},
-				})
-			)
+		function update(_model: LongModel, message: LongMessage): LongUpdateReturn {
+			return LongMessage.match<LongUpdateReturn>(message, {
+				Start: () => ({ model: { status: "running" }, commands: [LongRunning()] }),
+				Completed: () => ({ model: { status: "done" } }),
+			})
 		}
 
-		const store = Store.boot({ update }, [{ status: "idle" }, []])
+		const store = Store.boot({ update }, { model: { status: "idle" } })
 
-		store.dispatch(Start())
+		store.dispatch(LongMessage.Start())
 		expect(store.getModel()).toEqual({ status: "running" })
 		store.dispose()
 
@@ -495,46 +473,44 @@ describe("dispose", function () {
 
 describe("command message mappers", function () {
 	it("dispatches a mapped Command result in the parent Message space", async function () {
-		const CompletedDoChildWork = m("CompletedDoChildWork")
-		const ChildMessage = Schema.Union([CompletedDoChildWork])
+		const ChildMessage = defineMessageUnion({
+			CompletedDoChildWork: {},
+		})
 		type ChildMessage = typeof ChildMessage.Type
 
 		const DoChildWork = Command.define("DoChildWork", {
-			messages: [CompletedDoChildWork],
-			execute: Effect.succeed(CompletedDoChildWork()),
+			messages: [ChildMessage.CompletedDoChildWork],
+			execute: Effect.succeed(ChildMessage.CompletedDoChildWork()),
 		})
 
-		const GotChildMessage = m("GotChildMessage", { message: ChildMessage })
-		const ParentMessage = Schema.Union([GotChildMessage])
+		const ParentMessage = defineMessageUnion({
+			GotChildMessage: { message: ChildMessage },
+		})
 		type ParentMessage = typeof ParentMessage.Type
 
 		const ParentModel = Schema.Struct({ label: Schema.String })
 		type ParentModel = typeof ParentModel.Type
 
-		type ParentUpdateReturn = readonly [ParentModel, ReadonlyArray<Command.Command<ParentMessage>>]
+		type ParentUpdateReturn = Update.Return<ParentModel, ParentMessage>
 
 		function update(_model: ParentModel, message: ParentMessage): ParentUpdateReturn {
-			return Match.value(message).pipe(
-				Match.withReturnType<ParentUpdateReturn>(),
-				Match.tagsExhaustive({
-					GotChildMessage: function ({ message: childMessage }) {
-						return Match.value(childMessage).pipe(
-							Match.withReturnType<ParentUpdateReturn>(),
-							Match.tagsExhaustive({
-								CompletedDoChildWork: () => [{ label: "child done" }, []],
-							})
-						)
-					},
-				})
-			)
+			return ParentMessage.match<ParentUpdateReturn>(message, {
+				GotChildMessage: ({ message: childMessage }) =>
+					ChildMessage.match<ParentUpdateReturn>(childMessage, {
+						CompletedDoChildWork: () => ({ model: { label: "child done" } }),
+					}),
+			})
 		}
 
-		const store = Store.boot({ update }, [
-			{ label: "start" },
-			Command.mapMessages([DoChildWork()], function (childMessage) {
-				return GotChildMessage({ message: childMessage })
-			}),
-		])
+		const store = Store.boot(
+			{ update },
+			{
+				model: { label: "start" },
+				commands: Command.mapMessages([DoChildWork()], (childMessage) =>
+					ParentMessage.GotChildMessage({ message: childMessage })
+				),
+			}
+		)
 
 		try {
 			await vi.waitFor(function () {
