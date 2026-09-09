@@ -1,6 +1,7 @@
-import { Match as M, Schema as S } from 'effect'
+import { Schema } from 'effect'
+import { type Update } from 'foldkit'
 import type { HtmlBuilder } from 'foldkit/html'
-import { m } from 'foldkit/message'
+import { defineMessageUnion } from 'foldkit/message'
 import * as Scene from 'foldkit/scene'
 import { evo } from 'foldkit/struct'
 
@@ -8,24 +9,19 @@ import { describe, it } from '@effect/vitest'
 
 import { view } from './index.js'
 
-const Toggled = m('Toggled', { isChecked: S.Boolean })
-const Message = S.Union([Toggled])
+const Message = defineMessageUnion({
+  Toggled: { isChecked: Schema.Boolean },
+})
 type Message = typeof Message.Type
 
 type Model = Readonly<{ isChecked: boolean }>
 
-type UpdateReturn = readonly [Model, ReadonlyArray<never>]
-
-const update = (model: Model, message: Message): UpdateReturn =>
-  M.value(message).pipe(
-    M.withReturnType<UpdateReturn>(),
-    M.tagsExhaustive({
-      Toggled: ({ isChecked }) => [
-        evo(model, { isChecked: () => isChecked }),
-        [],
-      ],
+const update = (model: Model, message: Message) =>
+  Message.match<Update.Return<Model, Message>>(message, {
+    Toggled: ({ isChecked }) => ({
+      model: evo(model, { isChecked: () => isChecked }),
     }),
-  )
+  })
 
 const testView =
   ({
@@ -42,14 +38,14 @@ const testView =
       {
         id: 'test',
         isChecked: model.isChecked,
-        onToggle: isChecked => Toggled({ isChecked }),
+        onToggle: isChecked => Message.Toggled({ isChecked }),
         isDisabled,
         isReadOnly,
         isIndeterminate,
         toView: ({ checkbox, label }) =>
           h.div(
             [],
-            [h.div([...checkbox]), h.span([...label], ['Accept terms'])],
+            [h.button([...checkbox]), h.span([...label], ['Accept terms'])],
           ),
       },
       h,
@@ -127,6 +123,22 @@ describe('Checkbox controlled view', () => {
       Scene.expect(checkbox).toHaveAttr('data-disabled', ''),
       Scene.expect(checkbox).toHaveAttr('aria-readonly', 'true'),
       Scene.expect(checkbox).toHaveAttr('data-readonly', ''),
+    )
+  })
+
+  it('sets type button so a button control does not submit a form', () => {
+    Scene.scene(
+      { update, view: testView() },
+      Scene.given({ isChecked: false }),
+      Scene.expect(checkbox).toHaveAttr('type', 'button'),
+    )
+  })
+
+  it('keeps type button when disabled and read-only', () => {
+    Scene.scene(
+      { update, view: testView({ isDisabled: true, isReadOnly: true }) },
+      Scene.given({ isChecked: false }),
+      Scene.expect(checkbox).toHaveAttr('type', 'button'),
     )
   })
 

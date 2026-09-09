@@ -22,6 +22,11 @@ const examples = [
 		blurb: "Subscriptions tick while a Model gate is true — Start/Stop without remounting.",
 		options: linkOptions({ to: "/stopwatch" }),
 	},
+	{
+		title: "API Cache",
+		blurb: "AsyncData as the cache — invalidate, stale-while-revalidate, and a refetch Subscription.",
+		options: linkOptions({ to: "/api-cache" }),
+	},
 ]
 
 function Landing() {

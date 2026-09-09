@@ -1,6 +1,6 @@
 # Third-Party Notices
 
-This package depends on [Foldkit](https://github.com/foldkit/foldkit) `0.139.0`
+This package depends on [Foldkit](https://github.com/foldkit/foldkit) `0.158.2`
 and reexports selected public Foldkit surfaces through `react-foldkit/*`.
 Foldkit remains an external regular dependency rather than being copied into
 React Foldkit's published `dist/` output.
