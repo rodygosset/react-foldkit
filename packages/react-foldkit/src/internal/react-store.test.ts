@@ -1,14 +1,15 @@
-import { Effect, Latch, Layer, Match, Schema, Stream } from "effect"
+import { Effect, Latch, Layer, Schema, Stream } from "effect"
 import { describe, expect, it, vi } from "vitest"
 import type * as Command from "../command"
-import { m } from "../message"
+import { defineMessageUnion } from "../message"
 import * as Subscription from "../subscription"
 import type * as Update from "../update"
 import * as ReactStore from "./react-store"
 
-const CompletedInit = m("CompletedInit", { value: Schema.String })
-const SetValue = m("SetValue", { value: Schema.String })
-const Message = Schema.Union([CompletedInit, SetValue])
+const Message = defineMessageUnion({
+	CompletedInit: { value: Schema.String },
+	SetValue: { value: Schema.String },
+})
 type Message = typeof Message.Type
 
 const Model = Schema.Struct({ value: Schema.String })
@@ -17,29 +18,26 @@ type Model = typeof Model.Type
 type UpdateReturn = Update.Return<Model, Message>
 
 const update = (_model: Model, message: Message): UpdateReturn =>
-	Match.value(message).pipe(
-		Match.withReturnType<UpdateReturn>(),
-		Match.tagsExhaustive({
-			CompletedInit: ({ value }) => [{ value }, []],
-			SetValue: ({ value }) => [{ value }, []],
-		})
-	)
+	Message.match<UpdateReturn>(message, {
+		CompletedInit: ({ value }) => ({ model: { value } }),
+		SetValue: ({ value }) => ({ model: { value } }),
+	})
 
 const makeInitCommand = (effect: Effect.Effect<Message>): Command.Command<Message> => ({ name: "RunInit", effect })
 
 describe("React store lifecycle", function () {
 	it("drops dispatches while inactive and preserves the last live Model across reactivation", function () {
-		const store = ReactStore.make({ update }, [{ value: "initial" }, []])
+		const store = ReactStore.make({ update }, { model: { value: "initial" } })
 
-		store.dispatch(SetValue({ value: "before activation" }))
+		store.dispatch(Message.SetValue({ value: "before activation" }))
 		expect(store.getModel()).toEqual({ value: "initial" })
 
 		const deactivateFirst = store.activate()
-		store.dispatch(SetValue({ value: "live" }))
+		store.dispatch(Message.SetValue({ value: "live" }))
 		expect(store.getModel()).toEqual({ value: "live" })
 		deactivateFirst()
 
-		store.dispatch(SetValue({ value: "while inactive" }))
+		store.dispatch(Message.SetValue({ value: "while inactive" }))
 		const deactivateSecond = store.activate()
 		expect(store.getModel()).toEqual({ value: "live" })
 		deactivateSecond()
@@ -50,10 +48,10 @@ describe("React store lifecycle", function () {
 		const command = makeInitCommand(
 			Effect.sync(function () {
 				runs += 1
-				return CompletedInit({ value: "complete" })
+				return Message.CompletedInit({ value: "complete" })
 			})
 		)
-		const store = ReactStore.make({ update }, [{ value: "initial" }, [command]])
+		const store = ReactStore.make({ update }, { model: { value: "initial" }, commands: [command] })
 
 		const deactivateFirst = store.activate()
 		await vi.waitFor(function () {
@@ -77,10 +75,10 @@ describe("React store lifecycle", function () {
 			Effect.gen(function* () {
 				runs += 1
 				yield* latch.await
-				return CompletedInit({ value: "complete" })
+				return Message.CompletedInit({ value: "complete" })
 			})
 		)
-		const store = ReactStore.make({ update }, [{ value: "initial" }, [command]])
+		const store = ReactStore.make({ update }, { model: { value: "initial" }, commands: [command] })
 
 		const deactivateFirst = store.activate()
 		await vi.waitFor(function () {
@@ -129,7 +127,7 @@ describe("React store lifecycle", function () {
 				}
 			),
 		}))
-		const store = ReactStore.make({ update, subscriptions, layer }, [{ value: "initial" }, []])
+		const store = ReactStore.make({ update, subscriptions, layer }, { model: { value: "initial" } })
 
 		const deactivateFirst = store.activate()
 		await vi.waitFor(function () {
@@ -151,7 +149,7 @@ describe("React store lifecycle", function () {
 	})
 
 	it("rejects overlapping activations", function () {
-		const store = ReactStore.make({ update }, [{ value: "initial" }, []])
+		const store = ReactStore.make({ update }, { model: { value: "initial" } })
 		const deactivate = store.activate()
 
 		try {

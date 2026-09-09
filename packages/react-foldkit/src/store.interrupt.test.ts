@@ -1,5 +1,5 @@
 import { describe, it } from "@effect/vitest"
-import { Array, Effect, Fiber, Match, Schema } from "effect"
+import { Array, Effect, Fiber, Schema } from "effect"
 import { expect, vi } from "vitest"
 import * as Command from "./command"
 import {
@@ -7,8 +7,9 @@ import {
 	makeInterruptRegistry as __makeRegistry,
 	type InterruptRegistry as __Registry,
 } from "./internal/foldkit"
-import { m } from "./message"
+import { defineMessageUnion } from "./message"
 import * as Store from "./store"
+import type * as Update from "./update"
 
 /**
  * Interrupt registry contract — mirrored from Foldkit's
@@ -18,8 +19,10 @@ import * as Store from "./store"
  * interruptible Commands forked through the store can be cancelled.
  */
 
-const CompletedWork = m("CompletedWork")
-const SucceededTask = m("SucceededTask", { taskId: Schema.Number })
+const Message = defineMessageUnion({
+	CompletedWork: {},
+	SucceededTask: { taskId: Schema.Number },
+})
 
 const provideRegistry =
 	(registry: __Registry) =>
@@ -30,12 +33,12 @@ describe("interruptible Command.define", function () {
 	it("derives the key from args at construction, prefixed by the Command name", function () {
 		const RunTask = Command.define("RunTask", {
 			args: { taskId: Schema.Number, label: Schema.String },
-			messages: [SucceededTask],
+			messages: [Message.SucceededTask],
 			interrupt: {
 				keyFields: ["taskId"],
 				toKey: ({ taskId }) => taskId.toString(),
 			},
-			execute: ({ taskId }) => Effect.succeed(SucceededTask({ taskId })),
+			execute: ({ taskId }) => Effect.succeed(Message.SucceededTask({ taskId })),
 		})
 
 		const instance = RunTask({ taskId: 7, label: "seven" })
@@ -51,9 +54,9 @@ describe("interruptible Command.define", function () {
 
 	it("uses the Command name as the key on the no-args form", function () {
 		const SyncLibrary = Command.define("SyncLibrary", {
-			messages: [CompletedWork],
+			messages: [Message.CompletedWork],
 			interrupt: true,
-			execute: Effect.succeed(CompletedWork()),
+			execute: Effect.succeed(Message.CompletedWork()),
 		})
 
 		const instance = SyncLibrary()
@@ -71,9 +74,9 @@ describe("interruptible Command.define", function () {
 			let didProduceResult = false
 
 			const RunForever = Command.define("RunForever", {
-				messages: [CompletedWork],
+				messages: [Message.CompletedWork],
 				interrupt: true,
-				execute: Effect.as(Effect.never, CompletedWork()),
+				execute: Effect.as(Effect.never, Message.CompletedWork()),
 			})
 
 			const fiber = yield* Effect.forkChild(
@@ -106,9 +109,9 @@ describe("interruptible Command.define", function () {
 			const registry = __makeRegistry()
 
 			const RunForever = Command.define("RunForever", {
-				messages: [CompletedWork],
+				messages: [Message.CompletedWork],
 				interrupt: true,
-				execute: Effect.as(Effect.never, CompletedWork()),
+				execute: Effect.as(Effect.never, Message.CompletedWork()),
 			})
 
 			const outcome = yield* RunForever.Interrupt((outcome) => outcome).effect.pipe(provideRegistry(registry))
@@ -123,16 +126,16 @@ describe("interruptible Command.define", function () {
 
 			const RunTask = Command.define("RunTask", {
 				args: { taskId: Schema.Number },
-				messages: [SucceededTask],
+				messages: [Message.SucceededTask],
 				interrupt: {
 					keyFields: ["taskId"],
 					toKey: ({ taskId }) => String(taskId),
 				},
-				execute: ({ taskId }) => Effect.succeed(SucceededTask({ taskId })),
+				execute: ({ taskId }) => Effect.succeed(Message.SucceededTask({ taskId })),
 			})
 
 			const message = yield* RunTask({ taskId: 1 }).effect.pipe(provideRegistry(registry))
-			expect(message).toEqual(SucceededTask({ taskId: 1 }))
+			expect(message).toEqual(Message.SucceededTask({ taskId: 1 }))
 
 			const outcome = yield* RunTask.Interrupt({ taskId: 1 }, (outcome) => outcome).effect.pipe(
 				provideRegistry(registry)
@@ -149,7 +152,7 @@ describe("interruptible Command.define", function () {
 
 			const RunTask = Command.define("RunTask", {
 				args: { taskId: Schema.Number },
-				messages: [SucceededTask],
+				messages: [Message.SucceededTask],
 				interrupt: {
 					keyFields: ["taskId"],
 					toKey: function ({ taskId }) {
@@ -157,7 +160,7 @@ describe("interruptible Command.define", function () {
 					},
 				},
 				execute: ({ taskId }) =>
-					Effect.onInterrupt(Effect.as(Effect.never, SucceededTask({ taskId })), () =>
+					Effect.onInterrupt(Effect.as(Effect.never, Message.SucceededTask({ taskId })), () =>
 						Effect.sync(function () {
 							interruptedTaskIds.push(taskId)
 						})
@@ -189,13 +192,13 @@ describe("interruptible Command.define", function () {
 			let runCount = 0
 
 			const Watch = Command.define("Watch", {
-				messages: [CompletedWork],
+				messages: [Message.CompletedWork],
 				interrupt: true,
 				execute: Effect.suspend(function () {
 					runCount = runCount + 1
 					const runId = runCount
 					events.push(`started:${runId}`)
-					return Effect.onInterrupt(Effect.as(Effect.never, CompletedWork()), () =>
+					return Effect.onInterrupt(Effect.as(Effect.never, Message.CompletedWork()), () =>
 						Effect.sync(function () {
 							events.push(`interrupted:${runId}`)
 						})
@@ -226,9 +229,9 @@ describe("interruptible Command.define", function () {
 			const registry = __makeRegistry()
 
 			const FailingTask = Command.define("FailingTask", {
-				messages: [CompletedWork],
+				messages: [Message.CompletedWork],
 				interrupt: true,
-				execute: Effect.flatMap(Effect.fail("boom"), () => Effect.succeed(CompletedWork())),
+				execute: Effect.flatMap(Effect.fail("boom"), () => Effect.succeed(Message.CompletedWork())),
 			})
 
 			const exit = yield* Effect.exit(FailingTask().effect.pipe(provideRegistry(registry)))
@@ -241,12 +244,13 @@ describe("interruptible Command.define", function () {
 
 describe("store interrupt registry wiring", function () {
 	it("provides the interrupt registry so Interrupt stops an in-flight store Command", async function () {
-		const Completed = m("Completed")
-		const GotOutcome = m("GotOutcome", { tag: Schema.String })
-		const Start = m("Start")
-		const Cancel = m("Cancel")
-		const Message = Schema.Union([Start, Cancel, Completed, GotOutcome])
-		type Message = typeof Message.Type
+		const WiringMessage = defineMessageUnion({
+			Completed: {},
+			GotOutcome: { tag: Schema.String },
+			Start: {},
+			Cancel: {},
+		})
+		type WiringMessage = typeof WiringMessage.Type
 
 		const Model = Schema.Struct({
 			status: Schema.String,
@@ -255,28 +259,28 @@ describe("store interrupt registry wiring", function () {
 		type Model = typeof Model.Type
 
 		const RunForever = Command.define("RunForever", {
-			messages: [Completed],
+			messages: [WiringMessage.Completed],
 			interrupt: true,
-			execute: Effect.as(Effect.never, Completed()),
+			execute: Effect.as(Effect.never, WiringMessage.Completed()),
 		})
 
-		type UpdateReturn = readonly [Model, ReadonlyArray<Command.Command<Message>>]
+		type UpdateReturn = Update.Return<Model, WiringMessage>
 
-		const update = (model: Model, message: Message): UpdateReturn =>
-			Match.value(message).pipe(
-				Match.withReturnType<UpdateReturn>(),
-				Match.tagsExhaustive({
-					Start: () => [{ status: "running", outcome: null }, [RunForever()]],
-					Cancel: () => [model, [RunForever.Interrupt((outcome) => GotOutcome({ tag: outcome._tag }))]],
-					Completed: () => [{ status: "done", outcome: null }, []],
-					GotOutcome: ({ tag }) => [{ status: "cancelled", outcome: tag }, []],
-				})
-			)
+		const update = (model: Model, message: WiringMessage): UpdateReturn =>
+			WiringMessage.match<UpdateReturn>(message, {
+				Start: () => ({ model: { status: "running", outcome: null }, commands: [RunForever()] }),
+				Cancel: () => ({
+					model,
+					commands: [RunForever.Interrupt((outcome) => WiringMessage.GotOutcome({ tag: outcome._tag }))],
+				}),
+				Completed: () => ({ model: { status: "done", outcome: null } }),
+				GotOutcome: ({ tag }) => ({ model: { status: "cancelled", outcome: tag } }),
+			})
 
-		const store = Store.boot({ update }, [{ status: "idle", outcome: null }, []])
+		const store = Store.boot({ update }, { model: { status: "idle", outcome: null } })
 
 		try {
-			store.dispatch(Start())
+			store.dispatch(WiringMessage.Start())
 			expect(store.getModel().status).toBe("running")
 
 			// Yield so the Command fiber can register under its interrupt key.
@@ -287,7 +291,7 @@ describe("store interrupt registry wiring", function () {
 				queueMicrotask(resolve)
 			})
 
-			store.dispatch(Cancel())
+			store.dispatch(WiringMessage.Cancel())
 
 			await vi.waitFor(function () {
 				expect(store.getModel()).toEqual({ status: "cancelled", outcome: "Interrupted" })

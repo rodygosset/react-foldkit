@@ -29,8 +29,7 @@ the stable `react-foldkit/*` facade rather than importing Foldkit directly.
 
 ```tsx
 import { ReactFoldkit } from "react-foldkit"
-import * as Command from "react-foldkit/command"
-import { m } from "react-foldkit/message"
+import { defineMessageUnion } from "react-foldkit/message"
 ```
 
 ## Package surface
@@ -39,35 +38,32 @@ import { m } from "react-foldkit/message"
 | ------------------------------------------------------------ | ------------------------------------------------- |
 | `./react`                                                    | `make()` → `Provider`, `useModel`, `useDispatch`  |
 | `./store`                                                    | `boot()` for tests and non-React hosts            |
-| `./command`, `./message`, `./update`, `./struct`, `./schema` | TEA vocabulary                                    |
-| `./asyncData`                                                | Remote data helpers (`settle`, `revalidate`, …)   |
-| `./subscription`                                             | Model-gated standing orders (`Subscription.make`) |
-| `./submodel`                                                 | Nested model delegation                           |
-| `./eslint`                                                   | Recommended + strict ESLint presets               |
+| `./command`, `./message`, `./update`, `./struct`, `./schema` | TEA vocabulary (`defineMessageUnion`, `Update.foldChild`, …) |
+| `./asyncData`                                                | Remote data helpers (`settle`, `revalidate`, …)              |
+| `./subscription`                                             | Model-gated standing orders (`Subscription.make`)            |
+| `./eslint`                                                   | Recommended + strict ESLint presets                          |
 
 ## Quick start
 
 ```tsx
-import { Match, Schema } from "effect"
-import * as Command from "react-foldkit/command"
-import { m } from "react-foldkit/message"
+import { Schema } from "effect"
+import { defineMessageUnion } from "react-foldkit/message"
 import { ReactFoldkit } from "react-foldkit"
 import { evo } from "react-foldkit/struct"
+import type * as Update from "react-foldkit/update"
 
 const Model = Schema.Struct({ count: Schema.Number })
 type Model = typeof Model.Type
 
-const Increment = m("Increment")
-const Message = Schema.Union([Increment])
+const Message = defineMessageUnion({
+  Increment: {},
+})
 type Message = typeof Message.Type
 
-const update = (model: Model, message: Message) =>
-  Match.value(message).pipe(
-    Match.tagsExhaustive({
-      Increment: () => [evo(model, { count: (n) => n + 1 }), Command.none],
-    })
-  )
-
+const update = (model: Model, message: Message): Update.Return<Model, Message> =>
+  Message.match<Update.Return<Model, Message>>(message, {
+    Increment: () => ({ model: evo(model, { count: (n) => n + 1 }) }),
+  })
 
 const { Provider, useModel, useDispatch } = ReactFoldkit.make({ update })
 
@@ -76,7 +72,7 @@ function CounterView() {
   const dispatch = useDispatch()
 
   return (
-    <button type="button" onClick={function () { dispatch(Increment()) }}>
+    <button type="button" onClick={function () { dispatch(Message.Increment()) }}>
       {count}
     </button>
   )
@@ -84,7 +80,7 @@ function CounterView() {
 
 export function Counter() {
   return (
-    <Provider init={[{ count: 0 }, Command.none]}>
+    <Provider init={{ model: { count: 0 } }}>
       <CounterView />
     </Provider>
   )

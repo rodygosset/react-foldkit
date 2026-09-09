@@ -222,7 +222,8 @@ export function boot<Model, Message, R = never>(
 	const modelPubSub = Effect.runSync(PubSub.unbounded<Model>({ replay: 1 }))
 	const runtimeContextForCommands = captureRuntimeContextForCommands()
 
-	const [initialModel, initCommands] = init
+	const initialModel = init.model
+	const initCommands = init.commands ?? []
 	let model: Model = initialModel
 	PubSub.publishUnsafe(modelPubSub, model)
 
@@ -301,14 +302,14 @@ export function boot<Model, Message, R = never>(
 
 	function processMessage(message: Message): void {
 		try {
-			const [nextModel, commands] = config.update(model, message)
+			const result = config.update(model, message)
 			const previous = model
-			model = nextModel
-			if (previous !== nextModel) {
-				publishModel(nextModel)
+			model = result.model
+			if (previous !== result.model) {
+				publishModel(result.model)
 				for (const listener of listeners) listener()
 			}
-			for (const command of commands) forkCommand(command, Option.some(message))
+			for (const command of result.commands ?? []) forkCommand(command, Option.some(message))
 		} catch (error) {
 			crashWith(Cause.die(error), Option.some(message))
 		}
