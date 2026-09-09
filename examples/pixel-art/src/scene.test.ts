@@ -2,18 +2,19 @@ import { Option } from 'effect'
 import { Command, click, expect, given, role, scene, text } from 'foldkit/scene'
 import { describe, test } from 'vitest'
 
-import { Dialog, Listbox } from '@foldkit/ui'
+import { Dialog, Listbox, RadioGroup } from '@foldkit/ui'
 
 import { ExportPng, SaveCanvas } from './command'
 import { createEmptyGrid } from './grid'
-import {
-  CompletedSaveCanvas,
-  FailedExportPng,
-  SucceededExportPng,
-} from './message'
+import { Message } from './message'
 import { type Model, type PaletteIndex } from './model'
 import { update } from './update'
 import { view } from './view'
+
+const resolveFocusOption = Command.resolve(
+  RadioGroup.FocusOption,
+  RadioGroup.Message.CompletedFocusOption(),
+)
 
 const createTestModel = (): Model => ({
   grid: createEmptyGrid(4),
@@ -31,6 +32,9 @@ const createTestModel = (): Model => ({
   gridSizeConfirmDialog: Dialog.init({ id: 'grid-size-confirm-dialog' }),
   maybePendingGridSize: Option.none(),
   themeListbox: Listbox.init({ id: 'theme-picker' }),
+  toolRadioGroup: RadioGroup.init({ id: 'tool-picker' }),
+  gridSizeRadioGroup: RadioGroup.init({ id: 'grid-size-picker' }),
+  paletteRadioGroup: RadioGroup.init({ id: 'palette-picker' }),
 })
 
 const createPaintedModel = (): Model => ({
@@ -49,7 +53,7 @@ describe('export workflow', () => {
       given(createTestModel()),
       click(role('button', { name: 'Export PNG' })),
       Command.expectExact(ExportPng),
-      Command.resolve(ExportPng, SucceededExportPng()),
+      Command.resolve(ExportPng, Message.SucceededExportPng()),
       Command.expectNone(),
     )
   })
@@ -61,9 +65,9 @@ describe('export workflow', () => {
       click(role('button', { name: 'Export PNG' })),
       Command.resolve(
         ExportPng,
-        FailedExportPng({ error: 'Canvas 2D context not available' }),
+        Message.FailedExportPng({ error: 'Canvas 2D context not available' }),
       ),
-      Command.resolve(Dialog.ShowDialog, Dialog.CompletedShowDialog()),
+      Command.resolve(Dialog.ShowDialog, Dialog.Message.SucceededShowDialog()),
       expect(text('Export Failed')).toExist(),
       expect(text('Canvas 2D context not available')).toExist(),
       expect(role('button', { name: 'Dismiss' })).toExist(),
@@ -77,12 +81,15 @@ describe('export workflow', () => {
       click(role('button', { name: 'Export PNG' })),
       Command.resolve(
         ExportPng,
-        FailedExportPng({ error: 'Canvas 2D context not available' }),
+        Message.FailedExportPng({ error: 'Canvas 2D context not available' }),
       ),
-      Command.resolve(Dialog.ShowDialog, Dialog.CompletedShowDialog()),
+      Command.resolve(Dialog.ShowDialog, Dialog.Message.SucceededShowDialog()),
       expect(text('Export Failed')).toExist(),
       click(role('button', { name: 'Dismiss' })),
-      Command.resolve(Dialog.CloseDialog, Dialog.CompletedCloseDialog()),
+      Command.resolve(
+        Dialog.CloseDialog,
+        Dialog.Message.CompletedCloseDialog(),
+      ),
       expect(text('Export Failed')).toBeAbsent(),
     )
   })
@@ -123,6 +130,7 @@ describe('toolbar', () => {
       { update, view },
       given(createTestModel()),
       click(role('radio', { name: /^Fill/ })),
+      resolveFocusOption,
       expect(role('radio', { name: /^Fill/, checked: true })).toExist(),
       expect(role('radio', { name: /^Brush/, checked: false })).toExist(),
     )
@@ -134,7 +142,7 @@ describe('toolbar', () => {
       given(createPaintedModel()),
       expect(role('button', { name: 'Clear Canvas' })).toBeEnabled(),
       click(role('button', { name: 'Clear Canvas' })),
-      Command.resolve(SaveCanvas, CompletedSaveCanvas()),
+      Command.resolve(SaveCanvas, Message.CompletedSaveCanvas()),
       expect(role('button', { name: 'Clear Canvas' })).toBeDisabled(),
     )
   })
@@ -175,7 +183,7 @@ describe('history panel', () => {
       expect(role('button', { name: /^Undo/ })).toBeEnabled(),
       expect(role('button', { name: /^Redo/ })).toBeDisabled(),
       click(role('button', { name: /^Undo/ })),
-      Command.resolve(SaveCanvas, CompletedSaveCanvas()),
+      Command.resolve(SaveCanvas, Message.CompletedSaveCanvas()),
       expect(role('button', { name: /^Undo/ })).toBeDisabled(),
       expect(role('button', { name: /^Redo/ })).toBeEnabled(),
     )
@@ -188,7 +196,8 @@ describe('grid size change', () => {
       { update, view },
       given(createPaintedModel()),
       click(role('radio', { name: '8' })),
-      Command.resolve(Dialog.ShowDialog, Dialog.CompletedShowDialog()),
+      resolveFocusOption,
+      Command.resolve(Dialog.ShowDialog, Dialog.Message.SucceededShowDialog()),
       expect(text('Change to 8\u00d78?')).toExist(),
       expect(
         text('This will clear your canvas and reset undo history.'),
@@ -214,8 +223,11 @@ describe('grid size change', () => {
       given(modelWithPendingResize),
       expect(text('Change to 8\u00d78?')).toExist(),
       click(role('button', { name: 'Clear and Resize' })),
-      Command.resolve(Dialog.CloseDialog, Dialog.CompletedCloseDialog()),
-      Command.resolve(SaveCanvas, CompletedSaveCanvas()),
+      Command.resolve(
+        Dialog.CloseDialog,
+        Dialog.Message.CompletedCloseDialog(),
+      ),
+      Command.resolve(SaveCanvas, Message.CompletedSaveCanvas()),
       expect(text('Change to 8\u00d78?')).toBeAbsent(),
     )
   })
@@ -235,7 +247,10 @@ describe('grid size change', () => {
       given(modelWithPendingResize),
       expect(text('Change to 8\u00d78?')).toExist(),
       click(role('button', { name: 'Cancel' })),
-      Command.resolve(Dialog.CloseDialog, Dialog.CompletedCloseDialog()),
+      Command.resolve(
+        Dialog.CloseDialog,
+        Dialog.Message.CompletedCloseDialog(),
+      ),
       expect(text('Change to 8\u00d78?')).toBeAbsent(),
     )
   })
