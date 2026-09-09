@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiCacheRouteImport } from './routes/api-cache'
 import { Route as CounterRouteImport } from './routes/counter'
 import { Route as StopwatchRouteImport } from './routes/stopwatch'
 import { Route as TodoRouteImport } from './routes/todo'
@@ -17,6 +18,11 @@ import { Route as TodoRouteImport } from './routes/todo'
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiCacheRoute = ApiCacheRouteImport.update({
+  id: '/api-cache',
+  path: '/api-cache',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CounterRoute = CounterRouteImport.update({
@@ -37,12 +43,14 @@ const TodoRoute = TodoRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/api-cache': typeof ApiCacheRoute
   '/counter': typeof CounterRoute
   '/stopwatch': typeof StopwatchRoute
   '/todo': typeof TodoRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/api-cache': typeof ApiCacheRoute
   '/counter': typeof CounterRoute
   '/stopwatch': typeof StopwatchRoute
   '/todo': typeof TodoRoute
@@ -50,20 +58,22 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/api-cache': typeof ApiCacheRoute
   '/counter': typeof CounterRoute
   '/stopwatch': typeof StopwatchRoute
   '/todo': typeof TodoRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/counter' | '/stopwatch' | '/todo'
+  fullPaths: '/' | '/api-cache' | '/counter' | '/stopwatch' | '/todo'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/counter' | '/stopwatch' | '/todo'
-  id: '__root__' | '/' | '/counter' | '/stopwatch' | '/todo'
+  to: '/' | '/api-cache' | '/counter' | '/stopwatch' | '/todo'
+  id: '__root__' | '/' | '/api-cache' | '/counter' | '/stopwatch' | '/todo'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ApiCacheRoute: typeof ApiCacheRoute
   CounterRoute: typeof CounterRoute
   StopwatchRoute: typeof StopwatchRoute
   TodoRoute: typeof TodoRoute
@@ -76,6 +86,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api-cache': {
+      id: '/api-cache'
+      path: '/api-cache'
+      fullPath: '/api-cache'
+      preLoaderRoute: typeof ApiCacheRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/counter': {
@@ -104,6 +121,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ApiCacheRoute: ApiCacheRoute,
   CounterRoute: CounterRoute,
   StopwatchRoute: StopwatchRoute,
   TodoRoute: TodoRoute,

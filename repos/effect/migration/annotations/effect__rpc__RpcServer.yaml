@@ -36,7 +36,7 @@
   note: "HttpApp became HttpEffect; the result contains the WebSocket protocol and upgrade effect."
 "@effect/rpc/RpcServer#Protocol":
   replacement: "effect/unstable/rpc/RpcServer#Protocol"
-  note: "Retained as a Context.Service; custom transports now expose a disconnect queue and explicit capability flags."
+  note: "Retained as a Context.Service; custom transports now expose a disconnect queue, explicit capability flags, and codecFor for schema-aware payload and exit encoding."
 "@effect/rpc/RpcServer#toHttpApp":
   replacement: "effect/unstable/rpc/RpcServer#toHttpEffect"
   note: "Renamed for the v4 HTTP effect model; it starts the RPC server and returns the request effect."
@@ -46,3 +46,6 @@
 "@effect/rpc/RpcServer#toWebHandler":
   replacement: "HttpRouter.toWebHandler(RpcServer.layerHttp(options).pipe(Layer.provide(options.layer)))"
   note: "The RPC convenience wrapper was removed; build the RPC route layer and convert it with the generic v4 HttpRouter web-handler adapter."
+"@effect/rpc/RpcServer#layer":
+  replacement: "effect/unstable/rpc/RpcServer#layer"
+  note: "Moved to core Effect; server requirements are now derived with Rpc.ServicesServer rather than the former combined Rpc.Context alias."

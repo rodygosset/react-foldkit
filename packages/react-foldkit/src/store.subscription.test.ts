@@ -1,7 +1,6 @@
-import { Effect, Match, Queue, Schema, Stream } from "effect"
+import { Effect, Queue, Schema, Stream } from "effect"
 import { afterEach, describe, expect, it, vi } from "vitest"
-import * as Command from "./command"
-import { m } from "./message"
+import { defineMessageUnion } from "./message"
 import * as Store from "./store"
 import * as Subscription from "./subscription"
 import type * as Update from "./update"
@@ -11,12 +10,12 @@ import type * as Update from "./update"
  * Acquire/release counters mirror Foldkit embed.test stream tracking.
  */
 
-const Enabled = m("Enabled")
-const Disabled = m("Disabled")
-const BumpedUnrelated = m("BumpedUnrelated")
-const Emitted = m("Emitted", { seq: Schema.Number })
-
-const Message = Schema.Union([Enabled, Disabled, BumpedUnrelated, Emitted])
+const Message = defineMessageUnion({
+	Enabled: {},
+	Disabled: {},
+	BumpedUnrelated: {},
+	Emitted: { seq: Schema.Number },
+})
 type Message = typeof Message.Type
 
 const Model = Schema.Struct({
@@ -52,7 +51,7 @@ function makeTrackedSubscriptions(
 									acquires.count += 1
 									active.current = true
 									seq += 1
-									Queue.offerUnsafe(queue, Emitted({ seq }))
+									Queue.offerUnsafe(queue, Message.Emitted({ seq }))
 								}),
 								() =>
 									Effect.sync(function () {
@@ -70,23 +69,12 @@ function makeTrackedSubscriptions(
 }
 
 const update = (model: Model, message: Message): UpdateReturn =>
-	Match.value(message).pipe(
-		Match.withReturnType<UpdateReturn>(),
-		Match.tagsExhaustive({
-			Enabled: function () {
-				return [{ ...model, enabled: true }, Command.none]
-			},
-			Disabled: function () {
-				return [{ ...model, enabled: false }, Command.none]
-			},
-			BumpedUnrelated: function () {
-				return [{ ...model, unrelated: model.unrelated + 1 }, Command.none]
-			},
-			Emitted: function ({ seq }) {
-				return [{ ...model, emissions: [...model.emissions, seq] }, Command.none]
-			},
+	Message.match<UpdateReturn>(message, {
+			Enabled: () => ({ model: { ...model, enabled: true } }),
+			Disabled: () => ({ model: { ...model, enabled: false } }),
+			BumpedUnrelated: () => ({ model: { ...model, unrelated: model.unrelated + 1 } }),
+			Emitted: ({ seq }) => ({ model: { ...model, emissions: [...model.emissions, seq] } }),
 		})
-	)
 
 describe("subscriptions", function () {
 	it("starts from init deps with zero dispatches", async function () {
@@ -99,7 +87,7 @@ describe("subscriptions", function () {
 				update,
 				subscriptions: makeTrackedSubscriptions(active, acquires, releases),
 			},
-			[{ enabled: true, unrelated: 0, emissions: [] }, []]
+			{ model: { enabled: true, unrelated: 0, emissions: [] } }
 		)
 
 		try {
@@ -123,14 +111,14 @@ describe("subscriptions", function () {
 				update,
 				subscriptions: makeTrackedSubscriptions(active, acquires, releases),
 			},
-			[{ enabled: false, unrelated: 0, emissions: [] }, []]
+			{ model: { enabled: false, unrelated: 0, emissions: [] } }
 		)
 
 		try {
 			expect(active.current).toBe(false)
 			expect(acquires.count).toBe(0)
 
-			store.dispatch(Enabled())
+			store.dispatch(Message.Enabled())
 
 			await vi.waitFor(function () {
 				expect(active.current).toBe(true)
@@ -152,7 +140,7 @@ describe("subscriptions", function () {
 				update,
 				subscriptions: makeTrackedSubscriptions(active, acquires, releases),
 			},
-			[{ enabled: true, unrelated: 0, emissions: [] }, []]
+			{ model: { enabled: true, unrelated: 0, emissions: [] } }
 		)
 
 		try {
@@ -160,7 +148,7 @@ describe("subscriptions", function () {
 				expect(active.current).toBe(true)
 			})
 
-			store.dispatch(Disabled())
+			store.dispatch(Message.Disabled())
 
 			await vi.waitFor(function () {
 				expect(active.current).toBe(false)
@@ -181,22 +169,22 @@ describe("subscriptions", function () {
 				update,
 				subscriptions: makeTrackedSubscriptions(active, acquires, releases),
 			},
-			[{ enabled: false, unrelated: 0, emissions: [] }, []]
+			{ model: { enabled: false, unrelated: 0, emissions: [] } }
 		)
 
 		try {
-			store.dispatch(Enabled())
+			store.dispatch(Message.Enabled())
 			await vi.waitFor(function () {
 				expect(active.current).toBe(true)
 			})
 			const firstEmissions = store.getModel().emissions.length
 
-			store.dispatch(Disabled())
+			store.dispatch(Message.Disabled())
 			await vi.waitFor(function () {
 				expect(active.current).toBe(false)
 			})
 
-			store.dispatch(Enabled())
+			store.dispatch(Message.Enabled())
 			await vi.waitFor(function () {
 				expect(active.current).toBe(true)
 				expect(store.getModel().emissions.length).toBeGreaterThan(firstEmissions)
@@ -217,7 +205,7 @@ describe("subscriptions", function () {
 				update,
 				subscriptions: makeTrackedSubscriptions(active, acquires, releases),
 			},
-			[{ enabled: true, unrelated: 0, emissions: [] }, []]
+			{ model: { enabled: true, unrelated: 0, emissions: [] } }
 		)
 
 		try {
@@ -226,8 +214,8 @@ describe("subscriptions", function () {
 				expect(acquires.count).toBe(1)
 			})
 
-			store.dispatch(BumpedUnrelated())
-			store.dispatch(BumpedUnrelated())
+			store.dispatch(Message.BumpedUnrelated())
+			store.dispatch(Message.BumpedUnrelated())
 
 			await new Promise<void>(function (resolve) {
 				setTimeout(resolve, 30)
@@ -252,7 +240,7 @@ describe("subscriptions", function () {
 				update,
 				subscriptions: makeTrackedSubscriptions(active, acquires, releases),
 			},
-			[{ enabled: true, unrelated: 0, emissions: [] }, []]
+			{ model: { enabled: true, unrelated: 0, emissions: [] } }
 		)
 
 		await vi.waitFor(function () {

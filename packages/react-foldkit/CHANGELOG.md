@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+Breaking alignment with Foldkit `0.158.2` and Effect `4.0.0-rc.112`.
+
+- `Update.Return` is `{ model, commands?, outMessage? }`. Empty commands are omitted; `Command.none` is gone.
+- Messages are declared with `defineMessageUnion` from `react-foldkit/message`. The `m` helper is gone.
+- Interruptible command outcomes are `Interruptible.Outcome.Interrupted()` / `NotFound()`.
+- Nested child updates use `Update.foldChild`. The `react-foldkit/submodel` export is gone.
+- Node engines are `>=20.19.0`.
+
 ## 0.1.0
 
 First publishable cut of `react-foldkit`.
@@ -7,7 +17,7 @@ First publishable cut of `react-foldkit`.
 - React `Provider` / `useModel` / `useDispatch` over a Foldkit-style store
   (boot barrier, drain budget, crash terminality, interrupt registry, Scope teardown)
 - Reexported Foldkit TEA surfaces: Command, Message, Update, Struct, Schema, AsyncData,
-  Submodel, Subscription (`make` / `entry`)
+  Subscription (`make` / `entry`)
 - ESLint presets: `react-foldkit/eslint` (`recommended` + `strict`)
 - Examples in the monorepo `apps/web`: Todo (AsyncData) and Stopwatch (Subscription)
 

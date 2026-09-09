@@ -1,20 +1,21 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
-import { Effect, Latch, Layer, Match, Schema, Stream } from "effect"
+import { Effect, Latch, Layer, Schema, Stream } from "effect"
 import React, { StrictMode } from "react"
 import { hydrateRoot, type Root } from "react-dom/client"
 import { renderToString } from "react-dom/server"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import type * as Command from "./command"
-import { m } from "./message"
+import { defineMessageUnion } from "./message"
 import { make } from "./react"
 import * as Subscription from "./subscription"
 import type * as Update from "./update"
 
-const CompletedLoad = m("CompletedLoad", { value: Schema.String })
-const FailedLoad = m("FailedLoad", { error: Schema.String })
-const SetValue = m("SetValue", { value: Schema.String })
-const BumpedUnrelated = m("BumpedUnrelated")
-const Message = Schema.Union([CompletedLoad, FailedLoad, SetValue, BumpedUnrelated])
+const Message = defineMessageUnion({
+	CompletedLoad: { value: Schema.String },
+	FailedLoad: { error: Schema.String },
+	SetValue: { value: Schema.String },
+	BumpedUnrelated: {},
+})
 type Message = typeof Message.Type
 
 const Model = Schema.Struct({
@@ -29,15 +30,12 @@ type UpdateReturn = Update.Return<Model, Message>
 const initialModel = (): Model => ({ status: "Loading", value: "", unrelated: 0 })
 
 const update = (model: Model, message: Message): UpdateReturn =>
-	Match.value(message).pipe(
-		Match.withReturnType<UpdateReturn>(),
-		Match.tagsExhaustive({
-			CompletedLoad: ({ value }) => [{ ...model, status: "Success", value }, []],
-			FailedLoad: ({ error }) => [{ ...model, status: "Failure", value: error }, []],
-			SetValue: ({ value }) => [{ ...model, value }, []],
-			BumpedUnrelated: () => [{ ...model, unrelated: model.unrelated + 1 }, []],
+	Message.match<UpdateReturn>(message, {
+			CompletedLoad: ({ value }) => ({ model: { ...model, status: "Success", value } }),
+			FailedLoad: ({ error }) => ({ model: { ...model, status: "Failure", value: error } }),
+			SetValue: ({ value }) => ({ model: { ...model, value } }),
+			BumpedUnrelated: () => ({ model: { ...model, unrelated: model.unrelated + 1 } }),
 		})
-	)
 
 const makeInitCommand = (effect: Effect.Effect<Message>): Command.Command<Message> => ({ name: "Load", effect })
 
@@ -53,7 +51,7 @@ describe("React Provider", function () {
 			Effect.gen(function* () {
 				starts += 1
 				yield* latch.await
-				return CompletedLoad({ value: "loaded" })
+				return Message.CompletedLoad({ value: "loaded" })
 			})
 		)
 		const { Provider, useModel } = make({ update })
@@ -64,7 +62,7 @@ describe("React Provider", function () {
 		}
 
 		render(
-			<Provider init={[initialModel(), [command]]}>
+			<Provider init={{ model: initialModel(), commands: [command] }}>
 				<View />
 			</Provider>
 		)
@@ -90,7 +88,7 @@ describe("React Provider", function () {
 			Effect.gen(function* () {
 				starts += 1
 				yield* latch.await
-				return CompletedLoad({ value: "hydrated" })
+				return Message.CompletedLoad({ value: "hydrated" })
 			})
 		)
 		const { Provider, useModel } = make({ update })
@@ -102,7 +100,7 @@ describe("React Provider", function () {
 
 		function App() {
 			return (
-				<Provider init={[initialModel(), [command]]}>
+				<Provider init={{ model: initialModel(), commands: [command] }}>
 					<View />
 				</Provider>
 			)
@@ -148,7 +146,7 @@ describe("React Provider", function () {
 		const command = makeInitCommand(
 			Effect.sync(function () {
 				runs += 1
-				return CompletedLoad({ value: "strict" })
+				return Message.CompletedLoad({ value: "strict" })
 			})
 		)
 		const { Provider, useModel } = make({ update })
@@ -159,7 +157,7 @@ describe("React Provider", function () {
 
 		render(
 			<StrictMode>
-				<Provider init={[initialModel(), [command]]}>
+				<Provider init={{ model: initialModel(), commands: [command] }}>
 					<View />
 				</Provider>
 			</StrictMode>
@@ -179,7 +177,7 @@ describe("React Provider", function () {
 			Effect.gen(function* () {
 				runs += 1
 				yield* latch.await
-				return CompletedLoad({ value: "activity" })
+				return Message.CompletedLoad({ value: "activity" })
 			}).pipe(
 				Effect.onInterrupt(function () {
 					return Effect.sync(function () {
@@ -197,7 +195,7 @@ describe("React Provider", function () {
 		function App(props: { mode: "visible" | "hidden" }) {
 			return (
 				<React.Activity mode={props.mode}>
-					<Provider init={[initialModel(), [command]]}>
+					<Provider init={{ model: initialModel(), commands: [command] }}>
 						<View />
 					</Provider>
 				</React.Activity>
@@ -242,7 +240,7 @@ describe("React Provider", function () {
 			Effect.gen(function* () {
 				starts += 1
 				yield* latch.await
-				return CompletedLoad({ value: "late" })
+				return Message.CompletedLoad({ value: "late" })
 			}).pipe(
 				Effect.onInterrupt(function () {
 					return Effect.sync(function () {
@@ -263,7 +261,7 @@ describe("React Provider", function () {
 		}
 
 		const rendered = render(
-			<Provider init={[initialModel(), [command]]}>
+			<Provider init={{ model: initialModel(), commands: [command] }}>
 				<View />
 			</Provider>
 		)
@@ -320,7 +318,7 @@ describe("React Provider", function () {
 
 		const rendered = render(
 			<StrictMode>
-				<Provider init={[initialModel(), []]}>
+				<Provider init={{ model: initialModel() }}>
 					<View />
 				</Provider>
 			</StrictMode>
@@ -358,14 +356,14 @@ describe("React Provider", function () {
 			const dispatch = useDispatch()
 			return (
 				<>
-					<button onClick={() => dispatch(BumpedUnrelated())}>Bump</button>
-					<button onClick={() => dispatch(SetValue({ value: "changed" }))}>Change</button>
+					<button onClick={() => dispatch(Message.BumpedUnrelated())}>Bump</button>
+					<button onClick={() => dispatch(Message.SetValue({ value: "changed" }))}>Change</button>
 				</>
 			)
 		}
 
 		render(
-			<Provider init={[initialModel(), []]}>
+			<Provider init={{ model: initialModel() }}>
 				<Selected />
 				<Full />
 				<Controls />
@@ -389,8 +387,8 @@ describe("React Provider", function () {
 			return <span>{useModel().value}</span>
 		}
 
-		const firstInit: UpdateReturn = [{ ...initialModel(), value: "first" }, []]
-		const secondInit: UpdateReturn = [{ ...initialModel(), value: "second" }, []]
+		const firstInit: UpdateReturn = { model: { ...initialModel(), value: "first" } }
+		const secondInit: UpdateReturn = { model: { ...initialModel(), value: "second" } }
 		const rendered = render(
 			<Provider init={firstInit}>
 				<View />
