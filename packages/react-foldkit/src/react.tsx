@@ -1,21 +1,29 @@
-import { Equal } from "effect"
+import { Equal, Schema } from "effect"
 import React from "react"
 import * as ReactStore from "./internal/react-store"
 import * as Store from "./store"
 import type * as Update from "./update"
 
+export type Config<ModelSchema extends Schema.Codec<unknown, unknown, never, never>, Message, R = never> = {
+	readonly config: Store.Config<Schema.Schema.Type<ModelSchema>, Message, R>
+	readonly Model: ModelSchema
+}
+
+type Type<ModelSchema extends Schema.Codec<unknown, unknown, never, never>> = Schema.Schema.Type<ModelSchema>
+
 /**
- * The Provider takes either `init` (cold boot, dispose on unmount) or a
- * live {@link Store.boot} store (subscribe/dispatch only; the host owns
- * dispose).
+ * Builds Provider, Seed, and hooks around a Foldkit-shaped store.
  *
- * The underlying {@link Store.boot} matches Foldkit’s command loop: cached
- * Layer, interrupt registry, microtask scheduler + deferred forks, boot
- * barrier, drain budget, model-gated Subscriptions, and Scope teardown on
- * dispose.
+ * Provider cold-boots from `init` and disposes on unmount. Seed writes a Model
+ * into the inactive store (before activate) so SSR and first paint see
+ * preloaded data. Live updates go through dispatch after activate.
  */
-export function make<Model, Message, R = never>(config: Store.Config<Model, Message, R>) {
-	const StoreContext = React.createContext<ReactStore.ReactStore<Model, Message> | null>(null)
+export function make<ModelSchema extends Schema.Codec<unknown, unknown, never, never>, Message, R = never>({
+	Model,
+	config,
+}: Config<ModelSchema, Message, R>) {
+	const equalsModel = Schema.toEquivalence(Model)
+	const StoreContext = React.createContext<ReactStore.ReactStore<Type<ModelSchema>, Message> | null>(null)
 
 	function useStore() {
 		const value = React.useContext(StoreContext)
@@ -25,16 +33,12 @@ export function make<Model, Message, R = never>(config: Store.Config<Model, Mess
 	}
 
 	type ProviderProps = {
+		readonly init: Update.Return<Type<ModelSchema>, Message, R>
 		readonly children: React.ReactNode
-	} & (
-		| { readonly init: Update.Return<Model, Message, R>; readonly store?: never }
-		| { readonly store: Store.Store<Model, Message>; readonly init?: never }
-	)
+	}
 
 	function Provider(props: ProviderProps) {
-		const [store] = React.useState(() =>
-			props.store !== undefined ? ReactStore.fromLive(props.store) : ReactStore.make(config, props.init)
-		)
+		const [store] = React.useState(() => ReactStore.make(config, props.init))
 
 		React.useEffect(
 			function manageStoreLifetime() {
@@ -46,31 +50,43 @@ export function make<Model, Message, R = never>(config: Store.Config<Model, Mess
 		return <StoreContext.Provider value={store}>{props.children}</StoreContext.Provider>
 	}
 
+	function Seed(props: { readonly model: Type<ModelSchema>; readonly children?: React.ReactNode }): React.ReactNode {
+		const store = useStore()
+		const appliedModelRef = React.useRef<Type<ModelSchema> | null>(null)
+
+		if (appliedModelRef.current === null || !equalsModel(appliedModelRef.current, props.model)) {
+			appliedModelRef.current = props.model
+			ReactStore.seedModel(store, props.model)
+		}
+
+		return props.children ?? null
+	}
+
 	const useDispatch = () => useStore().dispatch
 
-	function useModel(): Model
+	function useModel(): Type<ModelSchema>
 	function useModel<Selected>(
-		selector: (model: Model) => Selected,
+		selector: (model: Type<ModelSchema>) => Selected,
 		isEqual?: (a: Selected, b: Selected) => boolean
 	): Selected
 	function useModel<Selected>(
-		selector?: (model: Model) => Selected,
+		selector?: (model: Type<ModelSchema>) => Selected,
 		isEqual?: (a: Selected, b: Selected) => boolean
-	): Model | Selected {
+	): Type<ModelSchema> | Selected {
 		const store = useStore()
 		const selectorRef = React.useRef(selector)
 		const isEqualRef = React.useRef(isEqual)
-		const selectedRef = React.useRef<Model | Selected>(undefined as never)
+		const selectedRef = React.useRef<Type<ModelSchema> | Selected>(undefined as never)
 		const hasSelectedRef = React.useRef(false)
 
 		selectorRef.current = selector
 		isEqualRef.current = isEqual
 
-		const getSnapshot = (): Model | Selected => selectModel(store.getModel())
+		const getSnapshot = (): Type<ModelSchema> | Selected => selectModel(store.getModel())
 
-		const getServerSnapshot = (): Model | Selected => selectModel(store.getServerModel())
+		const getServerSnapshot = (): Type<ModelSchema> | Selected => selectModel(store.getServerModel())
 
-		function selectModel(model: Model): Model | Selected {
+		function selectModel(model: Type<ModelSchema>): Type<ModelSchema> | Selected {
 			const currentSelector = selectorRef.current
 			if (currentSelector === undefined) return model
 
@@ -87,5 +103,5 @@ export function make<Model, Message, R = never>(config: Store.Config<Model, Mess
 		return React.useSyncExternalStore(store.subscribe, getSnapshot, getServerSnapshot)
 	}
 
-	return { Provider, useModel, useDispatch }
+	return { Provider, Seed, useModel, useDispatch }
 }

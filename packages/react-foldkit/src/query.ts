@@ -15,7 +15,6 @@ import {
 import * as AsyncData from "./asyncData"
 import * as Command from "./command"
 import { defineMessageUnion } from "./message"
-import * as Store from "./store"
 import * as Subscription from "./subscription"
 import * as Update from "./update"
 
@@ -90,8 +89,12 @@ const completeCancel = <Model, Args, A, E, Message, R>(
 		NotFound: () => applyPolicy(store, model, args, "revalidateOrLoad"),
 	})
 
-const isSettledData = <A, E>(data: AsyncData.AsyncData<A, E>): boolean =>
-	AsyncData.isSuccess(data) || AsyncData.isFailure(data) || AsyncData.isStale(data)
+const runExecute = <A, E, R>(execute: Effect.Effect<A, E, R>): Effect.Effect<AsyncData.AsyncData<A, E>, never, R> =>
+	pipe(
+		execute,
+		Effect.result,
+		Effect.map((result) => AsyncData.settle(AsyncData.Loading(), result))
+	)
 
 type FieldConfig<Name extends string, A, AI, E, EI, R> = Readonly<{
 	name: Name
@@ -138,7 +141,7 @@ type KeyedKeyArgs<
 > = Pick<Schema.Schema.Type<Schema.Struct<Fields>>, KeyField>
 
 export namespace Fold {
-	export interface Field<ParentModel, ParentMessage, ChildMessage, Data, R = never> {
+	export interface Field<ParentModel, ParentMessage, ChildMessage, R = never> {
 		readonly fold: Update.Fold<ParentModel, ParentMessage, ChildMessage, R>
 		readonly revalidate: Update.Step<ParentModel, ParentMessage, R>
 		readonly revalidateOrLoad: Update.Step<ParentModel, ParentMessage, R>
@@ -146,12 +149,9 @@ export namespace Fold {
 		readonly replace: Update.Step<ParentModel, ParentMessage, R>
 		readonly watch: Update.Step<ParentModel, ParentMessage, R>
 		readonly forget: Update.Step<ParentModel, ParentMessage, R>
-		readonly ensure: (
-			store: Store.Store<ParentModel, ParentMessage>
-		) => Effect.Effect<Data, Store.Disposed>
 	}
 
-	export interface Keyed<ParentModel, ParentMessage, ChildMessage, Args, Data, R = never> {
+	export interface Keyed<ParentModel, ParentMessage, ChildMessage, Args, R = never> {
 		readonly fold: Update.Fold<ParentModel, ParentMessage, ChildMessage, R>
 		readonly revalidate: Update.Fold<ParentModel, ParentMessage, Args, R>
 		readonly revalidateOrLoad: Update.Fold<ParentModel, ParentMessage, Args, R>
@@ -159,10 +159,6 @@ export namespace Fold {
 		readonly replace: Update.Fold<ParentModel, ParentMessage, Args, R>
 		readonly watch: Update.Fold<ParentModel, ParentMessage, ReadonlyArray<Args>, R>
 		readonly forget: Update.Fold<ParentModel, ParentMessage, Args, R>
-		readonly ensure: (
-			store: Store.Store<ParentModel, ParentMessage>,
-			args: Args
-		) => Effect.Effect<Data, Store.Disposed>
 	}
 }
 
@@ -187,7 +183,7 @@ export interface Field<Name extends string, Model extends Schema.Top, Message ex
 	readonly informForget: (model: Model["Type"]) => Update.Return<Model["Type"], Message["Type"], R>
 	readonly foldChild: <ParentModel, ParentMessage>(
 		config: FoldLens<ParentModel, ParentMessage, Model["Type"], Message["Type"]>
-	) => Fold.Field<ParentModel, ParentMessage, Message["Type"], Model["Type"], R>
+	) => Fold.Field<ParentModel, ParentMessage, Message["Type"], R>
 	readonly watchSubscription: <ParentModel, ParentMessage>(
 		entry: Subscription.EntryBuilder<ParentModel, ParentMessage, R>,
 		config: {
@@ -195,9 +191,7 @@ export interface Field<Name extends string, Model extends Schema.Top, Message ex
 			readonly modelToIsWatching: (model: ParentModel) => boolean
 		}
 	) => Subscription.EntryWithoutKeepAlive<ParentModel, ParentMessage, { readonly isWatching: boolean }, R>
-	readonly ensure: (
-		store: Store.Store<Model["Type"], Message["Type"]>
-	) => Effect.Effect<Model["Type"], Store.Disposed>
+	readonly run: Effect.Effect<Model["Type"], never, R>
 }
 
 export namespace Field {
@@ -236,7 +230,7 @@ export interface Keyed<
 	readonly informForget: Update.Fold<Model["Type"], Message["Type"], KeyedArgs<Fields>, R>
 	readonly foldChild: <ParentModel, ParentMessage>(
 		config: FoldLens<ParentModel, ParentMessage, Model["Type"], Message["Type"]>
-	) => Fold.Keyed<ParentModel, ParentMessage, Message["Type"], KeyedArgs<Fields>, Data, R>
+	) => Fold.Keyed<ParentModel, ParentMessage, Message["Type"], KeyedArgs<Fields>, R>
 	readonly watchSubscription: <ParentModel, ParentMessage>(
 		entry: Subscription.EntryBuilder<ParentModel, ParentMessage, R>,
 		config: {
@@ -249,10 +243,7 @@ export interface Keyed<
 		{ readonly args: ReadonlyArray<KeyedArgs<Fields>> },
 		R
 	>
-	readonly ensure: (
-		store: Store.Store<Model["Type"], Message["Type"]>,
-		args: KeyedArgs<Fields>
-	) => Effect.Effect<Data, Store.Disposed>
+	readonly run: (args: KeyedArgs<Fields>) => Effect.Effect<Data, never, R>
 }
 
 export namespace Keyed {
@@ -345,7 +336,7 @@ function defineField<Name extends string, A, AI, E, EI, R>(config: FieldConfig<N
 
 	const foldChild = <ParentModel, ParentMessage>(
 		foldConfig: FoldLens<ParentModel, ParentMessage, Model, Message>
-	): Fold.Field<ParentModel, ParentMessage, Message, Model, R> => ({
+	): Fold.Field<ParentModel, ParentMessage, Message, R> => ({
 		fold: Update.foldChild({ update, ...foldConfig }),
 		revalidate: Update.foldChildStep({ update: informRevalidate, ...foldConfig }),
 		revalidateOrLoad: Update.foldChildStep({ update: informRevalidateOrLoad, ...foldConfig }),
@@ -353,15 +344,6 @@ function defineField<Name extends string, A, AI, E, EI, R>(config: FieldConfig<N
 		replace: Update.foldChildStep({ update: informReplace, ...foldConfig }),
 		watch: Update.foldChildStep({ update: informWatch, ...foldConfig }),
 		forget: Update.foldChildStep({ update: informForget, ...foldConfig }),
-		ensure: (runtime: Store.Store<ParentModel, ParentMessage>) =>
-			Effect.gen(function* () {
-				runtime.dispatch(foldConfig.toParentMessage(Message.RequestedLoadIfMissing()))
-				return yield* Store.takeWhen(runtime, (parent) =>
-					Option.flatMap(foldConfig.read(parent), (model) =>
-						isSettledData(model) ? Option.some(model) : Option.none()
-					)
-				)
-			}),
 	})
 
 	const watchSubscription = <ParentModel, ParentMessage>(
@@ -382,13 +364,7 @@ function defineField<Name extends string, A, AI, E, EI, R>(config: FieldConfig<N
 			}
 		)
 
-	const ensure = (runtime: Store.Store<Model, Message>): Effect.Effect<Model, Store.Disposed> =>
-		Effect.gen(function* () {
-			runtime.dispatch(Message.RequestedLoadIfMissing())
-			return yield* Store.takeWhen(runtime, (model) =>
-				isSettledData(model) ? Option.some(model) : Option.none()
-			)
-		})
+	const run = runExecute(config.execute)
 
 	return {
 		Model: Data.schema,
@@ -404,7 +380,7 @@ function defineField<Name extends string, A, AI, E, EI, R>(config: FieldConfig<N
 		informForget,
 		foldChild,
 		watchSubscription,
-		ensure,
+		run,
 	} satisfies Field<Name, typeof Data.schema, typeof Message, R>
 }
 
@@ -544,15 +520,9 @@ function defineKeyed<
 	const init = (): Model => HashMap.empty()
 	const read = (model: Model, args: Args): Data => store.read(model, args)
 
-	const takeSettled = (runtime: Store.Store<Model, Message>, args: Args): Effect.Effect<Data, Store.Disposed> =>
-		Store.takeWhen(runtime, (model) => {
-			const data = store.read(model, args)
-			return isSettledData(data) ? Option.some(data) : Option.none()
-		})
-
 	const foldChild = <ParentModel, ParentMessage>(
 		foldConfig: FoldLens<ParentModel, ParentMessage, Model, Message>
-	): Fold.Keyed<ParentModel, ParentMessage, Message, Args, Data, R> => ({
+	): Fold.Keyed<ParentModel, ParentMessage, Message, Args, R> => ({
 		fold: Update.foldChild({ update, ...foldConfig }),
 		revalidate: Update.foldChild({ update: informRevalidate, ...foldConfig }),
 		revalidateOrLoad: Update.foldChild({ update: informRevalidateOrLoad, ...foldConfig }),
@@ -560,18 +530,6 @@ function defineKeyed<
 		replace: Update.foldChild({ update: informReplace, ...foldConfig }),
 		watch: Update.foldChild({ update: informWatch, ...foldConfig }),
 		forget: Update.foldChild({ update: informForget, ...foldConfig }),
-		ensure: (runtime: Store.Store<ParentModel, ParentMessage>, args: Args) =>
-			Effect.gen(function* () {
-				runtime.dispatch(
-					foldConfig.toParentMessage(Message.RequestedLoadIfMissing({ args: toMessageArgs(args) }))
-				)
-				return yield* Store.takeWhen(runtime, (parent) =>
-					Option.flatMap(foldConfig.read(parent), (model) => {
-						const data = store.read(model, args)
-						return isSettledData(data) ? Option.some(data) : Option.none()
-					})
-				)
-			}),
 	})
 
 	const watchSubscription = <ParentModel, ParentMessage>(
@@ -592,11 +550,7 @@ function defineKeyed<
 			}
 		)
 
-	const ensure = (runtime: Store.Store<Model, Message>, args: Args): Effect.Effect<Data, Store.Disposed> =>
-		Effect.gen(function* () {
-			runtime.dispatch(Message.RequestedLoadIfMissing({ args: toMessageArgs(args) }))
-			return yield* takeSettled(runtime, args)
-		})
+	const run = (args: Args): Effect.Effect<Data, never, R> => runExecute(config.execute(args))
 
 	const Model = Schema.HashMap(Schema.String, Slot)
 
@@ -615,7 +569,7 @@ function defineKeyed<
 		informForget,
 		foldChild,
 		watchSubscription,
-		ensure,
+		run,
 	} satisfies Keyed<Name, typeof Model, typeof Message, Fields, KeyField, Data, R>
 }
 

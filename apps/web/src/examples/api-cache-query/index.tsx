@@ -187,8 +187,8 @@ const subscriptions = Subscription.make<Model, Message>()((entry) => ({
 }))
 
 const { Provider, useModel, useDispatch } = ReactFoldkit.make({
-	update,
-	subscriptions,
+	Model,
+	config: { update, subscriptions },
 })
 
 const formatFetchedAt = (fetchedAt: number): string => new Date(fetchedAt).toLocaleTimeString()

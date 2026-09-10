@@ -5,9 +5,9 @@ import { hydrateRoot, type Root } from "react-dom/client"
 import { renderToString } from "react-dom/server"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import type * as Command from "./command"
+import * as ReactStore from "./internal/react-store"
 import { defineMessageUnion } from "./message"
 import { make } from "./react"
-import * as Store from "./store"
 import * as Subscription from "./subscription"
 import type * as Update from "./update"
 
@@ -32,11 +32,11 @@ const initialModel = (): Model => ({ status: "Loading", value: "", unrelated: 0 
 
 const update = (model: Model, message: Message): UpdateReturn =>
 	Message.match<UpdateReturn>(message, {
-			CompletedLoad: ({ value }) => ({ model: { ...model, status: "Success", value } }),
-			FailedLoad: ({ error }) => ({ model: { ...model, status: "Failure", value: error } }),
-			SetValue: ({ value }) => ({ model: { ...model, value } }),
-			BumpedUnrelated: () => ({ model: { ...model, unrelated: model.unrelated + 1 } }),
-		})
+		CompletedLoad: ({ value }) => ({ model: { ...model, status: "Success", value } }),
+		FailedLoad: ({ error }) => ({ model: { ...model, status: "Failure", value: error } }),
+		SetValue: ({ value }) => ({ model: { ...model, value } }),
+		BumpedUnrelated: () => ({ model: { ...model, unrelated: model.unrelated + 1 } }),
+	})
 
 const makeInitCommand = (effect: Effect.Effect<Message>): Command.Command<Message> => ({ name: "Load", effect })
 
@@ -55,7 +55,7 @@ describe("React Provider", function () {
 				return Message.CompletedLoad({ value: "loaded" })
 			})
 		)
-		const { Provider, useModel } = make({ update })
+		const { Provider, useModel } = make({ Model, config: { update } })
 
 		function View() {
 			const model = useModel()
@@ -92,7 +92,7 @@ describe("React Provider", function () {
 				return Message.CompletedLoad({ value: "hydrated" })
 			})
 		)
-		const { Provider, useModel } = make({ update })
+		const { Provider, useModel } = make({ Model, config: { update } })
 
 		function View() {
 			const model = useModel()
@@ -150,7 +150,7 @@ describe("React Provider", function () {
 				return Message.CompletedLoad({ value: "strict" })
 			})
 		)
-		const { Provider, useModel } = make({ update })
+		const { Provider, useModel } = make({ Model, config: { update } })
 
 		function View() {
 			return <span>{useModel().value}</span>
@@ -187,7 +187,7 @@ describe("React Provider", function () {
 				})
 			)
 		)
-		const { Provider, useModel } = make({ update })
+		const { Provider, useModel } = make({ Model, config: { update } })
 
 		function View() {
 			return <span>{useModel().value}</span>
@@ -251,9 +251,12 @@ describe("React Provider", function () {
 			)
 		)
 		const { Provider, useModel } = make({
-			update(model: Model, message: Message): UpdateReturn {
-				results += 1
-				return update(model, message)
+			Model,
+			config: {
+				update(model: Model, message: Message): UpdateReturn {
+					results += 1
+					return update(model, message)
+				},
 			},
 		})
 
@@ -311,7 +314,7 @@ describe("React Provider", function () {
 				),
 			}
 		})
-		const { Provider, useModel } = make({ update, subscriptions, layer })
+		const { Provider, useModel } = make({ Model, config: { update, subscriptions, layer } })
 
 		function View() {
 			return <span>{useModel().status}</span>
@@ -335,7 +338,7 @@ describe("React Provider", function () {
 	})
 
 	it("uses selector equivalence to avoid unrelated rerenders", function () {
-		const { Provider, useDispatch, useModel } = make({ update })
+		const { Provider, useDispatch, useModel } = make({ Model, config: { update } })
 		let selectedRenders = 0
 		let fullRenders = 0
 
@@ -382,7 +385,7 @@ describe("React Provider", function () {
 	})
 
 	it("captures init for one Provider identity and replaces it on keyed remount", function () {
-		const { Provider, useModel } = make({ update })
+		const { Provider, useModel } = make({ Model, config: { update } })
 
 		function View() {
 			return <span>{useModel().value}</span>
@@ -415,34 +418,58 @@ describe("React Provider", function () {
 		expect(screen.getByText("second")).toBeDefined()
 	})
 
-	it("Provider store reads the same Model as boot and unmount does not dispose it", function () {
-		const { Provider, useModel } = make({ update })
-		const store = Store.boot({ update }, { model: { ...initialModel(), value: "booted" } })
+	it("Seed writes the Model before activate so useModel sees it on first paint", function () {
+		const { Provider, Seed, useModel } = make({ Model, config: { update } })
+		const seeded = { ...initialModel(), status: "Success", value: "preloaded" }
+
+		function View() {
+			return <span>{`${useModel().status}:${useModel().value}`}</span>
+		}
+
+		render(
+			<Provider init={{ model: initialModel() }}>
+				<Seed model={seeded}>
+					<View />
+				</Seed>
+			</Provider>
+		)
+
+		expect(screen.getByText("Success:preloaded")).toBeDefined()
+	})
+
+	it("Seed with an equivalent Model does not overwrite on rerender", function () {
+		const { Provider, Seed, useModel } = make({ Model, config: { update } })
+		const first = { ...initialModel(), status: "Success", value: "first" }
 
 		function View() {
 			return <span>{useModel().value}</span>
 		}
 
-		try {
-			const rendered = render(
-				<Provider store={store}>
-					<View />
+		function App(props: { readonly model: Model }) {
+			return (
+				<Provider init={{ model: initialModel() }}>
+					<Seed model={props.model}>
+						<View />
+					</Seed>
 				</Provider>
 			)
-			expect(screen.getByText("booted")).toBeDefined()
+		}
 
-			act(function () {
-				store.dispatch(Message.SetValue({ value: "from-boot" }))
-			})
-			expect(screen.getByText("from-boot")).toBeDefined()
-			expect(store.getModel().value).toBe("from-boot")
+		const rendered = render(<App model={first} />)
+		expect(screen.getByText("first")).toBeDefined()
+		rendered.rerender(<App model={{ ...first }} />)
+		expect(screen.getByText("first")).toBeDefined()
+	})
 
-			rendered.unmount()
-			expect(store.isDisposed()).toBe(false)
-			store.dispatch(Message.SetValue({ value: "after-unmount" }))
-			expect(store.getModel().value).toBe("after-unmount")
+	it("seedModel throws after the store is active", function () {
+		const store = ReactStore.make({ update }, { model: initialModel() })
+		const deactivate = store.activate()
+		try {
+			expect(function () {
+				ReactStore.seedModel(store, { ...initialModel(), value: "late" })
+			}).toThrow(/Seed.*active/)
 		} finally {
-			store.dispose()
+			deactivate()
 		}
 	})
 })
