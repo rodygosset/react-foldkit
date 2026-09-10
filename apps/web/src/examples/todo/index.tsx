@@ -230,10 +230,8 @@ const update = (model: Model, message: Message): UpdateReturn =>
 
 const { Provider, useModel, useDispatch } = ReactFoldkit.make({
 	Model,
-	config: {
-		update,
-		layer: TodoRepository.layer,
-	},
+	update,
+	layer: TodoRepository.layer,
 })
 
 const filterLinks = [
