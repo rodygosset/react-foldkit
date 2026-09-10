@@ -37,22 +37,20 @@ type ConfigBase<Model, Message, R> = {
  *
  * When `R` is `never`, `layer` is optional (defaults to {@link Layer.empty}).
  * When `R` is not `never`, `layer` is required so Command Effects can be provided.
+ * `NoInfer` keeps `R` pinned to `update` / `subscriptions`, so `Layer.empty`
+ * cannot satisfy a config that requires services.
  */
 export type Config<Model, Message, R = never> = [R] extends [never]
 	? ConfigBase<Model, Message, R> & {
 			layer?: Layer.Layer<never, never, never>
 		}
 	: ConfigBase<Model, Message, R> & {
-			layer: Layer.Layer<R, never, never>
+			layer: Layer.Layer<NoInfer<R>, never, never>
 		}
 
 export namespace Config {
-	export function make<Model, Message, R = never>(
-		config: ConfigBase<Model, Message, R> & {
-			readonly layer?: Layer.Layer<R, never, never> | Layer.Layer<never, never, never>
-		}
-	): Config<Model, Message, R> {
-		return config as Config<Model, Message, R>
+	export function make<Model, Message, R = never>(config: Config<Model, Message, R>): Config<Model, Message, R> {
+		return config
 	}
 }
 

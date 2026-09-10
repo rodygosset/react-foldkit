@@ -22,7 +22,7 @@ export function make<ModelSchema extends Schema.Codec<unknown, unknown, never, n
 	Model,
 	...rest
 }: Config<ModelSchema, Message, R>) {
-	const config = Store.Config.make(rest)
+	const config = Store.Config.make(rest as Store.Config<Type<ModelSchema>, Message, R>)
 	const equalsModel = Schema.toEquivalence(Model)
 	const StoreContext = React.createContext<ReactStore.ReactStore<Type<ModelSchema>, Message> | null>(null)
 
