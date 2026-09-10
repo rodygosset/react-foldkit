@@ -119,7 +119,6 @@ type KeyedKeyArgs<
 	KeyField extends keyof Schema.Schema.Type<Schema.Struct<Fields>> & string,
 > = Pick<Schema.Schema.Type<Schema.Struct<Fields>>, KeyField>
 
-/** Parent-facing folds produced by {@link Field.foldChild} / {@link Keyed.foldChild}. */
 export namespace Fold {
 	export interface Field<ParentModel, ParentMessage, ChildMessage, R = never> {
 		readonly fold: Update.Fold<ParentModel, ParentMessage, ChildMessage, R>
@@ -161,7 +160,6 @@ export interface Field<Name extends string, Model extends Schema.Top, Message ex
 }
 
 export namespace Field {
-	/** `Model`, `Message`, and `init` only. `update` and `inform*` are invariant in `Model["Type"]`. Bound those with `Field<Name, Model, Message, R>`. */
 	export type Any = Pick<Field<string, Schema.Top, Schema.Top>, "Model" | "Message" | "init">
 }
 
@@ -197,7 +195,6 @@ export interface Keyed<
 }
 
 export namespace Keyed {
-	/** `Model`, `Message`, and `init` only. `update` and `inform*` are invariant in `Model["Type"]`. Bound those with `Keyed<Name, Model, Message, Fields, KeyField, R>`. */
 	export type Any = Pick<
 		Keyed<string, Schema.Top, Schema.Top, Schema.Struct.Fields, string>,
 		"Model" | "Message" | "init"
@@ -385,11 +382,7 @@ function defineKeyed<
 	} satisfies Keyed<Name, typeof Model, typeof Message, Fields, KeyField, R>
 }
 
-/** Defines a remote-data Submodel. Field Model is `AsyncData`. Keyed Model is
- *  a `HashMap` of `AsyncData`. Settle, retry, and in-flight dedup live in this
- *  child's `update`. The parent folds `Got*` and drives loads with
- *  `foldChild` Steps (`loadIfMissing`, `revalidate`, `revalidateOrLoad`,
- *  `replace`). */
+/** Defines a remote-data Submodel as {@link Field} or {@link Keyed}. */
 export function define<Name extends string, A, AI, E, EI, R = never>(
 	config: FieldConfig<Name, A, AI, E, EI, R> & { readonly args?: never; readonly toKey?: never }
 ): Field<Name, FieldModel<A, AI, E, EI>, ReturnType<typeof defineField<Name, A, AI, E, EI, R>>["Message"], R>
