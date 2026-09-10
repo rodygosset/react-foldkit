@@ -50,11 +50,11 @@ const applyPolicy = <Model, Args, A, E, Message, R>(
 		}),
 	})
 
-const replaceSlot = <Model, Args, A, E, Message, R>(
+function replaceSlot<Model, Args, A, E, Message, R>(
 	store: CacheStore<Model, Args, A, E, Message, R>,
 	model: Model,
 	args: Args
-): Update.Return<Model, Message, R> => {
+): Update.Return<Model, Message, R> {
 	if (!AsyncData.isPending(store.read(model, args))) {
 		return applyPolicy(store, model, args, "revalidateOrLoad")
 	}
