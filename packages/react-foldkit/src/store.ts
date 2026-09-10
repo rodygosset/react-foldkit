@@ -47,8 +47,12 @@ export type Config<Model, Message, R = never> = [R] extends [never]
 		}
 
 export namespace Config {
-	export function make<Model, Message, R = never>(config: Config<Model, Message, R>): Config<Model, Message, R> {
-		return config
+	export function make<Model, Message, R = never>(
+		config: ConfigBase<Model, Message, R> & {
+			readonly layer?: Layer.Layer<R, never, never> | Layer.Layer<never, never, never>
+		}
+	): Config<Model, Message, R> {
+		return config as Config<Model, Message, R>
 	}
 }
 
