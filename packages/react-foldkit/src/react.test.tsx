@@ -461,12 +461,12 @@ describe("React Provider", function () {
 		expect(screen.getByText("first")).toBeDefined()
 	})
 
-	it("seedModel throws after the store is active", function () {
+	it("seed throws after the store is active", function () {
 		const store = ReactStore.make({ update }, { model: initialModel() })
 		const deactivate = store.activate()
 		try {
 			expect(function () {
-				ReactStore.seedModel(store, { ...initialModel(), value: "late" })
+				store.seed({ ...initialModel(), value: "late" })
 			}).toThrow(/Seed.*active/)
 		} finally {
 			deactivate()

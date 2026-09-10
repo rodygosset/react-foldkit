@@ -56,7 +56,7 @@ export function make<ModelSchema extends Schema.Codec<unknown, unknown, never, n
 
 		if (appliedModelRef.current === null || !equalsModel(appliedModelRef.current, props.model)) {
 			appliedModelRef.current = props.model
-			ReactStore.seedModel(store, props.model)
+			store.seed(props.model)
 		}
 
 		return props.children ?? null
