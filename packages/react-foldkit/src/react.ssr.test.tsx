@@ -58,7 +58,7 @@ describe("React server rendering", function () {
 				layerBuilds += 1
 			})
 		)
-		const { Provider, useModel } = make({ update, subscriptions, layer })
+		const { Provider, useModel } = make({ Model, config: { update, subscriptions, layer } })
 
 		function View() {
 			const status = useModel((model) => model.status)
@@ -78,7 +78,7 @@ describe("React server rendering", function () {
 	})
 
 	it("supports whole-Model and structurally selected server snapshots", function () {
-		const { Provider, useModel } = make({ update })
+		const { Provider, useModel } = make({ Model, config: { update } })
 
 		function View() {
 			const model = useModel()
@@ -93,5 +93,25 @@ describe("React server rendering", function () {
 		)
 
 		expect(html).toBe("<span>Loading:server</span>")
+	})
+
+	it("Seed writes the Model into the server snapshot before paint", function () {
+		const { Provider, Seed, useModel } = make({ Model, config: { update } })
+		const seeded = { status: "Success", value: "preloaded" }
+
+		function View() {
+			const model = useModel()
+			return <span>{`${model.status}:${model.value}`}</span>
+		}
+
+		const html = renderToString(
+			<Provider init={{ model: { status: "Loading", value: "" } }}>
+				<Seed model={seeded}>
+					<View />
+				</Seed>
+			</Provider>
+		)
+
+		expect(html).toBe("<span>Success:preloaded</span>")
 	})
 })

@@ -1,9 +1,14 @@
+import { Predicate } from "effect"
 import * as Store from "../store"
 import type * as Update from "../update"
 import * as InitCommand from "./init-command"
 
 const ReactStoreTypeId: unique symbol = Symbol.for("react-foldkit/ReactStoreTypeId")
 export type ReactStoreTypeId = typeof ReactStoreTypeId
+
+/** Private. Only {@link Seed} in `react.tsx` may call this. */
+const SeedModelSymbol: unique symbol = Symbol.for("react-foldkit/ReactStore/SeedModel")
+type SeedModelSymbol = typeof SeedModelSymbol
 
 type InitCommand<Message, R> = Update.Commands<Message, R>[number]
 
@@ -21,23 +26,21 @@ export type ReactStore<Model, Message> = Readonly<{
 	activate: () => () => void
 }>
 
+type ReactStoreWithSeed<Model, Message> = ReactStore<Model, Message> & {
+	readonly [SeedModelSymbol]: (model: Model) => void
+}
+
 const trackCompletion = <Message, R>(state: InitCommandState<Message, R>): InitCommand<Message, R> =>
 	InitCommand.track(state.command, function markComplete() {
 		state.isComplete = true
 	})
 
-/** Wraps an already-live {@link Store.boot} store. Activate does not dispose it. */
-export function fromLive<Model, Message>(store: Store.Store<Model, Message>): ReactStore<Model, Message> {
-	const serverModel = store.getModel()
-
-	return {
-		[ReactStoreTypeId]: ReactStoreTypeId,
-		getModel: () => store.getModel(),
-		getServerModel: () => serverModel,
-		subscribe: store.subscribe,
-		dispatch: store.dispatch,
-		activate: () => () => undefined,
+export const seedModel = <Model, Message>(store: ReactStore<Model, Message>, model: Model): void => {
+	if (Predicate.hasProperty(store, SeedModelSymbol)) {
+		;(store[SeedModelSymbol] as (model: Model) => void)(model)
+		return
 	}
+	throw new Error("seedModel property not found on store")
 }
 
 export function make<Model, Message, R = never>(
@@ -45,16 +48,22 @@ export function make<Model, Message, R = never>(
 	init: Update.Return<Model, Message, R>
 ): ReactStore<Model, Message> {
 	const listeners = new Set<() => void>()
-	const initialModel = init.model
 	const initCommands = init.commands ?? []
 	const initCommandStates = initCommands.map(function (command) {
 		return { command, isComplete: false }
 	})
-	let inactiveModel = initialModel
+	let inactiveModel = init.model
+	let serverModel = inactiveModel
 	let activeStore: Store.Store<Model, Message> | null = null
 
 	function notifyListeners(): void {
 		for (const listener of listeners) listener()
+	}
+
+	function seed(model: Model): void {
+		if (activeStore !== null) throw new Error("react-foldkit <Seed> cannot run after the store is active")
+		inactiveModel = model
+		serverModel = model
 	}
 
 	function activate(): () => void {
@@ -83,10 +92,11 @@ export function make<Model, Message, R = never>(
 		}
 	}
 
-	return {
+	const store: ReactStoreWithSeed<Model, Message> = {
 		[ReactStoreTypeId]: ReactStoreTypeId,
+		[SeedModelSymbol]: seed,
 		getModel: () => (activeStore === null ? inactiveModel : activeStore.getModel()),
-		getServerModel: () => initialModel,
+		getServerModel: () => serverModel,
 		subscribe(listener) {
 			listeners.add(listener)
 			return () => listeners.delete(listener)
@@ -96,4 +106,6 @@ export function make<Model, Message, R = never>(
 		},
 		activate,
 	}
+
+	return store
 }

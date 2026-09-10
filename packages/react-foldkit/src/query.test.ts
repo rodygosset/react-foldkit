@@ -1,5 +1,5 @@
 import { describe, it } from "@effect/vitest"
-import { Array, Effect, Equal, Fiber, HashMap, Latch, Option, Result, Schema } from "effect"
+import { Array, Effect, Equal, HashMap, Option, Result, Schema } from "effect"
 import { expect, expectTypeOf } from "vitest"
 import * as AsyncData from "./asyncData"
 import * as Command from "./command"
@@ -477,7 +477,7 @@ describe("Query.define field — watch and forget", () => {
 	})
 })
 
-describe("Query watch subscription and ensure", () => {
+describe("Query watch subscription and run", () => {
 	it.effect("watch subscription loads a new key and drops an old one", () =>
 		Effect.gen(function* () {
 			const ParentModel = Schema.Struct({
@@ -553,86 +553,30 @@ describe("Query watch subscription and ensure", () => {
 		})
 	)
 
-	it.effect("ensure completes on existing Success without a second Fetch", () =>
+	it.effect("Field run settles execute into Success", () =>
 		Effect.gen(function* () {
-			let attempts = 0
-			const counted = Query.define({
-				name: "CountedNotes",
-				data: Schema.Array(Note),
-				error: Schema.String,
-				execute: Effect.sync(() => {
-					attempts += 1
-					return hello
-				}),
-			})
-			const store = yield* Effect.acquireRelease(
-				Effect.sync(() =>
-					Store.boot({ update: counted.update }, { model: AsyncData.Success({ data: hello }) })
-				),
-				(live) => Effect.sync(() => live.dispose())
-			)
-			const data = yield* counted.ensure(store)
+			const data = yield* notes.run
 			expect(data).toEqual(AsyncData.Success({ data: hello }))
-			expect(attempts).toBe(0)
 		})
 	)
 
-	it.effect("ensure waits through Loading then Success", () =>
+	it.effect("Field run settles a failed execute into Failure", () =>
 		Effect.gen(function* () {
-			const latch = yield* Latch.make()
-			let attempts = 0
-			const deferred = Query.define({
-				name: "LatchedNotes",
+			const failing = Query.define({
+				name: "FailingNotes",
 				data: Schema.Array(Note),
 				error: Schema.String,
-				execute: Effect.gen(function* () {
-					attempts += 1
-					yield* latch.await
-					return hello
-				}),
+				execute: Effect.fail("boom"),
 			})
-			const store = yield* Effect.acquireRelease(
-				Effect.sync(() => Store.boot({ update: deferred.update }, { model: deferred.init() })),
-				(live) => Effect.sync(() => live.dispose())
-			)
-			const fiber = yield* Effect.forkChild(deferred.ensure(store))
-			yield* Effect.yieldNow
-			yield* Effect.yieldNow
-			expect(store.getModel()).toEqual(AsyncData.Loading())
-			yield* latch.open
-			const data = yield* Fiber.join(fiber)
-			expect(data).toEqual(AsyncData.Success({ data: hello }))
-			expect(attempts).toBe(1)
+			const data = yield* failing.run
+			expect(data).toEqual(AsyncData.Failure({ error: "boom" }))
 		})
 	)
 
-	it.effect("foldChild.ensure waits on the parent store until the child slot settles", () =>
+	it.effect("Keyed run(args) returns settled AsyncData for that slot", () =>
 		Effect.gen(function* () {
-			const ParentModel = Schema.Struct({ notes: noteById.Model })
-			type ParentModel = typeof ParentModel.Type
-			const ParentMessage = defineMessageUnion({
-				GotNoteMessage: { message: noteById.Message },
-			})
-			type ParentMessage = typeof ParentMessage.Type
-
-			const notesField = noteById.foldChild({
-				read: (model: ParentModel) => Option.some(model.notes),
-				write: (model, nextNotes) => evo(model, { notes: () => nextNotes }),
-				toParentMessage: (message) => ParentMessage.GotNoteMessage({ message }),
-			})
-
-			const update = (model: ParentModel, message: ParentMessage) =>
-				ParentMessage.match<Update.Return<ParentModel, ParentMessage>>(message, {
-					GotNoteMessage: ({ message: noteMessage }) => notesField.fold(model, noteMessage),
-				})
-
-			const store = yield* Effect.acquireRelease(
-				Effect.sync(() => Store.boot({ update }, { model: { notes: noteById.init() } })),
-				(live) => Effect.sync(() => live.dispose())
-			)
-			const data = yield* notesField.ensure(store, { noteId: "1" })
+			const data = yield* noteById.run({ noteId: "1" })
 			expect(data).toEqual(AsyncData.Success({ data: { id: "1", body: "hello" } }))
-			expect(noteById.read(store.getModel().notes, { noteId: "1" })).toEqual(data)
 		})
 	)
 })
@@ -688,7 +632,7 @@ describe("Query.Field and Query.Keyed types", () => {
 		})
 
 		expectTypeOf(notesField).toEqualTypeOf<
-			Query.Fold.Field<ParentModel, ParentMessage, typeof notes.Message.Type, (typeof notes.Model)["Type"]>
+			Query.Fold.Field<ParentModel, ParentMessage, typeof notes.Message.Type>
 		>()
 
 		const KeyedParent = Schema.Struct({ notes: noteById.Model })
@@ -705,13 +649,7 @@ describe("Query.Field and Query.Keyed types", () => {
 		})
 
 		expectTypeOf(keyedField).toEqualTypeOf<
-			Query.Fold.Keyed<
-				KeyedParent,
-				KeyedParentMessage,
-				typeof noteById.Message.Type,
-				{ readonly noteId: string },
-				AsyncData.AsyncData<Note, string>
-			>
+			Query.Fold.Keyed<KeyedParent, KeyedParentMessage, typeof noteById.Message.Type, { readonly noteId: string }>
 		>()
 	})
 
@@ -721,9 +659,7 @@ describe("Query.Field and Query.Keyed types", () => {
 		>()
 	})
 
-	it("keyed ensure returns AsyncData, not the HashMap Model", () => {
-		expectTypeOf(noteById.ensure).returns.toEqualTypeOf<
-			Effect.Effect<AsyncData.AsyncData<Note, string>, Store.Disposed>
-		>()
+	it("keyed run returns AsyncData, not the HashMap Model", () => {
+		expectTypeOf(noteById.run).returns.toEqualTypeOf<Effect.Effect<AsyncData.AsyncData<Note, string>>>()
 	})
 })

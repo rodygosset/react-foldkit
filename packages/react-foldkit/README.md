@@ -34,15 +34,15 @@ import { defineMessageUnion } from "react-foldkit/message"
 
 ## Package surface
 
-| Export                                                       | Role                                                         |
-| ------------------------------------------------------------ | ------------------------------------------------------------ |
-| `./react`                                                    | `make()` → `Provider` (`init` or a live `store`), `useModel`, `useDispatch` |
-| `./store`                                                    | `boot()` and `takeWhen()` for tests and non-React hosts      |
-| `./query`                                                    | Remote-data Submodel factory (`Query.define`, watch, forget, `ensure`) |
-| `./command`, `./message`, `./update`, `./struct`, `./schema` | TEA vocabulary (`defineMessageUnion`, `Update.foldChild`, …) |
-| `./asyncData`                                                | Remote data helpers (`settle`, `revalidate`, …)              |
-| `./subscription`                                             | Model-gated standing orders (`Subscription.make`)            |
-| `./eslint`                                                   | Recommended + strict ESLint presets                          |
+| Export                                                       | Role                                                              |
+| ------------------------------------------------------------ | ----------------------------------------------------------------- |
+| `./react`                                                    | `make({ Model, config })` → `Provider` (`init`), `Seed`, `useModel`, `useDispatch` |
+| `./store`                                                    | `boot()` and `takeWhen()` for tests and non-React hosts           |
+| `./query`                                                    | Remote-data Submodel factory (`Query.define`, watch, forget, `run`) |
+| `./command`, `./message`, `./update`, `./struct`, `./schema` | TEA vocabulary (`defineMessageUnion`, `Update.foldChild`, …)      |
+| `./asyncData`                                                | Remote data helpers (`settle`, `revalidate`, …)                   |
+| `./subscription`                                             | Model-gated standing orders (`Subscription.make`)                 |
+| `./eslint`                                                   | Recommended + strict ESLint presets                               |
 
 ## Quick start
 
@@ -66,7 +66,7 @@ const update = (model: Model, message: Message): Update.Return<Model, Message> =
 		Increment: () => ({ model: evo(model, { count: (n) => n + 1 }) }),
 	})
 
-const { Provider, useModel, useDispatch } = ReactFoldkit.make({ update })
+const { Provider, useModel, useDispatch } = ReactFoldkit.make({ Model, config: { update } })
 
 function CounterView() {
 	const count = useModel((m) => m.count)
@@ -96,7 +96,7 @@ export function Counter() {
 See `apps/web` in this monorepo for Todo (AsyncData), Stopwatch (Subscription),
 API Cache (hand-rolled AsyncData), and API Cache Query (`Query.define`).
 
-## Query watch, forget, and ensure
+## Query watch, forget, and run
 
 `Query.define` is a remote-data Submodel. Keyed `Model` is a `HashMap` of
 `{ args, data }` slots. Read `data` with `query.read(model, args)`.
@@ -108,34 +108,43 @@ including Interrupt of a pending Fetch. Per-key start/stop Messages are not used
 Foldkit `switchMap` on subscription deps cannot report removals. A late
 `SettledFetch` does not resurrect a forgotten slot.
 
-`Query.ensure(store, args)` (Keyed) / `Query.ensure(store)` (Field) dispatches
-`RequestedLoadIfMissing` then waits with `Store.takeWhen` until that slot is
-Success, Failure, or Stale. `foldChild.ensure` does the same on a parent store
-through the child's `Got*` Message.
+`Query.run` (Field) is an `Effect` that runs `execute` and returns settled
+`AsyncData` via `Effect.result` + `AsyncData.settle`. Keyed `run(args)` does the
+same for one slot. Neither writes into a store; callers that seed HashMap slots
+build them from the settled value.
 
 `watchSubscription` is one Foldkit `Subscription.make` entry, not a React hook.
 
-## Provider `store`
+## Seed
 
-`Provider` takes **either** `init` (cold boot, dispose on unmount) **or** a
-store already created with `Store.boot`. A passed-in store is subscribed and
-dispatched only; unmount does not dispose it.
+`Seed` writes a full Model into the inactive Provider store before `activate`,
+so SSR and first paint see preloaded data. Equivalent Models (via
+`Schema.toEquivalence`) are a no-op. Seeding after the store is active throws.
+
+```tsx
+const { Provider, Seed, useModel } = ReactFoldkit.make({ Model, config: { update } })
+
+<Provider init={{ model: empty }}>
+  <Seed model={preloaded}>
+    <View />
+  </Seed>
+</Provider>
+```
 
 ## Server rendering
 
-`Provider` renders its init Model on the server. Commands, Subscriptions, and
-Layer resources start only after client hydration, so the client must receive
-the same init Model that produced the server HTML. Dispatches while the live
-runtime is disconnected are ignored.
+`Provider` renders its init Model on the server (or the Seed Model when Seed
+runs during the render). Commands, Subscriptions, and Layer resources start only
+after client hydration, so the client must receive the same Model that produced
+the server HTML. Dispatches while the live runtime is disconnected are ignored.
 
 Init Commands belong to the Provider instance. Each runs until it produces its
 result once; an interrupted init Command restarts when React reconnects Effects,
 while completed init Commands do not. Subscriptions and Layer resources reconnect
 with each Effect activation.
 
-The `schema` config describes the Model but does not transfer it automatically.
-Applications that preload a Model on the server must encode it into the response
-and decode it with the same Schema before hydrating `Provider`.
+`make` takes `{ Model, config }`. `Model` is a `Schema.Codec`. Applications that
+preload on the server should pass that Model into `Seed`.
 
 ## ESLint
 

@@ -125,8 +125,8 @@ const subscriptions = Subscription.make<Model, Message>()((entry) => ({
 }))
 
 const { Provider, useModel, useDispatch } = ReactFoldkit.make({
-	update,
-	subscriptions,
+	Model,
+	config: { update, subscriptions },
 })
 
 const floorAndPad = (value: number): string => Math.floor(value).toString().padStart(2, "0")
