@@ -432,10 +432,9 @@ describe("Query.Field and Query.Keyed types", () => {
 		>()
 	})
 
-	it("rejects a keyed load with the wrong args shape", () => {
-		if (false) {
-			// @ts-expect-error noteId must be a string
-			noteById.informLoadIfMissing(noteById.init(), { noteId: 1 })
-		}
+	it("keyed informLoadIfMissing is Update.Fold over { noteId: string }", () => {
+		expectTypeOf(noteById.informLoadIfMissing).toEqualTypeOf<
+			Update.Fold<(typeof noteById.Model)["Type"], (typeof noteById.Message)["Type"], { readonly noteId: string }>
+		>()
 	})
 })
