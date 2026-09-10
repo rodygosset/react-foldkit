@@ -1,5 +1,5 @@
 import { Effect, HashMap, Option, Result, Schema } from "effect"
-import { describe, expect, it, vi } from "vitest"
+import { describe, expect, expectTypeOf, it, vi } from "vitest"
 import * as AsyncData from "./asyncData"
 import * as Command from "./command"
 import { defineMessageUnion } from "./message"
@@ -233,5 +233,72 @@ describe("Query.foldChild keyed", () => {
 		const started = notesField.loadIfMissing({ notes: noteById.init() }, { noteId: "1" })
 		expect(HashMap.get(started.model.notes, "1")).toEqual(Option.some(AsyncData.Loading()))
 		expect(started.commands?.map((command) => command.name)).toEqual(["FetchNote"])
+	})
+})
+
+describe("Query.Field and Query.Keyed types", () => {
+	const notes = Query.define({
+		name: "Notes",
+		data: Schema.Array(Note),
+		error: Schema.String,
+		execute: Effect.succeed([{ id: "1", body: "hello" }]),
+	})
+
+	const noteById = Query.define({
+		name: "Note",
+		data: Note,
+		error: Schema.String,
+		args: { noteId: Schema.String },
+		keyFields: ["noteId"],
+		toKey: ({ noteId }) => noteId,
+		execute: ({ noteId }) => Effect.succeed({ id: noteId, body: "hello" }),
+	})
+
+	it("define(field) is Query.Field with the config Name, Model, and Message", () => {
+		expectTypeOf(notes).toEqualTypeOf<Query.Field<"Notes", typeof notes.Model, typeof notes.Message>>()
+		const takesField = (_query: Query.Field.Any) => undefined
+		takesField(notes)
+	})
+
+	it("define(keyed) is Query.Keyed with the config Name, Model, and Message", () => {
+		expectTypeOf(noteById).toEqualTypeOf<Query.Keyed<"Note", typeof noteById.Model, typeof noteById.Message>>()
+		const takesKeyed = (_query: Query.Keyed.Any) => undefined
+		takesKeyed(noteById)
+	})
+
+	it("foldChild returns Query.Fold.Field / Query.Fold.Keyed", () => {
+		const ParentModel = Schema.Struct({ notes: notes.Model })
+		type ParentModel = typeof ParentModel.Type
+		const ParentMessage = defineMessageUnion({
+			GotNotesMessage: { message: notes.Message },
+		})
+		type ParentMessage = typeof ParentMessage.Type
+
+		const notesField = notes.foldChild({
+			read: (model: ParentModel) => Option.some(model.notes),
+			write: (model, nextNotes) => evo(model, { notes: () => nextNotes }),
+			toParentMessage: (message) => ParentMessage.GotNotesMessage({ message }),
+		})
+
+		expectTypeOf(notesField).toEqualTypeOf<
+			Query.Fold.Field<ParentModel, ParentMessage, typeof notes.Message.Type>
+		>()
+
+		const KeyedParent = Schema.Struct({ notes: noteById.Model })
+		type KeyedParent = typeof KeyedParent.Type
+		const KeyedParentMessage = defineMessageUnion({
+			GotNoteMessage: { message: noteById.Message },
+		})
+		type KeyedParentMessage = typeof KeyedParentMessage.Type
+
+		const keyedField = noteById.foldChild({
+			read: (model: KeyedParent) => Option.some(model.notes),
+			write: (model, nextNotes) => evo(model, { notes: () => nextNotes }),
+			toParentMessage: (message) => KeyedParentMessage.GotNoteMessage({ message }),
+		})
+
+		expectTypeOf(keyedField).toMatchTypeOf<
+			Query.Fold.Keyed<KeyedParent, KeyedParentMessage, typeof noteById.Message.Type, { readonly noteId: string }>
+		>()
 	})
 })
