@@ -6,14 +6,14 @@ import * as Update from "./update"
 
 type Policy = "loadIfMissing" | "revalidate" | "revalidateOrLoad"
 
-export type FoldChildConfig<ParentModel, ParentMessage, ChildModel, ChildMessage> = Readonly<{
-	read: (model: ParentModel) => Option.Option<ChildModel>
-	write: (model: ParentModel, nextChildModel: ChildModel) => ParentModel
-	toParentMessage: (message: ChildMessage) => ParentMessage
-}>
+type FoldLens<ParentModel, ParentMessage, ChildModel, ChildMessage> = Pick<
+	Update.ChildFold<ParentModel, ParentMessage, ChildModel, never, ChildMessage>,
+	"read" | "write" | "toParentMessage"
+>
 
-// Nested Command.Interruptible.Outcome in defineMessageUnion collapses through tsup to
-// `node_modules/foldkit/dist/schema` (and sometimes `outcome?: any`). Tags match Outcome.
+// NOTE: Nested Command.Interruptible.Outcome in defineMessageUnion collapses
+// through tsup to `node_modules/foldkit/dist/schema` (and sometimes
+// `outcome?: any`). Tags match Outcome.
 const FetchInterruptOutcome = defineMessageUnion({
 	Interrupted: {},
 	NotFound: {},
@@ -75,16 +75,6 @@ const completeCancel = <Model, Args, A, E, Message, R>(
 		NotFound: () => applyPolicy(store, model, args, "revalidateOrLoad"),
 	})
 
-const childFold = <ParentModel, ParentMessage, ChildModel, ChildMessage, R>(
-	update: (model: ChildModel, message: ChildMessage) => Update.Return<ChildModel, ChildMessage, R>,
-	config: FoldChildConfig<ParentModel, ParentMessage, ChildModel, ChildMessage>
-) => Update.foldChild({ update, ...config })
-
-const childFoldStep = <ParentModel, ParentMessage, ChildModel, ChildMessage, R>(
-	update: (model: ChildModel) => Update.Return<ChildModel, ChildMessage, R>,
-	config: FoldChildConfig<ParentModel, ParentMessage, ChildModel, ChildMessage>
-) => Update.foldChildStep({ update, ...config })
-
 type FieldConfig<Name extends string, A, AI, E, EI, R> = Readonly<{
 	name: Name
 	data: Schema.Codec<A, AI>
@@ -111,42 +101,23 @@ type KeyedConfig<
 	execute: (args: Schema.Schema.Type<Schema.Struct<Fields>>) => Effect.Effect<A, E, R>
 }>
 
-type Dual2<A, B, Out> = {
-	(a: A, b: B): Out
-	(b: B): (a: A) => Out
-}
+type DefineConfig =
+	| (FieldConfig<string, any, any, any, any, any> & { readonly toKey?: never })
+	| KeyedConfig<string, any, any, any, any, any, any, any>
+
+const isKeyedConfig = (config: DefineConfig): config is KeyedConfig<string, any, any, any, any, any, any, any> =>
+	Predicate.hasProperty(config, "toKey")
 
 type FieldModel<A, AI, E, EI> = Schema.Codec<AsyncData.AsyncData<A, E>, AsyncData.AsyncDataEncoded<AI, EI>>
 
 type SettledFetchOf<Message extends Schema.Top> = Extract<Message["Type"], { readonly _tag: "SettledFetch" }>
 
-type KeyedArgsOf<Message extends Schema.Top> = Message["Type"] extends infer Variant
-	? Variant extends { readonly _tag: "RequestedRevalidate"; readonly args: infer Args extends object }
-		? Args
-		: never
-	: never
+type KeyedArgs<Fields extends Schema.Struct.Fields> = Schema.Schema.Type<Schema.Struct<Fields>>
 
-type KeyedFetch<Name extends string, Message extends Schema.Top, R> = {
-	readonly name: `Fetch${Name}`
-	readonly Interrupt: {
-		readonly name: `Fetch${Name}.Interrupt`
-		<ToMessage>(
-			keyArgs: KeyedArgsOf<Message>,
-			toMessage: (outcome: Command.Interruptible.Outcome) => ToMessage
-		): Readonly<{
-			name: `Fetch${Name}.Interrupt`
-			args: object
-			interruptsKey: string
-			effect: Effect.Effect<ToMessage>
-		}>
-	}
-	(args: KeyedArgsOf<Message>): Readonly<{
-		name: `Fetch${Name}`
-		args: KeyedArgsOf<Message>
-		key: string
-		effect: Effect.Effect<SettledFetchOf<Message>, never, R>
-	}>
-}
+type KeyedKeyArgs<
+	Fields extends Schema.Struct.Fields,
+	KeyField extends keyof Schema.Schema.Type<Schema.Struct<Fields>> & string,
+> = Pick<Schema.Schema.Type<Schema.Struct<Fields>>, KeyField>
 
 /** Parent-facing folds produced by {@link Field.foldChild} / {@link Keyed.foldChild}. */
 export namespace Fold {
@@ -160,10 +131,10 @@ export namespace Fold {
 
 	export interface Keyed<ParentModel, ParentMessage, ChildMessage, Args, R = never> {
 		readonly fold: Update.Fold<ParentModel, ParentMessage, ChildMessage, R>
-		readonly revalidate: Dual2<ParentModel, Args, Update.Return<ParentModel, ParentMessage, R>>
-		readonly revalidateOrLoad: Dual2<ParentModel, Args, Update.Return<ParentModel, ParentMessage, R>>
-		readonly loadIfMissing: Dual2<ParentModel, Args, Update.Return<ParentModel, ParentMessage, R>>
-		readonly replace: Dual2<ParentModel, Args, Update.Return<ParentModel, ParentMessage, R>>
+		readonly revalidate: Update.Fold<ParentModel, ParentMessage, Args, R>
+		readonly revalidateOrLoad: Update.Fold<ParentModel, ParentMessage, Args, R>
+		readonly loadIfMissing: Update.Fold<ParentModel, ParentMessage, Args, R>
+		readonly replace: Update.Fold<ParentModel, ParentMessage, Args, R>
 	}
 }
 
@@ -184,8 +155,8 @@ export interface Field<Name extends string, Model extends Schema.Top, Message ex
 	readonly informRevalidateOrLoad: (model: Model["Type"]) => Update.Return<Model["Type"], Message["Type"], R>
 	readonly informLoadIfMissing: (model: Model["Type"]) => Update.Return<Model["Type"], Message["Type"], R>
 	readonly informReplace: (model: Model["Type"]) => Update.Return<Model["Type"], Message["Type"], R>
-	foldChild: <ParentModel, ParentMessage>(
-		config: FoldChildConfig<ParentModel, ParentMessage, Model["Type"], Message["Type"]>
+	readonly foldChild: <ParentModel, ParentMessage>(
+		config: FoldLens<ParentModel, ParentMessage, Model["Type"], Message["Type"]>
 	) => Fold.Field<ParentModel, ParentMessage, Message["Type"], R>
 }
 
@@ -195,39 +166,42 @@ export namespace Field {
 }
 
 /** Keyed remote-data Submodel. `Model` is a `HashMap` of `AsyncData`. */
-export interface Keyed<Name extends string, Model extends Schema.Top, Message extends Schema.Top, R = never> {
+export interface Keyed<
+	Name extends string,
+	Model extends Schema.Top,
+	Message extends Schema.Top,
+	Fields extends Schema.Struct.Fields,
+	KeyField extends keyof Schema.Schema.Type<Schema.Struct<Fields>> & string,
+	R = never,
+> {
 	readonly Model: Model
 	readonly Message: Message
-	readonly Fetch: KeyedFetch<Name, Message, R>
+	readonly Fetch: Command.Interruptible.DefinitionWithArgs<
+		`Fetch${Name}`,
+		Fields,
+		KeyedKeyArgs<Fields, KeyField>,
+		Effect.Effect<SettledFetchOf<Message>, never, R>
+	>
 	readonly init: () => Model["Type"]
 	readonly update: (
 		model: Model["Type"],
 		message: Message["Type"]
 	) => Update.Return<Model["Type"], Message["Type"], R>
-	readonly informRevalidate: Dual2<
-		Model["Type"],
-		KeyedArgsOf<Message>,
-		Update.Return<Model["Type"], Message["Type"], R>
-	>
-	readonly informRevalidateOrLoad: Dual2<
-		Model["Type"],
-		KeyedArgsOf<Message>,
-		Update.Return<Model["Type"], Message["Type"], R>
-	>
-	readonly informLoadIfMissing: Dual2<
-		Model["Type"],
-		KeyedArgsOf<Message>,
-		Update.Return<Model["Type"], Message["Type"], R>
-	>
-	readonly informReplace: Dual2<Model["Type"], KeyedArgsOf<Message>, Update.Return<Model["Type"], Message["Type"], R>>
-	foldChild: <ParentModel, ParentMessage>(
-		config: FoldChildConfig<ParentModel, ParentMessage, Model["Type"], Message["Type"]>
-	) => Fold.Keyed<ParentModel, ParentMessage, Message["Type"], KeyedArgsOf<Message>, R>
+	readonly informRevalidate: Update.Fold<Model["Type"], Message["Type"], KeyedArgs<Fields>, R>
+	readonly informRevalidateOrLoad: Update.Fold<Model["Type"], Message["Type"], KeyedArgs<Fields>, R>
+	readonly informLoadIfMissing: Update.Fold<Model["Type"], Message["Type"], KeyedArgs<Fields>, R>
+	readonly informReplace: Update.Fold<Model["Type"], Message["Type"], KeyedArgs<Fields>, R>
+	readonly foldChild: <ParentModel, ParentMessage>(
+		config: FoldLens<ParentModel, ParentMessage, Model["Type"], Message["Type"]>
+	) => Fold.Keyed<ParentModel, ParentMessage, Message["Type"], KeyedArgs<Fields>, R>
 }
 
 export namespace Keyed {
-	/** `Model`, `Message`, and `init` only. `update` and `inform*` are invariant in `Model["Type"]`. Bound those with `Keyed<Name, Model, Message, R>`. */
-	export type Any = Pick<Keyed<string, Schema.Top, Schema.Top>, "Model" | "Message" | "init">
+	/** `Model`, `Message`, and `init` only. `update` and `inform*` are invariant in `Model["Type"]`. Bound those with `Keyed<Name, Model, Message, Fields, KeyField, R>`. */
+	export type Any = Pick<
+		Keyed<string, Schema.Top, Schema.Top, Schema.Struct.Fields, string>,
+		"Model" | "Message" | "init"
+	>
 }
 
 function defineField<Name extends string, A, AI, E, EI, R>(config: FieldConfig<Name, A, AI, E, EI, R>) {
@@ -284,13 +258,13 @@ function defineField<Name extends string, A, AI, E, EI, R>(config: FieldConfig<N
 	const init = (): Model => AsyncData.Idle()
 
 	const foldChild = <ParentModel, ParentMessage>(
-		config: FoldChildConfig<ParentModel, ParentMessage, Model, Message>
+		config: FoldLens<ParentModel, ParentMessage, Model, Message>
 	): Fold.Field<ParentModel, ParentMessage, Message, R> => ({
-		fold: childFold(update, config),
-		revalidate: childFoldStep(informRevalidate, config),
-		revalidateOrLoad: childFoldStep(informRevalidateOrLoad, config),
-		loadIfMissing: childFoldStep(informLoadIfMissing, config),
-		replace: childFoldStep(informReplace, config),
+		fold: Update.foldChild({ update, ...config }),
+		revalidate: Update.foldChildStep({ update: informRevalidate, ...config }),
+		revalidateOrLoad: Update.foldChildStep({ update: informRevalidateOrLoad, ...config }),
+		loadIfMissing: Update.foldChildStep({ update: informLoadIfMissing, ...config }),
+		replace: Update.foldChildStep({ update: informReplace, ...config }),
 	})
 
 	return {
@@ -375,7 +349,7 @@ function defineKeyed<
 			CompletedCancelFetch: ({ args, outcome }) => completeCancel(store, model, args, outcome),
 		})
 
-	const inform = (build: (args: MessageArgs) => Message): Dual2<Model, Args, UpdateReturn> =>
+	const inform = (build: (args: MessageArgs) => Message): Update.Fold<Model, Message, Args, R> =>
 		Function.dual(2, (model: Model, args: Args): UpdateReturn => update(model, build(toMessageArgs(args))))
 
 	const informRevalidate = inform((args) => Message.RequestedRevalidate({ args }))
@@ -385,24 +359,15 @@ function defineKeyed<
 
 	const init = (): Model => HashMap.empty()
 
-	function foldChild<ParentModel, ParentMessage>(
-		config: FoldChildConfig<ParentModel, ParentMessage, Model, Message>
-	): Fold.Keyed<ParentModel, ParentMessage, Message, Args, R> {
-		const step = (
-			childInform: Dual2<Model, Args, UpdateReturn>
-		): Dual2<ParentModel, Args, Update.Return<ParentModel, ParentMessage, R>> =>
-			Function.dual(2, (model: ParentModel, args: Args): Update.Return<ParentModel, ParentMessage, R> =>
-				childFoldStep(childInform(args), config)(model)
-			)
-
-		return {
-			fold: childFold(update, config),
-			revalidate: step(informRevalidate),
-			revalidateOrLoad: step(informRevalidateOrLoad),
-			loadIfMissing: step(informLoadIfMissing),
-			replace: step(informReplace),
-		}
-	}
+	const foldChild = <ParentModel, ParentMessage>(
+		config: FoldLens<ParentModel, ParentMessage, Model, Message>
+	): Fold.Keyed<ParentModel, ParentMessage, Message, Args, R> => ({
+		fold: Update.foldChild({ update, ...config }),
+		revalidate: Update.foldChild({ update: informRevalidate, ...config }),
+		revalidateOrLoad: Update.foldChild({ update: informRevalidateOrLoad, ...config }),
+		loadIfMissing: Update.foldChild({ update: informLoadIfMissing, ...config }),
+		replace: Update.foldChild({ update: informReplace, ...config }),
+	})
 
 	const Model = Schema.HashMap(Schema.String, Data.schema)
 
@@ -417,34 +382,39 @@ function defineKeyed<
 		informLoadIfMissing,
 		informReplace,
 		foldChild,
-	} satisfies Keyed<Name, typeof Model, typeof Message, R>
+	} satisfies Keyed<Name, typeof Model, typeof Message, Fields, KeyField, R>
 }
 
-/** Defines a remote-data Submodel. The Model is `AsyncData`. Settle, retry, and
- *  in-flight dedup live in this child's `update`. The parent folds `Got*` and
- *  drives loads with `inform*` helpers through `foldChild`. */
-export const define: {
-	<Name extends string, A, AI, E, EI, R = never>(
-		config: FieldConfig<Name, A, AI, E, EI, R> & { readonly args?: never; readonly toKey?: never }
-	): Field<Name, FieldModel<A, AI, E, EI>, ReturnType<typeof defineField<Name, A, AI, E, EI, R>>["Message"], R>
-	<
-		Name extends string,
-		A,
-		AI,
-		E,
-		EI,
-		Fields extends Schema.Struct.Fields,
-		KeyField extends keyof Schema.Schema.Type<Schema.Struct<Fields>> & string,
-		R = never,
-	>(
-		config: KeyedConfig<Name, A, AI, E, EI, Fields, KeyField, R>
-	): Keyed<
-		Name,
-		ReturnType<typeof defineKeyed<Name, A, AI, E, EI, Fields, KeyField, R>>["Model"],
-		ReturnType<typeof defineKeyed<Name, A, AI, E, EI, Fields, KeyField, R>>["Message"],
-		R
-	>
-} = ((config: FieldConfig<string, any, any, any, any, any> | KeyedConfig<string, any, any, any, any, any, any, any>) =>
-	Predicate.hasProperty(config, "toKey")
-		? defineKeyed(config as never)
-		: defineField(config as never)) as typeof define
+/** Defines a remote-data Submodel. Field Model is `AsyncData`. Keyed Model is
+ *  a `HashMap` of `AsyncData`. Settle, retry, and in-flight dedup live in this
+ *  child's `update`. The parent folds `Got*` and drives loads with
+ *  `foldChild` Steps (`loadIfMissing`, `revalidate`, `revalidateOrLoad`,
+ *  `replace`). */
+export function define<Name extends string, A, AI, E, EI, R = never>(
+	config: FieldConfig<Name, A, AI, E, EI, R> & { readonly args?: never; readonly toKey?: never }
+): Field<Name, FieldModel<A, AI, E, EI>, ReturnType<typeof defineField<Name, A, AI, E, EI, R>>["Message"], R>
+export function define<
+	Name extends string,
+	A,
+	AI,
+	E,
+	EI,
+	Fields extends Schema.Struct.Fields,
+	KeyField extends keyof Schema.Schema.Type<Schema.Struct<Fields>> & string,
+	R = never,
+>(
+	config: KeyedConfig<Name, A, AI, E, EI, Fields, KeyField, R>
+): Keyed<
+	Name,
+	ReturnType<typeof defineKeyed<Name, A, AI, E, EI, Fields, KeyField, R>>["Model"],
+	ReturnType<typeof defineKeyed<Name, A, AI, E, EI, Fields, KeyField, R>>["Message"],
+	Fields,
+	KeyField,
+	R
+>
+export function define(config: DefineConfig): unknown {
+	if (isKeyedConfig(config)) {
+		return defineKeyed(config)
+	}
+	return defineField(config)
+}
