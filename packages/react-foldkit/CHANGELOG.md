@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Add `Query.define`: a remote-data Submodel factory. The child owns `AsyncData` transitions, settle, in-flight dedup, and interrupt-then-reload. The parent folds `Got*` and drives loads with `inform*` Steps from `bind`.
+- Add `Query.define`: a remote-data Submodel factory. The child owns `AsyncData` transitions, settle, in-flight dedup, and interrupt-then-reload. The parent folds `Got*` and drives loads with `inform*` Steps from `foldChild`.
 - Add the `API Cache (Query)` example next to the hand-rolled API Cache screen.
 
 Breaking alignment with Foldkit `0.158.2` and Effect `4.0.0-rc.112`.

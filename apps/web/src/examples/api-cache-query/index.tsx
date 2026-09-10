@@ -101,19 +101,19 @@ const {
 
 type UpdateReturn = Update.Return<Model, Message>
 
-const postsField = postsQuery.bind({
+const postsField = postsQuery.foldChild({
 	read: (model: Model) => Option.some(model.posts),
 	write: (model, nextPosts) => evo(model, { posts: () => nextPosts }),
 	toParentMessage: (childMessage) => Message.GotPostsMessage({ message: childMessage }),
 })
 
-const statsField = statsQuery.bind({
+const statsField = statsQuery.foldChild({
 	read: (model: Model) => Option.some(model.stats),
 	write: (model, nextStats) => evo(model, { stats: () => nextStats }),
 	toParentMessage: (childMessage) => Message.GotStatsMessage({ message: childMessage }),
 })
 
-const postDetailField = postDetailQuery.bind({
+const postDetailField = postDetailQuery.foldChild({
 	read: (model: Model) => Option.some(model.postDetailById),
 	write: (model, nextPostDetailById) => evo(model, { postDetailById: () => nextPostDetailById }),
 	toParentMessage: (childMessage) => Message.GotPostDetailMessage({ message: childMessage }),
