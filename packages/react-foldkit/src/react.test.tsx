@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
-import { Effect, Latch, Layer, Schema, Stream } from "effect"
+import { Context, Effect, Latch, Layer, Schema, Stream } from "effect"
 import React, { StrictMode } from "react"
 import { hydrateRoot, type Root } from "react-dom/client"
 import { renderToString } from "react-dom/server"
@@ -469,5 +469,27 @@ describe("React Provider", function () {
 		} finally {
 			deactivate()
 		}
+	})
+})
+
+describe("make config types", function () {
+	class ResourceService extends Context.Service<ResourceService, { value: string }>()("ResourceService") {}
+
+	function serviceUpdate(model: Model, _message: Message): Update.Return<Model, Message, ResourceService> {
+		return { model }
+	}
+
+	it("rejects Layer.empty when update requires services", function () {
+		make({
+			Model,
+			update: serviceUpdate,
+			layer: Layer.succeed(ResourceService, { value: "ok" }),
+		})
+
+		// @ts-expect-error Layer.empty does not provide ResourceService
+		make({ Model, update: serviceUpdate, layer: Layer.empty })
+
+		// @ts-expect-error layer is required when update needs services
+		make({ Model, update: serviceUpdate })
 	})
 })
