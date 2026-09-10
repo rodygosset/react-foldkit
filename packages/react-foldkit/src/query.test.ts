@@ -55,6 +55,17 @@ describe("Query.define field", () => {
 		expect(restarted.commands?.map((command) => command.name)).toEqual(["FetchNotes"])
 	})
 
+	it("CompletedCancelFetch NotFound on Idle starts Fetch via revalidateOrLoad", () => {
+		const started = notes.update(
+			notes.init(),
+			notes.Message.CompletedCancelFetch({
+				outcome: Command.Interruptible.Outcome.NotFound(),
+			})
+		)
+		expect(started.model).toEqual(AsyncData.Loading())
+		expect(started.commands?.map((command) => command.name)).toEqual(["FetchNotes"])
+	})
+
 	it("loadIfMissing does not refetch Success", () => {
 		const loaded = AsyncData.Success({ data: [{ id: "1", body: "hello" }] })
 		const result = notes.informLoadIfMissing(loaded)
@@ -127,9 +138,21 @@ describe("Query.define keyed cache", () => {
 		expect(HashMap.get(restarted.model, "1")).toEqual(Option.some(AsyncData.Loading()))
 		expect(restarted.commands?.map((command) => command.name)).toEqual(["FetchNote"])
 	})
+
+	it("CompletedCancelFetch NotFound on a missing key starts Fetch via revalidateOrLoad", () => {
+		const started = noteById.update(
+			noteById.init(),
+			noteById.Message.CompletedCancelFetch({
+				args: { noteId: "1" },
+				outcome: Command.Interruptible.Outcome.NotFound(),
+			})
+		)
+		expect(HashMap.get(started.model, "1")).toEqual(Option.some(AsyncData.Loading()))
+		expect(started.commands?.map((command) => command.name)).toEqual(["FetchNote"])
+	})
 })
 
-describe("Query.bind", () => {
+describe("Query.foldChild", () => {
 	const notes = Query.define({
 		name: "Notes",
 		data: Schema.Array(Note),
@@ -146,7 +169,7 @@ describe("Query.bind", () => {
 	})
 	type Message = typeof Message.Type
 
-	const notesField = notes.bind({
+	const notesField = notes.foldChild({
 		read: (model: Model) => Option.some(model.notes),
 		write: (model, nextNotes) => evo(model, { notes: () => nextNotes }),
 		toParentMessage: (message) => Message.GotNotesMessage({ message }),
@@ -181,7 +204,7 @@ describe("Query.bind", () => {
 	})
 })
 
-describe("Query.bind keyed", () => {
+describe("Query.foldChild keyed", () => {
 	const noteById = Query.define({
 		name: "Note",
 		data: Note,
@@ -200,13 +223,13 @@ describe("Query.bind keyed", () => {
 	})
 	type Message = typeof Message.Type
 
-	const notesField = noteById.bind({
+	const notesField = noteById.foldChild({
 		read: (model: Model) => Option.some(model.notes),
 		write: (model, nextNotes) => evo(model, { notes: () => nextNotes }),
 		toParentMessage: (message) => Message.GotNoteMessage({ message }),
 	})
 
-	it("loadIfMissing through bind writes Loading for a miss and FetchNote", () => {
+	it("loadIfMissing through foldChild writes Loading for a miss and FetchNote", () => {
 		const started = notesField.loadIfMissing({ notes: noteById.init() }, { noteId: "1" })
 		expect(HashMap.get(started.model.notes, "1")).toEqual(Option.some(AsyncData.Loading()))
 		expect(started.commands?.map((command) => command.name)).toEqual(["FetchNote"])

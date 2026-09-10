@@ -6,12 +6,14 @@ import * as Update from "./update"
 
 type Policy = "loadIfMissing" | "revalidate" | "revalidateOrLoad"
 
-type BindConfig<ParentModel, ParentMessage, ChildModel, ChildMessage> = Readonly<{
+type FoldChildConfig<ParentModel, ParentMessage, ChildModel, ChildMessage> = Readonly<{
 	read: (model: ParentModel) => Option.Option<ChildModel>
 	write: (model: ParentModel, nextChildModel: ChildModel) => ParentModel
 	toParentMessage: (message: ChildMessage) => ParentMessage
 }>
 
+// Nested Command.Interruptible.Outcome in defineMessageUnion collapses through tsup to
+// `node_modules/foldkit/dist/schema` (and sometimes `outcome?: any`). Tags match Outcome.
 const FetchInterruptOutcome = defineMessageUnion({
 	Interrupted: {},
 	NotFound: {},
@@ -66,36 +68,22 @@ const completeCancel = <Model, Args, A, E, Message, R>(
 	store: CacheStore<Model, Args, A, E, Message, R>,
 	model: Model,
 	args: Args,
-	outcome: typeof FetchInterruptOutcome.Type
+	outcome: Command.Interruptible.Outcome
 ): Update.Return<Model, Message, R> =>
-	Match.value(outcome).pipe(
-		Match.withReturnType<Update.Return<Model, Message, R>>(),
-		Match.tag("Interrupted", () => ({ model, commands: [store.load(args)] })),
-		Match.tag("NotFound", () => applyPolicy(store, model, args, "revalidateOrLoad")),
-		Match.exhaustive
-	)
+	Command.Interruptible.Outcome.match<Update.Return<Model, Message, R>>(outcome, {
+		Interrupted: () => ({ model, commands: [store.load(args)] }),
+		NotFound: () => applyPolicy(store, model, args, "revalidateOrLoad"),
+	})
 
-const bindFold = <ParentModel, ParentMessage, ChildModel, ChildMessage, R>(
+const childFold = <ParentModel, ParentMessage, ChildModel, ChildMessage, R>(
 	update: (model: ChildModel, message: ChildMessage) => Update.Return<ChildModel, ChildMessage, R>,
-	config: BindConfig<ParentModel, ParentMessage, ChildModel, ChildMessage>
-) =>
-	Update.foldChild({
-		update,
-		read: config.read,
-		write: config.write,
-		toParentMessage: config.toParentMessage,
-	})
+	config: FoldChildConfig<ParentModel, ParentMessage, ChildModel, ChildMessage>
+) => Update.foldChild({ update, ...config })
 
-const bindFieldStep = <ParentModel, ParentMessage, ChildModel, ChildMessage, R>(
+const childFoldStep = <ParentModel, ParentMessage, ChildModel, ChildMessage, R>(
 	update: (model: ChildModel) => Update.Return<ChildModel, ChildMessage, R>,
-	config: BindConfig<ParentModel, ParentMessage, ChildModel, ChildMessage>
-) =>
-	Update.foldChildStep({
-		update,
-		read: config.read,
-		write: config.write,
-		toParentMessage: config.toParentMessage,
-	})
+	config: FoldChildConfig<ParentModel, ParentMessage, ChildModel, ChildMessage>
+) => Update.foldChildStep({ update, ...config })
 
 type FieldConfig<Name extends string, A, AI, E, EI, R> = Readonly<{
 	name: Name
@@ -122,6 +110,11 @@ type KeyedConfig<
 	toKey: (args: Pick<Schema.Schema.Type<Schema.Struct<Fields>>, KeyField>) => string
 	execute: (args: Schema.Schema.Type<Schema.Struct<Fields>>) => Effect.Effect<A, E, R>
 }>
+
+type Dual2<A, B, Out> = {
+	(a: A, b: B): Out
+	(b: B): (a: A) => Out
+}
 
 const defineField = <Name extends string, A, AI, E, EI, R>(config: FieldConfig<Name, A, AI, E, EI, R>) => {
 	const Data = AsyncData.Schema(config.data, config.error)
@@ -176,12 +169,14 @@ const defineField = <Name extends string, A, AI, E, EI, R>(config: FieldConfig<N
 
 	const init = (): Model => AsyncData.Idle()
 
-	const bind = <ParentModel, ParentMessage>(bindConfig: BindConfig<ParentModel, ParentMessage, Model, Message>) => ({
-		fold: bindFold(update, bindConfig),
-		revalidate: bindFieldStep(informRevalidate, bindConfig),
-		revalidateOrLoad: bindFieldStep(informRevalidateOrLoad, bindConfig),
-		loadIfMissing: bindFieldStep(informLoadIfMissing, bindConfig),
-		replace: bindFieldStep(informReplace, bindConfig),
+	const foldChild = <ParentModel, ParentMessage>(
+		config: FoldChildConfig<ParentModel, ParentMessage, Model, Message>
+	) => ({
+		fold: childFold(update, config),
+		revalidate: childFoldStep(informRevalidate, config),
+		revalidateOrLoad: childFoldStep(informRevalidateOrLoad, config),
+		loadIfMissing: childFoldStep(informLoadIfMissing, config),
+		replace: childFoldStep(informReplace, config),
 	})
 
 	return {
@@ -194,7 +189,7 @@ const defineField = <Name extends string, A, AI, E, EI, R>(config: FieldConfig<N
 		informRevalidateOrLoad,
 		informLoadIfMissing,
 		informReplace,
-		bind,
+		foldChild,
 	}
 }
 
@@ -268,47 +263,28 @@ const defineKeyed = <
 			CompletedCancelFetch: ({ args, outcome }) => completeCancel(store, model, args, outcome),
 		})
 
-	const informRevalidate: {
-		(model: Model, args: Args): UpdateReturn
-		(args: Args): (model: Model) => UpdateReturn
-	} = Function.dual(2, (model: Model, args: Args): UpdateReturn =>
-		update(model, Message.RequestedRevalidate({ args: toMessageArgs(args) }))
-	)
-	const informRevalidateOrLoad: {
-		(model: Model, args: Args): UpdateReturn
-		(args: Args): (model: Model) => UpdateReturn
-	} = Function.dual(2, (model: Model, args: Args): UpdateReturn =>
-		update(model, Message.RequestedRevalidateOrLoad({ args: toMessageArgs(args) }))
-	)
-	const informLoadIfMissing: {
-		(model: Model, args: Args): UpdateReturn
-		(args: Args): (model: Model) => UpdateReturn
-	} = Function.dual(2, (model: Model, args: Args): UpdateReturn =>
-		update(model, Message.RequestedLoadIfMissing({ args: toMessageArgs(args) }))
-	)
-	const informReplace: {
-		(model: Model, args: Args): UpdateReturn
-		(args: Args): (model: Model) => UpdateReturn
-	} = Function.dual(2, (model: Model, args: Args): UpdateReturn =>
-		update(model, Message.RequestedReplace({ args: toMessageArgs(args) }))
-	)
+	const inform = (build: (args: MessageArgs) => Message): Dual2<Model, Args, UpdateReturn> =>
+		Function.dual(2, (model: Model, args: Args): UpdateReturn => update(model, build(toMessageArgs(args))))
+
+	const informRevalidate = inform((args) => Message.RequestedRevalidate({ args }))
+	const informRevalidateOrLoad = inform((args) => Message.RequestedRevalidateOrLoad({ args }))
+	const informLoadIfMissing = inform((args) => Message.RequestedLoadIfMissing({ args }))
+	const informReplace = inform((args) => Message.RequestedReplace({ args }))
 
 	const init = (): Model => HashMap.empty()
 
-	const bind = <ParentModel, ParentMessage>(bindConfig: BindConfig<ParentModel, ParentMessage, Model, Message>) => {
-		const step = (inform: {
-			(model: Model, args: Args): UpdateReturn
-			(args: Args): (model: Model) => UpdateReturn
-		}): {
-			(model: ParentModel, args: Args): Update.Return<ParentModel, ParentMessage, R>
-			(args: Args): (model: ParentModel) => Update.Return<ParentModel, ParentMessage, R>
-		} =>
+	const foldChild = <ParentModel, ParentMessage>(
+		config: FoldChildConfig<ParentModel, ParentMessage, Model, Message>
+	) => {
+		const step = (
+			childInform: Dual2<Model, Args, UpdateReturn>
+		): Dual2<ParentModel, Args, Update.Return<ParentModel, ParentMessage, R>> =>
 			Function.dual(2, (model: ParentModel, args: Args): Update.Return<ParentModel, ParentMessage, R> =>
-				bindFieldStep(inform(args), bindConfig)(model)
+				childFoldStep(childInform(args), config)(model)
 			)
 
 		return {
-			fold: bindFold(update, bindConfig),
+			fold: childFold(update, config),
 			revalidate: step(informRevalidate),
 			revalidateOrLoad: step(informRevalidateOrLoad),
 			loadIfMissing: step(informLoadIfMissing),
@@ -326,13 +302,13 @@ const defineKeyed = <
 		informRevalidateOrLoad,
 		informLoadIfMissing,
 		informReplace,
-		bind,
+		foldChild,
 	}
 }
 
 /** Defines a remote-data Submodel. The Model is `AsyncData`. Settle, retry, and
  *  in-flight dedup live in this child's `update`. The parent folds `Got*` and
- *  drives loads with `inform*` helpers through `bind`. */
+ *  drives loads with `inform*` helpers through `foldChild`. */
 export const define: {
 	<Name extends string, A, AI, E, EI, R = never>(
 		config: FieldConfig<Name, A, AI, E, EI, R> & { readonly args?: never; readonly toKey?: never }
@@ -354,4 +330,4 @@ export const define: {
 		? defineKeyed(config as never)
 		: defineField(config as never)) as typeof define
 
-export type { BindConfig }
+export type { FoldChildConfig }
