@@ -1,14 +1,9 @@
-import { Predicate } from "effect"
 import * as Store from "../store"
 import type * as Update from "../update"
 import * as InitCommand from "./init-command"
 
 const ReactStoreTypeId: unique symbol = Symbol.for("react-foldkit/ReactStoreTypeId")
 export type ReactStoreTypeId = typeof ReactStoreTypeId
-
-/** Private. Only {@link Seed} in `react.tsx` may call this. */
-const SeedModelSymbol: unique symbol = Symbol.for("react-foldkit/ReactStore/SeedModel")
-type SeedModelSymbol = typeof SeedModelSymbol
 
 type InitCommand<Message, R> = Update.Commands<Message, R>[number]
 
@@ -24,24 +19,13 @@ export type ReactStore<Model, Message> = Readonly<{
 	subscribe: (listener: () => void) => () => void
 	dispatch: (message: Message) => void
 	activate: () => () => void
+	seed: (model: Model) => void
 }>
-
-type ReactStoreWithSeed<Model, Message> = ReactStore<Model, Message> & {
-	readonly [SeedModelSymbol]: (model: Model) => void
-}
 
 const trackCompletion = <Message, R>(state: InitCommandState<Message, R>): InitCommand<Message, R> =>
 	InitCommand.track(state.command, function markComplete() {
 		state.isComplete = true
 	})
-
-export const seedModel = <Model, Message>(store: ReactStore<Model, Message>, model: Model): void => {
-	if (Predicate.hasProperty(store, SeedModelSymbol)) {
-		;(store[SeedModelSymbol] as (model: Model) => void)(model)
-		return
-	}
-	throw new Error("seedModel property not found on store")
-}
 
 export function make<Model, Message, R = never>(
 	config: Store.Config<Model, Message, R>,
@@ -92,20 +76,24 @@ export function make<Model, Message, R = never>(
 		}
 	}
 
-	const store: ReactStoreWithSeed<Model, Message> = {
+	return {
 		[ReactStoreTypeId]: ReactStoreTypeId,
-		[SeedModelSymbol]: seed,
-		getModel: () => (activeStore === null ? inactiveModel : activeStore.getModel()),
-		getServerModel: () => serverModel,
+		getModel: function getModel() {
+			return activeStore === null ? inactiveModel : activeStore.getModel()
+		},
+		getServerModel: function getServerModel() {
+			return serverModel
+		},
 		subscribe(listener) {
 			listeners.add(listener)
-			return () => listeners.delete(listener)
+			return function unsubscribe() {
+				listeners.delete(listener)
+			}
 		},
 		dispatch(message) {
 			if (activeStore !== null) activeStore.dispatch(message)
 		},
 		activate,
+		seed,
 	}
-
-	return store
 }
