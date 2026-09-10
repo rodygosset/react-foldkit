@@ -254,7 +254,8 @@ const PostDetailCard = (props: { detail: PostDetail; fetchedAt: number }) => (
 		<p className="text-sm text-muted-foreground">By {props.detail.author}</p>
 		<p className="leading-relaxed text-foreground/90">{props.detail.body}</p>
 		<p className="text-xs text-muted-foreground">
-			Fetched at {formatFetchedAt(props.fetchedAt)}. Leaving this screen forgets the detail slot.
+			Fetched at {formatFetchedAt(props.fetchedAt)}. Leaving this screen forgets the slot and Interrupts an
+			in-flight Fetch for that key.
 		</p>
 	</article>
 )
@@ -280,8 +281,10 @@ function PostsListView() {
 				</Button>
 			</div>
 			<p className="text-sm text-muted-foreground">
-				Open a post, then go back. The list stays Success. The detail key is forgotten when nothing is watching
-				it. Open the same post again to load it fresh.
+				Open a post, then go back. The list stays Success. <code>watchSubscription</code> keeps the live key
+				set. A dropped key runs the same forget path as <code>informForget</code>, including Interrupt while
+				pending. Open the same post again to load it fresh. The Cached badge uses{" "}
+				<code>postDetailQuery.read</code>, which returns the slot&apos;s <code>AsyncData</code>.
 			</p>
 			{AsyncData.matchDataSplitEmpty(model.posts, {
 				onIdle: () => <LoadingPanel text="Loading posts…" />,
@@ -507,7 +510,7 @@ function TabList() {
 const View = () => (
 	<ExampleShell
 		title="API Cache (Query)"
-		description="The same Model-as-cache TEA as API Cache. Query.define owns settle, retry, and in-flight dedup; watch keeps the live key set; the parent only folds Got* and intent."
+		description="The same Model-as-cache TEA as API Cache. Query.define owns settle, retry, dedup, and keyed slots ({ args, data }). watchSubscription reconciles the live key set with Interrupt on drop. The parent only folds Got* and intent."
 	>
 		<div className="mx-auto flex w-full max-w-lg flex-1 flex-col gap-6 px-6 pt-8 pb-16">
 			<TabList />
