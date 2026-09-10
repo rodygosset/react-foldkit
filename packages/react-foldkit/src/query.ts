@@ -385,9 +385,9 @@ function defineKeyed<
 
 	const init = (): Model => HashMap.empty()
 
-	const foldChild = <ParentModel, ParentMessage>(
+	function foldChild<ParentModel, ParentMessage>(
 		config: FoldChildConfig<ParentModel, ParentMessage, Model, Message>
-	): Fold.Keyed<ParentModel, ParentMessage, Message, Args, R> => {
+	): Fold.Keyed<ParentModel, ParentMessage, Message, Args, R> {
 		const step = (
 			childInform: Dual2<Model, Args, UpdateReturn>
 		): Dual2<ParentModel, Args, Update.Return<ParentModel, ParentMessage, R>> =>
@@ -404,10 +404,10 @@ function defineKeyed<
 		}
 	}
 
-	const modelSchema = Schema.HashMap(Schema.String, Data.schema)
+	const Model = Schema.HashMap(Schema.String, Data.schema)
 
 	return {
-		Model: modelSchema,
+		Model,
 		Message,
 		Fetch,
 		init,
@@ -417,7 +417,7 @@ function defineKeyed<
 		informLoadIfMissing,
 		informReplace,
 		foldChild,
-	} satisfies Keyed<Name, typeof modelSchema, typeof Message, R>
+	} satisfies Keyed<Name, typeof Model, typeof Message, R>
 }
 
 /** Defines a remote-data Submodel. The Model is `AsyncData`. Settle, retry, and
