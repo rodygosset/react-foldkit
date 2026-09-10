@@ -19,9 +19,9 @@ type Type<ModelSchema extends Schema.Codec<unknown, unknown, never, never>> = Sc
  * preloaded data. Live updates go through dispatch after activate.
  */
 export function make<ModelSchema extends Schema.Codec<unknown, unknown, never, never>, Message, R = never>(
-	options: Config<ModelSchema, Message, R>
+	config: Config<ModelSchema, Message, R>
 ) {
-	const equalsModel = Schema.toEquivalence(options.Model)
+	const equalsModel = Schema.toEquivalence(config.Model)
 	const StoreContext = React.createContext<ReactStore.ReactStore<Type<ModelSchema>, Message> | null>(null)
 
 	function useStore() {
@@ -37,7 +37,7 @@ export function make<ModelSchema extends Schema.Codec<unknown, unknown, never, n
 	}
 
 	function Provider(props: ProviderProps) {
-		const [store] = React.useState(() => ReactStore.make(options, props.init))
+		const [store] = React.useState(() => ReactStore.make(config, props.init))
 
 		React.useEffect(
 			function manageStoreLifetime() {
