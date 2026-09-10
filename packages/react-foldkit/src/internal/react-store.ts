@@ -26,6 +26,20 @@ const trackCompletion = <Message, R>(state: InitCommandState<Message, R>): InitC
 		state.isComplete = true
 	})
 
+/** Wraps an already-live {@link Store.boot} store. Activate does not dispose it. */
+export function fromLive<Model, Message>(store: Store.Store<Model, Message>): ReactStore<Model, Message> {
+	const serverModel = store.getModel()
+
+	return {
+		[ReactStoreTypeId]: ReactStoreTypeId,
+		getModel: () => store.getModel(),
+		getServerModel: () => serverModel,
+		subscribe: store.subscribe,
+		dispatch: store.dispatch,
+		activate: () => () => undefined,
+	}
+}
+
 export function make<Model, Message, R = never>(
 	config: Store.Config<Model, Message, R>,
 	init: Update.Return<Model, Message, R>

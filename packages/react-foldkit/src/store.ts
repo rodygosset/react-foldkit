@@ -55,7 +55,65 @@ export type Store<Model, Message> = Readonly<{
 	subscribe: (listener: () => void) => () => void
 	dispatch: (message: Message) => void
 	dispose: () => void
+	isDisposed: () => boolean
 }>
+
+/** Failed {@link takeWhen} because {@link Store.dispose} ran first. */
+export class Disposed extends Schema.Error<Disposed>("react-foldkit/Store/Disposed")({
+	_tag: Schema.tag("Disposed"),
+}) {}
+
+/**
+ * Succeeds with the first Model for which `pick` returns `Option.some`.
+ * Fails with {@link Disposed} if the store is disposed first.
+ * Interrupting the Effect unsubscribes.
+ */
+export const takeWhen = <Model, Message, A>(
+	store: Store<Model, Message>,
+	pick: (model: Model) => Option.Option<A>
+): Effect.Effect<A, Disposed> =>
+	Effect.callback<A, Disposed>(function (resume, signal) {
+		let isSettled = false
+
+		function tryPick(): boolean {
+			if (isSettled) return true
+
+			if (store.isDisposed()) {
+				isSettled = true
+				resume(Effect.fail(new Disposed()))
+				return true
+			}
+
+			const maybeValue = pick(store.getModel())
+			if (Option.isSome(maybeValue)) {
+				isSettled = true
+				resume(Effect.succeed(maybeValue.value))
+				return true
+			}
+
+			return false
+		}
+
+		if (tryPick()) return
+
+		const unsubscribe = store.subscribe(function onStoreChange() {
+			if (tryPick()) {
+				unsubscribe()
+			}
+		})
+
+		signal.addEventListener(
+			"abort",
+			function onTakeWhenAbort() {
+				unsubscribe()
+			},
+			{ once: true }
+		)
+
+		return Effect.sync(function unsubscribeTakeWhen() {
+			unsubscribe()
+		})
+	})
 
 /** Sync drain yields to the browser after this much cumulative work (Foldkit). */
 const DRAIN_BUDGET_MS = 5
@@ -374,6 +432,9 @@ export function boot<Model, Message, R = never>(
 		if (phase._tag === "Disposed") return
 		phase = { _tag: "Disposed" }
 		pendingMessages = []
+		for (const listener of listeners) {
+			listener()
+		}
 		listeners.clear()
 		if (deferredDrainChannel !== null) {
 			deferredDrainChannel.port1.close()
@@ -406,11 +467,10 @@ export function boot<Model, Message, R = never>(
 
 	return {
 		[StoreTypeId]: StoreTypeId,
-		getModel: function getModel() {
-			return model
-		},
+		getModel: () => model,
 		subscribe,
 		dispatch: enqueueMessage,
 		dispose,
+		isDisposed: () => phase._tag === "Disposed",
 	}
 }

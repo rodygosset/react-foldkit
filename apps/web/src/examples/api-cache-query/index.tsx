@@ -1,7 +1,7 @@
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import { Separator } from "@workspace/ui/components/separator"
-import { Array, Clock, Duration, Effect, HashMap, Match, Option, Schema, Stream } from "effect"
+import { Array, Clock, Duration, Effect, Match, Option, Schema, Stream } from "effect"
 import { ReactFoldkit } from "react-foldkit"
 import * as AsyncData from "react-foldkit/asyncData"
 import { defineMessageUnion } from "react-foldkit/message"
@@ -136,16 +136,12 @@ const update = (model: Model, message: Message): UpdateReturn =>
 		GotStatsMessage: ({ message: statsMessage }) => statsField.fold(model, statsMessage),
 		GotPostDetailMessage: ({ message: postDetailMessage }) => postDetailField.fold(model, postDetailMessage),
 		ClickedTab: ({ tab }) => activateTab(model, tab),
-		ClickedPost: ({ postId }) => {
-			const selectedModel = evo(model, {
-				maybeSelectedPostId: () => Option.some(postId),
-			})
-
-			return Option.match(HashMap.get(model.postDetailById, postId), {
-				onNone: () => postDetailField.loadIfMissing(selectedModel, { postId }),
-				onSome: () => Update.identity(selectedModel),
-			})
-		},
+		ClickedPost: ({ postId }) =>
+			Update.identity(
+				evo(model, {
+					maybeSelectedPostId: () => Option.some(postId),
+				})
+			),
 		ClickedBackToPosts: () => Update.identity(evo(model, { maybeSelectedPostId: () => Option.none() })),
 		ClickedInvalidatePosts: () => postsField.revalidateOrLoad(model),
 		ClickedRetryPosts: () => postsField.revalidateOrLoad(model),
@@ -180,6 +176,14 @@ const subscriptions = Subscription.make<Model, Message>()((entry) => ({
 				),
 		}
 	),
+	watchPostDetail: postDetailQuery.watchSubscription(entry, {
+		toParentMessage: (message) => Message.GotPostDetailMessage({ message }),
+		modelToArgs: (model) =>
+			Option.match(model.maybeSelectedPostId, {
+				onNone: () => [],
+				onSome: (postId) => [{ postId }],
+			}),
+	}),
 }))
 
 const { Provider, useModel, useDispatch } = ReactFoldkit.make({
@@ -190,7 +194,7 @@ const { Provider, useModel, useDispatch } = ReactFoldkit.make({
 const formatFetchedAt = (fetchedAt: number): string => new Date(fetchedAt).toLocaleTimeString()
 
 const isPostDetailCached = (postDetailById: Model["postDetailById"], postId: string): boolean =>
-	Option.exists(HashMap.get(postDetailById, postId), AsyncData.hasData)
+	AsyncData.hasData(postDetailQuery.read(postDetailById, { postId }))
 
 const ErrorPanel = (props: { error: string; onRetry: () => void }) => (
 	<div className="flex items-center justify-between gap-4 rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-destructive">
@@ -250,7 +254,7 @@ const PostDetailCard = (props: { detail: PostDetail; fetchedAt: number }) => (
 		<p className="text-sm text-muted-foreground">By {props.detail.author}</p>
 		<p className="leading-relaxed text-foreground/90">{props.detail.body}</p>
 		<p className="text-xs text-muted-foreground">
-			Fetched at {formatFetchedAt(props.fetchedAt)}. Future visits render instantly from the Model.
+			Fetched at {formatFetchedAt(props.fetchedAt)}. Leaving this screen forgets the detail slot.
 		</p>
 	</article>
 )
@@ -276,8 +280,8 @@ function PostsListView() {
 				</Button>
 			</div>
 			<p className="text-sm text-muted-foreground">
-				Open a post, go back, and open it again. The second visit renders instantly from the Model. Invalidate
-				marks the list stale and refetches it while the current list stays on screen.
+				Open a post, then go back. The list stays Success. The detail key is forgotten when nothing is watching
+				it. Open the same post again to load it fresh.
 			</p>
 			{AsyncData.matchDataSplitEmpty(model.posts, {
 				onIdle: () => <LoadingPanel text="Loading posts…" />,
@@ -320,7 +324,7 @@ function PostsListView() {
 function PostDetailView(props: { postId: string }) {
 	const model = useModel()
 	const dispatch = useDispatch()
-	const postDetailData = Option.getOrElse(HashMap.get(model.postDetailById, props.postId), AsyncData.Idle)
+	const postDetailData = postDetailQuery.read(model.postDetailById, { postId: props.postId })
 
 	return (
 		<div className="flex flex-col gap-4">
@@ -503,7 +507,7 @@ function TabList() {
 const View = () => (
 	<ExampleShell
 		title="API Cache (Query)"
-		description="The same Model-as-cache TEA as API Cache. Query.define owns settle, retry, and in-flight dedup; the parent only folds Got* and intent."
+		description="The same Model-as-cache TEA as API Cache. Query.define owns settle, retry, and in-flight dedup; watch keeps the live key set; the parent only folds Got* and intent."
 	>
 		<div className="mx-auto flex w-full max-w-lg flex-1 flex-col gap-6 px-6 pt-8 pb-16">
 			<TabList />
