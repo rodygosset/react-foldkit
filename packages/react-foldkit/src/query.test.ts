@@ -61,6 +61,13 @@ describe("Query.define field", () => {
 		expect(result.model).toBe(loaded)
 		expect(result.commands).toBeUndefined()
 	})
+
+	it("informReplace while pending returns Interrupt and keeps Loading", () => {
+		const pending = notes.informRevalidateOrLoad(notes.init())
+		const replaced = notes.informReplace(pending.model)
+		expect(replaced.model).toEqual(AsyncData.Loading())
+		expect(replaced.commands?.map((command) => command.name)).toEqual(["FetchNotes.Interrupt"])
+	})
 })
 
 describe("Query.define keyed cache", () => {
@@ -69,6 +76,7 @@ describe("Query.define keyed cache", () => {
 		data: Note,
 		error: Schema.String,
 		args: { noteId: Schema.String },
+		keyFields: ["noteId"],
 		toKey: ({ noteId }) => noteId,
 		execute: ({ noteId }) => Effect.succeed({ id: noteId, body: "hello" }),
 	})
@@ -105,6 +113,19 @@ describe("Query.define keyed cache", () => {
 		const replaced = noteById.informReplace(pending.model, { noteId: "1" })
 		expect(HashMap.get(replaced.model, "1")).toEqual(Option.some(AsyncData.Loading()))
 		expect(replaced.commands?.map((command) => command.name)).toEqual(["FetchNote.Interrupt"])
+	})
+
+	it("CompletedCancelFetch Interrupted restarts Fetch on a pending key", () => {
+		const pending = noteById.informLoadIfMissing(noteById.init(), { noteId: "1" })
+		const restarted = noteById.update(
+			pending.model,
+			noteById.Message.CompletedCancelFetch({
+				args: { noteId: "1" },
+				outcome: Command.Interruptible.Outcome.Interrupted(),
+			})
+		)
+		expect(HashMap.get(restarted.model, "1")).toEqual(Option.some(AsyncData.Loading()))
+		expect(restarted.commands?.map((command) => command.name)).toEqual(["FetchNote"])
 	})
 })
 
@@ -166,6 +187,7 @@ describe("Query.bind keyed", () => {
 		data: Note,
 		error: Schema.String,
 		args: { noteId: Schema.String },
+		keyFields: ["noteId"],
 		toKey: ({ noteId }) => noteId,
 		execute: ({ noteId }) => Effect.succeed({ id: noteId, body: "hello" }),
 	})
@@ -188,31 +210,5 @@ describe("Query.bind keyed", () => {
 		const started = notesField.loadIfMissing({ notes: noteById.init() }, { noteId: "1" })
 		expect(HashMap.get(started.model.notes, "1")).toEqual(Option.some(AsyncData.Loading()))
 		expect(started.commands?.map((command) => command.name)).toEqual(["FetchNote"])
-	})
-})
-
-describe("Query.group", () => {
-	const posts = Query.define({
-		name: "Posts",
-		data: Schema.Array(Note),
-		error: Schema.String,
-		execute: Effect.succeed([{ id: "p", body: "post" }]),
-	})
-	const stats = Query.define({
-		name: "Stats",
-		data: Schema.Number,
-		error: Schema.String,
-		execute: Effect.succeed(3),
-	})
-	const cache = Query.group({ posts, stats })
-
-	it("routes a member Message without touching sibling fields", () => {
-		const onlyPosts = cache.update(
-			cache.init(),
-			(cache.Message as any).Posts({ message: posts.Message.RequestedLoadIfMissing() })
-		)
-		expect(onlyPosts.model.posts).toEqual(AsyncData.Loading())
-		expect(onlyPosts.model.stats).toEqual(AsyncData.Idle())
-		expect(onlyPosts.commands?.map((command: { name: string }) => command.name)).toEqual(["FetchPosts"])
 	})
 })

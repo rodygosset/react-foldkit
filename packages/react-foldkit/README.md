@@ -34,11 +34,11 @@ import { defineMessageUnion } from "react-foldkit/message"
 
 ## Package surface
 
-| Export                                                       | Role                                              |
-| ------------------------------------------------------------ | ------------------------------------------------- |
-| `./react`                                                    | `make()` → `Provider`, `useModel`, `useDispatch`  |
-| `./store`                                                    | `boot()` for tests and non-React hosts            |
-| `./query`                                                    | Remote-data Submodel factory (`Query.define`, `Query.group`) |
+| Export                                                       | Role                                                         |
+| ------------------------------------------------------------ | ------------------------------------------------------------ |
+| `./react`                                                    | `make()` → `Provider`, `useModel`, `useDispatch`             |
+| `./store`                                                    | `boot()` for tests and non-React hosts                       |
+| `./query`                                                    | Remote-data Submodel factory (`Query.define`)                |
 | `./command`, `./message`, `./update`, `./struct`, `./schema` | TEA vocabulary (`defineMessageUnion`, `Update.foldChild`, …) |
 | `./asyncData`                                                | Remote data helpers (`settle`, `revalidate`, …)              |
 | `./subscription`                                             | Model-gated standing orders (`Subscription.make`)            |
@@ -57,34 +57,39 @@ const Model = Schema.Struct({ count: Schema.Number })
 type Model = typeof Model.Type
 
 const Message = defineMessageUnion({
-  Increment: {},
+	Increment: {},
 })
 type Message = typeof Message.Type
 
 const update = (model: Model, message: Message): Update.Return<Model, Message> =>
-  Message.match<Update.Return<Model, Message>>(message, {
-    Increment: () => ({ model: evo(model, { count: (n) => n + 1 }) }),
-  })
+	Message.match<Update.Return<Model, Message>>(message, {
+		Increment: () => ({ model: evo(model, { count: (n) => n + 1 }) }),
+	})
 
 const { Provider, useModel, useDispatch } = ReactFoldkit.make({ update })
 
 function CounterView() {
-  const count = useModel((m) => m.count)
-  const dispatch = useDispatch()
+	const count = useModel((m) => m.count)
+	const dispatch = useDispatch()
 
-  return (
-    <button type="button" onClick={function () { dispatch(Message.Increment()) }}>
-      {count}
-    </button>
-  )
+	return (
+		<button
+			type="button"
+			onClick={function () {
+				dispatch(Message.Increment())
+			}}
+		>
+			{count}
+		</button>
+	)
 }
 
 export function Counter() {
-  return (
-    <Provider init={{ model: { count: 0 } }}>
-      <CounterView />
-    </Provider>
-  )
+	return (
+		<Provider init={{ model: { count: 0 } }}>
+			<CounterView />
+		</Provider>
+	)
 }
 ```
 
