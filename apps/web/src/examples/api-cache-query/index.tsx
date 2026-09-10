@@ -46,6 +46,7 @@ const statsQuery = Query.define({
 const postDetailQuery = Query.define({
 	name: "PostDetail",
 	args: { postId: Schema.String },
+	keyFields: ["postId"],
 	toKey: ({ postId }) => postId,
 	data: FetchedPostDetail,
 	error: Schema.String,
@@ -133,8 +134,7 @@ const update = (model: Model, message: Message): UpdateReturn =>
 	Message.match<UpdateReturn>(message, {
 		GotPostsMessage: ({ message: postsMessage }) => postsField.fold(model, postsMessage),
 		GotStatsMessage: ({ message: statsMessage }) => statsField.fold(model, statsMessage),
-		GotPostDetailMessage: ({ message: postDetailMessage }) =>
-			postDetailField.fold(model, postDetailMessage),
+		GotPostDetailMessage: ({ message: postDetailMessage }) => postDetailField.fold(model, postDetailMessage),
 		ClickedTab: ({ tab }) => activateTab(model, tab),
 		ClickedPost: ({ postId }) => {
 			const selectedModel = evo(model, {
