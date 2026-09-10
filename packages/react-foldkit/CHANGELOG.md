@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Add `Query.run` (Field: settled `Effect`; Keyed: `run(args) => Effect`). Remove `Query.ensure` and `foldChild.ensure`.
+- `ReactFoldkit.make` takes a flat `Store.Config` plus `Model: Schema.Codec`. Add `Seed` for pre-activate Model writes (`Schema.toEquivalence` skips equivalent Models). `Provider` is init-only (remove `store` / `fromLive`). `layer` is `NoInfer`'d from `update`, so `Layer.empty` is not accepted when Commands require services.
+- Keep `Query.informWatch` / `informForget` and `Query.watchSubscription`. Keyed slots store `{ args, data }` so watch-drop Interrupts pending fetches. Late `SettledFetch` after forget is a no-op.
+- Add `Store.takeWhen` and `Store.Disposed`.
+- Add `Query.define`: a remote-data Submodel factory. The child owns `AsyncData` transitions, settle, in-flight dedup, and interrupt-then-reload. The parent folds `Got*` and drives loads with `foldChild` Steps (`loadIfMissing`, `revalidate`, `revalidateOrLoad`, `replace`, `watch`, `forget`). `Query.define` returns `Query.Field` or `Query.Keyed`. `foldChild` returns `Query.Fold.Field` or `Query.Fold.Keyed`. Keyed `Fetch` is `Command.Interruptible.DefinitionWithArgs`. Keyed `inform*` is `Update.Fold`.
+- Add the `API Cache (Query)` example next to the hand-rolled API Cache screen.
+
 Breaking alignment with Foldkit `0.158.2` and Effect `4.0.0-rc.112`.
 
 - `Update.Return` is `{ model, commands?, outMessage? }`. Empty commands are omitted; `Command.none` is gone.

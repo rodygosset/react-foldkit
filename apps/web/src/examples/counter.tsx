@@ -31,7 +31,7 @@ const update = (model: Model, message: Message): UpdateReturn =>
 		ClickedReset: () => ({ model: evo(model, { count: () => 0 }) }),
 	})
 
-const { Provider, useModel, useDispatch } = ReactFoldkit.make({ update })
+const { Provider, useModel, useDispatch } = ReactFoldkit.make({ Model, update })
 
 function View() {
 	const count = useModel((model) => model.count)

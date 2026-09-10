@@ -125,6 +125,7 @@ const subscriptions = Subscription.make<Model, Message>()((entry) => ({
 }))
 
 const { Provider, useModel, useDispatch } = ReactFoldkit.make({
+	Model,
 	update,
 	subscriptions,
 })

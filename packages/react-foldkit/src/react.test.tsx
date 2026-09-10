@@ -1,10 +1,11 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
-import { Effect, Latch, Layer, Schema, Stream } from "effect"
+import { Context, Effect, Latch, Layer, Schema, Stream } from "effect"
 import React, { StrictMode } from "react"
 import { hydrateRoot, type Root } from "react-dom/client"
 import { renderToString } from "react-dom/server"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import type * as Command from "./command"
+import * as ReactStore from "./internal/react-store"
 import { defineMessageUnion } from "./message"
 import { make } from "./react"
 import * as Subscription from "./subscription"
@@ -31,11 +32,11 @@ const initialModel = (): Model => ({ status: "Loading", value: "", unrelated: 0 
 
 const update = (model: Model, message: Message): UpdateReturn =>
 	Message.match<UpdateReturn>(message, {
-			CompletedLoad: ({ value }) => ({ model: { ...model, status: "Success", value } }),
-			FailedLoad: ({ error }) => ({ model: { ...model, status: "Failure", value: error } }),
-			SetValue: ({ value }) => ({ model: { ...model, value } }),
-			BumpedUnrelated: () => ({ model: { ...model, unrelated: model.unrelated + 1 } }),
-		})
+		CompletedLoad: ({ value }) => ({ model: { ...model, status: "Success", value } }),
+		FailedLoad: ({ error }) => ({ model: { ...model, status: "Failure", value: error } }),
+		SetValue: ({ value }) => ({ model: { ...model, value } }),
+		BumpedUnrelated: () => ({ model: { ...model, unrelated: model.unrelated + 1 } }),
+	})
 
 const makeInitCommand = (effect: Effect.Effect<Message>): Command.Command<Message> => ({ name: "Load", effect })
 
@@ -54,7 +55,7 @@ describe("React Provider", function () {
 				return Message.CompletedLoad({ value: "loaded" })
 			})
 		)
-		const { Provider, useModel } = make({ update })
+		const { Provider, useModel } = make({ Model, update })
 
 		function View() {
 			const model = useModel()
@@ -91,7 +92,7 @@ describe("React Provider", function () {
 				return Message.CompletedLoad({ value: "hydrated" })
 			})
 		)
-		const { Provider, useModel } = make({ update })
+		const { Provider, useModel } = make({ Model, update })
 
 		function View() {
 			const model = useModel()
@@ -149,7 +150,7 @@ describe("React Provider", function () {
 				return Message.CompletedLoad({ value: "strict" })
 			})
 		)
-		const { Provider, useModel } = make({ update })
+		const { Provider, useModel } = make({ Model, update })
 
 		function View() {
 			return <span>{useModel().value}</span>
@@ -186,7 +187,7 @@ describe("React Provider", function () {
 				})
 			)
 		)
-		const { Provider, useModel } = make({ update })
+		const { Provider, useModel } = make({ Model, update })
 
 		function View() {
 			return <span>{useModel().value}</span>
@@ -250,6 +251,7 @@ describe("React Provider", function () {
 			)
 		)
 		const { Provider, useModel } = make({
+			Model,
 			update(model: Model, message: Message): UpdateReturn {
 				results += 1
 				return update(model, message)
@@ -310,7 +312,7 @@ describe("React Provider", function () {
 				),
 			}
 		})
-		const { Provider, useModel } = make({ update, subscriptions, layer })
+		const { Provider, useModel } = make({ Model, update, subscriptions, layer })
 
 		function View() {
 			return <span>{useModel().status}</span>
@@ -334,7 +336,7 @@ describe("React Provider", function () {
 	})
 
 	it("uses selector equivalence to avoid unrelated rerenders", function () {
-		const { Provider, useDispatch, useModel } = make({ update })
+		const { Provider, useDispatch, useModel } = make({ Model, update })
 		let selectedRenders = 0
 		let fullRenders = 0
 
@@ -381,7 +383,7 @@ describe("React Provider", function () {
 	})
 
 	it("captures init for one Provider identity and replaces it on keyed remount", function () {
-		const { Provider, useModel } = make({ update })
+		const { Provider, useModel } = make({ Model, update })
 
 		function View() {
 			return <span>{useModel().value}</span>
@@ -412,5 +414,82 @@ describe("React Provider", function () {
 			</Provider>
 		)
 		expect(screen.getByText("second")).toBeDefined()
+	})
+
+	it("Seed writes the Model before activate so useModel sees it on first paint", function () {
+		const { Provider, Seed, useModel } = make({ Model, update })
+		const seeded = { ...initialModel(), status: "Success", value: "preloaded" }
+
+		function View() {
+			return <span>{`${useModel().status}:${useModel().value}`}</span>
+		}
+
+		render(
+			<Provider init={{ model: initialModel() }}>
+				<Seed model={seeded}>
+					<View />
+				</Seed>
+			</Provider>
+		)
+
+		expect(screen.getByText("Success:preloaded")).toBeDefined()
+	})
+
+	it("Seed with an equivalent Model does not overwrite on rerender", function () {
+		const { Provider, Seed, useModel } = make({ Model, update })
+		const first = { ...initialModel(), status: "Success", value: "first" }
+
+		function View() {
+			return <span>{useModel().value}</span>
+		}
+
+		function App(props: { readonly model: Model }) {
+			return (
+				<Provider init={{ model: initialModel() }}>
+					<Seed model={props.model}>
+						<View />
+					</Seed>
+				</Provider>
+			)
+		}
+
+		const rendered = render(<App model={first} />)
+		expect(screen.getByText("first")).toBeDefined()
+		rendered.rerender(<App model={{ ...first }} />)
+		expect(screen.getByText("first")).toBeDefined()
+	})
+
+	it("seed throws after the store is active", function () {
+		const store = ReactStore.make({ update }, { model: initialModel() })
+		const deactivate = store.activate()
+		try {
+			expect(function () {
+				store.seed({ ...initialModel(), value: "late" })
+			}).toThrow(/Seed.*active/)
+		} finally {
+			deactivate()
+		}
+	})
+})
+
+describe("make config types", function () {
+	class ResourceService extends Context.Service<ResourceService, { value: string }>()("ResourceService") {}
+
+	function serviceUpdate(model: Model, _message: Message): Update.Return<Model, Message, ResourceService> {
+		return { model }
+	}
+
+	it("rejects Layer.empty when update requires services", function () {
+		make({
+			Model,
+			update: serviceUpdate,
+			layer: Layer.succeed(ResourceService, { value: "ok" }),
+		})
+
+		// @ts-expect-error Layer.empty does not provide ResourceService
+		make({ Model, update: serviceUpdate, layer: Layer.empty })
+
+		// @ts-expect-error layer is required when update needs services
+		make({ Model, update: serviceUpdate })
 	})
 })

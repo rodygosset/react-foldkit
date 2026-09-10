@@ -1,18 +1,7 @@
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import { Separator } from "@workspace/ui/components/separator"
-import {
-	Array,
-	Clock,
-	Duration,
-	Effect,
-	HashMap,
-	Match,
-	Option,
-	Schema,
-	Stream,
-	pipe,
-} from "effect"
+import { Array, Clock, Duration, Effect, HashMap, Match, Option, Schema, Stream, pipe } from "effect"
 import { ReactFoldkit } from "react-foldkit"
 import * as AsyncData from "react-foldkit/asyncData"
 import * as Command from "react-foldkit/command"
@@ -21,14 +10,7 @@ import { evo } from "react-foldkit/struct"
 import * as Subscription from "react-foldkit/subscription"
 import type * as Update from "react-foldkit/update"
 import { ExampleShell } from "../../components/example-shell"
-import {
-	Post,
-	PostDetail,
-	Stats,
-	fetchPostDetail,
-	fetchPosts,
-	fetchStats,
-} from "./data"
+import { Post, PostDetail, Stats, fetchPostDetail, fetchPosts, fetchStats } from "./data"
 
 const STATS_REFETCH_INTERVAL = Duration.seconds(5)
 
@@ -108,20 +90,14 @@ const {
 
 type UpdateReturn = Update.Return<Model, Message>
 
-function applyPostsTransition(
-	model: Model,
-	maybeNextPosts: Option.Option<PostsData>
-): UpdateReturn {
+function applyPostsTransition(model: Model, maybeNextPosts: Option.Option<PostsData>): UpdateReturn {
 	return Option.match(maybeNextPosts, {
 		onNone: () => ({ model }),
 		onSome: (nextPosts) => ({ model: evo(model, { posts: () => nextPosts }), commands: [FetchPosts()] }),
 	})
 }
 
-function applyStatsTransition(
-	model: Model,
-	maybeNextStats: Option.Option<StatsData>
-): UpdateReturn {
+function applyStatsTransition(model: Model, maybeNextStats: Option.Option<StatsData>): UpdateReturn {
 	return Option.match(maybeNextStats, {
 		onNone: () => ({ model }),
 		onSome: (nextStats) => ({ model: evo(model, { stats: () => nextStats }), commands: [FetchStats()] }),
@@ -149,64 +125,47 @@ function activateTab(model: Model, tab: Tab): UpdateReturn {
 
 const update = (model: Model, message: Message): UpdateReturn =>
 	Message.match<UpdateReturn>(message, {
-			ClickedTab: ({ tab }) => activateTab(model, tab),
-
-			ClickedPost: ({ postId }) => {
-				const selectedModel = evo(model, {
-					maybeSelectedPostId: () => Option.some(postId),
-				})
-
-				return Option.match(HashMap.get(model.postDetailById, postId), {
-					onNone: () => ({
-						model: evo(selectedModel, {
-							postDetailById: setPostDetail(postId, PostDetailData.Loading()),
-						}),
-						commands: [FetchPostDetail({ postId })],
+		ClickedTab: ({ tab }) => activateTab(model, tab),
+		ClickedPost: ({ postId }) => {
+			const selectedModel = evo(model, {
+				maybeSelectedPostId: () => Option.some(postId),
+			})
+			return Option.match(HashMap.get(model.postDetailById, postId), {
+				onNone: () => ({
+					model: evo(selectedModel, {
+						postDetailById: setPostDetail(postId, PostDetailData.Loading()),
 					}),
-					onSome: () => ({ model: selectedModel }),
-				})
-			},
-
-			ClickedBackToPosts: () => ({
-				model: evo(model, { maybeSelectedPostId: () => Option.none() }),
-			}),
-
-			ClickedInvalidatePosts: () =>
-				applyPostsTransition(model, AsyncData.revalidateOrLoad(model.posts)),
-
-			ClickedRetryPosts: () =>
-				applyPostsTransition(model, AsyncData.revalidateOrLoad(model.posts)),
-
-			ClickedRetryPostDetail: ({ postId }) => ({
-				model: evo(model, {
-					postDetailById: setPostDetail(postId, PostDetailData.Loading()),
+					commands: [FetchPostDetail({ postId })],
 				}),
-				commands: [FetchPostDetail({ postId })],
+				onSome: () => ({ model: selectedModel }),
+			})
+		},
+		ClickedBackToPosts: () => ({
+			model: evo(model, { maybeSelectedPostId: () => Option.none() }),
+		}),
+		ClickedInvalidatePosts: () => applyPostsTransition(model, AsyncData.revalidateOrLoad(model.posts)),
+		ClickedRetryPosts: () => applyPostsTransition(model, AsyncData.revalidateOrLoad(model.posts)),
+		ClickedRetryPostDetail: ({ postId }) => ({
+			model: evo(model, {
+				postDetailById: setPostDetail(postId, PostDetailData.Loading()),
 			}),
-
-			ClickedRefreshStats: () =>
-				applyStatsTransition(model, AsyncData.revalidateOrLoad(model.stats)),
-
-			ClickedRetryStats: () =>
-				applyStatsTransition(model, AsyncData.revalidateOrLoad(model.stats)),
-
-			TickedRevalidateStats: () =>
-				applyStatsTransition(model, AsyncData.revalidate(model.stats)),
-
-			SettledFetchPosts: ({ result }) => ({
-				model: evo(model, { posts: AsyncData.settle(result) }),
+			commands: [FetchPostDetail({ postId })],
+		}),
+		ClickedRefreshStats: () => applyStatsTransition(model, AsyncData.revalidateOrLoad(model.stats)),
+		ClickedRetryStats: () => applyStatsTransition(model, AsyncData.revalidateOrLoad(model.stats)),
+		TickedRevalidateStats: () => applyStatsTransition(model, AsyncData.revalidate(model.stats)),
+		SettledFetchPosts: ({ result }) => ({
+			model: evo(model, { posts: AsyncData.settle(result) }),
+		}),
+		SettledFetchPostDetail: ({ postId, result }) => ({
+			model: evo(model, {
+				postDetailById: HashMap.modify(postId, AsyncData.settle(result)),
 			}),
-
-			SettledFetchPostDetail: ({ postId, result }) => ({
-				model: evo(model, {
-					postDetailById: HashMap.modify(postId, AsyncData.settle(result)),
-				}),
-			}),
-
-			SettledFetchStats: ({ result }) => ({
-				model: evo(model, { stats: AsyncData.settle(result) }),
-			}),
-		})
+		}),
+		SettledFetchStats: ({ result }) => ({
+			model: evo(model, { stats: AsyncData.settle(result) }),
+		}),
+	})
 
 // INIT
 
@@ -290,7 +249,7 @@ const subscriptions = Subscription.make<Model, Message>()(function (entry) {
 						// emission so freshly loaded stats are not refetched instantly.
 						Stream.tick(STATS_REFETCH_INTERVAL).pipe(
 							Stream.drop(1),
-			Stream.map(Message.TickedRevalidateStats)
+							Stream.map(Message.TickedRevalidateStats)
 						),
 						Effect.sync(() => isObservingStats)
 					)
@@ -301,6 +260,7 @@ const subscriptions = Subscription.make<Model, Message>()(function (entry) {
 })
 
 const { Provider, useModel, useDispatch } = ReactFoldkit.make({
+	Model,
 	update,
 	subscriptions,
 })
@@ -311,17 +271,11 @@ function formatFetchedAt(fetchedAt: number): string {
 	return new Date(fetchedAt).toLocaleTimeString()
 }
 
-function isPostDetailCached(
-	postDetailById: HashMap.HashMap<string, PostDetailData>,
-	postId: string
-): boolean {
+function isPostDetailCached(postDetailById: HashMap.HashMap<string, PostDetailData>, postId: string): boolean {
 	return Option.exists(HashMap.get(postDetailById, postId), AsyncData.hasData)
 }
 
-function ErrorPanel(props: {
-	error: string
-	onRetry: () => void
-}) {
+function ErrorPanel(props: { error: string; onRetry: () => void }) {
 	return (
 		<div className="flex items-center justify-between gap-4 rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-destructive">
 			<p className="text-sm">{props.error}</p>
@@ -338,9 +292,7 @@ function ErrorPanel(props: {
 
 function LoadingPanel(props: { text: string }) {
 	return (
-		<div className="rounded-2xl bg-muted/60 px-4 py-8 text-center text-sm text-muted-foreground">
-			{props.text}
-		</div>
+		<div className="rounded-2xl bg-muted/60 px-4 py-8 text-center text-sm text-muted-foreground">{props.text}</div>
 	)
 }
 
@@ -385,10 +337,7 @@ function PostListItems(props: {
 	)
 }
 
-function PostDetailCard(props: {
-	detail: PostDetail
-	fetchedAt: number
-}) {
+function PostDetailCard(props: { detail: PostDetail; fetchedAt: number }) {
 	return (
 		<article className="flex flex-col gap-3 rounded-2xl bg-muted/60 px-5 py-5">
 			<h2 className="text-2xl font-semibold tracking-tight">{props.detail.title}</h2>
@@ -422,8 +371,8 @@ function PostsListView() {
 				</Button>
 			</div>
 			<p className="text-sm text-muted-foreground">
-				Open a post, go back, and open it again. The second visit renders instantly from the Model.
-				Invalidate marks the list stale and refetches it while the current list stays on screen.
+				Open a post, go back, and open it again. The second visit renders instantly from the Model. Invalidate
+				marks the list stale and refetches it while the current list stays on screen.
 			</p>
 			{AsyncData.matchDataSplitEmpty(model.posts, {
 				onIdle: () => <LoadingPanel text="Loading posts…" />,
@@ -526,11 +475,7 @@ function PostsTabView() {
 	})
 }
 
-function StatsCards(props: {
-	stats: Stats
-	fetchedAt: number
-	isRefreshing: boolean
-}) {
+function StatsCards(props: { stats: Stats; fetchedAt: number; isRefreshing: boolean }) {
 	return (
 		<div className="flex flex-col gap-3">
 			<div className="grid grid-cols-3 gap-3">
@@ -576,8 +521,8 @@ function StatsTabView() {
 				</Button>
 			</div>
 			<p className="text-sm text-muted-foreground">
-				Stats refetch every 5 seconds while this tab is open. The old numbers stay on screen while the
-				new ones load.
+				Stats refetch every 5 seconds while this tab is open. The old numbers stay on screen while the new ones
+				load.
 			</p>
 			{AsyncData.matchDataSplitEmpty(model.stats, {
 				onIdle: () => <LoadingPanel text="Loading stats…" />,
