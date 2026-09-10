@@ -119,7 +119,7 @@ const postDetailField = postDetailQuery.foldChild({
 	toParentMessage: (childMessage) => Message.GotPostDetailMessage({ message: childMessage }),
 })
 
-const activateTab = (model: Model, tab: Tab): UpdateReturn => {
+function activateTab(model: Model, tab: Tab): UpdateReturn {
 	const modelWithActiveTab = evo(model, { activeTab: () => tab })
 
 	return Match.value(tab).pipe(
@@ -255,7 +255,7 @@ const PostDetailCard = (props: { detail: PostDetail; fetchedAt: number }) => (
 	</article>
 )
 
-const PostsListView = () => {
+function PostsListView() {
 	const model = useModel()
 	const dispatch = useDispatch()
 	const isPending = AsyncData.isPending(model.posts)
@@ -317,7 +317,7 @@ const PostsListView = () => {
 	)
 }
 
-const PostDetailView = (props: { postId: string }) => {
+function PostDetailView(props: { postId: string }) {
 	const model = useModel()
 	const dispatch = useDispatch()
 	const postDetailData = Option.getOrElse(HashMap.get(model.postDetailById, props.postId), AsyncData.Idle)
@@ -401,7 +401,7 @@ const StatsCards = (props: { stats: Stats; fetchedAt: number; isRefreshing: bool
 	</div>
 )
 
-const StatsTabView = () => {
+function StatsTabView() {
 	const model = useModel()
 	const dispatch = useDispatch()
 	const isPending = AsyncData.isPending(model.stats)
@@ -461,7 +461,7 @@ const StatsTabView = () => {
 	)
 }
 
-const TabPanel = () => {
+function TabPanel() {
 	const activeTab = useModel((model) => model.activeTab)
 
 	return Match.value(activeTab).pipe(
@@ -471,7 +471,7 @@ const TabPanel = () => {
 	)
 }
 
-const TabList = () => {
+function TabList() {
 	const activeTab = useModel((model) => model.activeTab)
 	const dispatch = useDispatch()
 

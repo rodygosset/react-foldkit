@@ -6,7 +6,7 @@ import * as Update from "./update"
 
 type Policy = "loadIfMissing" | "revalidate" | "revalidateOrLoad"
 
-type FoldChildConfig<ParentModel, ParentMessage, ChildModel, ChildMessage> = Readonly<{
+export type FoldChildConfig<ParentModel, ParentMessage, ChildModel, ChildMessage> = Readonly<{
 	read: (model: ParentModel) => Option.Option<ChildModel>
 	write: (model: ParentModel, nextChildModel: ChildModel) => ParentModel
 	toParentMessage: (message: ChildMessage) => ParentMessage
@@ -230,7 +230,7 @@ export namespace Keyed {
 	export type Any = Pick<Keyed<string, Schema.Top, Schema.Top>, "Model" | "Message" | "init">
 }
 
-const defineField = <Name extends string, A, AI, E, EI, R>(config: FieldConfig<Name, A, AI, E, EI, R>) => {
+function defineField<Name extends string, A, AI, E, EI, R>(config: FieldConfig<Name, A, AI, E, EI, R>) {
 	const Data = AsyncData.Schema(config.data, config.error)
 
 	const Message = defineMessageUnion({
@@ -307,7 +307,7 @@ const defineField = <Name extends string, A, AI, E, EI, R>(config: FieldConfig<N
 	} satisfies Field<Name, typeof Data.schema, typeof Message, R>
 }
 
-const defineKeyed = <
+function defineKeyed<
 	Name extends string,
 	A,
 	AI,
@@ -316,9 +316,7 @@ const defineKeyed = <
 	Fields extends Schema.Struct.Fields,
 	KeyField extends keyof Schema.Schema.Type<Schema.Struct<Fields>> & string,
 	R,
->(
-	config: KeyedConfig<Name, A, AI, E, EI, Fields, KeyField, R>
-) => {
+>(config: KeyedConfig<Name, A, AI, E, EI, Fields, KeyField, R>) {
 	const Data = AsyncData.Schema(config.data, config.error)
 	type Data = typeof Data.schema.Type
 	const ArgsSchema = Schema.Struct(config.args)
@@ -450,5 +448,3 @@ export const define: {
 	Predicate.hasProperty(config, "toKey")
 		? defineKeyed(config as never)
 		: defineField(config as never)) as typeof define
-
-export type { FoldChildConfig }
