@@ -36,7 +36,7 @@ import { defineMessageUnion } from "react-foldkit/message"
 
 | Export                                                       | Role                                                              |
 | ------------------------------------------------------------ | ----------------------------------------------------------------- |
-| `./react`                                                    | `make({ Model, config })` → `Provider` (`init`), `Seed`, `useModel`, `useDispatch` |
+| `./react`                                                    | `make({ Model, update, … })` → `Provider` (`init`), `Seed`, `useModel`, `useDispatch` |
 | `./store`                                                    | `boot()` and `takeWhen()` for tests and non-React hosts           |
 | `./query`                                                    | Remote-data Submodel factory (`Query.define`, watch, forget, `run`) |
 | `./command`, `./message`, `./update`, `./struct`, `./schema` | TEA vocabulary (`defineMessageUnion`, `Update.foldChild`, …)      |
@@ -66,7 +66,7 @@ const update = (model: Model, message: Message): Update.Return<Model, Message> =
 		Increment: () => ({ model: evo(model, { count: (n) => n + 1 }) }),
 	})
 
-const { Provider, useModel, useDispatch } = ReactFoldkit.make({ Model, config: { update } })
+const { Provider, useModel, useDispatch } = ReactFoldkit.make({ Model, update })
 
 function CounterView() {
 	const count = useModel((m) => m.count)
@@ -122,7 +122,7 @@ so SSR and first paint see preloaded data. Equivalent Models (via
 `Schema.toEquivalence`) are a no-op. Seeding after the store is active throws.
 
 ```tsx
-const { Provider, Seed, useModel } = ReactFoldkit.make({ Model, config: { update } })
+const { Provider, Seed, useModel } = ReactFoldkit.make({ Model, update })
 
 <Provider init={{ model: empty }}>
   <Seed model={preloaded}>
@@ -143,7 +143,7 @@ result once; an interrupted init Command restarts when React reconnects Effects,
 while completed init Commands do not. Subscriptions and Layer resources reconnect
 with each Effect activation.
 
-`make` takes `{ Model, config }`. `Model` is a `Schema.Codec`. Applications that
+`make` takes a `Store.Config` plus `Model: Schema.Codec`. Applications that
 preload on the server should pass that Model into `Seed`.
 
 ## ESLint

@@ -46,6 +46,12 @@ export type Config<Model, Message, R = never> = [R] extends [never]
 			layer: Layer.Layer<R, never, never>
 		}
 
+export namespace Config {
+	export function make<Model, Message, R = never>(config: Config<Model, Message, R>): Config<Model, Message, R> {
+		return config
+	}
+}
+
 export const StoreTypeId: unique symbol = Symbol.for("react-foldkit/StoreTypeId")
 export type StoreTypeId = typeof StoreTypeId
 

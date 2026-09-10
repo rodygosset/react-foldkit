@@ -58,7 +58,7 @@ describe("React server rendering", function () {
 				layerBuilds += 1
 			})
 		)
-		const { Provider, useModel } = make({ Model, config: { update, subscriptions, layer } })
+		const { Provider, useModel } = make({ Model, update, subscriptions, layer })
 
 		function View() {
 			const status = useModel((model) => model.status)
@@ -78,7 +78,7 @@ describe("React server rendering", function () {
 	})
 
 	it("supports whole-Model and structurally selected server snapshots", function () {
-		const { Provider, useModel } = make({ Model, config: { update } })
+		const { Provider, useModel } = make({ Model, update })
 
 		function View() {
 			const model = useModel()
@@ -96,7 +96,7 @@ describe("React server rendering", function () {
 	})
 
 	it("Seed writes the Model into the server snapshot before paint", function () {
-		const { Provider, Seed, useModel } = make({ Model, config: { update } })
+		const { Provider, Seed, useModel } = make({ Model, update })
 		const seeded = { status: "Success", value: "preloaded" }
 
 		function View() {

@@ -4,10 +4,10 @@ import * as ReactStore from "./internal/react-store"
 import * as Store from "./store"
 import type * as Update from "./update"
 
-export type Config<ModelSchema extends Schema.Codec<unknown, unknown, never, never>, Message, R = never> = {
-	readonly config: Store.Config<Schema.Schema.Type<ModelSchema>, Message, R>
-	readonly Model: ModelSchema
-}
+export type Config<ModelSchema extends Schema.Codec<unknown, unknown, never, never>, Message, R = never> =
+	Store.Config<Schema.Schema.Type<ModelSchema>, Message, R> & {
+		readonly Model: ModelSchema
+	}
 
 type Type<ModelSchema extends Schema.Codec<unknown, unknown, never, never>> = Schema.Schema.Type<ModelSchema>
 
@@ -18,10 +18,11 @@ type Type<ModelSchema extends Schema.Codec<unknown, unknown, never, never>> = Sc
  * into the inactive store (before activate) so SSR and first paint see
  * preloaded data. Live updates go through dispatch after activate.
  */
-export function make<ModelSchema extends Schema.Codec<unknown, unknown, never, never>, Message, R = never>({
-	Model,
-	config,
-}: Config<ModelSchema, Message, R>) {
+export function make<ModelSchema extends Schema.Codec<unknown, unknown, never, never>, Message, R = never>(
+	program: Config<ModelSchema, Message, R>
+) {
+	const { Model } = program
+	const storeConfig = Store.Config.make(program)
 	const equalsModel = Schema.toEquivalence(Model)
 	const StoreContext = React.createContext<ReactStore.ReactStore<Type<ModelSchema>, Message> | null>(null)
 
@@ -38,7 +39,7 @@ export function make<ModelSchema extends Schema.Codec<unknown, unknown, never, n
 	}
 
 	function Provider(props: ProviderProps) {
-		const [store] = React.useState(() => ReactStore.make(config, props.init))
+		const [store] = React.useState(() => ReactStore.make(storeConfig, props.init))
 
 		React.useEffect(
 			function manageStoreLifetime() {

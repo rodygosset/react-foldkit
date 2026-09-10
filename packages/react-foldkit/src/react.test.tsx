@@ -55,7 +55,7 @@ describe("React Provider", function () {
 				return Message.CompletedLoad({ value: "loaded" })
 			})
 		)
-		const { Provider, useModel } = make({ Model, config: { update } })
+		const { Provider, useModel } = make({ Model, update })
 
 		function View() {
 			const model = useModel()
@@ -92,7 +92,7 @@ describe("React Provider", function () {
 				return Message.CompletedLoad({ value: "hydrated" })
 			})
 		)
-		const { Provider, useModel } = make({ Model, config: { update } })
+		const { Provider, useModel } = make({ Model, update })
 
 		function View() {
 			const model = useModel()
@@ -150,7 +150,7 @@ describe("React Provider", function () {
 				return Message.CompletedLoad({ value: "strict" })
 			})
 		)
-		const { Provider, useModel } = make({ Model, config: { update } })
+		const { Provider, useModel } = make({ Model, update })
 
 		function View() {
 			return <span>{useModel().value}</span>
@@ -187,7 +187,7 @@ describe("React Provider", function () {
 				})
 			)
 		)
-		const { Provider, useModel } = make({ Model, config: { update } })
+		const { Provider, useModel } = make({ Model, update })
 
 		function View() {
 			return <span>{useModel().value}</span>
@@ -252,11 +252,9 @@ describe("React Provider", function () {
 		)
 		const { Provider, useModel } = make({
 			Model,
-			config: {
-				update(model: Model, message: Message): UpdateReturn {
-					results += 1
-					return update(model, message)
-				},
+			update(model: Model, message: Message): UpdateReturn {
+				results += 1
+				return update(model, message)
 			},
 		})
 
@@ -314,7 +312,7 @@ describe("React Provider", function () {
 				),
 			}
 		})
-		const { Provider, useModel } = make({ Model, config: { update, subscriptions, layer } })
+		const { Provider, useModel } = make({ Model, update, subscriptions, layer })
 
 		function View() {
 			return <span>{useModel().status}</span>
@@ -338,7 +336,7 @@ describe("React Provider", function () {
 	})
 
 	it("uses selector equivalence to avoid unrelated rerenders", function () {
-		const { Provider, useDispatch, useModel } = make({ Model, config: { update } })
+		const { Provider, useDispatch, useModel } = make({ Model, update })
 		let selectedRenders = 0
 		let fullRenders = 0
 
@@ -385,7 +383,7 @@ describe("React Provider", function () {
 	})
 
 	it("captures init for one Provider identity and replaces it on keyed remount", function () {
-		const { Provider, useModel } = make({ Model, config: { update } })
+		const { Provider, useModel } = make({ Model, update })
 
 		function View() {
 			return <span>{useModel().value}</span>
@@ -419,7 +417,7 @@ describe("React Provider", function () {
 	})
 
 	it("Seed writes the Model before activate so useModel sees it on first paint", function () {
-		const { Provider, Seed, useModel } = make({ Model, config: { update } })
+		const { Provider, Seed, useModel } = make({ Model, update })
 		const seeded = { ...initialModel(), status: "Success", value: "preloaded" }
 
 		function View() {
@@ -438,7 +436,7 @@ describe("React Provider", function () {
 	})
 
 	it("Seed with an equivalent Model does not overwrite on rerender", function () {
-		const { Provider, Seed, useModel } = make({ Model, config: { update } })
+		const { Provider, Seed, useModel } = make({ Model, update })
 		const first = { ...initialModel(), status: "Success", value: "first" }
 
 		function View() {
