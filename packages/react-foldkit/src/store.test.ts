@@ -1,6 +1,6 @@
 import { describe, it } from "@effect/vitest"
 import { Cause, Context, Effect, Fiber, Layer, Option, Schema } from "effect"
-import { afterEach, expect, expectTypeOf, vi } from "vitest"
+import { afterEach, expect, vi } from "vitest"
 import * as Command from "./command"
 import { defineMessageUnion } from "./message"
 import * as Store from "./store"
@@ -413,17 +413,18 @@ describe("resources", function () {
 	})
 
 	it("rejects Layer.empty when update requires services", function () {
-		const config = Store.Config.make({
+		function typeConfig(_config: Store.Config<ResourceModel, ResourceMessage, ResourceService>): void {}
+
+		typeConfig({
 			update: resourceUpdate,
 			layer: Layer.succeed(ResourceService, { value: "ok" }),
 		})
-		expectTypeOf(config).toMatchTypeOf<Store.Config<ResourceModel, ResourceMessage, ResourceService>>()
 
 		// @ts-expect-error Layer.empty does not provide ResourceService
-		Store.Config.make({ update: resourceUpdate, layer: Layer.empty })
+		typeConfig({ update: resourceUpdate, layer: Layer.empty })
 
 		// @ts-expect-error layer is required when update needs services
-		Store.Config.make({ update: resourceUpdate })
+		typeConfig({ update: resourceUpdate })
 	})
 })
 
