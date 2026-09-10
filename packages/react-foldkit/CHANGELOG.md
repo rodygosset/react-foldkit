@@ -2,7 +2,9 @@
 
 ## Unreleased
 
-- Add `Query.define`: a remote-data Submodel factory. The child owns `AsyncData` transitions, settle, in-flight dedup, and interrupt-then-reload. The parent folds `Got*` and drives loads with `foldChild` Steps (`loadIfMissing`, `revalidate`, `revalidateOrLoad`, `replace`). `Query.define` returns `Query.Field` or `Query.Keyed`. `foldChild` returns `Query.Fold.Field` or `Query.Fold.Keyed`. Keyed `Fetch` is `Command.Interruptible.DefinitionWithArgs`. Keyed `inform*` is `Update.Fold`.
+- Add `Query.informWatch` / `informForget` (full live key set), `Query.ensure`, `foldChild.ensure`, and `Query.watchSubscription`. Keyed slots store `{ args, data }` so watch-drop Interrupts pending fetches. Late `SettledFetch` after forget is a no-op.
+- Add `Store.takeWhen` and `Store.Disposed`. `Provider` accepts either `init` or an already-booted `store` (unmount does not dispose a passed-in store).
+- Add `Query.define`: a remote-data Submodel factory. The child owns `AsyncData` transitions, settle, in-flight dedup, and interrupt-then-reload. The parent folds `Got*` and drives loads with `foldChild` Steps (`loadIfMissing`, `revalidate`, `revalidateOrLoad`, `replace`, `watch`, `forget`). `Query.define` returns `Query.Field` or `Query.Keyed`. `foldChild` returns `Query.Fold.Field` or `Query.Fold.Keyed`. Keyed `Fetch` is `Command.Interruptible.DefinitionWithArgs`. Keyed `inform*` is `Update.Fold`.
 - Add the `API Cache (Query)` example next to the hand-rolled API Cache screen.
 
 Breaking alignment with Foldkit `0.158.2` and Effect `4.0.0-rc.112`.

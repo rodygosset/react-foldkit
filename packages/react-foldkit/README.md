@@ -36,9 +36,9 @@ import { defineMessageUnion } from "react-foldkit/message"
 
 | Export                                                       | Role                                                         |
 | ------------------------------------------------------------ | ------------------------------------------------------------ |
-| `./react`                                                    | `make()` → `Provider`, `useModel`, `useDispatch`             |
-| `./store`                                                    | `boot()` for tests and non-React hosts                       |
-| `./query`                                                    | Remote-data Submodel factory (`Query.define`)                |
+| `./react`                                                    | `make()` → `Provider` (`init` or a live `store`), `useModel`, `useDispatch` |
+| `./store`                                                    | `boot()` and `takeWhen()` for tests and non-React hosts      |
+| `./query`                                                    | Remote-data Submodel factory (`Query.define`, watch, forget, `ensure`) |
 | `./command`, `./message`, `./update`, `./struct`, `./schema` | TEA vocabulary (`defineMessageUnion`, `Update.foldChild`, …) |
 | `./asyncData`                                                | Remote data helpers (`settle`, `revalidate`, …)              |
 | `./subscription`                                             | Model-gated standing orders (`Subscription.make`)            |
@@ -95,6 +95,31 @@ export function Counter() {
 
 See `apps/web` in this monorepo for Todo (AsyncData), Stopwatch (Subscription),
 API Cache (hand-rolled AsyncData), and API Cache Query (`Query.define`).
+
+## Query watch, forget, and ensure
+
+`Query.define` is a remote-data Submodel. Keyed `Model` is a `HashMap` of
+`{ args, data }` slots. Read `data` with `query.read(model, args)`.
+
+`informWatch` / `RequestedWatch` is the full live key set. The Message payload is
+a `HashMap` of `toKey` to args. `informWatch` still takes an array of args.
+Missing keys `loadIfMissing`. Extras run the same forget path as `informForget`,
+including Interrupt of a pending Fetch. Per-key start/stop Messages are not used.
+Foldkit `switchMap` on subscription deps cannot report removals. A late
+`SettledFetch` does not resurrect a forgotten slot.
+
+`Query.ensure(store, args)` (Keyed) / `Query.ensure(store)` (Field) dispatches
+`RequestedLoadIfMissing` then waits with `Store.takeWhen` until that slot is
+Success, Failure, or Stale. `foldChild.ensure` does the same on a parent store
+through the child's `Got*` Message.
+
+`watchSubscription` is one Foldkit `Subscription.make` entry, not a React hook.
+
+## Provider `store`
+
+`Provider` takes **either** `init` (cold boot, dispose on unmount) **or** a
+store already created with `Store.boot`. A passed-in store is subscribed and
+dispatched only; unmount does not dispose it.
 
 ## Server rendering
 

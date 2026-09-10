@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import type * as Command from "./command"
 import { defineMessageUnion } from "./message"
 import { make } from "./react"
+import * as Store from "./store"
 import * as Subscription from "./subscription"
 import type * as Update from "./update"
 
@@ -412,5 +413,36 @@ describe("React Provider", function () {
 			</Provider>
 		)
 		expect(screen.getByText("second")).toBeDefined()
+	})
+
+	it("Provider store reads the same Model as boot and unmount does not dispose it", function () {
+		const { Provider, useModel } = make({ update })
+		const store = Store.boot({ update }, { model: { ...initialModel(), value: "booted" } })
+
+		function View() {
+			return <span>{useModel().value}</span>
+		}
+
+		try {
+			const rendered = render(
+				<Provider store={store}>
+					<View />
+				</Provider>
+			)
+			expect(screen.getByText("booted")).toBeDefined()
+
+			act(function () {
+				store.dispatch(Message.SetValue({ value: "from-boot" }))
+			})
+			expect(screen.getByText("from-boot")).toBeDefined()
+			expect(store.getModel().value).toBe("from-boot")
+
+			rendered.unmount()
+			expect(store.isDisposed()).toBe(false)
+			store.dispatch(Message.SetValue({ value: "after-unmount" }))
+			expect(store.getModel().value).toBe("after-unmount")
+		} finally {
+			store.dispose()
+		}
 	})
 })

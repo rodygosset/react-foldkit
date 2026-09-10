@@ -1,5 +1,6 @@
-import { Cause, Context, Effect, Layer, Schema } from "effect"
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { describe, it } from "@effect/vitest"
+import { Cause, Context, Effect, Fiber, Layer, Option, Schema } from "effect"
+import { afterEach, expect, vi } from "vitest"
 import * as Command from "./command"
 import { defineMessageUnion } from "./message"
 import * as Store from "./store"
@@ -520,4 +521,87 @@ describe("command message mappers", function () {
 			store.dispose()
 		}
 	})
+
+	it.effect("takeWhen succeeds with the current Model when pick already matches", () =>
+		Effect.gen(function* () {
+			const CountMessage = defineMessageUnion({
+				Increment: {},
+			})
+			type CountMessage = typeof CountMessage.Type
+			const store = yield* Effect.acquireRelease(
+				Effect.sync(() =>
+					Store.boot(
+						{
+							update: (model: { count: number }, _message: CountMessage) => ({
+								model: { count: model.count + 1 },
+							}),
+						},
+						{ model: { count: 0 } }
+					)
+				),
+				(live) => Effect.sync(() => live.dispose())
+			)
+			const n = yield* Store.takeWhen(store, (model) =>
+				model.count === 0 ? Option.some(model.count) : Option.none()
+			)
+			expect(n).toBe(0)
+		})
+	)
+
+	it.effect("takeWhen waits until a later Model matches pick", () =>
+		Effect.gen(function* () {
+			const CountMessage = defineMessageUnion({
+				Increment: {},
+			})
+			type CountMessage = typeof CountMessage.Type
+			const store = yield* Effect.acquireRelease(
+				Effect.sync(() =>
+					Store.boot(
+						{
+							update: (model: { count: number }, _message: CountMessage) => ({
+								model: { count: model.count + 1 },
+							}),
+						},
+						{ model: { count: 0 } }
+					)
+				),
+				(live) => Effect.sync(() => live.dispose())
+			)
+			const fiber = yield* Effect.forkChild(
+				Store.takeWhen(store, (model) => (model.count >= 2 ? Option.some(model.count) : Option.none()))
+			)
+			store.dispatch(CountMessage.Increment())
+			store.dispatch(CountMessage.Increment())
+			const n = yield* Fiber.join(fiber)
+			expect(n).toBe(2)
+		})
+	)
+
+	it.effect("takeWhen fails when the store is disposed before pick hits", () =>
+		Effect.gen(function* () {
+			const CountMessage = defineMessageUnion({
+				Increment: {},
+			})
+			type CountMessage = typeof CountMessage.Type
+			const store = yield* Effect.acquireRelease(
+				Effect.sync(() =>
+					Store.boot(
+						{
+							update: (model: { count: number }, _message: CountMessage) => ({
+								model: { count: model.count + 1 },
+							}),
+						},
+						{ model: { count: 0 } }
+					)
+				),
+				(live) => Effect.sync(() => live.dispose())
+			)
+			const fiber = yield* Effect.forkChild(
+				Store.takeWhen(store, (model) => (model.count >= 99 ? Option.some(model.count) : Option.none()))
+			)
+			store.dispose()
+			const error = yield* Effect.flip(Fiber.join(fiber))
+			expect(error).toBeInstanceOf(Store.Disposed)
+		})
+	)
 })

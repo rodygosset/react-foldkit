@@ -5,8 +5,9 @@ import * as Store from "./store"
 import type * as Update from "./update"
 
 /**
- * Builds React bindings for a store config. The Provider creates a cold store
- * during render, then activates Commands and Subscriptions in `useEffect`.
+ * The Provider takes either `init` (cold boot, dispose on unmount) or a
+ * live {@link Store.boot} store (subscribe/dispatch only; the host owns
+ * dispose).
  *
  * The underlying {@link Store.boot} matches Foldkit’s command loop: cached
  * Layer, interrupt registry, microtask scheduler + deferred forks, boot
@@ -23,8 +24,17 @@ export function make<Model, Message, R = never>(config: Store.Config<Model, Mess
 		return value
 	}
 
-	function Provider(props: { init: Update.Return<Model, Message, R>; children: React.ReactNode }) {
-		const [store] = React.useState(() => ReactStore.make(config, props.init))
+	type ProviderProps = {
+		readonly children: React.ReactNode
+	} & (
+		| { readonly init: Update.Return<Model, Message, R>; readonly store?: never }
+		| { readonly store: Store.Store<Model, Message>; readonly init?: never }
+	)
+
+	function Provider(props: ProviderProps) {
+		const [store] = React.useState(() =>
+			props.store !== undefined ? ReactStore.fromLive(props.store) : ReactStore.make(config, props.init)
+		)
 
 		React.useEffect(
 			function manageStoreLifetime() {
