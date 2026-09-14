@@ -105,9 +105,15 @@ those fields. Override them when Interrupt identity is a subset of `args`.
 
 `query.foldChild` returns a callable Foldkit fold. Call it data-first in `Got*`
 handlers (`foldPosts(model, message)`). Policy Steps hang on the same function
-(`foldPosts.revalidateOrLoad(model)`). For an always-present slot, pass
-`foldChild<Model>()({ field: "posts", toParentMessage })`. A full `read` /
-`write` lens still infers `ParentModel` from `read`.
+(`foldPosts.revalidateOrLoad(model)`). Declare the parent case with
+`query.ParentMessage` (`GotPostsMessage: postsQuery.ParentMessage`) and pass the
+constructor as `toParentMessage` (`toParentMessage: Message.GotPostsMessage`).
+For an always-present slot, call
+`foldChild<Model, Message>()({ field: "posts", toParentMessage: Message.GotPostsMessage })`.
+Name both parent types so the fold is the full parent Message union, not only the
+`Got*` variant the constructor returns.
+A full `read` / `write` lens still infers `ParentModel` from `read` and takes
+Foldkit's `(childMessage) => parentMessage` mapper.
 `foldPosts.watchSubscription(entry, modelToArgs)` reuses that fold's
 `toParentMessage`.
 

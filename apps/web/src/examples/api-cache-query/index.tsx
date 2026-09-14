@@ -71,9 +71,9 @@ const Model = Schema.Struct({
 type Model = typeof Model.Type
 
 const Message = defineMessageUnion({
-	GotPostsMessage: { message: postsQuery.Message },
-	GotStatsMessage: { message: statsQuery.Message },
-	GotPostDetailMessage: { message: postDetailQuery.Message },
+	GotPostsMessage: postsQuery.ParentMessage,
+	GotStatsMessage: statsQuery.ParentMessage,
+	GotPostDetailMessage: postDetailQuery.ParentMessage,
 	ClickedTab: { tab: Tab },
 	ClickedPost: { postId: Schema.String },
 	ClickedBackToPosts: {},
@@ -88,19 +88,19 @@ type Message = typeof Message.Type
 
 type UpdateReturn = Update.Return<Model, Message>
 
-const foldPosts = postsQuery.foldChild<Model>()({
+const foldPosts = postsQuery.foldChild<Model, Message>()({
 	field: "posts",
-	toParentMessage: (childMessage): Message => Message.GotPostsMessage({ message: childMessage }),
+	toParentMessage: Message.GotPostsMessage,
 })
 
-const foldStats = statsQuery.foldChild<Model>()({
+const foldStats = statsQuery.foldChild<Model, Message>()({
 	field: "stats",
-	toParentMessage: (childMessage): Message => Message.GotStatsMessage({ message: childMessage }),
+	toParentMessage: Message.GotStatsMessage,
 })
 
-const foldPostDetail = postDetailQuery.foldChild<Model>()({
+const foldPostDetail = postDetailQuery.foldChild<Model, Message>()({
 	field: "postDetailById",
-	toParentMessage: (childMessage): Message => Message.GotPostDetailMessage({ message: childMessage }),
+	toParentMessage: Message.GotPostDetailMessage,
 })
 
 function activateTab(model: Model, tab: Tab): UpdateReturn {
