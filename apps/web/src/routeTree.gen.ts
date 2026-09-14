@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiCacheRouteImport } from './routes/api-cache'
+import { Route as ApiCacheHttpApiRouteImport } from './routes/api-cache-http-api'
 import { Route as ApiCacheQueryRouteImport } from './routes/api-cache-query'
 import { Route as CounterRouteImport } from './routes/counter'
 import { Route as StopwatchRouteImport } from './routes/stopwatch'
@@ -24,6 +25,11 @@ const IndexRoute = IndexRouteImport.update({
 const ApiCacheRoute = ApiCacheRouteImport.update({
   id: '/api-cache',
   path: '/api-cache',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiCacheHttpApiRoute = ApiCacheHttpApiRouteImport.update({
+  id: '/api-cache-http-api',
+  path: '/api-cache-http-api',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiCacheQueryRoute = ApiCacheQueryRouteImport.update({
@@ -50,6 +56,7 @@ const TodoRoute = TodoRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/api-cache': typeof ApiCacheRoute
+  '/api-cache-http-api': typeof ApiCacheHttpApiRoute
   '/api-cache-query': typeof ApiCacheQueryRoute
   '/counter': typeof CounterRoute
   '/stopwatch': typeof StopwatchRoute
@@ -58,6 +65,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/api-cache': typeof ApiCacheRoute
+  '/api-cache-http-api': typeof ApiCacheHttpApiRoute
   '/api-cache-query': typeof ApiCacheQueryRoute
   '/counter': typeof CounterRoute
   '/stopwatch': typeof StopwatchRoute
@@ -67,6 +75,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/api-cache': typeof ApiCacheRoute
+  '/api-cache-http-api': typeof ApiCacheHttpApiRoute
   '/api-cache-query': typeof ApiCacheQueryRoute
   '/counter': typeof CounterRoute
   '/stopwatch': typeof StopwatchRoute
@@ -77,6 +86,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/api-cache'
+    | '/api-cache-http-api'
     | '/api-cache-query'
     | '/counter'
     | '/stopwatch'
@@ -85,6 +95,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/api-cache'
+    | '/api-cache-http-api'
     | '/api-cache-query'
     | '/counter'
     | '/stopwatch'
@@ -93,6 +104,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/api-cache'
+    | '/api-cache-http-api'
     | '/api-cache-query'
     | '/counter'
     | '/stopwatch'
@@ -102,6 +114,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ApiCacheRoute: typeof ApiCacheRoute
+  ApiCacheHttpApiRoute: typeof ApiCacheHttpApiRoute
   ApiCacheQueryRoute: typeof ApiCacheQueryRoute
   CounterRoute: typeof CounterRoute
   StopwatchRoute: typeof StopwatchRoute
@@ -122,6 +135,13 @@ declare module '@tanstack/react-router' {
       path: '/api-cache'
       fullPath: '/api-cache'
       preLoaderRoute: typeof ApiCacheRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api-cache-http-api': {
+      id: '/api-cache-http-api'
+      path: '/api-cache-http-api'
+      fullPath: '/api-cache-http-api'
+      preLoaderRoute: typeof ApiCacheHttpApiRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api-cache-query': {
@@ -158,6 +178,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ApiCacheRoute: ApiCacheRoute,
+  ApiCacheHttpApiRoute: ApiCacheHttpApiRoute,
   ApiCacheQueryRoute: ApiCacheQueryRoute,
   CounterRoute: CounterRoute,
   StopwatchRoute: StopwatchRoute,

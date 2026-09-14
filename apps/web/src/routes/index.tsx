@@ -32,6 +32,11 @@ const examples = [
 		blurb: "The same cache, with Query.define as a Submodel for settle, retry, and dedup.",
 		options: linkOptions({ to: "/api-cache-query" }),
 	},
+	{
+		title: "API Cache (HttpApi)",
+		blurb: "The same Query cache, with Query.fromHttpApi wiring group, endpoint, and args.",
+		options: linkOptions({ to: "/api-cache-http-api" }),
+	},
 ]
 
 function Landing() {
