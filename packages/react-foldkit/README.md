@@ -99,7 +99,15 @@ API Cache (hand-rolled AsyncData), and API Cache Query (`Query.define`).
 ## Query watch, forget, and run
 
 `Query.define` is a remote-data Submodel. Keyed `Model` is a `HashMap` of
-`{ args, data }` slots. Read `data` with `query.read(model, args)`.
+`{ args, data }` slots. Read `data` with `query.read(model, args)`. Keyed
+`define` defaults `keyFields` to every `args` key and `toKey` to a `:` join of
+those fields. Override them when Interrupt identity is a subset of `args`.
+
+`query.foldChild` returns a callable Foldkit fold. Call it data-first in `Got*`
+handlers (`foldPosts(model, message)`). Policy Steps hang on the same function
+(`foldPosts.revalidateOrLoad(model)`). Pass the parent `Model` schema and `field: "posts"` when the child is
+always on the parent Model. `foldPosts.watchSubscription(entry, modelToArgs)`
+reuses that fold's `toParentMessage`.
 
 `informWatch` / `RequestedWatch` is the full live key set. The Message payload is
 a `HashMap` of `toKey` to args. `informWatch` still takes an array of args.
