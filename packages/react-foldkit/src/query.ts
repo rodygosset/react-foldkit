@@ -32,9 +32,17 @@ type ChildField<ParentModel, ChildModel> = {
 }[keyof ParentModel] &
 	string
 
+export type ParentMessage<Message extends Schema.Top> = {
+	readonly message: Message
+}
+
+type GotWrapper<ChildMessage, ParentMessage> = (fields: {
+	readonly message: ChildMessage
+}) => ParentMessage
+
 type FieldFoldConfig<ParentModel, ParentMessage, ChildModel, ChildMessage> = Readonly<{
 	field: ChildField<ParentModel, ChildModel>
-	toParentMessage: (message: ChildMessage) => ParentMessage
+	toParentMessage: GotWrapper<ChildMessage, ParentMessage>
 }>
 
 type MissingParentModelFieldConfig = {
@@ -50,22 +58,34 @@ type FoldChildField<ChildModel, ChildMessage, R> = {
 	<ParentModel, ParentMessage>(
 		config: FoldLens<ParentModel, ParentMessage, ChildModel, ChildMessage>
 	): Fold.Field<ParentModel, ParentMessage, ChildMessage, R>
-	<ParentModel = never>(): <ParentMessage>(
-		config: [ParentModel] extends [never]
-			? MissingParentModelFieldConfig
-			: FieldFoldConfig<ParentModel, ParentMessage, ChildModel, ChildMessage>
-	) => Fold.Field<ParentModel, ParentMessage, ChildMessage, R>
+	<ParentModel = never, ParentMessage = never>(): [ParentMessage] extends [never]
+		? <InferredParentMessage>(
+				config: [ParentModel] extends [never]
+					? MissingParentModelFieldConfig
+					: FieldFoldConfig<ParentModel, InferredParentMessage, ChildModel, ChildMessage>
+			) => Fold.Field<ParentModel, InferredParentMessage, ChildMessage, R>
+		: (
+				config: [ParentModel] extends [never]
+					? MissingParentModelFieldConfig
+					: FieldFoldConfig<ParentModel, ParentMessage, ChildModel, ChildMessage>
+			) => Fold.Field<ParentModel, ParentMessage, ChildMessage, R>
 }
 
 type FoldChildKeyed<ChildModel, ChildMessage, Args, R> = {
 	<ParentModel, ParentMessage>(
 		config: FoldLens<ParentModel, ParentMessage, ChildModel, ChildMessage>
 	): Fold.Keyed<ParentModel, ParentMessage, ChildMessage, Args, R>
-	<ParentModel = never>(): <ParentMessage>(
-		config: [ParentModel] extends [never]
-			? MissingParentModelFieldConfig
-			: FieldFoldConfig<ParentModel, ParentMessage, ChildModel, ChildMessage>
-	) => Fold.Keyed<ParentModel, ParentMessage, ChildMessage, Args, R>
+	<ParentModel = never, ParentMessage = never>(): [ParentMessage] extends [never]
+		? <InferredParentMessage>(
+				config: [ParentModel] extends [never]
+					? MissingParentModelFieldConfig
+					: FieldFoldConfig<ParentModel, InferredParentMessage, ChildModel, ChildMessage>
+			) => Fold.Keyed<ParentModel, InferredParentMessage, ChildMessage, Args, R>
+		: (
+				config: [ParentModel] extends [never]
+					? MissingParentModelFieldConfig
+					: FieldFoldConfig<ParentModel, ParentMessage, ChildModel, ChildMessage>
+			) => Fold.Keyed<ParentModel, ParentMessage, ChildMessage, Args, R>
 }
 
 function isFieldFoldConfig<ParentModel, ParentMessage, ChildModel, ChildMessage>(
@@ -94,7 +114,9 @@ function resolveFoldLens<ParentModel, ParentMessage, ChildModel, ChildMessage>(
 					[field]: () => nextChild,
 				} as unknown as Parameters<typeof evolve>[1]
 			),
-		toParentMessage: config.toParentMessage,
+		toParentMessage: function (childMessage: ChildMessage) {
+			return config.toParentMessage({ message: childMessage })
+		},
 	}
 }
 
@@ -275,6 +297,7 @@ export namespace Fold {
 export interface Field<Name extends string, Model extends Schema.Top, Message extends Schema.Top, R = never> {
 	readonly Model: Model
 	readonly Message: Message
+	readonly ParentMessage: ParentMessage<Message>
 	readonly Fetch: Command.Interruptible.DefinitionNoArgs<
 		`Fetch${Name}`,
 		Effect.Effect<SettledFetchOf<Message>, never, R>
@@ -317,6 +340,7 @@ export interface Keyed<
 > {
 	readonly Model: Model
 	readonly Message: Message
+	readonly ParentMessage: ParentMessage<Message>
 	readonly Fetch: Command.Interruptible.DefinitionWithArgs<
 		`Fetch${Name}`,
 		Fields,
@@ -492,6 +516,7 @@ function defineField<Name extends string, A, AI, E, EI, R>(config: FieldConfig<N
 	return {
 		Model: Data.schema,
 		Message,
+		ParentMessage: { message: Message },
 		Fetch,
 		init,
 		update,
@@ -714,6 +739,7 @@ function defineKeyed<
 	return {
 		Model,
 		Message,
+		ParentMessage: { message: Message },
 		Fetch,
 		init,
 		read,

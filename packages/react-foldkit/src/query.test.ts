@@ -307,14 +307,14 @@ describe("Query.foldChild field", () => {
 	type Model = typeof Model.Type
 
 	const Message = defineMessageUnion({
-		GotNotesMessage: { message: notes.Message },
+		GotNotesMessage: notes.ParentMessage,
 		ClickedLoad: {},
 	})
 	type Message = typeof Message.Type
 
 	const foldNotes = notes.foldChild<Model>()({
 		field: "notes",
-		toParentMessage: (message): Message => Message.GotNotesMessage({ message }),
+		toParentMessage: Message.GotNotesMessage,
 	})
 
 	const update = (model: Model, message: Message) =>
@@ -360,13 +360,13 @@ describe("Query.foldChild keyed", () => {
 	type Model = typeof Model.Type
 
 	const Message = defineMessageUnion({
-		GotNoteMessage: { message: noteById.Message },
+		GotNoteMessage: noteById.ParentMessage,
 	})
 	type Message = typeof Message.Type
 
 	const foldNotes = noteById.foldChild<Model>()({
 		field: "notes",
-		toParentMessage: (message): Message => Message.GotNoteMessage({ message }),
+		toParentMessage: Message.GotNoteMessage,
 	})
 
 	it("loadIfMissing through foldChild writes Loading for a miss and FetchNote", () => {
@@ -389,22 +389,25 @@ describe("Query.foldChild field lens", () => {
 	const Model = Schema.Struct({ notes: notes.Model })
 	type Model = typeof Model.Type
 	const Message = defineMessageUnion({
-		GotNotesMessage: { message: notes.Message },
+		GotNotesMessage: notes.ParentMessage,
 	})
 	type Message = typeof Message.Type
-
-	const toParentMessage = (message: (typeof notes.Message)["Type"]): Message =>
-		Message.GotNotesMessage({ message })
 
 	it("field config writes the same Loading and Fetch as a ChildFold lens", () => {
 		const foldFromField = notes.foldChild<Model>()({
 			field: "notes",
-			toParentMessage,
+			toParentMessage: Message.GotNotesMessage,
 		})
 		const foldFromLens = notes.foldChild({
-			read: (model: Model) => Option.some(model.notes),
-			write: (model, nextNotes) => evo(model, { notes: () => nextNotes }),
-			toParentMessage,
+			read: function (model: Model) {
+				return Option.some(model.notes)
+			},
+			write: function (model, nextNotes) {
+				return evo(model, { notes: () => nextNotes })
+			},
+			toParentMessage: function (message) {
+				return Message.GotNotesMessage({ message })
+			},
 		})
 		const parent = { notes: notes.init() }
 		const fromField = foldFromField.revalidateOrLoad(parent)
@@ -416,7 +419,7 @@ describe("Query.foldChild field lens", () => {
 	it("the fold is callable data-first and data-last", () => {
 		const foldFromField = notes.foldChild<Model>()({
 			field: "notes",
-			toParentMessage,
+			toParentMessage: Message.GotNotesMessage,
 		})
 		const parent = { notes: AsyncData.Loading() }
 		const message = notes.Message.SettledFetch({ result: Result.succeed(hello) })
@@ -564,14 +567,14 @@ describe("Query watch subscription and run", () => {
 			})
 			type ParentModel = typeof ParentModel.Type
 			const ParentMessage = defineMessageUnion({
-				GotNoteMessage: { message: noteById.Message },
+				GotNoteMessage: noteById.ParentMessage,
 				SetWatchedNoteIds: { noteIds: Schema.Array(Schema.String) },
 			})
 			type ParentMessage = typeof ParentMessage.Type
 
-			const foldNotes = noteById.foldChild<ParentModel>()({
+			const foldNotes = noteById.foldChild<ParentModel, ParentMessage>()({
 				field: "notes",
-				toParentMessage: (message): ParentMessage => ParentMessage.GotNoteMessage({ message }),
+				toParentMessage: ParentMessage.GotNoteMessage,
 			})
 
 			const update = (model: ParentModel, message: ParentMessage) =>
@@ -664,6 +667,18 @@ describe("Query.Field and Query.Keyed types", () => {
 		takesField(notes)
 	})
 
+	it("ParentMessage is the Got* fields object for defineMessageUnion", () => {
+		expectTypeOf(notes.ParentMessage).toEqualTypeOf<Query.ParentMessage<typeof notes.Message>>()
+		expectTypeOf(noteById.ParentMessage).toEqualTypeOf<Query.ParentMessage<typeof noteById.Message>>()
+		const Message = defineMessageUnion({
+			GotNotesMessage: notes.ParentMessage,
+		})
+		expect(Message.GotNotesMessage({ message: notes.Message.RequestedWatch() })).toEqual({
+			_tag: "GotNotesMessage",
+			message: notes.Message.RequestedWatch(),
+		})
+	})
+
 	it("define(keyed) is Query.Keyed with Name, Model, Message, Fields, and KeyField", () => {
 		expectTypeOf(noteById).toEqualTypeOf<
 			Query.Keyed<
@@ -702,13 +717,13 @@ describe("Query.Field and Query.Keyed types", () => {
 		const ParentModel = Schema.Struct({ notes: notes.Model })
 		type ParentModel = typeof ParentModel.Type
 		const ParentMessage = defineMessageUnion({
-			GotNotesMessage: { message: notes.Message },
+			GotNotesMessage: notes.ParentMessage,
 		})
 		type ParentMessage = typeof ParentMessage.Type
 
 		const foldNotes = notes.foldChild<ParentModel>()({
 			field: "notes",
-			toParentMessage: (message): ParentMessage => ParentMessage.GotNotesMessage({ message }),
+			toParentMessage: ParentMessage.GotNotesMessage,
 		})
 
 		expectTypeOf(foldNotes).toMatchTypeOf<
@@ -719,14 +734,20 @@ describe("Query.Field and Query.Keyed types", () => {
 		const KeyedParent = Schema.Struct({ notes: noteById.Model })
 		type KeyedParent = typeof KeyedParent.Type
 		const KeyedParentMessage = defineMessageUnion({
-			GotNoteMessage: { message: noteById.Message },
+			GotNoteMessage: noteById.ParentMessage,
 		})
 		type KeyedParentMessage = typeof KeyedParentMessage.Type
 
 		const foldKeyed = noteById.foldChild({
-			read: (model: KeyedParent) => Option.some(model.notes),
-			write: (model, nextNotes) => evo(model, { notes: () => nextNotes }),
-			toParentMessage: (message) => KeyedParentMessage.GotNoteMessage({ message }),
+			read: function (model: KeyedParent) {
+				return Option.some(model.notes)
+			},
+			write: function (model, nextNotes) {
+				return evo(model, { notes: () => nextNotes })
+			},
+			toParentMessage: function (message) {
+				return KeyedParentMessage.GotNoteMessage({ message })
+			},
 		})
 
 		expectTypeOf(foldKeyed).toMatchTypeOf<
@@ -738,14 +759,14 @@ describe("Query.Field and Query.Keyed types", () => {
 		const ParentModel = Schema.Struct({ notes: notes.Model, label: Schema.String })
 		type ParentModel = typeof ParentModel.Type
 		const ParentMessage = defineMessageUnion({
-			GotNotesMessage: { message: notes.Message },
+			GotNotesMessage: notes.ParentMessage,
 			ClickedLoad: {},
 		})
 		type ParentMessage = typeof ParentMessage.Type
 
-		const foldNotes = notes.foldChild<ParentModel>()({
+		const foldNotes = notes.foldChild<ParentModel, ParentMessage>()({
 			field: "notes",
-			toParentMessage: (message): ParentMessage => ParentMessage.GotNotesMessage({ message }),
+			toParentMessage: ParentMessage.GotNotesMessage,
 		})
 
 		expectTypeOf(foldNotes.revalidate).toEqualTypeOf<Update.Step<ParentModel, ParentMessage>>()
@@ -767,9 +788,25 @@ describe("Query.Field and Query.Keyed types", () => {
 		notes.foldChild<Parent>()({
 			// @ts-expect-error
 			field: "label",
-			toParentMessage: function (message: (typeof notes.Message)["Type"]) {
-				return message
+			toParentMessage: function (fields: { readonly message: (typeof notes.Message)["Type"] }) {
+				return fields.message
 			},
+		})
+	})
+
+	it("field foldChild rejects a Got* constructor whose payload is not the query Message", () => {
+		type Parent = { notes: (typeof notes.Model)["Type"] }
+		const Message = defineMessageUnion({
+			GotNotesMessage: notes.ParentMessage,
+		})
+		type Message = typeof Message.Type
+		const Wrong = defineMessageUnion({
+			GotNotesMessage: { message: Schema.String },
+		})
+		notes.foldChild<Parent, Message>()({
+			field: "notes",
+			// @ts-expect-error
+			toParentMessage: Wrong.GotNotesMessage,
 		})
 	})
 
