@@ -105,9 +105,11 @@ those fields. Override them when Interrupt identity is a subset of `args`.
 
 `query.foldChild` returns a callable Foldkit fold. Call it data-first in `Got*`
 handlers (`foldPosts(model, message)`). Policy Steps hang on the same function
-(`foldPosts.revalidateOrLoad(model)`). Pass the parent `Model` schema and `field: "posts"` when the child is
-always on the parent Model. `foldPosts.watchSubscription(entry, modelToArgs)`
-reuses that fold's `toParentMessage`.
+(`foldPosts.revalidateOrLoad(model)`). For an always-present slot, pass
+`foldChild<Model>()({ field: "posts", toParentMessage })`. A full `read` /
+`write` lens still infers `ParentModel` from `read`.
+`foldPosts.watchSubscription(entry, modelToArgs)` reuses that fold's
+`toParentMessage`.
 
 `informWatch` / `RequestedWatch` is the full live key set. The Message payload is
 a `HashMap` of `toKey` to args. `informWatch` still takes an array of args.

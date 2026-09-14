@@ -32,34 +32,40 @@ type ChildField<ParentModel, ChildModel> = {
 }[keyof ParentModel] &
 	string
 
-type FieldFoldConfig<ParentSchema extends Schema.Top, ParentMessage, ChildModel, ChildMessage> = Readonly<{
-	Model: ParentSchema
-	field: ChildField<ParentSchema["Type"], ChildModel>
+type FieldFoldConfig<ParentModel, ParentMessage, ChildModel, ChildMessage> = Readonly<{
+	field: ChildField<ParentModel, ChildModel>
 	toParentMessage: (message: ChildMessage) => ParentMessage
 }>
 
-type ParentSchemaOf<ParentModel> = Schema.Schema<ParentModel>
+type MissingParentModelFieldConfig = {
+	readonly field: never
+	readonly toParentMessage: never
+}
 
 type FoldChildConfig<ParentModel, ParentMessage, ChildModel, ChildMessage> =
 	| FoldLens<ParentModel, ParentMessage, ChildModel, ChildMessage>
-	| FieldFoldConfig<ParentSchemaOf<ParentModel>, ParentMessage, ChildModel, ChildMessage>
+	| FieldFoldConfig<ParentModel, ParentMessage, ChildModel, ChildMessage>
 
 type FoldChildField<ChildModel, ChildMessage, R> = {
-	<ParentSchema extends Schema.Top, ParentMessage>(
-		config: FieldFoldConfig<ParentSchema, ParentMessage, ChildModel, ChildMessage>
-	): Fold.Field<ParentSchema["Type"], ParentMessage, ChildMessage, R>
 	<ParentModel, ParentMessage>(
 		config: FoldLens<ParentModel, ParentMessage, ChildModel, ChildMessage>
 	): Fold.Field<ParentModel, ParentMessage, ChildMessage, R>
+	<ParentModel = never>(): <ParentMessage>(
+		config: [ParentModel] extends [never]
+			? MissingParentModelFieldConfig
+			: FieldFoldConfig<ParentModel, ParentMessage, ChildModel, ChildMessage>
+	) => Fold.Field<ParentModel, ParentMessage, ChildMessage, R>
 }
 
 type FoldChildKeyed<ChildModel, ChildMessage, Args, R> = {
-	<ParentSchema extends Schema.Top, ParentMessage>(
-		config: FieldFoldConfig<ParentSchema, ParentMessage, ChildModel, ChildMessage>
-	): Fold.Keyed<ParentSchema["Type"], ParentMessage, ChildMessage, Args, R>
 	<ParentModel, ParentMessage>(
 		config: FoldLens<ParentModel, ParentMessage, ChildModel, ChildMessage>
 	): Fold.Keyed<ParentModel, ParentMessage, ChildMessage, Args, R>
+	<ParentModel = never>(): <ParentMessage>(
+		config: [ParentModel] extends [never]
+			? MissingParentModelFieldConfig
+			: FieldFoldConfig<ParentModel, ParentMessage, ChildModel, ChildMessage>
+	) => Fold.Keyed<ParentModel, ParentMessage, ChildMessage, Args, R>
 }
 
 function isFieldFoldConfig<ParentModel, ParentMessage, ChildModel, ChildMessage>(
@@ -445,10 +451,9 @@ function defineField<Name extends string, A, AI, E, EI, R>(config: FieldConfig<N
 			}
 		)
 
-	const foldChild: FoldChildField<Model, Message, R> = <ParentModel, ParentMessage>(
-		config: FoldChildConfig<ParentModel, ParentMessage, Model, Message>
-	) => {
-		const foldConfig = resolveFoldLens(config)
+	const foldFromLens = function <ParentModel, ParentMessage>(
+		foldConfig: FoldLens<ParentModel, ParentMessage, Model, Message>
+	) {
 		return attachFold(Update.foldChild({ update, ...foldConfig }), {
 			revalidate: Update.foldChildStep({ update: informRevalidate, ...foldConfig }),
 			revalidateOrLoad: Update.foldChildStep({ update: informRevalidateOrLoad, ...foldConfig }),
@@ -462,6 +467,17 @@ function defineField<Name extends string, A, AI, E, EI, R>(config: FieldConfig<N
 			) => watchFieldSubscription(entry, foldConfig.toParentMessage, modelToIsWatching),
 		})
 	}
+
+	const foldChild = function <ParentModel, ParentMessage>(
+		config?: FoldChildConfig<ParentModel, ParentMessage, Model, Message>
+	) {
+		if (arguments.length === 0) {
+			return function (fieldConfig: FieldFoldConfig<ParentModel, ParentMessage, Model, Message>) {
+				return foldFromLens(resolveFoldLens(fieldConfig))
+			}
+		}
+		return foldFromLens(resolveFoldLens(config as FoldChildConfig<ParentModel, ParentMessage, Model, Message>))
+	} as FoldChildField<Model, Message, R>
 
 	const watchSubscription = <ParentModel, ParentMessage>(
 		entry: Subscription.EntryBuilder<ParentModel, ParentMessage, R>,
@@ -639,10 +655,9 @@ function defineKeyed<
 	const init = (): Model => HashMap.empty()
 	const read = (model: Model, args: Args): Data => store.read(model, args)
 
-	const foldChild: FoldChildKeyed<Model, Message, Args, R> = <ParentModel, ParentMessage>(
-		config: FoldChildConfig<ParentModel, ParentMessage, Model, Message>
-	) => {
-		const foldConfig = resolveFoldLens(config)
+	const foldFromLens = function <ParentModel, ParentMessage>(
+		foldConfig: FoldLens<ParentModel, ParentMessage, Model, Message>
+	) {
 		return attachFold(Update.foldChild({ update, ...foldConfig }), {
 			revalidate: foldChildFromInform(informRevalidate, foldConfig),
 			revalidateOrLoad: foldChildFromInform(informRevalidateOrLoad, foldConfig),
@@ -656,6 +671,17 @@ function defineKeyed<
 			) => watchKeyedSubscription(entry, foldConfig.toParentMessage, modelToArgs),
 		})
 	}
+
+	const foldChild = function <ParentModel, ParentMessage>(
+		config?: FoldChildConfig<ParentModel, ParentMessage, Model, Message>
+	) {
+		if (arguments.length === 0) {
+			return function (fieldConfig: FieldFoldConfig<ParentModel, ParentMessage, Model, Message>) {
+				return foldFromLens(resolveFoldLens(fieldConfig))
+			}
+		}
+		return foldFromLens(resolveFoldLens(config as FoldChildConfig<ParentModel, ParentMessage, Model, Message>))
+	} as FoldChildKeyed<Model, Message, Args, R>
 
 	const watchKeyedSubscription = <ParentModel, ParentMessage>(
 		entry: Subscription.EntryBuilder<ParentModel, ParentMessage, R>,
