@@ -8,6 +8,7 @@ import {
 	Option,
 	Order,
 	Predicate,
+	Record,
 	Schema,
 	Stream,
 	pipe,
@@ -15,6 +16,7 @@ import {
 import * as AsyncData from "./asyncData"
 import * as Command from "./command"
 import { defineMessageUnion } from "./message"
+import { makeConstrainedEvo } from "./struct"
 import * as Subscription from "./subscription"
 import * as Update from "./update"
 
@@ -24,6 +26,80 @@ type FoldLens<ParentModel, ParentMessage, ChildModel, ChildMessage> = Pick<
 	Update.ChildFold<ParentModel, ParentMessage, ChildModel, never, ChildMessage>,
 	"read" | "write" | "toParentMessage"
 >
+
+type ChildField<ParentModel, ChildModel> = {
+	[K in keyof ParentModel]: ParentModel[K] extends ChildModel ? K : never
+}[keyof ParentModel] &
+	string
+
+type FieldFoldConfig<
+	ParentSchema extends Schema.Top,
+	ParentMessage,
+	ChildModel,
+	ChildMessage,
+> = Readonly<{
+	Model: ParentSchema
+	field: ChildField<ParentSchema["Type"], ChildModel>
+	toParentMessage: (message: ChildMessage) => ParentMessage
+}>
+
+type FoldChildConfig<ParentModel, ParentMessage, ChildModel, ChildMessage> =
+	| FoldLens<ParentModel, ParentMessage, ChildModel, ChildMessage>
+	| FieldFoldConfig<Schema.Top, ParentMessage, ChildModel, ChildMessage>
+
+type FoldChildField<ChildModel, ChildMessage, R> = {
+	<ParentSchema extends Schema.Top, ParentMessage>(
+		config: FieldFoldConfig<ParentSchema, ParentMessage, ChildModel, ChildMessage>
+	): Fold.Field<ParentSchema["Type"], ParentMessage, ChildMessage, R>
+	<ParentModel, ParentMessage>(
+		config: FoldLens<ParentModel, ParentMessage, ChildModel, ChildMessage>
+	): Fold.Field<ParentModel, ParentMessage, ChildMessage, R>
+}
+
+type FoldChildKeyed<ChildModel, ChildMessage, Args, R> = {
+	<ParentSchema extends Schema.Top, ParentMessage>(
+		config: FieldFoldConfig<ParentSchema, ParentMessage, ChildModel, ChildMessage>
+	): Fold.Keyed<ParentSchema["Type"], ParentMessage, ChildMessage, Args, R>
+	<ParentModel, ParentMessage>(
+		config: FoldLens<ParentModel, ParentMessage, ChildModel, ChildMessage>
+	): Fold.Keyed<ParentModel, ParentMessage, ChildMessage, Args, R>
+}
+
+function isFieldFoldConfig<ParentModel, ParentMessage, ChildModel, ChildMessage>(
+	config: FoldChildConfig<ParentModel, ParentMessage, ChildModel, ChildMessage>
+): config is Extract<
+	FoldChildConfig<ParentModel, ParentMessage, ChildModel, ChildMessage>,
+	{ readonly field: string }
+> {
+	return Predicate.hasProperty(config, "field")
+}
+
+function resolveFoldLens<ParentModel, ParentMessage, ChildModel, ChildMessage>(
+	config: FoldChildConfig<ParentModel, ParentMessage, ChildModel, ChildMessage>
+): FoldLens<ParentModel, ParentMessage, ChildModel, ChildMessage> {
+	if (!isFieldFoldConfig(config)) {
+		return config
+	}
+
+	const field = config.field
+	const evolve = makeConstrainedEvo<ParentModel & globalThis.Record<string, unknown>>()
+
+	return {
+		read: function (model: ParentModel) {
+			return Option.some((model as ParentModel & globalThis.Record<string, unknown>)[field] as ChildModel)
+		},
+		write: function (model: ParentModel, nextChild: ChildModel) {
+			return evolve(model as ParentModel & globalThis.Record<string, unknown>, {
+				[field]: () => nextChild,
+			} as never) as ParentModel
+		},
+		toParentMessage: config.toParentMessage,
+	}
+}
+
+function attachFold<FoldFn extends object, Policies extends object>(fold: FoldFn, policies: Policies): FoldFn & Policies {
+	return Object.assign(fold, policies)
+}
 
 // NOTE: Nested Command.Interruptible.Outcome in defineMessageUnion collapses
 // through tsup to `node_modules/foldkit/dist/schema` (and sometimes
@@ -117,17 +193,17 @@ type KeyedConfig<
 	data: Schema.Codec<A, AI>
 	error: Schema.Codec<E, EI>
 	args: Fields
-	keyFields: Array.NonEmptyReadonlyArray<KeyField>
-	toKey: (args: Pick<Schema.Schema.Type<Schema.Struct<Fields>>, KeyField>) => string
+	keyFields?: Array.NonEmptyReadonlyArray<KeyField>
+	toKey?: (args: Pick<Schema.Schema.Type<Schema.Struct<Fields>>, KeyField>) => string
 	execute: (args: Schema.Schema.Type<Schema.Struct<Fields>>) => Effect.Effect<A, E, R>
 }>
 
 type DefineConfig =
-	| (FieldConfig<string, any, any, any, any, any> & { readonly toKey?: never })
+	| (FieldConfig<string, any, any, any, any, any> & { readonly args?: never; readonly toKey?: never })
 	| KeyedConfig<string, any, any, any, any, any, any, any>
 
 const isKeyedConfig = (config: DefineConfig): config is KeyedConfig<string, any, any, any, any, any, any, any> =>
-	Predicate.hasProperty(config, "toKey")
+	Predicate.hasProperty(config, "args")
 
 type FieldModel<A, AI, E, EI> = Schema.Codec<AsyncData.AsyncData<A, E>, AsyncData.AsyncDataEncoded<AI, EI>>
 
@@ -141,25 +217,53 @@ type KeyedKeyArgs<
 > = Pick<Schema.Schema.Type<Schema.Struct<Fields>>, KeyField>
 
 export namespace Fold {
-	export interface Field<ParentModel, ParentMessage, ChildMessage, R = never> {
-		readonly fold: Update.Fold<ParentModel, ParentMessage, ChildMessage, R>
-		readonly revalidate: Update.Step<ParentModel, ParentMessage, R>
-		readonly revalidateOrLoad: Update.Step<ParentModel, ParentMessage, R>
-		readonly loadIfMissing: Update.Step<ParentModel, ParentMessage, R>
-		readonly replace: Update.Step<ParentModel, ParentMessage, R>
-		readonly watch: Update.Step<ParentModel, ParentMessage, R>
-		readonly forget: Update.Step<ParentModel, ParentMessage, R>
-	}
+	export type Field<ParentModel, ParentMessage, ChildMessage, R = never> = Update.Fold<
+		ParentModel,
+		ParentMessage,
+		ChildMessage,
+		R
+	> &
+		Readonly<{
+			revalidate: Update.Step<ParentModel, ParentMessage, R>
+			revalidateOrLoad: Update.Step<ParentModel, ParentMessage, R>
+			loadIfMissing: Update.Step<ParentModel, ParentMessage, R>
+			replace: Update.Step<ParentModel, ParentMessage, R>
+			watch: Update.Step<ParentModel, ParentMessage, R>
+			forget: Update.Step<ParentModel, ParentMessage, R>
+			watchSubscription: (
+				entry: Subscription.EntryBuilder<ParentModel, ParentMessage, R>,
+				modelToIsWatching: (model: ParentModel) => boolean
+			) => Subscription.EntryWithoutKeepAlive<
+				ParentModel,
+				ParentMessage,
+				{ readonly isWatching: boolean },
+				R
+			>
+		}>
 
-	export interface Keyed<ParentModel, ParentMessage, ChildMessage, Args, R = never> {
-		readonly fold: Update.Fold<ParentModel, ParentMessage, ChildMessage, R>
-		readonly revalidate: Update.Fold<ParentModel, ParentMessage, Args, R>
-		readonly revalidateOrLoad: Update.Fold<ParentModel, ParentMessage, Args, R>
-		readonly loadIfMissing: Update.Fold<ParentModel, ParentMessage, Args, R>
-		readonly replace: Update.Fold<ParentModel, ParentMessage, Args, R>
-		readonly watch: Update.Fold<ParentModel, ParentMessage, ReadonlyArray<Args>, R>
-		readonly forget: Update.Fold<ParentModel, ParentMessage, Args, R>
-	}
+	export type Keyed<ParentModel, ParentMessage, ChildMessage, Args, R = never> = Update.Fold<
+		ParentModel,
+		ParentMessage,
+		ChildMessage,
+		R
+	> &
+		Readonly<{
+			revalidate: Update.Fold<ParentModel, ParentMessage, Args, R>
+			revalidateOrLoad: Update.Fold<ParentModel, ParentMessage, Args, R>
+			loadIfMissing: Update.Fold<ParentModel, ParentMessage, Args, R>
+			replace: Update.Fold<ParentModel, ParentMessage, Args, R>
+			watch: Update.Fold<ParentModel, ParentMessage, ReadonlyArray<Args>, R>
+			forget: Update.Fold<ParentModel, ParentMessage, Args, R>
+			watchSubscription: (
+				entry: Subscription.EntryBuilder<ParentModel, ParentMessage, R>,
+				modelToArgs: (model: ParentModel) => ReadonlyArray<Args>
+			) => Subscription.EntryWithoutKeepAlive<
+				ParentModel,
+				ParentMessage,
+				{ readonly args: ReadonlyArray<Args> },
+				R
+			>
+		}>
 }
 
 /** Single-slot remote-data Submodel. `Model` is the `AsyncData` codec. */
@@ -181,9 +285,7 @@ export interface Field<Name extends string, Model extends Schema.Top, Message ex
 	readonly informReplace: (model: Model["Type"]) => Update.Return<Model["Type"], Message["Type"], R>
 	readonly informWatch: (model: Model["Type"]) => Update.Return<Model["Type"], Message["Type"], R>
 	readonly informForget: (model: Model["Type"]) => Update.Return<Model["Type"], Message["Type"], R>
-	readonly foldChild: <ParentModel, ParentMessage>(
-		config: FoldLens<ParentModel, ParentMessage, Model["Type"], Message["Type"]>
-	) => Fold.Field<ParentModel, ParentMessage, Message["Type"], R>
+	readonly foldChild: FoldChildField<Model["Type"], Message["Type"], R>
 	readonly watchSubscription: <ParentModel, ParentMessage>(
 		entry: Subscription.EntryBuilder<ParentModel, ParentMessage, R>,
 		config: {
@@ -228,9 +330,7 @@ export interface Keyed<
 	readonly informReplace: Update.Fold<Model["Type"], Message["Type"], KeyedArgs<Fields>, R>
 	readonly informWatch: Update.Fold<Model["Type"], Message["Type"], ReadonlyArray<KeyedArgs<Fields>>, R>
 	readonly informForget: Update.Fold<Model["Type"], Message["Type"], KeyedArgs<Fields>, R>
-	readonly foldChild: <ParentModel, ParentMessage>(
-		config: FoldLens<ParentModel, ParentMessage, Model["Type"], Message["Type"]>
-	) => Fold.Keyed<ParentModel, ParentMessage, Message["Type"], KeyedArgs<Fields>, R>
+	readonly foldChild: FoldChildKeyed<Model["Type"], Message["Type"], KeyedArgs<Fields>, R>
 	readonly watchSubscription: <ParentModel, ParentMessage>(
 		entry: Subscription.EntryBuilder<ParentModel, ParentMessage, R>,
 		config: {
@@ -334,35 +434,53 @@ function defineField<Name extends string, A, AI, E, EI, R>(config: FieldConfig<N
 
 	const init = (): Model => AsyncData.Idle()
 
-	const foldChild = <ParentModel, ParentMessage>(
-		foldConfig: FoldLens<ParentModel, ParentMessage, Model, Message>
-	): Fold.Field<ParentModel, ParentMessage, Message, R> => ({
-		fold: Update.foldChild({ update, ...foldConfig }),
-		revalidate: Update.foldChildStep({ update: informRevalidate, ...foldConfig }),
-		revalidateOrLoad: Update.foldChildStep({ update: informRevalidateOrLoad, ...foldConfig }),
-		loadIfMissing: Update.foldChildStep({ update: informLoadIfMissing, ...foldConfig }),
-		replace: Update.foldChildStep({ update: informReplace, ...foldConfig }),
-		watch: Update.foldChildStep({ update: informWatch, ...foldConfig }),
-		forget: Update.foldChildStep({ update: informForget, ...foldConfig }),
-	})
+	const watchFieldSubscription = function <ParentModel, ParentMessage>(
+		entry: Subscription.EntryBuilder<ParentModel, ParentMessage, R>,
+		toParentMessage: (message: Message) => ParentMessage,
+		modelToIsWatching: (model: ParentModel) => boolean
+	) {
+		return entry(
+			{ isWatching: Schema.Boolean },
+			{
+				modelToDependencies: function (parent: ParentModel) {
+					return { isWatching: modelToIsWatching(parent) }
+				},
+				dependenciesToStream: function ({ isWatching }: { readonly isWatching: boolean }) {
+					return Stream.succeed(toParentMessage(isWatching ? Message.RequestedWatch() : Message.RequestedForget()))
+				},
+			}
+		)
+	}
 
-	const watchSubscription = <ParentModel, ParentMessage>(
+	const foldChild = function (
+		config: FoldLens<any, any, Model, Message> | FieldFoldConfig<Schema.Top, any, Model, Message>
+	) {
+		const foldConfig: FoldLens<any, any, Model, Message> = resolveFoldLens(config)
+		return attachFold(Update.foldChild({ update, ...foldConfig }), {
+			revalidate: Update.foldChildStep({ update: informRevalidate, ...foldConfig }),
+			revalidateOrLoad: Update.foldChildStep({ update: informRevalidateOrLoad, ...foldConfig }),
+			loadIfMissing: Update.foldChildStep({ update: informLoadIfMissing, ...foldConfig }),
+			replace: Update.foldChildStep({ update: informReplace, ...foldConfig }),
+			watch: Update.foldChildStep({ update: informWatch, ...foldConfig }),
+			forget: Update.foldChildStep({ update: informForget, ...foldConfig }),
+			watchSubscription: function (
+				entry: Subscription.EntryBuilder<any, any, R>,
+				modelToIsWatching: (model: any) => boolean
+			) {
+				return watchFieldSubscription(entry, foldConfig.toParentMessage, modelToIsWatching)
+			},
+		})
+	} as FoldChildField<Model, Message, R>
+
+	const watchSubscription = function <ParentModel, ParentMessage>(
 		entry: Subscription.EntryBuilder<ParentModel, ParentMessage, R>,
 		watchConfig: {
 			readonly toParentMessage: (message: Message) => ParentMessage
 			readonly modelToIsWatching: (model: ParentModel) => boolean
 		}
-	) =>
-		entry(
-			{ isWatching: Schema.Boolean },
-			{
-				modelToDependencies: (parent: ParentModel) => ({ isWatching: watchConfig.modelToIsWatching(parent) }),
-				dependenciesToStream: ({ isWatching }: { readonly isWatching: boolean }) =>
-					Stream.succeed(
-						watchConfig.toParentMessage(isWatching ? Message.RequestedWatch() : Message.RequestedForget())
-					),
-			}
-		)
+	) {
+		return watchFieldSubscription(entry, watchConfig.toParentMessage, watchConfig.modelToIsWatching)
+	}
 
 	const run = runExecute(config.execute)
 
@@ -398,6 +516,20 @@ function defineKeyed<
 	type Data = typeof Data.schema.Type
 	const Args = Schema.Struct(config.args)
 	type Args = typeof Args.Type
+	const argsKeys = Record.keys(config.args)
+	if (!Array.isArrayNonEmpty(argsKeys)) {
+		throw new Error(`Query.define("${config.name}"): keyed args must include at least one field`)
+	}
+	const keyFields: Array.NonEmptyReadonlyArray<KeyField> =
+		config.keyFields ?? (argsKeys as unknown as Array.NonEmptyReadonlyArray<KeyField>)
+	const toKey: (keyArgs: Pick<Args, KeyField>) => string =
+		config.toKey ??
+		function (keyArgs: Pick<Args, KeyField>): string {
+			return Array.join(
+				Array.map(keyFields, (key) => globalThis.String(keyArgs[key])),
+				":"
+			)
+		}
 	const Slot = Schema.Struct({
 		args: Args,
 		data: Data.schema,
@@ -425,8 +557,8 @@ function defineKeyed<
 		args: config.args,
 		messages: [Message.SettledFetch],
 		interrupt: {
-			keyFields: config.keyFields,
-			toKey: config.toKey,
+			keyFields,
+			toKey,
 		},
 		execute: (args: Args) =>
 			pipe(
@@ -442,20 +574,20 @@ function defineKeyed<
 
 	const store: CacheStore<Model, Args, A, E, Message, R> = {
 		read: (model, args) =>
-			AsyncData.fromOptionOrIdle(Option.map(HashMap.get(model, config.toKey(args)), (slot) => slot.data)),
-		write: (model, args, data) => HashMap.set(model, config.toKey(args), { args, data }),
+			AsyncData.fromOptionOrIdle(Option.map(HashMap.get(model, toKey(args)), (slot) => slot.data)),
+		write: (model, args, data) => HashMap.set(model, toKey(args), { args, data }),
 		load: (args) => Fetch(args),
 		interrupt: (args) =>
 			Fetch.Interrupt(args, (outcome) => Message.CompletedCancelFetch({ args: toMessageArgs(args), outcome })),
 	}
 
-	const hasSlot = (model: Model, args: Args): boolean => HashMap.has(model, config.toKey(args))
+	const hasSlot = (model: Model, args: Args): boolean => HashMap.has(model, toKey(args))
 
 	const forgetSlot = (model: Model, args: Args): UpdateReturn => {
 		if (!hasSlot(model, args)) {
 			return { model }
 		}
-		const nextModel = HashMap.remove(model, config.toKey(args))
+		const nextModel = HashMap.remove(model, toKey(args))
 		if (AsyncData.isPending(store.read(model, args))) {
 			return { model: nextModel, commands: [store.interrupt(args)] }
 		}
@@ -463,7 +595,7 @@ function defineKeyed<
 	}
 
 	const watchSlots = (model: Model, liveArgs: ReadonlyArray<Args>): UpdateReturn => {
-		const liveKeys = HashSet.fromIterable(Array.map(liveArgs, (args) => config.toKey(args)))
+		const liveKeys = HashSet.fromIterable(Array.map(liveArgs, (args) => toKey(args)))
 		const forgetExtras = HashMap.reduce(model, Array.empty<UpdateStep>(), (steps, slot, key) =>
 			HashSet.has(liveKeys, key) ? steps : Array.append(steps, (current: Model) => forgetSlot(current, slot.args))
 		)
@@ -510,7 +642,7 @@ function defineKeyed<
 	const informForget = inform((args) => Message.RequestedForget({ args }))
 	const toWatchMessage = (liveArgs: ReadonlyArray<Args>): Message =>
 		Message.RequestedWatch({
-			live: HashMap.fromIterable(Array.map(liveArgs, (args) => [config.toKey(args), args] as const)),
+			live: HashMap.fromIterable(Array.map(liveArgs, (args) => [toKey(args), args] as const)),
 		})
 	const informWatch: Update.Fold<Model, Message, ReadonlyArray<Args>, R> = Function.dual(
 		2,
@@ -520,35 +652,85 @@ function defineKeyed<
 	const init = (): Model => HashMap.empty()
 	const read = (model: Model, args: Args): Data => store.read(model, args)
 
-	const foldChild = <ParentModel, ParentMessage>(
-		foldConfig: FoldLens<ParentModel, ParentMessage, Model, Message>
-	): Fold.Keyed<ParentModel, ParentMessage, Message, Args, R> => ({
-		fold: Update.foldChild({ update, ...foldConfig }),
-		revalidate: Update.foldChild({ update: informRevalidate, ...foldConfig }),
-		revalidateOrLoad: Update.foldChild({ update: informRevalidateOrLoad, ...foldConfig }),
-		loadIfMissing: Update.foldChild({ update: informLoadIfMissing, ...foldConfig }),
-		replace: Update.foldChild({ update: informReplace, ...foldConfig }),
-		watch: Update.foldChild({ update: informWatch, ...foldConfig }),
-		forget: Update.foldChild({ update: informForget, ...foldConfig }),
-	})
+	const foldChild = function (
+		config: FoldLens<any, any, Model, Message> | FieldFoldConfig<Schema.Top, any, Model, Message>
+	) {
+		const foldConfig: FoldLens<any, any, Model, Message> = resolveFoldLens(config)
+		return attachFold(Update.foldChild({ update, ...foldConfig }), {
+			revalidate: Update.foldChild({
+				update: function (childModel: Model, args: Args) {
+					return informRevalidate(childModel, args)
+				},
+				...foldConfig,
+			}),
+			revalidateOrLoad: Update.foldChild({
+				update: function (childModel: Model, args: Args) {
+					return informRevalidateOrLoad(childModel, args)
+				},
+				...foldConfig,
+			}),
+			loadIfMissing: Update.foldChild({
+				update: function (childModel: Model, args: Args) {
+					return informLoadIfMissing(childModel, args)
+				},
+				...foldConfig,
+			}),
+			replace: Update.foldChild({
+				update: function (childModel: Model, args: Args) {
+					return informReplace(childModel, args)
+				},
+				...foldConfig,
+			}),
+			watch: Update.foldChild({
+				update: function (childModel: Model, liveArgs: ReadonlyArray<Args>) {
+					return informWatch(childModel, liveArgs)
+				},
+				...foldConfig,
+			}),
+			forget: Update.foldChild({
+				update: function (childModel: Model, args: Args) {
+					return informForget(childModel, args)
+				},
+				...foldConfig,
+			}),
+			watchSubscription: function (
+				entry: Subscription.EntryBuilder<any, any, R>,
+				modelToArgs: (model: any) => ReadonlyArray<Args>
+			) {
+				return watchKeyedSubscription(entry, foldConfig.toParentMessage, modelToArgs)
+			},
+		})
+	} as FoldChildKeyed<Model, Message, Args, R>
 
-	const watchSubscription = <ParentModel, ParentMessage>(
+	const watchKeyedSubscription = function <ParentModel, ParentMessage>(
+		entry: Subscription.EntryBuilder<ParentModel, ParentMessage, R>,
+		toParentMessage: (message: Message) => ParentMessage,
+		modelToArgs: (model: ParentModel) => ReadonlyArray<Args>
+	) {
+		return entry(
+			{ args: Schema.Array(Args) },
+			{
+				modelToDependencies: function (parent: ParentModel) {
+					return {
+						args: Array.sortWith(modelToArgs(parent), (liveArgs) => toKey(liveArgs), Order.String),
+					}
+				},
+				dependenciesToStream: function ({ args }: { readonly args: ReadonlyArray<Args> }) {
+					return Stream.succeed(toParentMessage(toWatchMessage(args)))
+				},
+			}
+		)
+	}
+
+	const watchSubscription = function <ParentModel, ParentMessage>(
 		entry: Subscription.EntryBuilder<ParentModel, ParentMessage, R>,
 		watchConfig: {
 			readonly toParentMessage: (message: Message) => ParentMessage
 			readonly modelToArgs: (model: ParentModel) => ReadonlyArray<Args>
 		}
-	) =>
-		entry(
-			{ args: Schema.Array(Args) },
-			{
-				modelToDependencies: (parent: ParentModel) => ({
-					args: Array.sortWith(watchConfig.modelToArgs(parent), (liveArgs) => config.toKey(liveArgs), Order.String),
-				}),
-				dependenciesToStream: ({ args }: { readonly args: ReadonlyArray<Args> }) =>
-					Stream.succeed(watchConfig.toParentMessage(toWatchMessage(args))),
-			}
-		)
+	) {
+		return watchKeyedSubscription(entry, watchConfig.toParentMessage, watchConfig.modelToArgs)
+	}
 
 	const run = (args: Args): Effect.Effect<Data, never, R> => runExecute(config.execute(args))
 
