@@ -25,6 +25,22 @@ const noteById = Query.define({
 	data: Note,
 	error: Schema.String,
 	args: { noteId: Schema.String },
+	execute: ({ noteId }) => Effect.succeed({ id: noteId, body: "hello" }),
+})
+
+const noteByIdAndLocale = Query.define({
+	name: "NoteLocale",
+	data: Note,
+	error: Schema.String,
+	args: { noteId: Schema.String, locale: Schema.String },
+	execute: ({ noteId, locale }) => Effect.succeed({ id: `${noteId}:${locale}`, body: "hello" }),
+})
+
+const noteByIdPreview = Query.define({
+	name: "NotePreview",
+	data: Note,
+	error: Schema.String,
+	args: { noteId: Schema.String, preview: Schema.Boolean },
 	keyFields: ["noteId"],
 	toKey: ({ noteId }) => noteId,
 	execute: ({ noteId }) => Effect.succeed({ id: noteId, body: "hello" }),
@@ -296,21 +312,21 @@ describe("Query.foldChild field", () => {
 	})
 	type Message = typeof Message.Type
 
-	const notesField = notes.foldChild({
-		read: (model: Model) => Option.some(model.notes),
-		write: (model, nextNotes) => evo(model, { notes: () => nextNotes }),
+	const foldNotes = notes.foldChild({
+		Model,
+		field: "notes",
 		toParentMessage: (message) => Message.GotNotesMessage({ message }),
 	})
 
 	const update = (model: Model, message: Message) =>
 		Message.match<Update.Return<Model, Message>>(message, {
-			GotNotesMessage: ({ message }) => notesField.fold(model, message),
-			ClickedLoad: () => notesField.revalidateOrLoad(model),
+			GotNotesMessage: ({ message }) => foldNotes(model, message),
+			ClickedLoad: () => foldNotes.revalidateOrLoad(model),
 		})
 
 	it.effect("settles an init load through the parent Got* wrapper", () =>
 		Effect.gen(function* () {
-			const init = notesField.revalidateOrLoad({ notes: notes.init() })
+			const init = foldNotes.revalidateOrLoad({ notes: notes.init() })
 			const store = yield* Effect.acquireRelease(
 				Effect.sync(() => Store.boot({ update }, init)),
 				(live) => Effect.sync(() => live.dispose())
@@ -325,7 +341,7 @@ describe("Query.foldChild field", () => {
 	)
 
 	it("fold applies SettledFetch through the parent wrapper", () => {
-		const folded = notesField.fold(
+		const folded = foldNotes(
 			{ notes: AsyncData.Loading() },
 			notes.Message.SettledFetch({ result: Result.succeed(hello) })
 		)
@@ -334,7 +350,7 @@ describe("Query.foldChild field", () => {
 
 	it("replace returns an Interrupt Command while a fetch is pending", () => {
 		const pending = notes.informRevalidateOrLoad(notes.init())
-		const parent = notesField.replace({ notes: pending.model })
+		const parent = foldNotes.replace({ notes: pending.model })
 		expect(parent.model.notes).toEqual(AsyncData.Loading())
 		expect(parent.commands?.map((command) => command.name)).toEqual(["FetchNotes.Interrupt"])
 	})
@@ -349,14 +365,14 @@ describe("Query.foldChild keyed", () => {
 	})
 	type Message = typeof Message.Type
 
-	const notesField = noteById.foldChild({
-		read: (model: Model) => Option.some(model.notes),
-		write: (model, nextNotes) => evo(model, { notes: () => nextNotes }),
+	const foldNotes = noteById.foldChild({
+		Model,
+		field: "notes",
 		toParentMessage: (message) => Message.GotNoteMessage({ message }),
 	})
 
 	it("loadIfMissing through foldChild writes Loading for a miss and FetchNote", () => {
-		const started = notesField.loadIfMissing({ notes: noteById.init() }, { noteId: "1" })
+		const started = foldNotes.loadIfMissing({ notes: noteById.init() }, { noteId: "1" })
 		expect(noteById.read(started.model.notes, { noteId: "1" })).toEqual(AsyncData.Loading())
 		expect(started.commands?.map(commandShape)).toEqual([commandShape(noteById.Fetch({ noteId: "1" }))])
 	})
@@ -364,10 +380,76 @@ describe("Query.foldChild keyed", () => {
 	it("loadIfMissing runs data-first and data-last", () => {
 		const model = { notes: noteById.init() }
 		const args = { noteId: "1" }
-		const dataFirst = notesField.loadIfMissing(model, args)
-		const dataLast = notesField.loadIfMissing(args)(model)
+		const dataFirst = foldNotes.loadIfMissing(model, args)
+		const dataLast = foldNotes.loadIfMissing(args)(model)
 		expect(Equal.equals(dataFirst.model.notes, dataLast.model.notes)).toBe(true)
 		expect(dataFirst.commands?.map(commandShape)).toEqual(dataLast.commands?.map(commandShape))
+	})
+})
+
+describe("Query.foldChild field lens", () => {
+	const Model = Schema.Struct({ notes: notes.Model })
+	type Model = typeof Model.Type
+	const Message = defineMessageUnion({
+		GotNotesMessage: { message: notes.Message },
+	})
+	type Message = typeof Message.Type
+
+	const toParentMessage = (message: (typeof notes.Message)["Type"]): Message =>
+		Message.GotNotesMessage({ message })
+
+	it("field config writes the same Loading and Fetch as a ChildFold lens", () => {
+		const foldFromField = notes.foldChild({
+			Model,
+			field: "notes",
+			toParentMessage,
+		})
+		const foldFromLens = notes.foldChild({
+			read: (model: Model) => Option.some(model.notes),
+			write: (model, nextNotes) => evo(model, { notes: () => nextNotes }),
+			toParentMessage,
+		})
+		const parent = { notes: notes.init() }
+		const fromField = foldFromField.revalidateOrLoad(parent)
+		const fromLens = foldFromLens.revalidateOrLoad(parent)
+		expect(fromField.model).toEqual(fromLens.model)
+		expect(fromField.commands?.map(commandShape)).toEqual(fromLens.commands?.map(commandShape))
+	})
+
+	it("the fold is callable data-first and data-last", () => {
+		const foldFromField = notes.foldChild({
+			Model,
+			field: "notes",
+			toParentMessage,
+		})
+		const parent = { notes: AsyncData.Loading() }
+		const message = notes.Message.SettledFetch({ result: Result.succeed(hello) })
+		const dataFirst = foldFromField(parent, message)
+		const dataLast = foldFromField(message)(parent)
+		expect(dataFirst.model.notes).toEqual(AsyncData.Success({ data: hello }))
+		expect(Equal.equals(dataFirst.model.notes, dataLast.model.notes)).toBe(true)
+	})
+})
+
+describe("Query.define keyed — default toKey", () => {
+	it("joins every args field when keyFields and toKey are omitted", () => {
+		const started = noteByIdAndLocale.informLoadIfMissing(noteByIdAndLocale.init(), {
+			noteId: "1",
+			locale: "en",
+		})
+		expect(noteByIdAndLocale.read(started.model, { noteId: "1", locale: "en" })).toEqual(AsyncData.Loading())
+		expect(HashMap.has(started.model, "1:en")).toBe(true)
+		expect(HashMap.has(started.model, "1")).toBe(false)
+	})
+
+	it("keeps Interrupt identity on keyFields when extra args are present", () => {
+		const pending = noteByIdPreview.informLoadIfMissing(noteByIdPreview.init(), {
+			noteId: "1",
+			preview: true,
+		})
+		const sameKey = noteByIdPreview.informLoadIfMissing(pending.model, { noteId: "1", preview: false })
+		expect(sameKey.commands).toBeUndefined()
+		expect(HashMap.has(pending.model, "1")).toBe(true)
 	})
 })
 
@@ -491,25 +573,24 @@ describe("Query watch subscription and run", () => {
 			})
 			type ParentMessage = typeof ParentMessage.Type
 
-			const notesField = noteById.foldChild({
-				read: (model: ParentModel) => Option.some(model.notes),
-				write: (model, nextNotes) => evo(model, { notes: () => nextNotes }),
-				toParentMessage: (message) => ParentMessage.GotNoteMessage({ message }),
+			const foldNotes = noteById.foldChild({
+				Model: ParentModel,
+				field: "notes",
+				toParentMessage: (message): ParentMessage => ParentMessage.GotNoteMessage({ message }),
 			})
 
 			const update = (model: ParentModel, message: ParentMessage) =>
 				ParentMessage.match<Update.Return<ParentModel, ParentMessage>>(message, {
-					GotNoteMessage: ({ message: noteMessage }) => notesField.fold(model, noteMessage),
+					GotNoteMessage: ({ message: noteMessage }) => foldNotes(model, noteMessage),
 					SetWatchedNoteIds: ({ noteIds }) => ({
 						model: evo(model, { watchedNoteIds: () => noteIds }),
 					}),
 				})
 
 			const subscriptions = Subscription.make<ParentModel, ParentMessage>()((entry) => ({
-				watchNotes: noteById.watchSubscription(entry, {
-					toParentMessage: (message) => ParentMessage.GotNoteMessage({ message }),
-					modelToArgs: (model) => Array.map(model.watchedNoteIds, (noteId) => ({ noteId })),
-				}),
+				watchNotes: foldNotes.watchSubscription(entry, (model) =>
+					Array.map(model.watchedNoteIds, (noteId) => ({ noteId }))
+				),
 			}))
 
 			const store = yield* Effect.acquireRelease(
@@ -599,6 +680,11 @@ describe("Query.Field and Query.Keyed types", () => {
 				AsyncData.AsyncData<Note, string>
 			>
 		>()
+		expectTypeOf(noteByIdPreview.Fetch.Interrupt).parameter(0).toEqualTypeOf<{ readonly noteId: string }>()
+		expectTypeOf(noteByIdAndLocale.Fetch.Interrupt).parameter(0).toEqualTypeOf<{
+			readonly noteId: string
+			readonly locale: string
+		}>()
 		const takesKeyed = (_query: Query.Keyed.Any) => undefined
 		takesKeyed(noteById)
 	})
@@ -625,15 +711,16 @@ describe("Query.Field and Query.Keyed types", () => {
 		})
 		type ParentMessage = typeof ParentMessage.Type
 
-		const notesField = notes.foldChild({
-			read: (model: ParentModel) => Option.some(model.notes),
-			write: (model, nextNotes) => evo(model, { notes: () => nextNotes }),
+		const foldNotes = notes.foldChild({
+			Model: ParentModel,
+			field: "notes",
 			toParentMessage: (message) => ParentMessage.GotNotesMessage({ message }),
 		})
 
-		expectTypeOf(notesField).toEqualTypeOf<
+		expectTypeOf(foldNotes).toMatchTypeOf<
 			Query.Fold.Field<ParentModel, ParentMessage, typeof notes.Message.Type>
 		>()
+		expectTypeOf(foldNotes).toBeCallableWith({ notes: notes.init() }, notes.Message.RequestedWatch())
 
 		const KeyedParent = Schema.Struct({ notes: noteById.Model })
 		type KeyedParent = typeof KeyedParent.Type
@@ -642,13 +729,13 @@ describe("Query.Field and Query.Keyed types", () => {
 		})
 		type KeyedParentMessage = typeof KeyedParentMessage.Type
 
-		const keyedField = noteById.foldChild({
+		const foldKeyed = noteById.foldChild({
 			read: (model: KeyedParent) => Option.some(model.notes),
 			write: (model, nextNotes) => evo(model, { notes: () => nextNotes }),
 			toParentMessage: (message) => KeyedParentMessage.GotNoteMessage({ message }),
 		})
 
-		expectTypeOf(keyedField).toEqualTypeOf<
+		expectTypeOf(foldKeyed).toMatchTypeOf<
 			Query.Fold.Keyed<KeyedParent, KeyedParentMessage, typeof noteById.Message.Type, { readonly noteId: string }>
 		>()
 	})
