@@ -451,7 +451,7 @@ function defineKeyed<
 
 	const hasSlot = (model: Model, args: Args): boolean => HashMap.has(model, config.toKey(args))
 
-	const forgetSlot = (model: Model, args: Args): UpdateReturn => {
+	function forgetSlot(model: Model, args: Args): UpdateReturn {
 		if (!hasSlot(model, args)) {
 			return { model }
 		}
@@ -462,7 +462,7 @@ function defineKeyed<
 		return { model: nextModel }
 	}
 
-	const watchSlots = (model: Model, liveArgs: ReadonlyArray<Args>): UpdateReturn => {
+	function watchSlots(model: Model, liveArgs: ReadonlyArray<Args>): UpdateReturn {
 		const liveKeys = HashSet.fromIterable(Array.map(liveArgs, (args) => config.toKey(args)))
 		const forgetExtras = HashMap.reduce(model, Array.empty<UpdateStep>(), (steps, slot, key) =>
 			HashSet.has(liveKeys, key) ? steps : Array.append(steps, (current: Model) => forgetSlot(current, slot.args))
@@ -543,7 +543,11 @@ function defineKeyed<
 			{ args: Schema.Array(Args) },
 			{
 				modelToDependencies: (parent: ParentModel) => ({
-					args: Array.sortWith(watchConfig.modelToArgs(parent), (liveArgs) => config.toKey(liveArgs), Order.String),
+					args: Array.sortWith(
+						watchConfig.modelToArgs(parent),
+						(liveArgs) => config.toKey(liveArgs),
+						Order.String
+					),
 				}),
 				dependenciesToStream: ({ args }: { readonly args: ReadonlyArray<Args> }) =>
 					Stream.succeed(watchConfig.toParentMessage(toWatchMessage(args))),
