@@ -43,9 +43,11 @@ type FieldFoldConfig<
 	toParentMessage: (message: ChildMessage) => ParentMessage
 }>
 
+type ParentSchemaOf<ParentModel> = Schema.Top & { readonly Type: ParentModel }
+
 type FoldChildConfig<ParentModel, ParentMessage, ChildModel, ChildMessage> =
 	| FoldLens<ParentModel, ParentMessage, ChildModel, ChildMessage>
-	| FieldFoldConfig<Schema.Top, ParentMessage, ChildModel, ChildMessage>
+	| FieldFoldConfig<ParentSchemaOf<ParentModel>, ParentMessage, ChildModel, ChildMessage>
 
 type FoldChildField<ChildModel, ChildMessage, R> = {
 	<ParentSchema extends Schema.Top, ParentMessage>(
@@ -86,12 +88,14 @@ function resolveFoldLens<ParentModel, ParentMessage, ChildModel, ChildMessage>(
 
 	return {
 		read: function (model: ParentModel) {
-			return Option.some((model as ParentModel & globalThis.Record<string, unknown>)[field] as ChildModel)
+			return Option.some(model[field as keyof ParentModel] as ChildModel)
 		},
 		write: function (model: ParentModel, nextChild: ChildModel) {
 			return evolve(model as ParentModel & globalThis.Record<string, unknown>, {
-				[field]: () => nextChild,
-			} as never) as ParentModel
+				[field]: function () {
+					return nextChild
+				},
+			} as unknown as Parameters<typeof evolve>[1])
 		},
 		toParentMessage: config.toParentMessage,
 	}
@@ -99,6 +103,18 @@ function resolveFoldLens<ParentModel, ParentMessage, ChildModel, ChildMessage>(
 
 function attachFold<FoldFn extends object, Policies extends object>(fold: FoldFn, policies: Policies): FoldFn & Policies {
 	return Object.assign(fold, policies)
+}
+
+function foldChildFromInform<ParentModel, ParentMessage, ChildModel, ChildMessage, Input, R>(
+	inform: Update.Fold<ChildModel, ChildMessage, Input, R>,
+	lens: FoldLens<ParentModel, ParentMessage, ChildModel, ChildMessage>
+): Update.Fold<ParentModel, ParentMessage, Input, R> {
+	return Update.foldChild({
+		update: function (childModel: ChildModel, input: Input) {
+			return inform(childModel, input)
+		},
+		...lens,
+	})
 }
 
 // NOTE: Nested Command.Interruptible.Outcome in defineMessageUnion collapses
@@ -452,10 +468,10 @@ function defineField<Name extends string, A, AI, E, EI, R>(config: FieldConfig<N
 		)
 	}
 
-	const foldChild = function (
-		config: FoldLens<any, any, Model, Message> | FieldFoldConfig<Schema.Top, any, Model, Message>
+	const foldChild = function <ParentModel, ParentMessage>(
+		config: FoldChildConfig<ParentModel, ParentMessage, Model, Message>
 	) {
-		const foldConfig: FoldLens<any, any, Model, Message> = resolveFoldLens(config)
+		const foldConfig = resolveFoldLens(config)
 		return attachFold(Update.foldChild({ update, ...foldConfig }), {
 			revalidate: Update.foldChildStep({ update: informRevalidate, ...foldConfig }),
 			revalidateOrLoad: Update.foldChildStep({ update: informRevalidateOrLoad, ...foldConfig }),
@@ -464,8 +480,8 @@ function defineField<Name extends string, A, AI, E, EI, R>(config: FieldConfig<N
 			watch: Update.foldChildStep({ update: informWatch, ...foldConfig }),
 			forget: Update.foldChildStep({ update: informForget, ...foldConfig }),
 			watchSubscription: function (
-				entry: Subscription.EntryBuilder<any, any, R>,
-				modelToIsWatching: (model: any) => boolean
+				entry: Subscription.EntryBuilder<ParentModel, ParentMessage, R>,
+				modelToIsWatching: (model: ParentModel) => boolean
 			) {
 				return watchFieldSubscription(entry, foldConfig.toParentMessage, modelToIsWatching)
 			},
@@ -652,50 +668,20 @@ function defineKeyed<
 	const init = (): Model => HashMap.empty()
 	const read = (model: Model, args: Args): Data => store.read(model, args)
 
-	const foldChild = function (
-		config: FoldLens<any, any, Model, Message> | FieldFoldConfig<Schema.Top, any, Model, Message>
+	const foldChild = function <ParentModel, ParentMessage>(
+		config: FoldChildConfig<ParentModel, ParentMessage, Model, Message>
 	) {
-		const foldConfig: FoldLens<any, any, Model, Message> = resolveFoldLens(config)
+		const foldConfig = resolveFoldLens(config)
 		return attachFold(Update.foldChild({ update, ...foldConfig }), {
-			revalidate: Update.foldChild({
-				update: function (childModel: Model, args: Args) {
-					return informRevalidate(childModel, args)
-				},
-				...foldConfig,
-			}),
-			revalidateOrLoad: Update.foldChild({
-				update: function (childModel: Model, args: Args) {
-					return informRevalidateOrLoad(childModel, args)
-				},
-				...foldConfig,
-			}),
-			loadIfMissing: Update.foldChild({
-				update: function (childModel: Model, args: Args) {
-					return informLoadIfMissing(childModel, args)
-				},
-				...foldConfig,
-			}),
-			replace: Update.foldChild({
-				update: function (childModel: Model, args: Args) {
-					return informReplace(childModel, args)
-				},
-				...foldConfig,
-			}),
-			watch: Update.foldChild({
-				update: function (childModel: Model, liveArgs: ReadonlyArray<Args>) {
-					return informWatch(childModel, liveArgs)
-				},
-				...foldConfig,
-			}),
-			forget: Update.foldChild({
-				update: function (childModel: Model, args: Args) {
-					return informForget(childModel, args)
-				},
-				...foldConfig,
-			}),
+			revalidate: foldChildFromInform(informRevalidate, foldConfig),
+			revalidateOrLoad: foldChildFromInform(informRevalidateOrLoad, foldConfig),
+			loadIfMissing: foldChildFromInform(informLoadIfMissing, foldConfig),
+			replace: foldChildFromInform(informReplace, foldConfig),
+			watch: foldChildFromInform(informWatch, foldConfig),
+			forget: foldChildFromInform(informForget, foldConfig),
 			watchSubscription: function (
-				entry: Subscription.EntryBuilder<any, any, R>,
-				modelToArgs: (model: any) => ReadonlyArray<Args>
+				entry: Subscription.EntryBuilder<ParentModel, ParentMessage, R>,
+				modelToArgs: (model: ParentModel) => ReadonlyArray<Args>
 			) {
 				return watchKeyedSubscription(entry, foldConfig.toParentMessage, modelToArgs)
 			},
