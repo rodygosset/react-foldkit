@@ -12,7 +12,7 @@ export default defineConfig({
 		asyncData: "src/asyncData.ts",
 		command: "src/command.ts",
 		message: "src/message.ts",
-		query: "src/query.ts",
+		query: "src/query/index.ts",
 		schema: "src/schema.ts",
 		store: "src/store.ts",
 		struct: "src/struct.ts",
