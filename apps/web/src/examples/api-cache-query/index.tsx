@@ -88,17 +88,17 @@ type Message = typeof Message.Type
 
 type UpdateReturn = Update.Return<Model, Message>
 
-const foldPosts = postsQuery.foldChild<Model, Message>()({
+const foldPosts = postsQuery.lift<Model, Message>()({
 	field: "posts",
 	toParentMessage: Message.GotPostsMessage,
 })
 
-const foldStats = statsQuery.foldChild<Model, Message>()({
+const foldStats = statsQuery.lift<Model, Message>()({
 	field: "stats",
 	toParentMessage: Message.GotStatsMessage,
 })
 
-const foldPostDetail = postDetailQuery.foldChild<Model, Message>()({
+const foldPostDetail = postDetailQuery.lift<Model, Message>()({
 	field: "postDetailById",
 	toParentMessage: Message.GotPostDetailMessage,
 })

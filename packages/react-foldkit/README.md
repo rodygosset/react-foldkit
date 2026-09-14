@@ -103,7 +103,7 @@ API Cache (hand-rolled AsyncData), and API Cache Query (`Query.define`).
 `define` defaults `keyFields` to every `args` key and `toKey` to a `:` join of
 those fields. Override them when Interrupt identity is a subset of `args`.
 
-`query.foldChild` returns a callable Query fold. Bind the parent Model in a
+`query.lift` returns a callable parent handle. Bind the parent Model in a
 `Got*` handler (`GotPostsMessage: foldPosts(model)`). The bound function takes
 `{ message: childMessage }`, the same fields as `query.ParentMessage`. Call
 `foldPosts(model, { message })` when you already have those fields. Policy Steps
@@ -112,12 +112,12 @@ parent case with `query.ParentMessage`
 (`GotPostsMessage: postsQuery.ParentMessage`) and pass the constructor as
 `toParentMessage` (`toParentMessage: Message.GotPostsMessage`).
 For an always-present slot, call
-`foldChild<Model, Message>()({ field: "posts", toParentMessage: Message.GotPostsMessage })`.
-Name both parent types so the fold is the full parent Message union, not only the
+`lift<Model, Message>()({ field: "posts", toParentMessage: Message.GotPostsMessage })`.
+Name both parent types so the handle is the full parent Message union, not only the
 `Got*` variant the constructor returns.
 A full `read` / `write` lens still infers `ParentModel` from `read` and takes
 Foldkit's `(childMessage) => parentMessage` mapper.
-`foldPosts.watchSubscription(entry, modelToArgs)` reuses that fold's
+`foldPosts.watchSubscription(entry, modelToArgs)` reuses that lift's
 `toParentMessage`.
 
 `informWatch` / `RequestedWatch` is the full live key set. The Message payload is
