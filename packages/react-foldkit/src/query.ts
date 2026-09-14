@@ -42,7 +42,7 @@ export type ParentMessageValue<ChildMessage> = {
 
 type GotWrapper<ChildMessage, ParentMessage> = (fields: ParentMessageValue<ChildMessage>) => ParentMessage
 
-type FoldGot<ParentModel, ParentMessage, ChildMessage, R> = {
+type Lift<ParentModel, ParentMessage, ChildMessage, R> = {
 	(
 		model: ParentModel,
 		fields: ParentMessageValue<ChildMessage>
@@ -62,55 +62,55 @@ type MissingParentModelFieldConfig = {
 	readonly toParentMessage: never
 }
 
-type FoldChildConfig<ParentModel, ParentMessage, ChildModel, ChildMessage> =
+type LiftConfig<ParentModel, ParentMessage, ChildModel, ChildMessage> =
 	| FoldLens<ParentModel, ParentMessage, ChildModel, ChildMessage>
 	| FieldFoldConfig<ParentModel, ParentMessage, ChildModel, ChildMessage>
 
-type FoldChildField<ChildModel, ChildMessage, R> = {
+type LiftField<ChildModel, ChildMessage, R> = {
 	<ParentModel, ParentMessage>(
 		config: FoldLens<ParentModel, ParentMessage, ChildModel, ChildMessage>
-	): Fold.Field<ParentModel, ParentMessage, ChildMessage, R>
+	): Lifted.Field<ParentModel, ParentMessage, ChildMessage, R>
 	<ParentModel = never, ParentMessage = never>(): [ParentMessage] extends [never]
 		? <InferredParentMessage>(
 				config: [ParentModel] extends [never]
 					? MissingParentModelFieldConfig
 					: FieldFoldConfig<ParentModel, InferredParentMessage, ChildModel, ChildMessage>
-			) => Fold.Field<ParentModel, InferredParentMessage, ChildMessage, R>
+			) => Lifted.Field<ParentModel, InferredParentMessage, ChildMessage, R>
 		: (
 				config: [ParentModel] extends [never]
 					? MissingParentModelFieldConfig
 					: FieldFoldConfig<ParentModel, ParentMessage, ChildModel, ChildMessage>
-			) => Fold.Field<ParentModel, ParentMessage, ChildMessage, R>
+			) => Lifted.Field<ParentModel, ParentMessage, ChildMessage, R>
 }
 
-type FoldChildKeyed<ChildModel, ChildMessage, Args, R> = {
+type LiftKeyed<ChildModel, ChildMessage, Args, R> = {
 	<ParentModel, ParentMessage>(
 		config: FoldLens<ParentModel, ParentMessage, ChildModel, ChildMessage>
-	): Fold.Keyed<ParentModel, ParentMessage, ChildMessage, Args, R>
+	): Lifted.Keyed<ParentModel, ParentMessage, ChildMessage, Args, R>
 	<ParentModel = never, ParentMessage = never>(): [ParentMessage] extends [never]
 		? <InferredParentMessage>(
 				config: [ParentModel] extends [never]
 					? MissingParentModelFieldConfig
 					: FieldFoldConfig<ParentModel, InferredParentMessage, ChildModel, ChildMessage>
-			) => Fold.Keyed<ParentModel, InferredParentMessage, ChildMessage, Args, R>
+			) => Lifted.Keyed<ParentModel, InferredParentMessage, ChildMessage, Args, R>
 		: (
 				config: [ParentModel] extends [never]
 					? MissingParentModelFieldConfig
 					: FieldFoldConfig<ParentModel, ParentMessage, ChildModel, ChildMessage>
-			) => Fold.Keyed<ParentModel, ParentMessage, ChildMessage, Args, R>
+			) => Lifted.Keyed<ParentModel, ParentMessage, ChildMessage, Args, R>
 }
 
 function isFieldFoldConfig<ParentModel, ParentMessage, ChildModel, ChildMessage>(
-	config: FoldChildConfig<ParentModel, ParentMessage, ChildModel, ChildMessage>
+	config: LiftConfig<ParentModel, ParentMessage, ChildModel, ChildMessage>
 ): config is Extract<
-	FoldChildConfig<ParentModel, ParentMessage, ChildModel, ChildMessage>,
+	LiftConfig<ParentModel, ParentMessage, ChildModel, ChildMessage>,
 	{ readonly field: string }
 > {
 	return Predicate.hasProperty(config, "field")
 }
 
 function resolveFoldLens<ParentModel, ParentMessage, ChildModel, ChildMessage>(
-	config: FoldChildConfig<ParentModel, ParentMessage, ChildModel, ChildMessage>
+	config: LiftConfig<ParentModel, ParentMessage, ChildModel, ChildMessage>
 ): FoldLens<ParentModel, ParentMessage, ChildModel, ChildMessage> {
 	if (!isFieldFoldConfig(config)) return config
 
@@ -137,9 +137,9 @@ const attachFold = <FoldFn extends object, Policies extends object>(
 	policies: Policies
 ): FoldFn & Policies => Object.assign(fold, policies)
 
-function foldGot<ParentModel, ParentMessage, ChildMessage, R>(
+function asLift<ParentModel, ParentMessage, ChildMessage, R>(
 	fold: Update.Fold<ParentModel, ParentMessage, ChildMessage, R>
-): FoldGot<ParentModel, ParentMessage, ChildMessage, R> {
+): Lift<ParentModel, ParentMessage, ChildMessage, R> {
 	function foldCall(
 		model: ParentModel,
 		fields: ParentMessageValue<ChildMessage>
@@ -283,8 +283,8 @@ type KeyedKeyArgs<
 	KeyField extends keyof Schema.Schema.Type<Schema.Struct<Fields>> & string,
 > = Pick<Schema.Schema.Type<Schema.Struct<Fields>>, KeyField>
 
-export namespace Fold {
-	export type Field<ParentModel, ParentMessage, ChildMessage, R = never> = FoldGot<
+export namespace Lifted {
+	export type Field<ParentModel, ParentMessage, ChildMessage, R = never> = Lift<
 		ParentModel,
 		ParentMessage,
 		ChildMessage,
@@ -303,7 +303,7 @@ export namespace Fold {
 			) => Subscription.EntryWithoutKeepAlive<ParentModel, ParentMessage, { readonly isWatching: boolean }, R>
 		}>
 
-	export type Keyed<ParentModel, ParentMessage, ChildMessage, Args, R = never> = FoldGot<
+	export type Keyed<ParentModel, ParentMessage, ChildMessage, Args, R = never> = Lift<
 		ParentModel,
 		ParentMessage,
 		ChildMessage,
@@ -348,7 +348,7 @@ export interface Field<Name extends string, Model extends Schema.Top, Message ex
 	readonly informReplace: (model: Model["Type"]) => Update.Return<Model["Type"], Message["Type"], R>
 	readonly informWatch: (model: Model["Type"]) => Update.Return<Model["Type"], Message["Type"], R>
 	readonly informForget: (model: Model["Type"]) => Update.Return<Model["Type"], Message["Type"], R>
-	readonly foldChild: FoldChildField<Model["Type"], Message["Type"], R>
+	readonly lift: LiftField<Model["Type"], Message["Type"], R>
 	readonly watchSubscription: <ParentModel, ParentMessage>(
 		entry: Subscription.EntryBuilder<ParentModel, ParentMessage, R>,
 		config: {
@@ -394,7 +394,7 @@ export interface Keyed<
 	readonly informReplace: Update.Fold<Model["Type"], Message["Type"], KeyedArgs<Fields>, R>
 	readonly informWatch: Update.Fold<Model["Type"], Message["Type"], ReadonlyArray<KeyedArgs<Fields>>, R>
 	readonly informForget: Update.Fold<Model["Type"], Message["Type"], KeyedArgs<Fields>, R>
-	readonly foldChild: FoldChildKeyed<Model["Type"], Message["Type"], KeyedArgs<Fields>, R>
+	readonly lift: LiftKeyed<Model["Type"], Message["Type"], KeyedArgs<Fields>, R>
 	readonly watchSubscription: <ParentModel, ParentMessage>(
 		entry: Subscription.EntryBuilder<ParentModel, ParentMessage, R>,
 		config: {
@@ -510,10 +510,10 @@ function defineField<Name extends string, A, AI, E, EI, R>(config: FieldConfig<N
 			}
 		)
 
-	const foldFromLens = function <ParentModel, ParentMessage>(
+	const liftFromLens = function <ParentModel, ParentMessage>(
 		foldConfig: FoldLens<ParentModel, ParentMessage, Model, Message>
 	) {
-		return attachFold(foldGot(Update.foldChild({ update, ...foldConfig })), {
+		return attachFold(asLift(Update.foldChild({ update, ...foldConfig })), {
 			revalidate: Update.foldChildStep({ update: informRevalidate, ...foldConfig }),
 			revalidateOrLoad: Update.foldChildStep({ update: informRevalidateOrLoad, ...foldConfig }),
 			loadIfMissing: Update.foldChildStep({ update: informLoadIfMissing, ...foldConfig }),
@@ -527,16 +527,16 @@ function defineField<Name extends string, A, AI, E, EI, R>(config: FieldConfig<N
 		})
 	}
 
-	const foldChild = function <ParentModel, ParentMessage>(
-		config?: FoldChildConfig<ParentModel, ParentMessage, Model, Message>
+	const lift = function <ParentModel, ParentMessage>(
+		config?: LiftConfig<ParentModel, ParentMessage, Model, Message>
 	) {
 		if (arguments.length === 0) {
 			return function (fieldConfig: FieldFoldConfig<ParentModel, ParentMessage, Model, Message>) {
-				return foldFromLens(resolveFoldLens(fieldConfig))
+				return liftFromLens(resolveFoldLens(fieldConfig))
 			}
 		}
-		return foldFromLens(resolveFoldLens(config as FoldChildConfig<ParentModel, ParentMessage, Model, Message>))
-	} as FoldChildField<Model, Message, R>
+		return liftFromLens(resolveFoldLens(config as LiftConfig<ParentModel, ParentMessage, Model, Message>))
+	} as LiftField<Model, Message, R>
 
 	const watchSubscription = <ParentModel, ParentMessage>(
 		entry: Subscription.EntryBuilder<ParentModel, ParentMessage, R>,
@@ -561,7 +561,7 @@ function defineField<Name extends string, A, AI, E, EI, R>(config: FieldConfig<N
 		informReplace,
 		informWatch,
 		informForget,
-		foldChild,
+		lift,
 		watchSubscription,
 		run,
 	} satisfies Field<Name, typeof Data.schema, typeof Message, R>
@@ -715,10 +715,10 @@ function defineKeyed<
 	const init = (): Model => HashMap.empty()
 	const read = (model: Model, args: Args): Data => store.read(model, args)
 
-	const foldFromLens = function <ParentModel, ParentMessage>(
+	const liftFromLens = function <ParentModel, ParentMessage>(
 		foldConfig: FoldLens<ParentModel, ParentMessage, Model, Message>
 	) {
-		return attachFold(foldGot(Update.foldChild({ update, ...foldConfig })), {
+		return attachFold(asLift(Update.foldChild({ update, ...foldConfig })), {
 			revalidate: foldChildFromInform(informRevalidate, foldConfig),
 			revalidateOrLoad: foldChildFromInform(informRevalidateOrLoad, foldConfig),
 			loadIfMissing: foldChildFromInform(informLoadIfMissing, foldConfig),
@@ -732,16 +732,16 @@ function defineKeyed<
 		})
 	}
 
-	const foldChild = function <ParentModel, ParentMessage>(
-		config?: FoldChildConfig<ParentModel, ParentMessage, Model, Message>
+	const lift = function <ParentModel, ParentMessage>(
+		config?: LiftConfig<ParentModel, ParentMessage, Model, Message>
 	) {
 		if (arguments.length === 0) {
 			return function (fieldConfig: FieldFoldConfig<ParentModel, ParentMessage, Model, Message>) {
-				return foldFromLens(resolveFoldLens(fieldConfig))
+				return liftFromLens(resolveFoldLens(fieldConfig))
 			}
 		}
-		return foldFromLens(resolveFoldLens(config as FoldChildConfig<ParentModel, ParentMessage, Model, Message>))
-	} as FoldChildKeyed<Model, Message, Args, R>
+		return liftFromLens(resolveFoldLens(config as LiftConfig<ParentModel, ParentMessage, Model, Message>))
+	} as LiftKeyed<Model, Message, Args, R>
 
 	const watchKeyedSubscription = <ParentModel, ParentMessage>(
 		entry: Subscription.EntryBuilder<ParentModel, ParentMessage, R>,
@@ -785,7 +785,7 @@ function defineKeyed<
 		informReplace,
 		informWatch,
 		informForget,
-		foldChild,
+		lift,
 		watchSubscription,
 		run,
 	} satisfies Keyed<Name, typeof Model, typeof Message, Fields, KeyField, Data, R>
