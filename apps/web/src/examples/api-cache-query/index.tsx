@@ -46,8 +46,6 @@ const statsQuery = Query.define({
 const postDetailQuery = Query.define({
 	name: "PostDetail",
 	args: { postId: Schema.String },
-	keyFields: ["postId"],
-	toKey: ({ postId }) => postId,
 	data: FetchedPostDetail,
 	error: Schema.String,
 	execute: ({ postId }) =>
@@ -101,22 +99,22 @@ const {
 
 type UpdateReturn = Update.Return<Model, Message>
 
-const postsField = postsQuery.foldChild({
-	read: (model: Model) => Option.some(model.posts),
-	write: (model, nextPosts) => evo(model, { posts: () => nextPosts }),
-	toParentMessage: (childMessage) => Message.GotPostsMessage({ message: childMessage }),
+const foldPosts = postsQuery.foldChild({
+	Model,
+	field: "posts",
+	toParentMessage: (childMessage): Message => Message.GotPostsMessage({ message: childMessage }),
 })
 
-const statsField = statsQuery.foldChild({
-	read: (model: Model) => Option.some(model.stats),
-	write: (model, nextStats) => evo(model, { stats: () => nextStats }),
-	toParentMessage: (childMessage) => Message.GotStatsMessage({ message: childMessage }),
+const foldStats = statsQuery.foldChild({
+	Model,
+	field: "stats",
+	toParentMessage: (childMessage): Message => Message.GotStatsMessage({ message: childMessage }),
 })
 
-const postDetailField = postDetailQuery.foldChild({
-	read: (model: Model) => Option.some(model.postDetailById),
-	write: (model, nextPostDetailById) => evo(model, { postDetailById: () => nextPostDetailById }),
-	toParentMessage: (childMessage) => Message.GotPostDetailMessage({ message: childMessage }),
+const foldPostDetail = postDetailQuery.foldChild({
+	Model,
+	field: "postDetailById",
+	toParentMessage: (childMessage): Message => Message.GotPostDetailMessage({ message: childMessage }),
 })
 
 function activateTab(model: Model, tab: Tab): UpdateReturn {
@@ -124,17 +122,17 @@ function activateTab(model: Model, tab: Tab): UpdateReturn {
 
 	return Match.value(tab).pipe(
 		Match.withReturnType<UpdateReturn>(),
-		Match.when("Posts", () => postsField.loadIfMissing(modelWithActiveTab)),
-		Match.when("Stats", () => statsField.loadIfMissing(modelWithActiveTab)),
+		Match.when("Posts", () => foldPosts.loadIfMissing(modelWithActiveTab)),
+		Match.when("Stats", () => foldStats.loadIfMissing(modelWithActiveTab)),
 		Match.exhaustive
 	)
 }
 
 const update = (model: Model, message: Message): UpdateReturn =>
 	Message.match<UpdateReturn>(message, {
-		GotPostsMessage: ({ message: postsMessage }) => postsField.fold(model, postsMessage),
-		GotStatsMessage: ({ message: statsMessage }) => statsField.fold(model, statsMessage),
-		GotPostDetailMessage: ({ message: postDetailMessage }) => postDetailField.fold(model, postDetailMessage),
+		GotPostsMessage: ({ message: postsMessage }) => foldPosts(model, postsMessage),
+		GotStatsMessage: ({ message: statsMessage }) => foldStats(model, statsMessage),
+		GotPostDetailMessage: ({ message: postDetailMessage }) => foldPostDetail(model, postDetailMessage),
 		ClickedTab: ({ tab }) => activateTab(model, tab),
 		ClickedPost: ({ postId }) =>
 			Update.identity(
@@ -143,16 +141,16 @@ const update = (model: Model, message: Message): UpdateReturn =>
 				})
 			),
 		ClickedBackToPosts: () => Update.identity(evo(model, { maybeSelectedPostId: () => Option.none() })),
-		ClickedInvalidatePosts: () => postsField.revalidateOrLoad(model),
-		ClickedRetryPosts: () => postsField.revalidateOrLoad(model),
-		ClickedRetryPostDetail: ({ postId }) => postDetailField.revalidateOrLoad(model, { postId }),
-		ClickedRefreshStats: () => statsField.revalidateOrLoad(model),
-		ClickedRetryStats: () => statsField.revalidateOrLoad(model),
-		TickedRevalidateStats: () => statsField.revalidate(model),
+		ClickedInvalidatePosts: () => foldPosts.revalidateOrLoad(model),
+		ClickedRetryPosts: () => foldPosts.revalidateOrLoad(model),
+		ClickedRetryPostDetail: ({ postId }) => foldPostDetail.revalidateOrLoad(model, { postId }),
+		ClickedRefreshStats: () => foldStats.revalidateOrLoad(model),
+		ClickedRetryStats: () => foldStats.revalidateOrLoad(model),
+		TickedRevalidateStats: () => foldStats.revalidate(model),
 	})
 
 const init = (): UpdateReturn =>
-	postsField.revalidateOrLoad({
+	foldPosts.revalidateOrLoad({
 		activeTab: "Posts",
 		posts: postsQuery.init(),
 		postDetailById: postDetailQuery.init(),
@@ -176,14 +174,12 @@ const subscriptions = Subscription.make<Model, Message>()((entry) => ({
 				),
 		}
 	),
-	watchPostDetail: postDetailQuery.watchSubscription(entry, {
-		toParentMessage: (message) => Message.GotPostDetailMessage({ message }),
-		modelToArgs: (model) =>
-			Option.match(model.maybeSelectedPostId, {
-				onNone: () => [],
-				onSome: (postId) => [{ postId }],
-			}),
-	}),
+	watchPostDetail: foldPostDetail.watchSubscription(entry, (model) =>
+		Option.match(model.maybeSelectedPostId, {
+			onNone: () => [],
+			onSome: (postId) => [{ postId }],
+		})
+	),
 }))
 
 const { Provider, useModel, useDispatch } = ReactFoldkit.make({
