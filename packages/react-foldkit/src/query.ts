@@ -36,9 +36,21 @@ export type ParentMessage<Message extends Schema.Top> = {
 	readonly message: Message
 }
 
-type GotWrapper<ChildMessage, ParentMessage> = (fields: {
+export type ParentMessageValue<ChildMessage> = {
 	readonly message: ChildMessage
-}) => ParentMessage
+}
+
+type GotWrapper<ChildMessage, ParentMessage> = (fields: ParentMessageValue<ChildMessage>) => ParentMessage
+
+type FoldGot<ParentModel, ParentMessage, ChildMessage, R> = {
+	(
+		model: ParentModel,
+		fields: ParentMessageValue<ChildMessage>
+	): Update.Return<ParentModel, ParentMessage, R>
+	(
+		model: ParentModel
+	): (fields: ParentMessageValue<ChildMessage>) => Update.Return<ParentModel, ParentMessage, R>
+}
 
 type FieldFoldConfig<ParentModel, ParentMessage, ChildModel, ChildMessage> = Readonly<{
 	field: ChildField<ParentModel, ChildModel>
@@ -124,6 +136,29 @@ const attachFold = <FoldFn extends object, Policies extends object>(
 	fold: FoldFn,
 	policies: Policies
 ): FoldFn & Policies => Object.assign(fold, policies)
+
+function foldGot<ParentModel, ParentMessage, ChildMessage, R>(
+	fold: Update.Fold<ParentModel, ParentMessage, ChildMessage, R>
+): FoldGot<ParentModel, ParentMessage, ChildMessage, R> {
+	function foldCall(
+		model: ParentModel,
+		fields: ParentMessageValue<ChildMessage>
+	): Update.Return<ParentModel, ParentMessage, R>
+	function foldCall(
+		model: ParentModel
+	): (fields: ParentMessageValue<ChildMessage>) => Update.Return<ParentModel, ParentMessage, R>
+	function foldCall(model: ParentModel, fields?: ParentMessageValue<ChildMessage>) {
+		if (fields !== undefined) {
+			return fold(model, fields.message)
+		}
+
+		return function (nextFields: ParentMessageValue<ChildMessage>) {
+			return fold(model, nextFields.message)
+		}
+	}
+
+	return foldCall
+}
 
 const foldChildFromInform = <ParentModel, ParentMessage, ChildModel, ChildMessage, Input, R>(
 	inform: Update.Fold<ChildModel, ChildMessage, Input, R>,
@@ -249,7 +284,7 @@ type KeyedKeyArgs<
 > = Pick<Schema.Schema.Type<Schema.Struct<Fields>>, KeyField>
 
 export namespace Fold {
-	export type Field<ParentModel, ParentMessage, ChildMessage, R = never> = Update.Fold<
+	export type Field<ParentModel, ParentMessage, ChildMessage, R = never> = FoldGot<
 		ParentModel,
 		ParentMessage,
 		ChildMessage,
@@ -268,7 +303,7 @@ export namespace Fold {
 			) => Subscription.EntryWithoutKeepAlive<ParentModel, ParentMessage, { readonly isWatching: boolean }, R>
 		}>
 
-	export type Keyed<ParentModel, ParentMessage, ChildMessage, Args, R = never> = Update.Fold<
+	export type Keyed<ParentModel, ParentMessage, ChildMessage, Args, R = never> = FoldGot<
 		ParentModel,
 		ParentMessage,
 		ChildMessage,
@@ -478,7 +513,7 @@ function defineField<Name extends string, A, AI, E, EI, R>(config: FieldConfig<N
 	const foldFromLens = function <ParentModel, ParentMessage>(
 		foldConfig: FoldLens<ParentModel, ParentMessage, Model, Message>
 	) {
-		return attachFold(Update.foldChild({ update, ...foldConfig }), {
+		return attachFold(foldGot(Update.foldChild({ update, ...foldConfig })), {
 			revalidate: Update.foldChildStep({ update: informRevalidate, ...foldConfig }),
 			revalidateOrLoad: Update.foldChildStep({ update: informRevalidateOrLoad, ...foldConfig }),
 			loadIfMissing: Update.foldChildStep({ update: informLoadIfMissing, ...foldConfig }),
@@ -683,7 +718,7 @@ function defineKeyed<
 	const foldFromLens = function <ParentModel, ParentMessage>(
 		foldConfig: FoldLens<ParentModel, ParentMessage, Model, Message>
 	) {
-		return attachFold(Update.foldChild({ update, ...foldConfig }), {
+		return attachFold(foldGot(Update.foldChild({ update, ...foldConfig })), {
 			revalidate: foldChildFromInform(informRevalidate, foldConfig),
 			revalidateOrLoad: foldChildFromInform(informRevalidateOrLoad, foldConfig),
 			loadIfMissing: foldChildFromInform(informLoadIfMissing, foldConfig),
