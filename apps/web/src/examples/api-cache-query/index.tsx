@@ -1,7 +1,7 @@
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import { Separator } from "@workspace/ui/components/separator"
-import { Array, Clock, Duration, Effect, Match, Option, Schema, Stream } from "effect"
+import { Array, Clock, Duration, Effect, Match, Option, pipe, Schema, Stream } from "effect"
 import { ReactFoldkit } from "react-foldkit"
 import * as AsyncData from "react-foldkit/asyncData"
 import { defineMessageUnion } from "react-foldkit/message"
@@ -10,7 +10,7 @@ import { evo } from "react-foldkit/struct"
 import * as Subscription from "react-foldkit/subscription"
 import * as Update from "react-foldkit/update"
 import { ExampleShell } from "../../components/example-shell"
-import { Post, PostDetail, Stats, fetchPostDetail, fetchPosts, fetchStats } from "../api-cache/data"
+import { fetchPostDetail, fetchPosts, fetchStats, Post, PostDetail, Stats } from "../api-cache/data"
 
 const STATS_REFETCH_INTERVAL = Duration.seconds(5)
 
@@ -85,17 +85,6 @@ const Message = defineMessageUnion({
 	TickedRevalidateStats: {},
 })
 type Message = typeof Message.Type
-
-const {
-	ClickedTab,
-	ClickedPost,
-	ClickedBackToPosts,
-	ClickedInvalidatePosts,
-	ClickedRetryPosts,
-	ClickedRetryPostDetail,
-	ClickedRefreshStats,
-	ClickedRetryStats,
-} = Message
 
 type UpdateReturn = Update.Return<Model, Message>
 
@@ -271,7 +260,7 @@ function PostsListView() {
 					size="sm"
 					disabled={isPending}
 					onClick={() => {
-						dispatch(ClickedInvalidatePosts())
+						dispatch(Message.ClickedInvalidatePosts())
 					}}
 				>
 					{AsyncData.isRefreshing(model.posts) ? "Refreshing…" : "Invalidate"}
@@ -290,7 +279,7 @@ function PostsListView() {
 					<ErrorPanel
 						error={error}
 						onRetry={() => {
-							dispatch(ClickedRetryPosts())
+							dispatch(Message.ClickedRetryPosts())
 						}}
 					/>
 				),
@@ -302,7 +291,7 @@ function PostsListView() {
 								<ErrorPanel
 									error={error}
 									onRetry={() => {
-										dispatch(ClickedRetryPosts())
+										dispatch(Message.ClickedRetryPosts())
 									}}
 								/>
 							),
@@ -311,7 +300,7 @@ function PostsListView() {
 							posts={posts}
 							postDetailById={model.postDetailById}
 							onSelect={(postId) => {
-								dispatch(ClickedPost({ postId }))
+								dispatch(Message.ClickedPost({ postId }))
 							}}
 						/>
 					</div>
@@ -333,7 +322,7 @@ function PostDetailView(props: { postId: string }) {
 				size="sm"
 				className="self-start"
 				onClick={() => {
-					dispatch(ClickedBackToPosts())
+					dispatch(Message.ClickedBackToPosts())
 				}}
 			>
 				Back to posts
@@ -345,7 +334,7 @@ function PostDetailView(props: { postId: string }) {
 					<ErrorPanel
 						error={error}
 						onRetry={() => {
-							dispatch(ClickedRetryPostDetail({ postId: props.postId }))
+							dispatch(Message.ClickedRetryPostDetail({ postId: props.postId }))
 						}}
 					/>
 				),
@@ -357,7 +346,7 @@ function PostDetailView(props: { postId: string }) {
 								<ErrorPanel
 									error={error}
 									onRetry={() => {
-										dispatch(ClickedRetryPostDetail({ postId: props.postId }))
+										dispatch(Message.ClickedRetryPostDetail({ postId: props.postId }))
 									}}
 								/>
 							),
@@ -373,14 +362,14 @@ function PostDetailView(props: { postId: string }) {
 	)
 }
 
-const PostsTabView = () => {
-	const maybeSelectedPostId = useModel((model) => model.maybeSelectedPostId)
-
-	return Option.match(maybeSelectedPostId, {
-		onNone: () => <PostsListView />,
-		onSome: (postId) => <PostDetailView postId={postId} />,
-	})
-}
+const PostsTabView = () =>
+	pipe(
+		useModel((model) => model.maybeSelectedPostId),
+		Option.match({
+			onNone: () => <PostsListView />,
+			onSome: (postId) => <PostDetailView postId={postId} />,
+		})
+	)
 
 const StatsCards = (props: { stats: Stats; fetchedAt: number; isRefreshing: boolean }) => (
 	<div className="flex flex-col gap-3">
@@ -419,7 +408,7 @@ function StatsTabView() {
 					size="sm"
 					disabled={isPending}
 					onClick={() => {
-						dispatch(ClickedRefreshStats())
+						dispatch(Message.ClickedRefreshStats())
 					}}
 				>
 					{isPending ? "Refreshing…" : "Refresh"}
@@ -436,7 +425,7 @@ function StatsTabView() {
 					<ErrorPanel
 						error={error}
 						onRetry={() => {
-							dispatch(ClickedRetryStats())
+							dispatch(Message.ClickedRetryStats())
 						}}
 					/>
 				),
@@ -448,7 +437,7 @@ function StatsTabView() {
 								<ErrorPanel
 									error={error}
 									onRetry={() => {
-										dispatch(ClickedRetryStats())
+										dispatch(Message.ClickedRetryStats())
 									}}
 								/>
 							),
@@ -493,7 +482,7 @@ function TabList() {
 						size="sm"
 						aria-current={isActive ? "page" : undefined}
 						onClick={() => {
-							dispatch(ClickedTab({ tab }))
+							dispatch(Message.ClickedTab({ tab }))
 						}}
 					>
 						{tab}

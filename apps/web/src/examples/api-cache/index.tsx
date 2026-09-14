@@ -72,20 +72,6 @@ const Message = defineMessageUnion({
 })
 type Message = typeof Message.Type
 
-const {
-	ClickedTab,
-	ClickedPost,
-	ClickedBackToPosts,
-	ClickedInvalidatePosts,
-	ClickedRetryPosts,
-	ClickedRetryPostDetail,
-	ClickedRefreshStats,
-	ClickedRetryStats,
-	SettledFetchPosts,
-	SettledFetchPostDetail,
-	SettledFetchStats,
-} = Message
-
 // UPDATE
 
 type UpdateReturn = Update.Return<Model, Message>
@@ -194,7 +180,7 @@ const FetchPosts = Command.define("FetchPosts", {
 		}),
 		Effect.result,
 		Effect.map(function (result) {
-			return SettledFetchPosts({ result })
+			return Message.SettledFetchPosts({ result })
 		})
 	),
 })
@@ -211,7 +197,7 @@ const FetchPostDetail = Command.define("FetchPostDetail", {
 			}),
 			Effect.result,
 			Effect.map(function (result) {
-				return SettledFetchPostDetail({ postId, result })
+				return Message.SettledFetchPostDetail({ postId, result })
 			})
 		),
 })
@@ -226,7 +212,7 @@ const FetchStats = Command.define("FetchStats", {
 		}),
 		Effect.result,
 		Effect.map(function (result) {
-			return SettledFetchStats({ result })
+			return Message.SettledFetchStats({ result })
 		})
 	),
 })
@@ -364,7 +350,7 @@ function PostsListView() {
 					size="sm"
 					disabled={isPending}
 					onClick={function () {
-						dispatch(ClickedInvalidatePosts())
+						dispatch(Message.ClickedInvalidatePosts())
 					}}
 				>
 					{AsyncData.isRefreshing(model.posts) ? "Refreshing…" : "Invalidate"}
@@ -381,7 +367,7 @@ function PostsListView() {
 					<ErrorPanel
 						error={error}
 						onRetry={function () {
-							dispatch(ClickedRetryPosts())
+							dispatch(Message.ClickedRetryPosts())
 						}}
 					/>
 				),
@@ -393,7 +379,7 @@ function PostsListView() {
 								<ErrorPanel
 									error={error}
 									onRetry={function () {
-										dispatch(ClickedRetryPosts())
+										dispatch(Message.ClickedRetryPosts())
 									}}
 								/>
 							),
@@ -402,7 +388,7 @@ function PostsListView() {
 							posts={posts}
 							postDetailById={model.postDetailById}
 							onSelect={function (postId) {
-								dispatch(ClickedPost({ postId }))
+								dispatch(Message.ClickedPost({ postId }))
 							}}
 						/>
 					</div>
@@ -426,7 +412,7 @@ function PostDetailView(props: { postId: string }) {
 				size="sm"
 				className="self-start"
 				onClick={function () {
-					dispatch(ClickedBackToPosts())
+					dispatch(Message.ClickedBackToPosts())
 				}}
 			>
 				Back to posts
@@ -438,7 +424,7 @@ function PostDetailView(props: { postId: string }) {
 					<ErrorPanel
 						error={error}
 						onRetry={function () {
-							dispatch(ClickedRetryPostDetail({ postId: props.postId }))
+							dispatch(Message.ClickedRetryPostDetail({ postId: props.postId }))
 						}}
 					/>
 				),
@@ -450,7 +436,7 @@ function PostDetailView(props: { postId: string }) {
 								<ErrorPanel
 									error={error}
 									onRetry={function () {
-										dispatch(ClickedRetryPostDetail({ postId: props.postId }))
+										dispatch(Message.ClickedRetryPostDetail({ postId: props.postId }))
 									}}
 								/>
 							),
@@ -514,7 +500,7 @@ function StatsTabView() {
 					size="sm"
 					disabled={isPending}
 					onClick={function () {
-						dispatch(ClickedRefreshStats())
+						dispatch(Message.ClickedRefreshStats())
 					}}
 				>
 					{isPending ? "Refreshing…" : "Refresh"}
@@ -531,7 +517,7 @@ function StatsTabView() {
 					<ErrorPanel
 						error={error}
 						onRetry={function () {
-							dispatch(ClickedRetryStats())
+							dispatch(Message.ClickedRetryStats())
 						}}
 					/>
 				),
@@ -543,7 +529,7 @@ function StatsTabView() {
 								<ErrorPanel
 									error={error}
 									onRetry={function () {
-										dispatch(ClickedRetryStats())
+										dispatch(Message.ClickedRetryStats())
 									}}
 								/>
 							),
@@ -588,7 +574,7 @@ function TabList() {
 						size="sm"
 						aria-current={isActive ? "page" : undefined}
 						onClick={function () {
-							dispatch(ClickedTab({ tab }))
+							dispatch(Message.ClickedTab({ tab }))
 						}}
 					>
 						{tab}
