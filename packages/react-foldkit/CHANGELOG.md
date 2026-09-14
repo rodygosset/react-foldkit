@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- `Query.foldChild` returns a callable `Update.Fold` with policy methods and `watchSubscription` on the same object. Pass the parent `Model` schema and `field` for an always-present slot. Keyed `define` defaults `keyFields` to every `args` key and `toKey` to a `:` join of those fields.
+- `Query.foldChild` returns a callable `Update.Fold` with policy methods and `watchSubscription` on the same object. For an always-present slot, call `foldChild<Model>()({ field, toParentMessage })`. A `read` / `write` lens still infers the parent Model. Keyed `define` defaults `keyFields` to every `args` key and `toKey` to a `:` join of those fields.
 - Add `Query.run` (Field: settled `Effect`; Keyed: `run(args) => Effect`). Remove `Query.ensure` and `foldChild.ensure`.
 - `ReactFoldkit.make` takes a flat `Store.Config` plus `Model: Schema.Codec`. Add `Seed` for pre-activate Model writes (`Schema.toEquivalence` skips equivalent Models). `Provider` is init-only (remove `store` / `fromLive`). `layer` is `NoInfer`'d from `update`, so `Layer.empty` is not accepted when Commands require services.
 - Keep `Query.informWatch` / `informForget` and `Query.watchSubscription`. Keyed slots store `{ args, data }` so watch-drop Interrupts pending fetches. Late `SettledFetch` after forget is a no-op.
