@@ -319,8 +319,10 @@ describe("Query.foldChild field", () => {
 
 	const update = (model: Model, message: Message) =>
 		Message.match<Update.Return<Model, Message>>(message, {
-			GotNotesMessage: ({ message }) => foldNotes(model, message),
-			ClickedLoad: () => foldNotes.revalidateOrLoad(model),
+			GotNotesMessage: foldNotes(model),
+			ClickedLoad: function () {
+				return foldNotes.revalidateOrLoad(model)
+			},
 		})
 
 	it.effect("settles an init load through the parent Got* wrapper", () =>
@@ -342,7 +344,7 @@ describe("Query.foldChild field", () => {
 	it("fold applies SettledFetch through the parent wrapper", () => {
 		const folded = foldNotes(
 			{ notes: AsyncData.Loading() },
-			notes.Message.SettledFetch({ result: Result.succeed(hello) })
+			{ message: notes.Message.SettledFetch({ result: Result.succeed(hello) }) }
 		)
 		expect(folded.model.notes).toEqual(AsyncData.Success({ data: hello }))
 	})
@@ -416,17 +418,19 @@ describe("Query.foldChild field lens", () => {
 		expect(fromField.commands?.map(commandShape)).toEqual(fromLens.commands?.map(commandShape))
 	})
 
-	it("the fold is callable data-first and data-last", () => {
+	it("the fold binds Model first and takes ParentMessageValue", () => {
 		const foldFromField = notes.foldChild<Model>()({
 			field: "notes",
 			toParentMessage: Message.GotNotesMessage,
 		})
 		const parent = { notes: AsyncData.Loading() }
-		const message = notes.Message.SettledFetch({ result: Result.succeed(hello) })
-		const dataFirst = foldFromField(parent, message)
-		const dataLast = foldFromField(message)(parent)
+		const fields = {
+			message: notes.Message.SettledFetch({ result: Result.succeed(hello) }),
+		}
+		const dataFirst = foldFromField(parent, fields)
+		const viaCurry = foldFromField(parent)(fields)
 		expect(dataFirst.model.notes).toEqual(AsyncData.Success({ data: hello }))
-		expect(Equal.equals(dataFirst.model.notes, dataLast.model.notes)).toBe(true)
+		expect(Equal.equals(dataFirst.model.notes, viaCurry.model.notes)).toBe(true)
 	})
 })
 
@@ -579,7 +583,7 @@ describe("Query watch subscription and run", () => {
 
 			const update = (model: ParentModel, message: ParentMessage) =>
 				ParentMessage.match<Update.Return<ParentModel, ParentMessage>>(message, {
-					GotNoteMessage: ({ message: noteMessage }) => foldNotes(model, noteMessage),
+					GotNoteMessage: foldNotes(model),
 					SetWatchedNoteIds: ({ noteIds }) => ({
 						model: evo(model, { watchedNoteIds: () => noteIds }),
 					}),
@@ -729,7 +733,12 @@ describe("Query.Field and Query.Keyed types", () => {
 		expectTypeOf(foldNotes).toMatchTypeOf<
 			Query.Fold.Field<ParentModel, ParentMessage, typeof notes.Message.Type>
 		>()
-		expectTypeOf(foldNotes).toBeCallableWith({ notes: notes.init() }, notes.Message.RequestedWatch())
+		expectTypeOf(foldNotes).toBeCallableWith({ notes: notes.init() }, {
+			message: notes.Message.RequestedWatch(),
+		})
+		expectTypeOf(foldNotes({ notes: notes.init() })).toBeCallableWith({
+			message: notes.Message.RequestedWatch(),
+		})
 
 		const KeyedParent = Schema.Struct({ notes: noteById.Model })
 		type KeyedParent = typeof KeyedParent.Type
@@ -770,6 +779,32 @@ describe("Query.Field and Query.Keyed types", () => {
 		})
 
 		expectTypeOf(foldNotes.revalidate).toEqualTypeOf<Update.Step<ParentModel, ParentMessage>>()
+	})
+
+	it("field foldChild rejects a child Message in place of ParentMessageValue", () => {
+		const ParentModel = Schema.Struct({ notes: notes.Model })
+		type ParentModel = typeof ParentModel.Type
+		const ParentMessage = defineMessageUnion({
+			GotNotesMessage: notes.ParentMessage,
+		})
+		const foldNotes = notes.foldChild<ParentModel>()({
+			field: "notes",
+			toParentMessage: ParentMessage.GotNotesMessage,
+		})
+		const takesChildMessage = function (
+			_fold: (
+				model: ParentModel,
+				message: (typeof notes.Message)["Type"]
+			) => Update.Return<ParentModel, unknown>
+		) {
+			return undefined
+		}
+		expectTypeOf(foldNotes).toBeCallableWith(
+			{ notes: notes.init() },
+			{ message: notes.Message.RequestedWatch() }
+		)
+		// @ts-expect-error
+		takesChildMessage(foldNotes)
 	})
 
 	it("field foldChild without ParentModel rejects field", () => {

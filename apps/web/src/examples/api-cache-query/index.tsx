@@ -116,9 +116,9 @@ function activateTab(model: Model, tab: Tab): UpdateReturn {
 
 const update = (model: Model, message: Message): UpdateReturn =>
 	Message.match<UpdateReturn>(message, {
-		GotPostsMessage: ({ message: postsMessage }) => foldPosts(model, postsMessage),
-		GotStatsMessage: ({ message: statsMessage }) => foldStats(model, statsMessage),
-		GotPostDetailMessage: ({ message: postDetailMessage }) => foldPostDetail(model, postDetailMessage),
+		GotPostsMessage: foldPosts(model),
+		GotStatsMessage: foldStats(model),
+		GotPostDetailMessage: foldPostDetail(model),
 		ClickedTab: ({ tab }) => activateTab(model, tab),
 		ClickedPost: ({ postId }) =>
 			Update.identity(

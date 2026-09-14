@@ -103,11 +103,14 @@ API Cache (hand-rolled AsyncData), and API Cache Query (`Query.define`).
 `define` defaults `keyFields` to every `args` key and `toKey` to a `:` join of
 those fields. Override them when Interrupt identity is a subset of `args`.
 
-`query.foldChild` returns a callable Foldkit fold. Call it data-first in `Got*`
-handlers (`foldPosts(model, message)`). Policy Steps hang on the same function
-(`foldPosts.revalidateOrLoad(model)`). Declare the parent case with
-`query.ParentMessage` (`GotPostsMessage: postsQuery.ParentMessage`) and pass the
-constructor as `toParentMessage` (`toParentMessage: Message.GotPostsMessage`).
+`query.foldChild` returns a callable Query fold. Bind the parent Model in a
+`Got*` handler (`GotPostsMessage: foldPosts(model)`). The bound function takes
+`{ message: childMessage }`, the same fields as `query.ParentMessage`. Call
+`foldPosts(model, { message })` when you already have those fields. Policy Steps
+hang on the same function (`foldPosts.revalidateOrLoad(model)`). Declare the
+parent case with `query.ParentMessage`
+(`GotPostsMessage: postsQuery.ParentMessage`) and pass the constructor as
+`toParentMessage` (`toParentMessage: Message.GotPostsMessage`).
 For an always-present slot, call
 `foldChild<Model, Message>()({ field: "posts", toParentMessage: Message.GotPostsMessage })`.
 Name both parent types so the fold is the full parent Message union, not only the
