@@ -2,6 +2,7 @@ import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import { Separator } from "@workspace/ui/components/separator"
 import { Array, Clock, Duration, Effect, Layer, Match, Option, pipe, Schema, Stream } from "effect"
+import type * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup } from "effect/unstable/httpapi"
 import { ReactFoldkit } from "react-foldkit"
 import * as AsyncData from "react-foldkit/asyncData"
@@ -69,7 +70,9 @@ const postDetailQuery = fromBlogApi({
 	endpoint: "getPost",
 })
 
-const BlogClientLive = Layer.succeed(BlogClient, {
+type BlogApiGroups = typeof BlogApi extends HttpApi.HttpApi<infer _I, infer G> ? G : never
+
+const blogClient = {
 	blog: {
 		listPosts: function () {
 			return Effect.gen(function* () {
@@ -93,7 +96,9 @@ const BlogClientLive = Layer.succeed(BlogClient, {
 			})
 		},
 	},
-} as never)
+} as unknown as HttpApiClient.Client<BlogApiGroups, never, never>
+
+const BlogClientLive = Layer.succeed(BlogClient, blogClient)
 
 const Tab = Schema.Literals(["Posts", "Stats"])
 type Tab = typeof Tab.Type

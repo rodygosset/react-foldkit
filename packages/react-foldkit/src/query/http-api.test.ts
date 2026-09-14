@@ -1,9 +1,10 @@
 import { describe, it } from "@effect/vitest"
-import { Effect, Layer, Schema } from "effect"
+import { Effect, HashMap, Layer, Schema } from "effect"
+import type * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup } from "effect/unstable/httpapi"
 import { expect, expectTypeOf } from "vitest"
-import * as AsyncData from "./asyncData"
-import * as Query from "./query"
+import * as AsyncData from "../asyncData"
+import * as Query from "./index"
 
 const Note = Schema.Struct({ id: Schema.String, body: Schema.String })
 type Note = typeof Note.Type
@@ -23,11 +24,14 @@ const Api = HttpApi.make("Api").add(
 				error: Schema.String,
 			})
 		)
+		.add(HttpApiEndpoint.get("ping", "/ping"))
 )
 
 interface NotesClient {}
 
 const NotesClient = Query.HttpApiService<NotesClient>()("NotesClient", { api: Api })
+
+type NotesApiGroups = typeof Api extends HttpApi.HttpApi<infer _I, infer G> ? G : never
 
 const fromNotesApi = Query.fromHttpApi(NotesClient)
 
@@ -53,7 +57,24 @@ const noteByIdFlat = fromNotesApi({
 	},
 })
 
-const NotesClientLive = Layer.succeed(NotesClient, {
+const noteByIdKeyFields = fromNotesApi({
+	name: "NoteKeyFields",
+	group: "notes",
+	endpoint: "getById",
+	args: { id: Schema.String, nonce: Schema.String },
+	keyFields: ["id"],
+	toRequest: function (args) {
+		return { params: { id: args.id } }
+	},
+})
+
+const ping = fromNotesApi({
+	name: "Ping",
+	group: "notes",
+	endpoint: "ping",
+})
+
+const notesClient = {
 	notes: {
 		list: function () {
 			return Effect.succeed([{ id: "1", body: "hello" }])
@@ -62,8 +83,13 @@ const NotesClientLive = Layer.succeed(NotesClient, {
 			if (request.params.id === "missing") return Effect.fail("not found")
 			return Effect.succeed({ id: request.params.id, body: "hello" })
 		},
+		ping: function () {
+			return Effect.void
+		},
 	},
-} as never)
+} as unknown as HttpApiClient.Client<NotesApiGroups, never, never>
+
+const NotesClientLive = Layer.succeed(NotesClient, notesClient)
 
 describe("Query.fromHttpApi field", () => {
 	it("is a Field Submodel", () => {
@@ -119,4 +145,51 @@ describe("Query.fromHttpApi flattened args", () => {
 			expect(data).toEqual(AsyncData.Success({ data: { id: "3", body: "hello" } }))
 		})
 	)
+
+	it("flattened run success is the endpoint success type", () => {
+		expectTypeOf(noteByIdFlat.run).parameter(0).toEqualTypeOf<{ readonly id: string }>()
+	})
+
+	it("keyFields collapse slots that share the selected fields", () => {
+		const first = noteByIdKeyFields.informLoadIfMissing(noteByIdKeyFields.init(), { id: "a", nonce: "1" })
+		const second = noteByIdKeyFields.informLoadIfMissing(first.model, { id: "a", nonce: "2" })
+		expect(noteByIdKeyFields.read(second.model, { id: "a", nonce: "1" })).toEqual(AsyncData.Loading())
+		expect(noteByIdKeyFields.read(second.model, { id: "a", nonce: "2" })).toEqual(AsyncData.Loading())
+		expect(HashMap.size(second.model)).toBe(1)
+	})
+})
+
+describe("Query.fromHttpApi empty success", () => {
+	it("is a Field Submodel", () => {
+		expectTypeOf(ping.init).toBeFunction()
+	})
+
+	it.effect("run succeeds with no content", () =>
+		Effect.gen(function* () {
+			const data = yield* Effect.provide(ping.run, NotesClientLive)
+			expect(AsyncData.isSuccess(data)).toBe(true)
+		})
+	)
+})
+
+describe("Query.fromHttpApi construction", () => {
+	it("throws for an unknown group", () => {
+		expect(function () {
+			fromNotesApi({
+				name: "Missing",
+				group: "missing",
+				endpoint: "list",
+			} as never)
+		}).toThrow(/unknown group/)
+	})
+
+	it("throws for an unknown endpoint", () => {
+		expect(function () {
+			fromNotesApi({
+				name: "Missing",
+				group: "notes",
+				endpoint: "missing",
+			} as never)
+		}).toThrow(/unknown endpoint/)
+	})
 })
