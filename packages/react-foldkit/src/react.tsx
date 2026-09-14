@@ -4,10 +4,13 @@ import * as ReactStore from "./internal/react-store"
 import * as Store from "./store"
 import type * as Update from "./update"
 
-export type Config<ModelSchema extends Schema.Codec<unknown, unknown, never, never>, Message, R = never> =
-	Store.Config<Schema.Schema.Type<ModelSchema>, Message, R> & {
-		readonly Model: ModelSchema
-	}
+export type Config<ModelSchema extends Schema.Codec<unknown, unknown, never, never>, Message, R = never> = Store.Config<
+	Schema.Schema.Type<ModelSchema>,
+	Message,
+	R
+> & {
+	readonly Model: ModelSchema
+}
 
 type Type<ModelSchema extends Schema.Codec<unknown, unknown, never, never>> = Schema.Schema.Type<ModelSchema>
 
@@ -31,12 +34,10 @@ export function make<ModelSchema extends Schema.Codec<unknown, unknown, never, n
 		return value
 	}
 
-	type ProviderProps = {
+	function Provider(props: {
 		readonly init: Update.Return<Type<ModelSchema>, Message, R>
 		readonly children: React.ReactNode
-	}
-
-	function Provider(props: ProviderProps) {
+	}) {
 		const [store] = React.useState(() => ReactStore.make(config, props.init))
 
 		React.useEffect(
