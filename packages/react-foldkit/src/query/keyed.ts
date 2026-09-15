@@ -1,4 +1,4 @@
-import { Array, Effect, Function, HashMap, HashSet, Option, Order, pipe, Record, Schema, Stream } from "effect"
+import { Array, Effect, Function, HashMap, HashSet, Option, Order, pipe, Record, Schema, Stream, Struct } from "effect"
 import * as AsyncData from "../asyncData"
 import * as Command from "../command"
 import { defineMessageUnion } from "../message"
@@ -10,10 +10,10 @@ import {
 	attachFold,
 	type CacheStore,
 	completeCancel,
-	type FieldFoldConfig,
 	FetchInterruptOutcome,
-	type FoldLens,
+	type FieldFoldConfig,
 	foldChildFromInform,
+	type FoldLens,
 	type KeyedArgs,
 	type KeyedKeyArgs,
 	type LiftConfig,
@@ -98,22 +98,16 @@ export namespace Keyed {
 	>
 }
 
-const jsonUnknownKey: (value: unknown) => string = Schema.Unknown.pipe(
-	Schema.toCodecJson,
-	Schema.fromJsonString,
-	Schema.encodeUnknownSync
-)
-
-function pickFields<Args extends globalThis.Record<string, unknown>, KeyField extends keyof Args & string>(
-	args: Args,
+const toKeyCodec = <
+	Fields extends Schema.Struct.Fields,
+	KeyField extends keyof Schema.Schema.Type<Schema.Struct<Fields>>,
+>(
+	schema: Schema.Struct<Fields>,
 	keyFields: Array.NonEmptyReadonlyArray<KeyField>
-): Pick<Args, KeyField> {
-	const picked = {} as Pick<Args, KeyField>
-	for (const key of keyFields) {
-		Object.assign(picked, { [key]: args[key] })
-	}
-	return picked
-}
+): Schema.Codec<unknown, unknown> => Schema.Struct(Struct.pick(schema.fields, keyFields)) as never
+
+const encodeKey = <S extends Schema.Codec<unknown, unknown>>(schema: S): ((value: Schema.Schema.Type<S>) => string) =>
+	schema.pipe(Schema.toCodecJson, Schema.fromJsonString, Schema.encodeSync)
 
 export function defineKeyed<
 	Name extends string,
@@ -130,21 +124,16 @@ export function defineKeyed<
 	const Args = Schema.Struct(config.args)
 	type Args = typeof Args.Type
 	const argsKeys = Record.keys(config.args)
-	if (!Array.isArrayNonEmpty(argsKeys))
+	if (!Array.isReadonlyArrayNonEmpty(argsKeys))
 		throw new Error(`Query.define("${config.name}"): keyed args must include at least one field`)
 
 	const keyFields: Array.NonEmptyReadonlyArray<KeyField> =
 		config.keyFields ?? (argsKeys as unknown as Array.NonEmptyReadonlyArray<KeyField>)
-	const toKey: (keyArgs: Pick<Args, KeyField>) => string =
-		config.toKey ??
-		function (keyArgs: Pick<Args, KeyField>): string {
-			return jsonUnknownKey(keyArgs)
-		}
-	const interruptToKey: (keyArgs: Pick<Args, KeyField>) => string =
-		config.toKey ??
-		function (keyArgs: Pick<Args, KeyField>): string {
-			return jsonUnknownKey(pickFields(keyArgs as Args & globalThis.Record<string, unknown>, keyFields))
-		}
+
+	const encode = encodeKey(toKeyCodec(Args, keyFields))
+	const toKey: (keyArgs: Pick<Args, KeyField>) => string = config.toKey ?? encode
+	const interruptToKey: (keyArgs: Pick<Args, KeyField>) => string = config.toKey ?? encode
+
 	const Slot = Schema.Struct({
 		args: Args,
 		data: states.schema,

@@ -4,15 +4,19 @@ import * as ReactStore from "./internal/react-store"
 import * as Store from "./store"
 import type * as Update from "./update"
 
-export type Config<ModelSchema extends Schema.Codec<unknown, unknown, never, never>, Message, R = never> = Store.Config<
+type SchemaServices<S extends Schema.Constraint> = S["DecodingServices"] | S["EncodingServices"]
+
+type ModelCodec = Schema.Codec<unknown, unknown, unknown, unknown>
+
+export type Config<ModelSchema extends ModelCodec, Message, R = never> = Store.Config<
 	Schema.Schema.Type<ModelSchema>,
 	Message,
-	R
+	R | SchemaServices<ModelSchema>
 > & {
 	readonly Model: ModelSchema
 }
 
-type Type<ModelSchema extends Schema.Codec<unknown, unknown, never, never>> = Schema.Schema.Type<ModelSchema>
+type Type<ModelSchema extends ModelCodec> = Schema.Schema.Type<ModelSchema>
 
 /**
  * Builds Provider, Seed, and hooks around a Foldkit-shaped store.
@@ -20,8 +24,13 @@ type Type<ModelSchema extends Schema.Codec<unknown, unknown, never, never>> = Sc
  * Provider cold-boots from `init` and disposes on unmount. Seed writes a Model
  * into the inactive store (before activate) so SSR and first paint see
  * preloaded data. Live updates go through dispatch after activate.
+ *
+ * Model may require Schema decoding or encoding services. Those services join
+ * update `R`, so `layer` is required when the codec is not `never`. Sync JSON
+ * encode still needs `never` services at the call site that uses
+ * `encodeUnknownSync`.
  */
-export function make<ModelSchema extends Schema.Codec<unknown, unknown, never, never>, Message, R = never>(
+export function make<ModelSchema extends ModelCodec, Message, R = never>(
 	config: Config<ModelSchema, Message, R>
 ) {
 	const equalsModel = Schema.toEquivalence(config.Model)

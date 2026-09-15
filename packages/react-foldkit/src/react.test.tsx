@@ -492,4 +492,23 @@ describe("make config types", function () {
 		// @ts-expect-error layer is required when update needs services
 		make({ Model, update: serviceUpdate })
 	})
+
+	it("requires layer when the Model codec requires schema services", function () {
+		const servicefulModel = Model as Schema.Codec<Model, typeof Model.Encoded, ResourceService, ResourceService>
+		function idleUpdate(model: Model) {
+			return { model }
+		}
+
+		make({
+			Model: servicefulModel,
+			update: idleUpdate,
+			layer: Layer.succeed(ResourceService, { value: "ok" }),
+		})
+
+		// @ts-expect-error layer is required when Model needs schema services
+		make({
+			Model: servicefulModel,
+			update: idleUpdate,
+		})
+	})
 })
