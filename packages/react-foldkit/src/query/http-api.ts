@@ -1,5 +1,5 @@
 import { Array, Context, Effect, HashMap, Option, Record, Schema } from "effect"
-import type { Simplify } from "effect/Types"
+import type { Mutable, Simplify } from "effect/Types"
 import type * as HttpApi from "effect/unstable/httpapi/HttpApi"
 import type * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient"
 import * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint"
@@ -8,45 +8,6 @@ import * as AsyncData from "../asyncData"
 import { define, type Field, type Keyed } from "./index"
 
 type FieldModel<A, AI, E, EI> = Schema.Codec<AsyncData.AsyncData<A, E>, AsyncData.AsyncDataEncoded<AI, EI>>
-
-/**
- * A `Context.Service` whose value is `HttpApiClient.Client<Groups>` and whose
- * `api` is the `HttpApi` {@link fromHttpApi} reads for schemas and routes.
- *
- * @example
- * ```ts
- * interface BlogClient {}
- * const BlogClient = Query.HttpApiService<BlogClient>()("BlogClient", { api: BlogApi })
- * ```
- */
-export interface HttpApiService<Self, Id extends string, Groups extends HttpApiGroup.Constraint>
-	extends Context.Service<Self, HttpApiClient.Client<Groups, never, never>> {
-	readonly api: HttpApi.HttpApi<string, Groups>
-}
-
-/**
- * Builds an {@link HttpApiService} tag that carries `api` for {@link fromHttpApi}.
- *
- * @example
- * ```ts
- * interface BlogClient {}
- * const BlogClient = Query.HttpApiService<BlogClient>()("BlogClient", { api: BlogApi })
- * ```
- */
-export function HttpApiService<Self = never>() {
-	return function <const Id extends string, ApiId extends string, Groups extends HttpApiGroup.Constraint>(
-		id: Id,
-		options: { readonly api: HttpApi.HttpApi<ApiId, Groups> }
-	): HttpApiService<Self, Id, Groups> {
-		const self = Context.Service<Self, HttpApiClient.Client<Groups, never, never>>()(id) as unknown as HttpApiService<
-			Self,
-			Id,
-			Groups
-		>
-		Object.assign(self, { api: options.api })
-		return self
-	}
-}
 
 type EndpointFrom<
 	Groups extends HttpApiGroup.Constraint,
@@ -95,34 +56,11 @@ type EndpointIdOf<
 	GroupId extends HttpApiGroup.Identifier<Groups>,
 > = HttpApiEndpoint.Identifier<HttpApiGroup.Endpoints<HttpApiGroup.WithIdentifier<Groups, GroupId>>>
 
-type FromHttpApiBase<Name extends string, GroupId extends string, EndpointId extends string> = Readonly<{
+type QueryConfigBase<Name extends string, GroupId extends string, EndpointId extends string> = Readonly<{
 	name: Name
 	group: GroupId
 	endpoint: EndpointId
 }>
-
-type InferredKeyed<
-	Name extends string,
-	Groups extends HttpApiGroup.Constraint,
-	GroupId extends HttpApiGroup.Identifier<Groups>,
-	EndpointId extends EndpointIdOf<Groups, GroupId>,
-	Client,
-	Endpoint = EndpointFrom<Groups, GroupId, EndpointId>,
-	Request extends RequestBody<ClientRequestOf<Endpoint>> = RequestBody<ClientRequestOf<Endpoint>>,
-> = Keyed<
-	Name,
-	Schema.Codec<
-		HashMapModel<Request, EndpointSuccess<Endpoint>, EndpointError<Endpoint>>,
-		unknown,
-		never,
-		never
-	>,
-	Schema.Top,
-	Schema.Struct.Fields,
-	string,
-	AsyncData.AsyncData<EndpointSuccess<Endpoint>, EndpointError<Endpoint>>,
-	Client
->
 
 type HashMapModel<Args, A, E> = HashMap.HashMap<
 	string,
@@ -132,6 +70,24 @@ type HashMapModel<Args, A, E> = HashMap.HashMap<
 	}
 >
 
+type InferredKeyed<
+	Name extends string,
+	Groups extends HttpApiGroup.Constraint,
+	GroupId extends HttpApiGroup.Identifier<Groups>,
+	EndpointId extends EndpointIdOf<Groups, GroupId>,
+	Self,
+	Endpoint = EndpointFrom<Groups, GroupId, EndpointId>,
+	Request extends RequestBody<ClientRequestOf<Endpoint>> = RequestBody<ClientRequestOf<Endpoint>>,
+> = Keyed<
+	Name,
+	Schema.Codec<HashMapModel<Request, EndpointSuccess<Endpoint>, EndpointError<Endpoint>>, unknown, never, never>,
+	Schema.Top,
+	Schema.Struct.Fields,
+	string,
+	AsyncData.AsyncData<EndpointSuccess<Endpoint>, EndpointError<Endpoint>>,
+	Self
+>
+
 type FlattenedKeyed<
 	Name extends string,
 	Groups extends HttpApiGroup.Constraint,
@@ -139,16 +95,12 @@ type FlattenedKeyed<
 	EndpointId extends EndpointIdOf<Groups, GroupId>,
 	Fields extends Schema.Struct.Fields,
 	KeyField extends keyof Schema.Schema.Type<Schema.Struct<Fields>> & string,
-	Client,
+	Self,
 	Endpoint = EndpointFrom<Groups, GroupId, EndpointId>,
 > = Keyed<
 	Name,
 	Schema.Codec<
-		HashMapModel<
-			Schema.Schema.Type<Schema.Struct<Fields>>,
-			EndpointSuccess<Endpoint>,
-			EndpointError<Endpoint>
-		>,
+		HashMapModel<Schema.Schema.Type<Schema.Struct<Fields>>, EndpointSuccess<Endpoint>, EndpointError<Endpoint>>,
 		unknown,
 		never,
 		never
@@ -157,16 +109,16 @@ type FlattenedKeyed<
 	Fields,
 	KeyField,
 	AsyncData.AsyncData<EndpointSuccess<Endpoint>, EndpointError<Endpoint>>,
-	Client
+	Self
 >
 
-export interface FromHttpApi<Client, Groups extends HttpApiGroup.Constraint> {
+interface QueryFrom<Self, Groups extends HttpApiGroup.Constraint> {
 	<
 		Name extends string,
 		const GroupId extends HttpApiGroup.Identifier<Groups>,
 		const EndpointId extends EndpointIdOf<Groups, GroupId>,
 	>(
-		config: FromHttpApiBase<Name, GroupId, EndpointId> & {
+		config: QueryConfigBase<Name, GroupId, EndpointId> & {
 			readonly args?: never
 			readonly toRequest?: never
 			readonly keyFields?: Array.NonEmptyReadonlyArray<string>
@@ -182,9 +134,9 @@ export interface FromHttpApi<Client, Groups extends HttpApiGroup.Constraint> {
 					EndpointErrorEncoded<EndpointFrom<Groups, GroupId, EndpointId>>
 				>,
 				Schema.Top,
-				Client
+				Self
 			>
-		: InferredKeyed<Name, Groups, GroupId, EndpointId, Client>
+		: InferredKeyed<Name, Groups, GroupId, EndpointId, Self>
 	<
 		Name extends string,
 		const GroupId extends HttpApiGroup.Identifier<Groups>,
@@ -192,7 +144,7 @@ export interface FromHttpApi<Client, Groups extends HttpApiGroup.Constraint> {
 		Fields extends Schema.Struct.Fields,
 		KeyField extends keyof Schema.Schema.Type<Schema.Struct<Fields>> & string,
 	>(
-		config: FromHttpApiBase<Name, GroupId, EndpointId> & {
+		config: QueryConfigBase<Name, GroupId, EndpointId> & {
 			readonly args: Fields
 			readonly toRequest: (
 				args: Schema.Schema.Type<Schema.Struct<Fields>>
@@ -200,18 +152,38 @@ export interface FromHttpApi<Client, Groups extends HttpApiGroup.Constraint> {
 			readonly keyFields?: Array.NonEmptyReadonlyArray<KeyField>
 			readonly toKey?: (args: Pick<Schema.Schema.Type<Schema.Struct<Fields>>, KeyField>) => string
 		}
-	): FlattenedKeyed<Name, Groups, GroupId, EndpointId, Fields, KeyField, Client>
+	): FlattenedKeyed<Name, Groups, GroupId, EndpointId, Fields, KeyField, Self>
 }
 
 /**
- * `HttpApiEndpoint.getSuccessSchemas` / `getErrorSchemas` / `getPayloadSchemas`
- * exist at runtime and are used by AtomHttpApi. They are `@internal`, so they
- * are omitted from Effect's public `.d.ts`.
+ * A class-style `Context.Service` whose value is `HttpApiClient.Client<Groups>`.
+ * `.query` turns a group/endpoint into a Query Field or Keyed Submodel.
+ *
+ * @example
+ * ```ts
+ * class BlogClient extends Query.HttpApi.Service<BlogClient>()("BlogClient", { api: BlogApi }) {}
+ * const postsQuery = BlogClient.query({ name: "Posts", group: "blog", endpoint: "listPosts" })
+ * ```
  */
+export interface Service<Self, Id extends string, Groups extends HttpApiGroup.Constraint>
+	extends Context.Service<Self, HttpApiClient.Client<Groups, never, never>> {
+	new (_: never): Context.ServiceClass.Shape<Id, HttpApiClient.Client<Groups, never, never>>
+	readonly api: HttpApi.HttpApi<string, Groups>
+	readonly query: QueryFrom<Self, Groups>
+}
+
+type QueryConfig = {
+	readonly name: string
+	readonly group: string
+	readonly endpoint: string
+	readonly args?: Schema.Struct.Fields
+	readonly toRequest?: (args: unknown) => unknown
+	readonly keyFields?: Array.NonEmptyReadonlyArray<string>
+	readonly toKey?: (args: unknown) => string
+}
+
 type EndpointSchemaFns = {
-	readonly getSuccessSchemas: (
-		endpoint: HttpApiEndpoint.Top
-	) => readonly [Schema.Top, ...ReadonlyArray<Schema.Top>]
+	readonly getSuccessSchemas: (endpoint: HttpApiEndpoint.Top) => readonly [Schema.Top, ...ReadonlyArray<Schema.Top>]
 	readonly getErrorSchemas: (endpoint: HttpApiEndpoint.Top) => ReadonlyArray<Schema.Top>
 	readonly getPayloadSchemas: (endpoint: HttpApiEndpoint.Top) => ReadonlyArray<Schema.Top>
 }
@@ -223,15 +195,15 @@ function successCodec(endpoint: HttpApiEndpoint.Top): Schema.Top {
 }
 
 function errorCodec(endpoint: HttpApiEndpoint.Top): Schema.Top {
-	const schemas = endpointSchemas.getErrorSchemas(endpoint)
-	if (schemas.length === 0) return Schema.Never
-	return Schema.Union(schemas as Array.NonEmptyReadonlyArray<Schema.Top>)
+	const schemas = globalThis.Array.from(endpointSchemas.getErrorSchemas(endpoint))
+	if (Array.isArrayEmpty(schemas)) return Schema.Never
+	return Schema.Union(schemas)
 }
 
 function payloadCodec(endpoint: HttpApiEndpoint.Top): Schema.Top | undefined {
-	const schemas = endpointSchemas.getPayloadSchemas(endpoint)
-	if (schemas.length === 0) return undefined
-	return Schema.Union(schemas as Array.NonEmptyReadonlyArray<Schema.Top>)
+	const schemas = globalThis.Array.from(endpointSchemas.getPayloadSchemas(endpoint))
+	if (Array.isArrayEmpty(schemas)) return undefined
+	return Schema.Union(schemas)
 }
 
 function clientRequestFields(endpoint: HttpApiEndpoint.Top): Schema.Struct.Fields | undefined {
@@ -245,16 +217,20 @@ function clientRequestFields(endpoint: HttpApiEndpoint.Top): Schema.Struct.Field
 	return fields
 }
 
-function requireEndpoint(api: { readonly groups: globalThis.Record<string, unknown> }, group: string, endpoint: string) {
+function requireEndpoint(
+	api: { readonly groups: globalThis.Record<string, unknown> },
+	group: string,
+	endpoint: string
+) {
 	const groupValue = Record.get(api.groups, group) as Option.Option<{
 		readonly endpoints: globalThis.Record<string, HttpApiEndpoint.Top>
 	}>
 	if (Option.isNone(groupValue)) {
-		throw new Error(`Query.fromHttpApi: unknown group "${group}"`)
+		throw new Error(`Query.HttpApi: unknown group "${group}"`)
 	}
 	const endpointValue = Record.get(groupValue.value.endpoints, endpoint)
 	if (Option.isNone(endpointValue)) {
-		throw new Error(`Query.fromHttpApi: unknown endpoint "${group}.${endpoint}"`)
+		throw new Error(`Query.HttpApi: unknown endpoint "${group}.${endpoint}"`)
 	}
 	return endpointValue.value
 }
@@ -265,67 +241,39 @@ function clientRequestToKey(args: unknown): string {
 
 type EndpointFn = (request: unknown) => Effect.Effect<unknown, unknown>
 
-function callEndpoint<Self, Groups extends HttpApiGroup.Constraint>(
-	tag: Context.Service<Self, HttpApiClient.Client<Groups, never, never>>,
+function callEndpoint<R>(
+	tag: Effect.Effect<unknown, never, R>,
 	group: string,
 	endpoint: string,
 	request: unknown
-): Effect.Effect<unknown, unknown, Self> {
+): Effect.Effect<unknown, unknown, R> {
 	return Effect.gen(function* () {
-		const apiClient = yield* tag
-		const groups = apiClient as globalThis.Record<string, globalThis.Record<string, EndpointFn>>
-		const groupClient = groups[group]
-		const method = groupClient === undefined ? undefined : groupClient[endpoint]
-		if (method === undefined) {
-			throw new Error(`Query.fromHttpApi: missing client method "${group}.${endpoint}"`)
+		const apiClient = (yield* tag) as globalThis.Record<string, globalThis.Record<string, EndpointFn>>
+		const groupClient = Record.get(apiClient, group)
+		if (Option.isNone(groupClient)) {
+			throw new Error(`Query.HttpApi: missing client method "${group}.${endpoint}"`)
 		}
-		return yield* method(request)
+		const method = Record.get(groupClient.value, endpoint)
+		if (Option.isNone(method)) {
+			throw new Error(`Query.HttpApi: missing client method "${group}.${endpoint}"`)
+		}
+		return yield* method.value(request)
 	})
 }
 
-type ApiGroups<Client> = Client extends { readonly api: HttpApi.HttpApi<infer _ApiId, infer Groups> }
-	? Groups extends HttpApiGroup.Constraint
-		? Groups
-		: never
-	: never
-
-type FromHttpApiConfig = {
-	readonly name: string
-	readonly group: string
-	readonly endpoint: string
-	readonly args?: Schema.Struct.Fields
-	readonly toRequest?: (args: unknown) => unknown
-	readonly keyFields?: Array.NonEmptyReadonlyArray<string>
-	readonly toKey?: (args: unknown) => string
-}
-
-/**
- * Turns an HttpApi group/endpoint into a Query Field or Keyed Submodel.
- *
- * Empty client request (no params, query, payload, or headers) is a Field.
- * Anything else is Keyed. Default `toRequest` is identity on the client request.
- *
- * @example
- * ```ts
- * const fromBlog = Query.fromHttpApi(BlogClient)
- * const postsQuery = fromBlog({ name: "Posts", group: "blog", endpoint: "listPosts" })
- * const postQuery = fromBlog({ name: "Post", group: "blog", endpoint: "getPost" })
- * // watch: postQuery.watch({ params: { postId } })
- * ```
- */
-export function fromHttpApi<Client extends HttpApiService<any, any, any>>(
-	client: Client
-): FromHttpApi<Client, ApiGroups<Client>> {
-	function fromConfig(config: FromHttpApiConfig) {
+function makeQuery<Self, Id extends string, Groups extends HttpApiGroup.Constraint>(
+	tag: Service<Self, Id, Groups>
+): QueryFrom<Self, Groups> {
+	function fromConfig(config: QueryConfig) {
 		const endpoint = requireEndpoint(
-			client.api as { readonly groups: globalThis.Record<string, unknown> },
+			tag.api as { readonly groups: globalThis.Record<string, unknown> },
 			config.group,
 			config.endpoint
 		)
 		const data = successCodec(endpoint) as Schema.Codec<any, any, never, never>
 		const error = errorCodec(endpoint) as Schema.Codec<any, any, never, never>
 		const execute = function (request: unknown) {
-			return callEndpoint(client, config.group, config.endpoint, request)
+			return callEndpoint(tag as Effect.Effect<unknown, never, Self>, config.group, config.endpoint, request)
 		}
 
 		if (config.args !== undefined) {
@@ -373,5 +321,32 @@ export function fromHttpApi<Client extends HttpApiService<any, any, any>>(
 		})
 	}
 
-	return fromConfig as unknown as FromHttpApi<Client, ApiGroups<Client>>
+	return fromConfig as unknown as QueryFrom<Self, Groups>
+}
+
+/**
+ * Builds a class-style HttpApi service tag. Extend it, then call `.query`.
+ *
+ * Empty client request (no params, query, payload, or headers) is a Field.
+ * Anything else is Keyed. Default `toRequest` is identity on the client request.
+ *
+ * @example
+ * ```ts
+ * class BlogClient extends Query.HttpApi.Service<BlogClient>()("BlogClient", { api: BlogApi }) {}
+ * const postsQuery = BlogClient.query({ name: "Posts", group: "blog", endpoint: "listPosts" })
+ * const postQuery = BlogClient.query({ name: "Post", group: "blog", endpoint: "getPost" })
+ * ```
+ */
+export function Service<Self>() {
+	return function <const Id extends string, ApiId extends string, Groups extends HttpApiGroup.Constraint>(
+		id: Id,
+		options: { readonly api: HttpApi.HttpApi<ApiId, Groups> }
+	): Service<Self, Id, Groups> {
+		const self = Context.Service<Self, HttpApiClient.Client<Groups, never, never>>()(id) as unknown as Mutable<
+			Service<Self, Id, Groups>
+		>
+		self.api = options.api
+		self.query = makeQuery(self as Service<Self, Id, Groups>)
+		return self as Service<Self, Id, Groups>
+	}
 }
