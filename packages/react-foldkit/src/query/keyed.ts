@@ -25,13 +25,18 @@ import {
 	type SettledFetchOf,
 } from "./internal"
 
+export type SyncFields = { readonly [x: PropertyKey]: Schema.Codec<unknown, unknown> }
+
+const encodeKey = <S extends Schema.Codec<unknown, unknown>>(schema: S) =>
+	schema.pipe(Schema.toCodecJson, Schema.fromJsonString, Schema.encodeUnknownSync)
+
 export type KeyedConfig<
 	Name extends string,
 	A,
 	AI,
 	E,
 	EI,
-	Fields extends Schema.Struct.Fields,
+	Fields extends SyncFields,
 	KeyField extends keyof Schema.Schema.Type<Schema.Struct<Fields>> & string,
 	R,
 > = Readonly<{
@@ -98,24 +103,13 @@ export namespace Keyed {
 	>
 }
 
-const toKeyCodec = <
-	Fields extends Schema.Struct.Fields,
-	KeyField extends keyof Schema.Schema.Type<Schema.Struct<Fields>>,
->(
-	schema: Schema.Struct<Fields>,
-	keyFields: Array.NonEmptyReadonlyArray<KeyField>
-): Schema.Codec<unknown, unknown> => Schema.Struct(Struct.pick(schema.fields, keyFields)) as never
-
-const encodeKey = <S extends Schema.Codec<unknown, unknown>>(schema: S): ((value: Schema.Schema.Type<S>) => string) =>
-	schema.pipe(Schema.toCodecJson, Schema.fromJsonString, Schema.encodeSync)
-
 export function defineKeyed<
 	Name extends string,
 	A,
 	AI,
 	E,
 	EI,
-	Fields extends Schema.Struct.Fields,
+	Fields extends SyncFields,
 	KeyField extends keyof Schema.Schema.Type<Schema.Struct<Fields>> & string,
 	R,
 >(config: KeyedConfig<Name, A, AI, E, EI, Fields, KeyField, R>) {
@@ -129,10 +123,8 @@ export function defineKeyed<
 
 	const keyFields: Array.NonEmptyReadonlyArray<KeyField> =
 		config.keyFields ?? (argsKeys as unknown as Array.NonEmptyReadonlyArray<KeyField>)
-
-	const encode = encodeKey(toKeyCodec(Args, keyFields))
-	const toKey: (keyArgs: Pick<Args, KeyField>) => string = config.toKey ?? encode
-	const interruptToKey: (keyArgs: Pick<Args, KeyField>) => string = config.toKey ?? encode
+	const toKey = config.toKey ?? encodeKey(Args)
+	const toInterruptKey = config.toKey ?? encodeKey(Schema.Struct(Struct.pick(config.args, keyFields)))
 
 	const Slot = Schema.Struct({
 		args: Args,
@@ -162,7 +154,7 @@ export function defineKeyed<
 		messages: [Message.SettledFetch],
 		interrupt: {
 			keyFields,
-			toKey: interruptToKey,
+			toKey: toInterruptKey,
 		},
 		execute: (args: Args) =>
 			pipe(

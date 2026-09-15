@@ -209,12 +209,15 @@ describe("Query.HttpApi.Service.query construction", () => {
 	})
 
 	it("rejects an endpoint whose request codec requires encoding services", () => {
-		NotesClient.query(
-			"Locked",
-			"notes",
-			// @ts-expect-error params EncodingServices is not never
-			"locked"
-		)
+		function unused() {
+			NotesClient.query(
+				"Locked",
+				"notes",
+				// @ts-expect-error params EncodingServices is not never
+				"locked"
+			)
+		}
+		expect(unused).toBeTypeOf("function")
 	})
 })
 

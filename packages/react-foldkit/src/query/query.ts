@@ -1,13 +1,13 @@
 import { Predicate, Schema } from "effect"
 import * as AsyncData from "../asyncData"
 import { defineField, type Field, type FieldConfig } from "./field"
-import { type ParentMessage, type ParentMessageValue, Lifted } from "./internal"
-import { defineKeyed, type Keyed, type KeyedConfig } from "./keyed"
+import { Lifted, type ParentMessage, type ParentMessageValue } from "./internal"
+import { defineKeyed, type Keyed, type KeyedConfig, type SyncFields } from "./keyed"
 
 export type { Field, FieldConfig } from "./field"
-export type { Keyed, KeyedConfig } from "./keyed"
-export type { ParentMessage, ParentMessageValue }
+export type { Keyed, KeyedConfig, SyncFields } from "./keyed"
 export { Lifted }
+export type { ParentMessage, ParentMessageValue }
 
 type DefineConfig =
 	| (FieldConfig<string, unknown, unknown, unknown, unknown, any> & { readonly args?: never; readonly toKey?: never })
@@ -33,7 +33,7 @@ export function define<
 	AI,
 	E,
 	EI,
-	Fields extends Schema.Struct.Fields,
+	Fields extends SyncFields,
 	KeyField extends keyof Schema.Schema.Type<Schema.Struct<Fields>> & string,
 	R = never,
 >(
@@ -66,7 +66,7 @@ export type DefinedKeyed<
 	AI,
 	E,
 	EI,
-	Fields extends Schema.Struct.Fields,
+	Fields extends SyncFields,
 	KeyField extends keyof Schema.Schema.Type<Schema.Struct<Fields>> & string,
 	R = never,
 > = Keyed<

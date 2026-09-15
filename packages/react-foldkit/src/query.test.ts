@@ -13,6 +13,8 @@ import type * as Update from "./update"
 const Note = Schema.Struct({ id: Schema.String, body: Schema.String })
 type Note = typeof Note.Type
 
+const slotKey = Schema.Unknown.pipe(Schema.toCodecJson, Schema.fromJsonString, Schema.encodeUnknownSync)
+
 const notes = Query.define({
 	name: "Notes",
 	data: Schema.Array(Note),
@@ -59,8 +61,6 @@ const commandShape = (command: { readonly name: string; readonly args?: unknown;
 	key: command.key,
 })
 
-const slotKey = Schema.Unknown.pipe(Schema.toCodecJson, Schema.fromJsonString, Schema.encodeUnknownSync)
-
 describe("Query.define schema inputs", function () {
 	it("rejects Schema.Top data and error", function () {
 		const data: Schema.Top = Schema.Array(Note)
@@ -82,6 +82,20 @@ describe("Query.define schema inputs", function () {
 			data,
 			error: Schema.String,
 			execute: Effect.succeed("ok"),
+		})
+	})
+
+	it("rejects an args codec that requires encoding services", function () {
+		const noteId = Schema.String as Schema.Codec<string, string, never, "EncodeSvc">
+		// @ts-expect-error keyed args fields are Schema.Codec with never services
+		Query.define({
+			name: "EncodedArgs",
+			data: Note,
+			error: Schema.String,
+			args: { noteId },
+			execute: function (args: { noteId: string }) {
+				return Effect.succeed({ id: args.noteId, body: "hello" })
+			},
 		})
 	})
 })
@@ -461,7 +475,7 @@ describe("Query.lift field lens", () => {
 	})
 })
 
-describe("Query.define keyed — default toKey", () => {
+describe("Query.define keyed — toKey", () => {
 	it("JSON-encodes the full args when toKey is omitted", () => {
 		const started = noteByIdAndLocale.informLoadIfMissing(noteByIdAndLocale.init(), {
 			noteId: "1",

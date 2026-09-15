@@ -100,8 +100,11 @@ API Cache (hand-rolled AsyncData), and API Cache Query (`Query.define`).
 
 `Query.define` is a remote-data Submodel. Keyed `Model` is a `HashMap` of
 `{ args, data }` slots. Read `data` with `query.read(model, args)`. Keyed
-`define` defaults `keyFields` to every `args` key and `toKey` to a `:` join of
-those fields. Override them when Interrupt identity is a subset of `args`.
+`args` fields are `Schema.Codec`s (no encoding or decoding services). Omit
+`toKey` to JSON-encode args with `Schema.toCodecJson` and
+`Schema.fromJsonString`. `keyFields` defaults to every `args` key and is the
+Interrupt identity. `Query.HttpApi.Service.query` uses the same defaults for a
+keyed endpoint.
 
 `query.lift` returns a callable parent handle. Bind the parent Model in a
 `Got*` handler (`GotPostsMessage: foldPosts(model)`). The bound function takes

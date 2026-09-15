@@ -10,8 +10,8 @@ import {
 	attachFold,
 	type CacheStore,
 	completeCancel,
-	type FieldFoldConfig,
 	FetchInterruptOutcome,
+	type FieldFoldConfig,
 	type FoldLens,
 	type LiftConfig,
 	type LiftField,
@@ -155,10 +155,10 @@ export function defineField<Name extends string, A, AI, E, EI, R>(config: FieldC
 			}
 		)
 
-	const liftFromLens = function <ParentModel, ParentMessage>(
+	const liftFromLens = <ParentModel, ParentMessage>(
 		foldConfig: FoldLens<ParentModel, ParentMessage, Model, Message>
-	) {
-		return attachFold(asLift(Update.foldChild({ update, ...foldConfig })), {
+	) =>
+		attachFold(asLift(Update.foldChild({ update, ...foldConfig })), {
 			revalidate: Update.foldChildStep({ update: informRevalidate, ...foldConfig }),
 			revalidateOrLoad: Update.foldChildStep({ update: informRevalidateOrLoad, ...foldConfig }),
 			loadIfMissing: Update.foldChildStep({ update: informLoadIfMissing, ...foldConfig }),
@@ -170,7 +170,6 @@ export function defineField<Name extends string, A, AI, E, EI, R>(config: FieldC
 				modelToIsWatching: (model: ParentModel) => boolean
 			) => watchFieldSubscription(entry, foldConfig.toParentMessage, modelToIsWatching),
 		})
-	}
 
 	const lift = function <ParentModel, ParentMessage>(
 		config?: LiftConfig<ParentModel, ParentMessage, Model, Message>
