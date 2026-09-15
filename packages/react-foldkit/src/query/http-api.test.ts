@@ -24,51 +24,48 @@ const Api = HttpApi.make("Api").add(
 				error: Schema.String,
 			})
 		)
+		.add(
+			HttpApiEndpoint.get("getByIdNonce", "/notes/:id/nonce", {
+				params: { id: Schema.String },
+				query: { nonce: Schema.String },
+				success: Note,
+				error: Schema.String,
+			})
+		)
 		.add(HttpApiEndpoint.get("ping", "/ping"))
+		.add(
+			HttpApiEndpoint.get("secret", "/secret", {
+				success: Schema.String as Schema.Codec<string, string, never, "SecretEncode">,
+			})
+		)
+		.add(
+			HttpApiEndpoint.get("locked", "/locked/:id", {
+				params: { id: Schema.String as Schema.Codec<string, string, never, "ParamEncode"> },
+				success: Note,
+			})
+		)
 )
 
 class NotesClient extends Query.HttpApi.Service<NotesClient>()("NotesClient", { api: Api }) {}
 
 type NotesApiGroups = typeof Api extends HttpApi.HttpApi<infer _I, infer G> ? G : never
 
-const notes = NotesClient.query({
-	name: "Notes",
-	group: "notes",
-	endpoint: "list",
-})
+const notes = NotesClient.query("Notes", "notes", "list")
 
-const noteById = NotesClient.query({
-	name: "Note",
-	group: "notes",
-	endpoint: "getById",
-})
+const noteById = NotesClient.query("Note", "notes", "getById")
 
-const noteByIdFlat = NotesClient.query({
-	name: "NoteFlat",
-	group: "notes",
-	endpoint: "getById",
-	args: { id: Schema.String },
-	toRequest: function (args) {
-		return { params: { id: args.id } }
+const noteByIdKeyFields = NotesClient.query("NoteKeyFields", "notes", "getByIdNonce", {
+	keyFields: ["params"],
+	toKey: function (args) {
+		return args.params.id
 	},
 })
 
-const noteByIdKeyFields = NotesClient.query({
-	name: "NoteKeyFields",
-	group: "notes",
-	endpoint: "getById",
-	args: { id: Schema.String, nonce: Schema.String },
-	keyFields: ["id"],
-	toRequest: function (args) {
-		return { params: { id: args.id } }
-	},
+const noteByIdNonce = NotesClient.query("NoteNonce", "notes", "getByIdNonce", {
+	keyFields: ["params"],
 })
 
-const ping = NotesClient.query({
-	name: "Ping",
-	group: "notes",
-	endpoint: "ping",
-})
+const ping = NotesClient.query("Ping", "notes", "ping")
 
 const notesClient = {
 	notes: {
@@ -79,11 +76,17 @@ const notesClient = {
 			if (request.params.id === "missing") return Effect.fail("not found")
 			return Effect.succeed({ id: request.params.id, body: "hello" })
 		},
+		getByIdNonce: function (request: {
+			readonly params: { readonly id: string }
+			readonly query: { readonly nonce: string }
+		}) {
+			return Effect.succeed({ id: request.params.id, body: request.query.nonce })
+		},
 		ping: function () {
 			return Effect.void
 		},
 	},
-} as unknown as HttpApiClient.Client<NotesApiGroups, never, never>
+} as unknown as HttpApiClient.Client<NotesApiGroups>
 
 const NotesClientLive = Layer.succeed(NotesClient, notesClient)
 
@@ -129,29 +132,56 @@ describe("Query.HttpApi.Service.query keyed", () => {
 	})
 })
 
-describe("Query.HttpApi.Service.query flattened args", () => {
-	it("keys by the flattened args schema", () => {
-		const args: Parameters<typeof noteByIdFlat.read>[1] = { id: "1" }
-		expect(args).toEqual({ id: "1" })
-	})
-
-	it.effect("toRequest builds the client request", () =>
-		Effect.gen(function* () {
-			const data = yield* Effect.provide(noteByIdFlat.run({ id: "3" }), NotesClientLive)
-			expect(data).toEqual(AsyncData.Success({ data: { id: "3", body: "hello" } }))
+describe("Query.HttpApi.Service.query keyFields", () => {
+	it("keyFields plus toKey collapse slots that share the selected fields", () => {
+		const first = noteByIdKeyFields.informLoadIfMissing(noteByIdKeyFields.init(), {
+			params: { id: "a" },
+			query: { nonce: "1" },
 		})
-	)
-
-	it("flattened run args are the flattened schema", () => {
-		expectTypeOf(noteByIdFlat.run).parameter(0).toEqualTypeOf<{ readonly id: string }>()
+		const second = noteByIdKeyFields.informLoadIfMissing(first.model, {
+			params: { id: "a" },
+			query: { nonce: "2" },
+		})
+		expect(
+			noteByIdKeyFields.read(second.model, {
+				params: { id: "a" },
+				query: { nonce: "1" },
+			})
+		).toEqual(AsyncData.Loading())
+		expect(
+			noteByIdKeyFields.read(second.model, {
+				params: { id: "a" },
+				query: { nonce: "2" },
+			})
+		).toEqual(AsyncData.Loading())
+		expect(HashMap.size(second.model)).toBe(1)
 	})
 
-	it("keyFields collapse slots that share the selected fields", () => {
-		const first = noteByIdKeyFields.informLoadIfMissing(noteByIdKeyFields.init(), { id: "a", nonce: "1" })
-		const second = noteByIdKeyFields.informLoadIfMissing(first.model, { id: "a", nonce: "2" })
-		expect(noteByIdKeyFields.read(second.model, { id: "a", nonce: "1" })).toEqual(AsyncData.Loading())
-		expect(noteByIdKeyFields.read(second.model, { id: "a", nonce: "2" })).toEqual(AsyncData.Loading())
-		expect(HashMap.size(second.model)).toBe(1)
+	it("keyFields without toKey keep nested params in the slot key", () => {
+		const first = noteByIdNonce.informLoadIfMissing(noteByIdNonce.init(), {
+			params: { id: "a" },
+			query: { nonce: "1" },
+		})
+		const second = noteByIdNonce.informLoadIfMissing(first.model, {
+			params: { id: "a" },
+			query: { nonce: "2" },
+		})
+		expect(HashMap.size(second.model)).toBe(2)
+		expect(
+			noteByIdNonce.read(second.model, {
+				params: { id: "a" },
+				query: { nonce: "1" },
+			})
+		).toEqual(AsyncData.Loading())
+		expect(
+			noteByIdNonce.read(second.model, {
+				params: { id: "a" },
+				query: { nonce: "2" },
+			})
+		).toEqual(AsyncData.Loading())
+		expect(noteByIdNonce.Fetch({ params: { id: "a" }, query: { nonce: "1" } }).key).toEqual(
+			noteByIdNonce.Fetch({ params: { id: "a" }, query: { nonce: "2" } }).key
+		)
 	})
 })
 
@@ -169,24 +199,22 @@ describe("Query.HttpApi.Service.query empty success", () => {
 })
 
 describe("Query.HttpApi.Service.query construction", () => {
-	it("throws for an unknown group", () => {
-		expect(function () {
-			NotesClient.query({
-				name: "Missing",
-				group: "missing",
-				endpoint: "list",
-			} as never)
-		}).toThrow(/unknown group/)
+	it("rejects an endpoint whose success codec requires encoding services", () => {
+		NotesClient.query(
+			"Secret",
+			"notes",
+			// @ts-expect-error success EncodingServices is not never
+			"secret"
+		)
 	})
 
-	it("throws for an unknown endpoint", () => {
-		expect(function () {
-			NotesClient.query({
-				name: "Missing",
-				group: "notes",
-				endpoint: "missing",
-			} as never)
-		}).toThrow(/unknown endpoint/)
+	it("rejects an endpoint whose request codec requires encoding services", () => {
+		NotesClient.query(
+			"Locked",
+			"notes",
+			// @ts-expect-error params EncodingServices is not never
+			"locked"
+		)
 	})
 })
 

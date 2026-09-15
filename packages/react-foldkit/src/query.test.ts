@@ -59,6 +59,33 @@ const commandShape = (command: { readonly name: string; readonly args?: unknown;
 	key: command.key,
 })
 
+const slotKey = Schema.Unknown.pipe(Schema.toCodecJson, Schema.fromJsonString, Schema.encodeUnknownSync)
+
+describe("Query.define schema inputs", function () {
+	it("rejects Schema.Top data and error", function () {
+		const data: Schema.Top = Schema.Array(Note)
+		const error: Schema.Top = Schema.String
+		// @ts-expect-error Foldkit AsyncData.Schema takes Codec with never services
+		Query.define({
+			name: "TopNotes",
+			data,
+			error,
+			execute: Effect.succeed(hello),
+		})
+	})
+
+	it("rejects a data codec that requires encoding services", function () {
+		const data = Schema.String as Schema.Codec<string, string, never, "EncodeSvc">
+		Query.define({
+			name: "EncodedNotes",
+			// @ts-expect-error Foldkit AsyncData.Schema takes Codec with never services
+			data,
+			error: Schema.String,
+			execute: Effect.succeed("ok"),
+		})
+	})
+})
+
 describe("Query.define field — policy routing", () => {
 	it("revalidateOrLoad starts a cold field and leaves Loading and Refreshing alone", () => {
 		const started = notes.informRevalidateOrLoad(notes.init())
@@ -212,7 +239,7 @@ describe("Query.define keyed — isolation", () => {
 
 		const loaded = HashMap.set(
 			noteById.init(),
-			"1",
+			slotKey({ noteId: "1" }),
 			noteSlot("1", AsyncData.Success({ data: { id: "1", body: "hello" } }))
 		)
 		const hit = noteById.informLoadIfMissing(loaded, { noteId: "1" })
@@ -232,7 +259,7 @@ describe("Query.define keyed — isolation", () => {
 	it("revalidate refreshes a Success key", () => {
 		const loaded = HashMap.set(
 			noteById.init(),
-			"1",
+			slotKey({ noteId: "1" }),
 			noteSlot("1", AsyncData.Success({ data: { id: "1", body: "hello" } }))
 		)
 		const refreshed = noteById.informRevalidate(loaded, { noteId: "1" })
@@ -435,14 +462,15 @@ describe("Query.lift field lens", () => {
 })
 
 describe("Query.define keyed — default toKey", () => {
-	it("joins every args field when keyFields and toKey are omitted", () => {
+	it("JSON-encodes the full args when toKey is omitted", () => {
 		const started = noteByIdAndLocale.informLoadIfMissing(noteByIdAndLocale.init(), {
 			noteId: "1",
 			locale: "en",
 		})
 		expect(noteByIdAndLocale.read(started.model, { noteId: "1", locale: "en" })).toEqual(AsyncData.Loading())
-		expect(HashMap.has(started.model, "1:en")).toBe(true)
-		expect(HashMap.has(started.model, "1")).toBe(false)
+		expect(HashMap.has(started.model, slotKey({ noteId: "1", locale: "en" }))).toBe(true)
+		expect(HashMap.has(started.model, slotKey({ noteId: "1" }))).toBe(false)
+		expect(HashMap.has(started.model, "1:en")).toBe(false)
 	})
 
 	it("keeps Interrupt identity on keyFields when extra args are present", () => {
@@ -453,6 +481,23 @@ describe("Query.define keyed — default toKey", () => {
 		const sameKey = noteByIdPreview.informLoadIfMissing(pending.model, { noteId: "1", preview: false })
 		expect(sameKey.commands).toBeUndefined()
 		expect(HashMap.has(pending.model, "1")).toBe(true)
+	})
+
+	it("keyFields without toKey keep distinct slots and share Interrupt identity", () => {
+		const previewById = Query.define({
+			name: "NotePreviewSlots",
+			data: Note,
+			error: Schema.String,
+			args: { noteId: Schema.String, preview: Schema.Boolean },
+			keyFields: ["noteId"],
+			execute: ({ noteId }) => Effect.succeed({ id: noteId, body: "hello" }),
+		})
+		const first = previewById.informLoadIfMissing(previewById.init(), { noteId: "1", preview: true })
+		const second = previewById.informLoadIfMissing(first.model, { noteId: "1", preview: false })
+		expect(HashMap.size(second.model)).toBe(2)
+		expect(previewById.Fetch({ noteId: "1", preview: true }).key).toEqual(
+			previewById.Fetch({ noteId: "1", preview: false }).key
+		)
 	})
 })
 
@@ -468,7 +513,7 @@ describe("Query.define keyed — watch and forget", () => {
 
 		const onlyOne = noteById.informWatch(both.model, [{ noteId: "1" }])
 		expect(noteById.read(onlyOne.model, { noteId: "1" })).toEqual(AsyncData.Loading())
-		expect(HashMap.get(onlyOne.model, "2")).toEqual(Option.none())
+		expect(HashMap.get(onlyOne.model, slotKey({ noteId: "2" }))).toEqual(Option.none())
 		expect(onlyOne.commands?.map(commandShape)).toEqual([
 			commandShape(
 				noteById.Fetch.Interrupt({ noteId: "2" }, (outcome) =>
@@ -490,7 +535,7 @@ describe("Query.define keyed — watch and forget", () => {
 	it("informForget while pending removes the key and returns Interrupt", () => {
 		const pending = noteById.informLoadIfMissing(noteById.init(), { noteId: "2" })
 		const forgotten = noteById.informForget(pending.model, { noteId: "2" })
-		expect(HashMap.get(forgotten.model, "2")).toEqual(Option.none())
+		expect(HashMap.get(forgotten.model, slotKey({ noteId: "2" }))).toEqual(Option.none())
 		expect(forgotten.commands?.map(commandShape)).toEqual([
 			commandShape(
 				noteById.Fetch.Interrupt({ noteId: "2" }, (outcome) =>
@@ -510,7 +555,7 @@ describe("Query.define keyed — watch and forget", () => {
 				result: Result.succeed({ id: "1", body: "hello" }),
 			})
 		)
-		expect(HashMap.get(late.model, "1")).toEqual(Option.none())
+		expect(HashMap.get(late.model, slotKey({ noteId: "1" }))).toEqual(Option.none())
 		expect(HashMap.isEmpty(late.model)).toBe(true)
 	})
 
@@ -524,7 +569,7 @@ describe("Query.define keyed — watch and forget", () => {
 				result: Result.succeed({ id: "2", body: "hello" }),
 			})
 		)
-		expect(HashMap.get(late.model, "2")).toEqual(Option.none())
+		expect(HashMap.get(late.model, slotKey({ noteId: "2" }))).toEqual(Option.none())
 
 		const rewatched = noteById.informWatch(late.model, [{ noteId: "1" }, { noteId: "2" }])
 		expect(noteById.read(rewatched.model, { noteId: "2" })).toEqual(AsyncData.Loading())
@@ -625,14 +670,14 @@ describe("Query watch subscription and run", () => {
 
 			const dropped = yield* Store.takeWhen(store, (model) =>
 				AsyncData.isSuccess(noteById.read(model.notes, { noteId: "1" })) &&
-				Option.isNone(HashMap.get(model.notes, "2"))
+				Option.isNone(HashMap.get(model.notes, slotKey({ noteId: "2" })))
 					? Option.some(model)
 					: Option.none()
 			)
 			expect(noteById.read(dropped.notes, { noteId: "1" })).toEqual(
 				AsyncData.Success({ data: { id: "1", body: "hello" } })
 			)
-			expect(HashMap.get(dropped.notes, "2")).toEqual(Option.none())
+			expect(HashMap.get(dropped.notes, slotKey({ noteId: "2" }))).toEqual(Option.none())
 		})
 	)
 
