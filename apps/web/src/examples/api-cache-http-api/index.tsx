@@ -1,9 +1,9 @@
+/* eslint-disable @typescript-eslint/naming-convention */
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import { Separator } from "@workspace/ui/components/separator"
 import { Array, Clock, Duration, Effect, Layer, Match, Option, pipe, Schema, Stream } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup } from "effect/unstable/httpapi"
-import type * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient"
 import { ReactFoldkit } from "react-foldkit"
 import * as AsyncData from "react-foldkit/asyncData"
 import { defineMessageUnion } from "react-foldkit/message"
@@ -46,55 +46,39 @@ const BlogApi = HttpApi.make("BlogApi").add(
 		)
 )
 
-class BlogClient extends Query.HttpApi.Service<BlogClient>()("BlogClient", { api: BlogApi }) {}
+class BlogClient extends Query.HttpApi.Service<BlogClient>()("BlogClient", { api: BlogApi }) {
+	static readonly layer = Layer.succeed(
+		BlogClient,
+		BlogClient.of({
+			blog: {
+				listPosts: () =>
+					Effect.gen(function* () {
+						const list = yield* fetchPosts
+						const fetchedAt = yield* Clock.currentTimeMillis
+						return { posts: list, fetchedAt }
+					}) as any,
+				getPost: (request: { readonly params: { readonly postId: string } }) =>
+					Effect.gen(function* () {
+						const detail = yield* fetchPostDetail(request.params.postId)
+						const fetchedAt = yield* Clock.currentTimeMillis
+						return { detail, fetchedAt }
+					}) as any,
+				getStats: () =>
+					Effect.gen(function* () {
+						const snapshot = yield* fetchStats
+						const fetchedAt = yield* Clock.currentTimeMillis
+						return { stats: snapshot, fetchedAt }
+					}) as any,
+			},
+		})
+	)
+}
 
-const postsQuery = BlogClient.query({
-	name: "Posts",
-	group: "blog",
-	endpoint: "listPosts",
-})
+const postsQuery = BlogClient.query("Posts", "blog", "listPosts")
 
-const statsQuery = BlogClient.query({
-	name: "Stats",
-	group: "blog",
-	endpoint: "getStats",
-})
+const statsQuery = BlogClient.query("Stats", "blog", "getStats")
 
-const postDetailQuery = BlogClient.query({
-	name: "PostDetail",
-	group: "blog",
-	endpoint: "getPost",
-})
-
-type BlogApiGroups = typeof BlogApi extends HttpApi.HttpApi<infer _I, infer G> ? G : never
-
-const blogClient = {
-	blog: {
-		listPosts: function () {
-			return Effect.gen(function* () {
-				const list = yield* fetchPosts
-				const fetchedAt = yield* Clock.currentTimeMillis
-				return { posts: list, fetchedAt }
-			})
-		},
-		getPost: function (request: { readonly params: { readonly postId: string } }) {
-			return Effect.gen(function* () {
-				const detail = yield* fetchPostDetail(request.params.postId)
-				const fetchedAt = yield* Clock.currentTimeMillis
-				return { detail, fetchedAt }
-			})
-		},
-		getStats: function () {
-			return Effect.gen(function* () {
-				const snapshot = yield* fetchStats
-				const fetchedAt = yield* Clock.currentTimeMillis
-				return { stats: snapshot, fetchedAt }
-			})
-		},
-	},
-} as unknown as HttpApiClient.Client<BlogApiGroups, never, never>
-
-const BlogClientLive = Layer.succeed(BlogClient, blogClient)
+const postDetailQuery = BlogClient.query("PostDetail", "blog", "getPost")
 
 const Tab = Schema.Literals(["Posts", "Stats"])
 type Tab = typeof Tab.Type
@@ -212,7 +196,7 @@ const { Provider, useModel, useDispatch } = ReactFoldkit.make({
 	Model,
 	update,
 	subscriptions,
-	layer: BlogClientLive,
+	layer: BlogClient.layer,
 })
 
 const formatFetchedAt = (fetchedAt: number): string => new Date(fetchedAt).toLocaleTimeString()
