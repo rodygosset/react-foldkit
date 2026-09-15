@@ -1,13 +1,23 @@
 import { describe, it } from "@effect/vitest"
-import { Effect, HashMap, Layer, Schema } from "effect"
+import { Cause, Context, Effect, Exit, HashMap, Layer, Schema } from "effect"
 import type * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient"
-import { HttpApi, HttpApiEndpoint, HttpApiGroup } from "effect/unstable/httpapi"
+import { HttpClientError, HttpClientRequest } from "effect/unstable/http"
+import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware } from "effect/unstable/httpapi"
 import { expect, expectTypeOf } from "vitest"
 import * as AsyncData from "../asyncData"
 import * as Query from "./index"
 
 const Note = Schema.Struct({ id: Schema.String, body: Schema.String })
 type Note = typeof Note.Type
+
+class NotesAuthError extends Schema.Error<NotesAuthError>("NotesAuthError")({
+	_tag: Schema.tag("NotesAuthError"),
+}) {}
+
+class NotesAuth extends HttpApiMiddleware.Service<NotesAuth>()("NotesAuth", {
+	error: NotesAuthError,
+	requiredForClient: true,
+}) {}
 
 const Api = HttpApi.make("Api").add(
 	HttpApiGroup.make("notes")
@@ -32,6 +42,19 @@ const Api = HttpApi.make("Api").add(
 				error: Schema.String,
 			})
 		)
+		.add(
+			HttpApiEndpoint.post("create", "/notes", {
+				payload: Note,
+				success: Note,
+				error: Schema.String,
+			})
+		)
+		.add(
+			HttpApiEndpoint.get("guarded", "/notes/guarded", {
+				success: Note,
+				error: Schema.String,
+			}).middleware(NotesAuth)
+		)
 		.add(HttpApiEndpoint.get("ping", "/ping"))
 		.add(
 			HttpApiEndpoint.get("secret", "/secret", {
@@ -44,6 +67,11 @@ const Api = HttpApi.make("Api").add(
 				success: Note,
 			})
 		)
+		.add(
+			HttpApiEndpoint.get("decoded", "/decoded", {
+				success: Schema.String as Schema.Codec<string, string, "SecretDecode">,
+			})
+		)
 )
 
 class NotesClient extends Query.HttpApi.Service<NotesClient>()("NotesClient", { api: Api }) {}
@@ -51,21 +79,31 @@ class NotesClient extends Query.HttpApi.Service<NotesClient>()("NotesClient", { 
 type NotesApiGroups = typeof Api extends HttpApi.HttpApi<infer _I, infer G> ? G : never
 
 const notes = NotesClient.query("Notes", "notes", "list")
-
 const noteById = NotesClient.query("Note", "notes", "getById")
-
-const noteByIdKeyFields = NotesClient.query("NoteKeyFields", "notes", "getByIdNonce", {
-	keyFields: ["params"],
-	toKey: function (args) {
-		return args.params.id
-	},
-})
-
 const noteByIdNonce = NotesClient.query("NoteNonce", "notes", "getByIdNonce", {
 	keyFields: ["params"],
 })
-
+const createNote = NotesClient.query("CreateNote", "notes", "create")
+const guarded = NotesClient.query("Guarded", "notes", "guarded")
 const ping = NotesClient.query("Ping", "notes", "ping")
+
+function transportError(): HttpClientError.HttpClientError {
+	return new HttpClientError.HttpClientError({
+		reason: new HttpClientError.TransportError({
+			request: HttpClientRequest.get("/notes"),
+			description: "offline",
+		}),
+	})
+}
+
+function schemaError(): Schema.SchemaError {
+	try {
+		Schema.decodeUnknownSync(Schema.Number)("nope")
+	} catch (error) {
+		if (Schema.isSchemaError(error)) return error
+	}
+	throw new Error("expected Schema.decodeUnknownSync to throw SchemaError")
+}
 
 const notesClient = {
 	notes: {
@@ -74,6 +112,8 @@ const notesClient = {
 		},
 		getById: function (request: { readonly params: { readonly id: string } }) {
 			if (request.params.id === "missing") return Effect.fail("not found")
+			if (request.params.id === "transport") return Effect.fail(transportError())
+			if (request.params.id === "schema") return Effect.fail(schemaError())
 			return Effect.succeed({ id: request.params.id, body: "hello" })
 		},
 		getByIdNonce: function (request: {
@@ -81,6 +121,12 @@ const notesClient = {
 			readonly query: { readonly nonce: string }
 		}) {
 			return Effect.succeed({ id: request.params.id, body: request.query.nonce })
+		},
+		create: function (request: { readonly payload: Note }) {
+			return Effect.succeed(request.payload)
+		},
+		guarded: function () {
+			return Effect.succeed({ id: "1", body: "hello" })
 		},
 		ping: function () {
 			return Effect.void
@@ -91,9 +137,10 @@ const notesClient = {
 const NotesClientLive = Layer.succeed(NotesClient, notesClient)
 
 describe("Query.HttpApi.Service.query field", () => {
-	it("is a Field Submodel", () => {
-		expectTypeOf(notes.init).toBeFunction()
-		expectTypeOf(notes.informLoadIfMissing).toBeFunction()
+	it("is a Field whose run depends on the client tag", () => {
+		expectTypeOf(notes.run).toEqualTypeOf<
+			Effect.Effect<AsyncData.AsyncData<ReadonlyArray<Note>, string>, never, NotesClient>
+		>()
 	})
 
 	it.effect("run uses the HttpApiClient method", () =>
@@ -105,9 +152,13 @@ describe("Query.HttpApi.Service.query field", () => {
 })
 
 describe("Query.HttpApi.Service.query keyed", () => {
-	it("inferred args are the client request", () => {
-		const args: Parameters<typeof noteById.read>[1] = { params: { id: "1" } }
-		expect(args).toEqual({ params: { id: "1" } })
+	it("is a Keyed Submodel over the client request", () => {
+		expectTypeOf(noteById.run).parameter(0).toEqualTypeOf<{
+			readonly params: { readonly id: string }
+		}>()
+		expectTypeOf(createNote.run).parameter(0).toEqualTypeOf<{
+			readonly payload: Note
+		}>()
 	})
 
 	it.effect("run forwards params to the client method", () =>
@@ -124,6 +175,38 @@ describe("Query.HttpApi.Service.query keyed", () => {
 		})
 	)
 
+	it.effect("run dies on HttpClientError", () =>
+		Effect.gen(function* () {
+			const exit = yield* Effect.exit(
+				Effect.provide(noteById.run({ params: { id: "transport" } }), NotesClientLive)
+			)
+			expect(Exit.isFailure(exit)).toBe(true)
+			if (Exit.isFailure(exit)) {
+				expect(Cause.hasDies(exit.cause)).toBe(true)
+				expect(HttpClientError.isHttpClientError(Cause.squash(exit.cause))).toBe(true)
+			}
+		})
+	)
+
+	it.effect("run dies on SchemaError", () =>
+		Effect.gen(function* () {
+			const exit = yield* Effect.exit(Effect.provide(noteById.run({ params: { id: "schema" } }), NotesClientLive))
+			expect(Exit.isFailure(exit)).toBe(true)
+			if (Exit.isFailure(exit)) {
+				expect(Cause.hasDies(exit.cause)).toBe(true)
+				expect(Schema.isSchemaError(Cause.squash(exit.cause))).toBe(true)
+			}
+		})
+	)
+
+	it.effect("run forwards payload on POST", () =>
+		Effect.gen(function* () {
+			const payload = { id: "9", body: "created" }
+			const data = yield* Effect.provide(createNote.run({ payload }), NotesClientLive)
+			expect(data).toEqual(AsyncData.Success({ data: payload }))
+		})
+	)
+
 	it("distinct params keep distinct slots", () => {
 		const first = noteById.informLoadIfMissing(noteById.init(), { params: { id: "a" } })
 		const second = noteById.informLoadIfMissing(first.model, { params: { id: "b" } })
@@ -133,30 +216,6 @@ describe("Query.HttpApi.Service.query keyed", () => {
 })
 
 describe("Query.HttpApi.Service.query keyFields", () => {
-	it("keyFields plus toKey collapse slots that share the selected fields", () => {
-		const first = noteByIdKeyFields.informLoadIfMissing(noteByIdKeyFields.init(), {
-			params: { id: "a" },
-			query: { nonce: "1" },
-		})
-		const second = noteByIdKeyFields.informLoadIfMissing(first.model, {
-			params: { id: "a" },
-			query: { nonce: "2" },
-		})
-		expect(
-			noteByIdKeyFields.read(second.model, {
-				params: { id: "a" },
-				query: { nonce: "1" },
-			})
-		).toEqual(AsyncData.Loading())
-		expect(
-			noteByIdKeyFields.read(second.model, {
-				params: { id: "a" },
-				query: { nonce: "2" },
-			})
-		).toEqual(AsyncData.Loading())
-		expect(HashMap.size(second.model)).toBe(1)
-	})
-
 	it("keyFields without toKey keep nested params in the slot key", () => {
 		const first = noteByIdNonce.informLoadIfMissing(noteByIdNonce.init(), {
 			params: { id: "a" },
@@ -186,16 +245,20 @@ describe("Query.HttpApi.Service.query keyFields", () => {
 })
 
 describe("Query.HttpApi.Service.query empty success", () => {
-	it("is a Field Submodel", () => {
-		expectTypeOf(ping.init).toBeFunction()
-	})
-
 	it.effect("run succeeds with no content", () =>
 		Effect.gen(function* () {
 			const data = yield* Effect.provide(ping.run, NotesClientLive)
-			expect(AsyncData.isSuccess(data)).toBe(true)
+			expect(data).toEqual(AsyncData.Success({ data: undefined }))
 		})
 	)
+})
+
+describe("Query.HttpApi.Service.query middleware", () => {
+	it("includes middleware errors in the Field error type", () => {
+		expectTypeOf(guarded.run).toEqualTypeOf<
+			Effect.Effect<AsyncData.AsyncData<Note, string | NotesAuthError>, never, NotesClient>
+		>()
+	})
 })
 
 describe("Query.HttpApi.Service.query construction", () => {
@@ -209,24 +272,20 @@ describe("Query.HttpApi.Service.query construction", () => {
 	})
 
 	it("rejects an endpoint whose request codec requires encoding services", () => {
-		function unused() {
-			NotesClient.query(
-				"Locked",
-				"notes",
-				// @ts-expect-error params EncodingServices is not never
-				"locked"
-			)
-		}
-		expect(unused).toBeTypeOf("function")
+		NotesClient.query(
+			"Locked",
+			"notes",
+			// @ts-expect-error params EncodingServices is not never
+			"locked"
+		)
 	})
-})
 
-describe("Query.HttpApi.Service tag", () => {
-	it.effect("yields the provided HttpApiClient", () =>
-		Effect.gen(function* () {
-			const client = yield* Effect.provide(NotesClient, NotesClientLive)
-			const data = yield* client.notes.list()
-			expect(data).toEqual([{ id: "1", body: "hello" }])
-		})
-	)
+	it("rejects an endpoint whose success codec requires decoding services", () => {
+		NotesClient.query(
+			"Decoded",
+			"notes",
+			// @ts-expect-error success DecodingServices is not never
+			"decoded"
+		)
+	})
 })

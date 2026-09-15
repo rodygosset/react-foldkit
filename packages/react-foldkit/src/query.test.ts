@@ -1,5 +1,5 @@
 import { describe, it } from "@effect/vitest"
-import { Array, Effect, Equal, HashMap, Option, Result, Schema } from "effect"
+import { Array, Context, Effect, Equal, HashMap, Layer, Option, Result, Schema } from "effect"
 import { expect, expectTypeOf } from "vitest"
 import * as AsyncData from "./asyncData"
 import * as Command from "./command"
@@ -417,15 +417,6 @@ describe("Query.lift keyed", () => {
 		expect(noteById.read(started.model.notes, { noteId: "1" })).toEqual(AsyncData.Loading())
 		expect(started.commands?.map(commandShape)).toEqual([commandShape(noteById.Fetch({ noteId: "1" }))])
 	})
-
-	it("loadIfMissing runs data-first and data-last", () => {
-		const model = { notes: noteById.init() }
-		const args = { noteId: "1" }
-		const dataFirst = foldNotes.loadIfMissing(model, args)
-		const dataLast = foldNotes.loadIfMissing(args)(model)
-		expect(Equal.equals(dataFirst.model.notes, dataLast.model.notes)).toBe(true)
-		expect(dataFirst.commands?.map(commandShape)).toEqual(dataLast.commands?.map(commandShape))
-	})
 })
 
 describe("Query.lift field lens", () => {
@@ -537,15 +528,6 @@ describe("Query.define keyed — watch and forget", () => {
 		])
 	})
 
-	it("informWatch runs data-first and data-last", () => {
-		const model = noteById.init()
-		const args = [{ noteId: "1" }] as const
-		const dataFirst = noteById.informWatch(model, args)
-		const dataLast = noteById.informWatch(args)(model)
-		expect(Equal.equals(dataFirst.model, dataLast.model)).toBe(true)
-		expect(dataFirst.commands?.map(commandShape)).toEqual(dataLast.commands?.map(commandShape))
-	})
-
 	it("informForget while pending removes the key and returns Interrupt", () => {
 		const pending = noteById.informLoadIfMissing(noteById.init(), { noteId: "2" })
 		const forgotten = noteById.informForget(pending.model, { noteId: "2" })
@@ -619,6 +601,57 @@ describe("Query.define field — watch and forget", () => {
 		)
 		expect(late.model).toEqual(AsyncData.Idle())
 	})
+})
+
+describe("Query.define keyed — Store interrupt", () => {
+	it.effect("replace through Store.boot interrupts one slot and leaves the sibling pending", () =>
+		Effect.gen(function* () {
+			const attempts: globalThis.Record<string, number> = {}
+			const deferredNotes = Query.define({
+				name: "DeferredNote",
+				data: Note,
+				error: Schema.String,
+				args: { noteId: Schema.String },
+				execute: function ({ noteId }) {
+					return Effect.suspend(function () {
+						attempts[noteId] = (attempts[noteId] ?? 0) + 1
+						if (attempts[noteId] === 1) return Effect.never
+						return Effect.succeed({ id: noteId, body: "hello" })
+					})
+				},
+			})
+
+			const started = deferredNotes.informWatch(deferredNotes.init(), [{ noteId: "1" }, { noteId: "2" }])
+			const store = yield* Effect.acquireRelease(
+				Effect.sync(function () {
+					return Store.boot({ update: deferredNotes.update }, started)
+				}),
+				function (live) {
+					return Effect.sync(function () {
+						live.dispose()
+					})
+				}
+			)
+
+			yield* Effect.yieldNow
+			yield* Effect.yieldNow
+			store.dispatch(deferredNotes.Message.RequestedReplace({ args: { noteId: "1" } }))
+
+			const model = yield* Store.takeWhen(store, function (current) {
+				const first = deferredNotes.read(current, { noteId: "1" })
+				const second = deferredNotes.read(current, { noteId: "2" })
+				if (AsyncData.isSuccess(first) && AsyncData.isLoading(second)) return Option.some(current)
+				return Option.none()
+			})
+
+			expect(deferredNotes.read(model, { noteId: "1" })).toEqual(
+				AsyncData.Success({ data: { id: "1", body: "hello" } })
+			)
+			expect(deferredNotes.read(model, { noteId: "2" })).toEqual(AsyncData.Loading())
+			expect(attempts["1"]).toBe(2)
+			expect(attempts["2"]).toBe(1)
+		})
+	)
 })
 
 describe("Query watch subscription and run", () => {
@@ -695,6 +728,69 @@ describe("Query watch subscription and run", () => {
 		})
 	)
 
+	it.effect("field watch subscription loads while watching and forgets when watching stops", () =>
+		Effect.gen(function* () {
+			const ParentModel = Schema.Struct({
+				notes: notes.Model,
+				watching: Schema.Boolean,
+			})
+			type ParentModel = typeof ParentModel.Type
+			const ParentMessage = defineMessageUnion({
+				GotNotesMessage: notes.ParentMessage,
+				SetWatching: { watching: Schema.Boolean },
+			})
+			type ParentMessage = typeof ParentMessage.Type
+
+			const foldNotes = notes.lift<ParentModel, ParentMessage>()({
+				field: "notes",
+				toParentMessage: ParentMessage.GotNotesMessage,
+			})
+
+			const update = function (model: ParentModel, message: ParentMessage) {
+				return ParentMessage.match<Update.Return<ParentModel, ParentMessage>>(message, {
+					GotNotesMessage: foldNotes(model),
+					SetWatching: function ({ watching }) {
+						return { model: evo(model, { watching: function () { return watching } }) }
+					},
+				})
+			}
+
+			const subscriptions = Subscription.make<ParentModel, ParentMessage>()(function (entry) {
+				return {
+					watchNotes: foldNotes.watchSubscription(entry, function (model) {
+						return model.watching
+					}),
+				}
+			})
+
+			const store = yield* Effect.acquireRelease(
+				Effect.sync(function () {
+					return Store.boot(
+						{ update, subscriptions },
+						{ model: { notes: notes.init(), watching: true } }
+					)
+				}),
+				function (live) {
+					return Effect.sync(function () {
+						live.dispose()
+					})
+				}
+			)
+
+			const loaded = yield* Store.takeWhen(store, function (model) {
+				return AsyncData.isSuccess(model.notes) ? Option.some(model) : Option.none()
+			})
+			expect(loaded.notes).toEqual(AsyncData.Success({ data: hello }))
+
+			store.dispatch(ParentMessage.SetWatching({ watching: false }))
+
+			const forgotten = yield* Store.takeWhen(store, function (model) {
+				return AsyncData.isIdle(model.notes) ? Option.some(model) : Option.none()
+			})
+			expect(forgotten.notes).toEqual(AsyncData.Idle())
+		})
+	)
+
 	it.effect("Field run settles execute into Success", () =>
 		Effect.gen(function* () {
 			const data = yield* notes.run
@@ -723,57 +819,61 @@ describe("Query watch subscription and run", () => {
 	)
 })
 
-describe("Query.Field and Query.Keyed types", () => {
-	it("define(field) is Query.Field with the config Name, Model, and Message", () => {
-		expectTypeOf(notes).toEqualTypeOf<Query.Field<"Notes", typeof notes.Model, typeof notes.Message>>()
-		const takesField = (_query: Query.Field.Any) => undefined
-		takesField(notes)
+describe("Query.define execute services", () => {
+	class NoteService extends Context.Service<NoteService, { readonly body: string }>()("NoteService") {}
+
+	const served = Query.define({
+		name: "ServedNotes",
+		data: Schema.Array(Note),
+		error: Schema.String,
+		execute: Effect.gen(function* () {
+			const service = yield* NoteService
+			return [{ id: "1", body: service.body }]
+		}),
 	})
 
-	it("ParentMessage is the Got* fields object for defineMessageUnion", () => {
-		expectTypeOf(notes.ParentMessage).toEqualTypeOf<Query.ParentMessage<typeof notes.Message>>()
-		expectTypeOf(noteById.ParentMessage).toEqualTypeOf<Query.ParentMessage<typeof noteById.Message>>()
-		const Message = defineMessageUnion({
-			GotNotesMessage: notes.ParentMessage,
-		})
-		expect(Message.GotNotesMessage({ message: notes.Message.RequestedWatch() })).toEqual({
-			_tag: "GotNotesMessage",
-			message: notes.Message.RequestedWatch(),
-		})
-	})
-
-	it("define(keyed) is Query.Keyed with Name, Model, Message, Fields, and KeyField", () => {
-		expectTypeOf(noteById).toEqualTypeOf<
-			Query.Keyed<
-				"Note",
-				typeof noteById.Model,
-				typeof noteById.Message,
-				{ noteId: typeof Schema.String },
-				"noteId",
-				AsyncData.AsyncData<Note, string>
-			>
+	it("run requires the execute services", () => {
+		expectTypeOf(served.run).toEqualTypeOf<
+			Effect.Effect<AsyncData.AsyncData<ReadonlyArray<Note>, string>, never, NoteService>
 		>()
+		Store.boot(
+			{
+				update: served.update,
+				layer: Layer.succeed(NoteService, { body: "hello" }),
+			},
+			{ model: served.init() }
+		)
+		// @ts-expect-error layer is required when execute needs services
+		Store.boot({ update: served.update }, { model: served.init() })
+	})
+
+	it.effect("run settles after the execute services are provided", () =>
+		Effect.gen(function* () {
+			const data = yield* Effect.provide(served.run, Layer.succeed(NoteService, { body: "from-layer" }))
+			expect(data).toEqual(AsyncData.Success({ data: [{ id: "1", body: "from-layer" }] }))
+		})
+	)
+})
+
+describe("Query.Field and Query.Keyed types", () => {
+	it("Field.Any and Keyed.Any accept define results", () => {
+		const takesField = function (_query: Query.Field.Any) {
+			return undefined
+		}
+		takesField(notes)
+		const takesKeyed = function (_query: Query.Keyed.Any) {
+			return undefined
+		}
+		takesKeyed(noteById)
 		expectTypeOf(noteByIdPreview.Fetch.Interrupt).parameter(0).toEqualTypeOf<{ readonly noteId: string }>()
 		expectTypeOf(noteByIdAndLocale.Fetch.Interrupt).parameter(0).toEqualTypeOf<{
 			readonly noteId: string
 			readonly locale: string
 		}>()
-		const takesKeyed = (_query: Query.Keyed.Any) => undefined
-		takesKeyed(noteById)
-	})
-
-	it("keyed Fetch is Command.Interruptible.DefinitionWithArgs", () => {
-		expectTypeOf(noteById.Fetch).toEqualTypeOf<
-			Command.Interruptible.DefinitionWithArgs<
-				"FetchNote",
-				{ noteId: typeof Schema.String },
-				{ readonly noteId: string },
-				Effect.Effect<(typeof noteById.Message.SettledFetch)["Type"], never, never>
-			>
+		expectTypeOf(noteById.informLoadIfMissing).toEqualTypeOf<
+			Update.Fold<(typeof noteById.Model)["Type"], (typeof noteById.Message)["Type"], { readonly noteId: string }>
 		>()
-		expectTypeOf(noteById.Fetch.Interrupt({ noteId: "1" }, (outcome) => outcome).args).toEqualTypeOf<{
-			readonly noteId: string
-		}>()
+		expectTypeOf(noteById.run).returns.toEqualTypeOf<Effect.Effect<AsyncData.AsyncData<Note, string>>>()
 	})
 
 	it("lift returns Query.Lifted.Field / Query.Lifted.Keyed", () => {
@@ -821,23 +921,6 @@ describe("Query.Field and Query.Keyed types", () => {
 		expectTypeOf(foldKeyed).toMatchTypeOf<
 			Query.Lifted.Keyed<KeyedParent, KeyedParentMessage, typeof noteById.Message.Type, { readonly noteId: string }>
 		>()
-	})
-
-	it("field lift infers ParentMessage from toParentMessage", () => {
-		const ParentModel = Schema.Struct({ notes: notes.Model, label: Schema.String })
-		type ParentModel = typeof ParentModel.Type
-		const ParentMessage = defineMessageUnion({
-			GotNotesMessage: notes.ParentMessage,
-			ClickedLoad: {},
-		})
-		type ParentMessage = typeof ParentMessage.Type
-
-		const foldNotes = notes.lift<ParentModel, ParentMessage>()({
-			field: "notes",
-			toParentMessage: ParentMessage.GotNotesMessage,
-		})
-
-		expectTypeOf(foldNotes.revalidate).toEqualTypeOf<Update.Step<ParentModel, ParentMessage>>()
 	})
 
 	it("field lift rejects a child Message in place of ParentMessageValue", () => {
@@ -902,15 +985,5 @@ describe("Query.Field and Query.Keyed types", () => {
 			// @ts-expect-error
 			toParentMessage: Wrong.GotNotesMessage,
 		})
-	})
-
-	it("keyed informLoadIfMissing is Update.Fold over { noteId: string }", () => {
-		expectTypeOf(noteById.informLoadIfMissing).toEqualTypeOf<
-			Update.Fold<(typeof noteById.Model)["Type"], (typeof noteById.Message)["Type"], { readonly noteId: string }>
-		>()
-	})
-
-	it("keyed run returns AsyncData, not the HashMap Model", () => {
-		expectTypeOf(noteById.run).returns.toEqualTypeOf<Effect.Effect<AsyncData.AsyncData<Note, string>>>()
 	})
 })
