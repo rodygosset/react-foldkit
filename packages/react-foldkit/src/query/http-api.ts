@@ -6,6 +6,7 @@ import type * as HttpApi from "effect/unstable/httpapi/HttpApi"
 import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient"
 import * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint"
 import type * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup"
+import type { SyncFields } from "./keyed"
 import { define, type DefinedField, type DefinedKeyed } from "./query"
 
 type EndpointFrom<
@@ -81,8 +82,6 @@ type EndpointIdOf<
 		: HttpApiEndpoint.Identifier<Endpoint>
 	: never
 
-type StructTypeOf<Fields extends Schema.Struct.Fields> = Schema.Schema.Type<Schema.Struct<Fields>>
-
 type ClientRequestFields<Endpoint extends HttpApiEndpoint.ConstraintRequest> = Simplify<
 	([Endpoint["~Params"]["Type"]] extends [never] ? {} : { readonly params: Endpoint["~Params"] }) &
 		([Endpoint["~Query"]["Type"]] extends [never] ? {} : { readonly query: Endpoint["~Query"] }) &
@@ -91,12 +90,21 @@ type ClientRequestFields<Endpoint extends HttpApiEndpoint.ConstraintRequest> = S
 >
 
 type InferredFields<Endpoint> = Endpoint extends HttpApiEndpoint.ConstraintRequest
-	? [ClientRequestFields<Endpoint>] extends [Schema.Struct.Fields]
+	? ClientRequestFields<Endpoint> extends SyncFields
 		? ClientRequestFields<Endpoint>
 		: never
 	: never
 
-type InferredKeyField<Fields extends Schema.Struct.Fields> = keyof StructTypeOf<Fields> & string
+type KeyedRequestArgs<Endpoint> = RequestBody<ClientRequestOf<Endpoint>>
+
+type KeyedRequestKeyField<Endpoint> = keyof KeyedRequestArgs<Endpoint> & string
+
+type StructKeyField<Fields extends Schema.Struct.Fields> = keyof Schema.Schema.Type<Schema.Struct<Fields>> & string
+
+type KeyedQueryOptions<Endpoint, KeyField extends KeyedRequestKeyField<Endpoint>> = {
+	readonly toKey?: (args: Pick<KeyedRequestArgs<Endpoint>, KeyField>) => string
+	readonly keyFields?: Array.NonEmptyReadonlyArray<KeyField>
+}
 
 interface QueryFrom<Self, Groups extends HttpApiGroup.Constraint> {
 	<
@@ -104,16 +112,16 @@ interface QueryFrom<Self, Groups extends HttpApiGroup.Constraint> {
 		const GroupId extends HttpApiGroup.Identifier<Groups>,
 		const EndpointId extends EndpointIdOf<Groups, GroupId>,
 		Endpoint extends EndpointFrom<Groups, GroupId, EndpointId> = EndpointFrom<Groups, GroupId, EndpointId>,
-		Fields extends Schema.Struct.Fields = InferredFields<Endpoint>,
-		KeyField extends InferredKeyField<Fields> = InferredKeyField<Fields>,
+		Fields extends SyncFields = InferredFields<Endpoint> extends SyncFields ? InferredFields<Endpoint> : SyncFields,
+		KeyField extends KeyedRequestKeyField<Endpoint> & StructKeyField<Fields> = KeyedRequestKeyField<Endpoint> &
+			StructKeyField<Fields>,
 	>(
 		name: Name,
 		group: GroupId,
 		endpoint: EndpointId,
-		options?: {
-			readonly keyFields?: Array.NonEmptyReadonlyArray<KeyField>
-			readonly toKey?: (args: Pick<StructTypeOf<Fields>, KeyField>) => string
-		}
+		...options: IsFieldRequest<ClientRequestOf<Endpoint>> extends true
+			? []
+			: [options?: KeyedQueryOptions<Endpoint, KeyField>]
 	): IsFieldRequest<ClientRequestOf<Endpoint>> extends true
 		? DefinedField<
 				Name,
@@ -143,6 +151,7 @@ interface QueryFrom<Self, Groups extends HttpApiGroup.Constraint> {
  * ```ts
  * class BlogClient extends Query.HttpApi.Service<BlogClient>()("BlogClient", { api: BlogApi }) {}
  * const postsQuery = BlogClient.query("Posts", "blog", "listPosts")
+ * const postQuery = BlogClient.query("Post", "blog", "getPost")
  * ```
  */
 export interface Service<
@@ -202,7 +211,7 @@ function payloadCodec(endpoint: HttpApiEndpoint.Top): Schema.Top | undefined {
 	return Schema.Union(schemas)
 }
 
-function clientRequestFields(endpoint: HttpApiEndpoint.Top): Schema.Struct.Fields | undefined {
+function clientRequestFields(endpoint: HttpApiEndpoint.Top): SyncFields | undefined {
 	const fields: globalThis.Record<string, Schema.Top> = {}
 	if (endpoint.params !== undefined) fields.params = endpoint.params
 	if (endpoint.query !== undefined) fields.query = endpoint.query
@@ -210,7 +219,7 @@ function clientRequestFields(endpoint: HttpApiEndpoint.Top): Schema.Struct.Field
 	const payload = payloadCodec(endpoint)
 	if (payload !== undefined) fields.payload = payload
 	if (Record.isEmptyRecord(fields)) return undefined
-	return fields
+	return fields as never
 }
 
 const makeQuery = <Self, ApiId extends string, Groups extends HttpApiGroup.Constraint>(
@@ -247,8 +256,8 @@ const makeQuery = <Self, ApiId extends string, Groups extends HttpApiGroup.Const
 				return catchErrors(method(request))
 			})
 
-		const inferred = clientRequestFields(endpoint)
-		if (inferred === undefined)
+		const args = clientRequestFields(endpoint)
+		if (args === undefined)
 			return define({
 				name,
 				data,
@@ -260,7 +269,7 @@ const makeQuery = <Self, ApiId extends string, Groups extends HttpApiGroup.Const
 			name,
 			data,
 			error,
-			args: inferred,
+			args,
 			keyFields: options?.keyFields,
 			toKey: options?.toKey,
 			execute,
@@ -271,7 +280,9 @@ const makeQuery = <Self, ApiId extends string, Groups extends HttpApiGroup.Const
  * Builds a class-style HttpApi service tag. Extend it, then call `.query`.
  *
  * Empty client request (no params, query, payload, or headers) is a Field.
- * Anything else is Keyed. Keyed args are the HttpApiClient request.
+ * Anything else is Keyed. Keyed args are the HttpApiClient request. Args
+ * schemas are `Schema.Codec`s (no encoding or decoding services). Omit `toKey`
+ * to JSON-encode args. Interrupt identity defaults to `keyFields`.
  *
  * @example
  * ```ts
