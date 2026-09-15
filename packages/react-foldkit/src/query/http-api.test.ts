@@ -27,27 +27,23 @@ const Api = HttpApi.make("Api").add(
 		.add(HttpApiEndpoint.get("ping", "/ping"))
 )
 
-interface NotesClient {}
-
-const NotesClient = Query.HttpApiService<NotesClient>()("NotesClient", { api: Api })
+class NotesClient extends Query.HttpApi.Service<NotesClient>()("NotesClient", { api: Api }) {}
 
 type NotesApiGroups = typeof Api extends HttpApi.HttpApi<infer _I, infer G> ? G : never
 
-const fromNotesApi = Query.fromHttpApi(NotesClient)
-
-const notes = fromNotesApi({
+const notes = NotesClient.query({
 	name: "Notes",
 	group: "notes",
 	endpoint: "list",
 })
 
-const noteById = fromNotesApi({
+const noteById = NotesClient.query({
 	name: "Note",
 	group: "notes",
 	endpoint: "getById",
 })
 
-const noteByIdFlat = fromNotesApi({
+const noteByIdFlat = NotesClient.query({
 	name: "NoteFlat",
 	group: "notes",
 	endpoint: "getById",
@@ -57,7 +53,7 @@ const noteByIdFlat = fromNotesApi({
 	},
 })
 
-const noteByIdKeyFields = fromNotesApi({
+const noteByIdKeyFields = NotesClient.query({
 	name: "NoteKeyFields",
 	group: "notes",
 	endpoint: "getById",
@@ -68,7 +64,7 @@ const noteByIdKeyFields = fromNotesApi({
 	},
 })
 
-const ping = fromNotesApi({
+const ping = NotesClient.query({
 	name: "Ping",
 	group: "notes",
 	endpoint: "ping",
@@ -91,7 +87,7 @@ const notesClient = {
 
 const NotesClientLive = Layer.succeed(NotesClient, notesClient)
 
-describe("Query.fromHttpApi field", () => {
+describe("Query.HttpApi.Service.query field", () => {
 	it("is a Field Submodel", () => {
 		expectTypeOf(notes.init).toBeFunction()
 		expectTypeOf(notes.informLoadIfMissing).toBeFunction()
@@ -105,7 +101,7 @@ describe("Query.fromHttpApi field", () => {
 	)
 })
 
-describe("Query.fromHttpApi keyed", () => {
+describe("Query.HttpApi.Service.query keyed", () => {
 	it("inferred args are the client request", () => {
 		const args: Parameters<typeof noteById.read>[1] = { params: { id: "1" } }
 		expect(args).toEqual({ params: { id: "1" } })
@@ -133,7 +129,7 @@ describe("Query.fromHttpApi keyed", () => {
 	})
 })
 
-describe("Query.fromHttpApi flattened args", () => {
+describe("Query.HttpApi.Service.query flattened args", () => {
 	it("keys by the flattened args schema", () => {
 		const args: Parameters<typeof noteByIdFlat.read>[1] = { id: "1" }
 		expect(args).toEqual({ id: "1" })
@@ -146,7 +142,7 @@ describe("Query.fromHttpApi flattened args", () => {
 		})
 	)
 
-	it("flattened run success is the endpoint success type", () => {
+	it("flattened run args are the flattened schema", () => {
 		expectTypeOf(noteByIdFlat.run).parameter(0).toEqualTypeOf<{ readonly id: string }>()
 	})
 
@@ -159,7 +155,7 @@ describe("Query.fromHttpApi flattened args", () => {
 	})
 })
 
-describe("Query.fromHttpApi empty success", () => {
+describe("Query.HttpApi.Service.query empty success", () => {
 	it("is a Field Submodel", () => {
 		expectTypeOf(ping.init).toBeFunction()
 	})
@@ -172,10 +168,10 @@ describe("Query.fromHttpApi empty success", () => {
 	)
 })
 
-describe("Query.fromHttpApi construction", () => {
+describe("Query.HttpApi.Service.query construction", () => {
 	it("throws for an unknown group", () => {
 		expect(function () {
-			fromNotesApi({
+			NotesClient.query({
 				name: "Missing",
 				group: "missing",
 				endpoint: "list",
@@ -185,11 +181,21 @@ describe("Query.fromHttpApi construction", () => {
 
 	it("throws for an unknown endpoint", () => {
 		expect(function () {
-			fromNotesApi({
+			NotesClient.query({
 				name: "Missing",
 				group: "notes",
 				endpoint: "missing",
 			} as never)
 		}).toThrow(/unknown endpoint/)
 	})
+})
+
+describe("Query.HttpApi.Service tag", () => {
+	it.effect("yields the provided HttpApiClient", () =>
+		Effect.gen(function* () {
+			const client = yield* Effect.provide(NotesClient, NotesClientLive)
+			const data = yield* client.notes.list()
+			expect(data).toEqual([{ id: "1", body: "hello" }])
+		})
+	)
 })

@@ -2,8 +2,8 @@ import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import { Separator } from "@workspace/ui/components/separator"
 import { Array, Clock, Duration, Effect, Layer, Match, Option, pipe, Schema, Stream } from "effect"
-import type * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup } from "effect/unstable/httpapi"
+import type * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient"
 import { ReactFoldkit } from "react-foldkit"
 import * as AsyncData from "react-foldkit/asyncData"
 import { defineMessageUnion } from "react-foldkit/message"
@@ -46,25 +46,21 @@ const BlogApi = HttpApi.make("BlogApi").add(
 		)
 )
 
-interface BlogClient {}
+class BlogClient extends Query.HttpApi.Service<BlogClient>()("BlogClient", { api: BlogApi }) {}
 
-const BlogClient = Query.HttpApiService<BlogClient>()("BlogClient", { api: BlogApi })
-
-const fromBlogApi = Query.fromHttpApi(BlogClient)
-
-const postsQuery = fromBlogApi({
+const postsQuery = BlogClient.query({
 	name: "Posts",
 	group: "blog",
 	endpoint: "listPosts",
 })
 
-const statsQuery = fromBlogApi({
+const statsQuery = BlogClient.query({
 	name: "Stats",
 	group: "blog",
 	endpoint: "getStats",
 })
 
-const postDetailQuery = fromBlogApi({
+const postDetailQuery = BlogClient.query({
 	name: "PostDetail",
 	group: "blog",
 	endpoint: "getPost",
@@ -130,7 +126,7 @@ const Message = defineMessageUnion({
 })
 type Message = typeof Message.Type
 
-type UpdateReturn = Update.Return<Model, Message, typeof BlogClient>
+type UpdateReturn = Update.Return<Model, Message, BlogClient>
 
 const foldPosts = postsQuery.lift<Model, Message>()({
 	field: "posts",
@@ -188,7 +184,7 @@ const init = (): UpdateReturn =>
 		stats: statsQuery.init(),
 	})
 
-const subscriptions = Subscription.make<Model, Message, typeof BlogClient>()((entry) => ({
+const subscriptions = Subscription.make<Model, Message, BlogClient>()((entry) => ({
 	revalidateStats: entry(
 		{ isObservingStats: Schema.Boolean },
 		{
@@ -458,7 +454,7 @@ function StatsTabView() {
 			</div>
 			<p className="text-sm text-muted-foreground">
 				Stats refetch every 5 seconds while this tab is open. The old numbers stay on screen while the new ones
-				load. Query.fromHttpApi owns those AsyncData transitions.
+				load. BlogClient.query owns those AsyncData transitions.
 			</p>
 			{AsyncData.matchDataSplitEmpty(model.stats, {
 				onIdle: () => <LoadingPanel text="Loading stats…" />,
@@ -538,7 +534,7 @@ function TabList() {
 const View = () => (
 	<ExampleShell
 		title="API Cache (HttpApi)"
-		description="The same Model-as-cache TEA as API Cache Query. Query.fromHttpApi builds the Submodel from an HttpApi group and endpoint. Success, error, and keyed args come from the endpoint. The parent still folds Got* and intent."
+		description="The same Model-as-cache TEA as API Cache Query. BlogClient.query builds the Submodel from an HttpApi group and endpoint. Success, error, and keyed args come from the endpoint. The parent still folds Got* and intent."
 	>
 		<div className="mx-auto flex w-full max-w-lg flex-1 flex-col gap-6 px-6 pt-8 pb-16">
 			<TabList />

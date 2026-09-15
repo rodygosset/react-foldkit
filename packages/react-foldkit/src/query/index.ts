@@ -821,4 +821,4 @@ export function define(config: DefineConfig): unknown {
 	return defineField(config)
 }
 
-export { fromHttpApi, HttpApiService, type FromHttpApi } from "./http-api"
+export * as HttpApi from "./http-api"

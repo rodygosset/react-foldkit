@@ -34,7 +34,7 @@ const examples = [
 	},
 	{
 		title: "API Cache (HttpApi)",
-		blurb: "The same Query cache, with Query.fromHttpApi wiring group, endpoint, and args.",
+		blurb: "The same Query cache, with Query.HttpApi.Service.query wiring group, endpoint, and args.",
 		options: linkOptions({ to: "/api-cache-http-api" }),
 	},
 ]
