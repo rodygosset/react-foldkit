@@ -11,13 +11,13 @@ import {
 	type CacheStore,
 	completeCancel,
 	FetchInterruptOutcome,
-	type FieldFoldConfig,
 	foldChildFromInform,
 	type FoldLens,
 	type KeyedArgs,
 	type KeyedInterruptArgs,
 	type LiftConfig,
-	type LiftKeyed,
+	type LiftKeyedQuery,
+	type ParentKeyFoldConfig,
 	type ParentMessage,
 	replaceSlot,
 	resolveFoldLens,
@@ -30,7 +30,7 @@ export type SyncFields = { readonly [x: PropertyKey]: Schema.Codec<unknown, unkn
 const encodeKey = <S extends Schema.Codec<unknown, unknown>>(schema: S) =>
 	schema.pipe(Schema.toCodecJson, Schema.fromJsonString, Schema.encodeUnknownSync)
 
-export type KeyedConfig<Name extends string, A, AI, E, EI, Fields extends SyncFields, R> = Readonly<{
+export type KeyedQueryConfig<Name extends string, A, AI, E, EI, Fields extends SyncFields, R> = Readonly<{
 	name: Name
 	data: Schema.Codec<A, AI>
 	error: Schema.Codec<E, EI>
@@ -39,8 +39,8 @@ export type KeyedConfig<Name extends string, A, AI, E, EI, Fields extends SyncFi
 	execute: (args: Schema.Schema.Type<Schema.Struct<Fields>>) => Effect.Effect<A, E, R>
 }>
 
-/** Keyed remote-data Submodel. `Model` is a `HashMap` of `{ args, data }` slots. */
-export interface Keyed<
+/** KeyedQuery remote-data Submodel. `Model` is a `HashMap` of `{ args, data }` slots. */
+export interface KeyedQuery<
 	Name extends string,
 	Model extends Schema.Top,
 	Message extends Schema.Top,
@@ -69,7 +69,7 @@ export interface Keyed<
 	readonly informReplace: Update.Fold<Model["Type"], Message["Type"], KeyedArgs<Fields>, R>
 	readonly informWatch: Update.Fold<Model["Type"], Message["Type"], ReadonlyArray<KeyedArgs<Fields>>, R>
 	readonly informForget: Update.Fold<Model["Type"], Message["Type"], KeyedArgs<Fields>, R>
-	readonly lift: LiftKeyed<Model["Type"], Message["Type"], KeyedArgs<Fields>, R>
+	readonly lift: LiftKeyedQuery<Model["Type"], Message["Type"], KeyedArgs<Fields>, R>
 	readonly watchSubscription: <ParentModel, ParentMessage>(
 		entry: Subscription.EntryBuilder<ParentModel, ParentMessage, R>,
 		config: {
@@ -85,15 +85,15 @@ export interface Keyed<
 	readonly run: (args: KeyedArgs<Fields>) => Effect.Effect<Data, never, R>
 }
 
-export namespace Keyed {
+export namespace KeyedQuery {
 	export type Any = Pick<
-		Keyed<string, Schema.Top, Schema.Top, Schema.Struct.Fields, unknown>,
+		KeyedQuery<string, Schema.Top, Schema.Top, Schema.Struct.Fields, unknown>,
 		"Model" | "Message" | "init"
 	>
 }
 
-export function defineKeyed<Name extends string, A, AI, E, EI, Fields extends SyncFields, R>(
-	config: KeyedConfig<Name, A, AI, E, EI, Fields, R>
+export function defineKeyedQuery<Name extends string, A, AI, E, EI, Fields extends SyncFields, R>(
+	config: KeyedQueryConfig<Name, A, AI, E, EI, Fields, R>
 ) {
 	const states = AsyncData.Schema(config.data, config.error)
 	type SlotState = typeof states.schema.Type
@@ -239,7 +239,7 @@ export function defineKeyed<Name extends string, A, AI, E, EI, Fields extends Sy
 			watchSubscription: (
 				entry: Subscription.EntryBuilder<ParentModel, ParentMessage, R>,
 				modelToArgs: (model: ParentModel) => ReadonlyArray<Args>
-			) => watchKeyedSubscription(entry, foldConfig.toParentMessage, modelToArgs),
+			) => watchKeyedQuerySubscription(entry, foldConfig.toParentMessage, modelToArgs),
 		})
 	}
 
@@ -247,13 +247,13 @@ export function defineKeyed<Name extends string, A, AI, E, EI, Fields extends Sy
 		config?: LiftConfig<ParentModel, ParentMessage, Model, Message>
 	) {
 		if (arguments.length === 0)
-			return (fieldConfig: FieldFoldConfig<ParentModel, ParentMessage, Model, Message>) =>
-				liftFromLens(resolveFoldLens(fieldConfig))
+			return (parentKeyConfig: ParentKeyFoldConfig<ParentModel, ParentMessage, Model, Message>) =>
+				liftFromLens(resolveFoldLens(parentKeyConfig))
 
 		return liftFromLens(resolveFoldLens(config as LiftConfig<ParentModel, ParentMessage, Model, Message>))
-	} as LiftKeyed<Model, Message, Args, R>
+	} as LiftKeyedQuery<Model, Message, Args, R>
 
-	const watchKeyedSubscription = <ParentModel, ParentMessage>(
+	const watchKeyedQuerySubscription = <ParentModel, ParentMessage>(
 		entry: Subscription.EntryBuilder<ParentModel, ParentMessage, R>,
 		toParentMessage: (message: Message) => ParentMessage,
 		modelToArgs: (model: ParentModel) => ReadonlyArray<Args>
@@ -275,7 +275,7 @@ export function defineKeyed<Name extends string, A, AI, E, EI, Fields extends Sy
 			readonly toParentMessage: (message: Message) => ParentMessage
 			readonly modelToArgs: (model: ParentModel) => ReadonlyArray<Args>
 		}
-	) => watchKeyedSubscription(entry, watchConfig.toParentMessage, watchConfig.modelToArgs)
+	) => watchKeyedQuerySubscription(entry, watchConfig.toParentMessage, watchConfig.modelToArgs)
 
 	const run = (args: Args): Effect.Effect<SlotState, never, R> => runExecute(config.execute(args))
 
@@ -298,5 +298,5 @@ export function defineKeyed<Name extends string, A, AI, E, EI, Fields extends Sy
 		lift,
 		watchSubscription,
 		run,
-	} satisfies Keyed<Name, typeof Model, typeof Message, Fields, SlotState, R>
+	} satisfies KeyedQuery<Name, typeof Model, typeof Message, Fields, SlotState, R>
 }

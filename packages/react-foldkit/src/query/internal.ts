@@ -13,7 +13,7 @@ export type FoldLens<ParentModel, ParentMessage, ChildModel, ChildMessage> = Pic
 	"read" | "write" | "toParentMessage"
 >
 
-type ChildField<ParentModel, ChildModel> = {
+type ChildModelKey<ParentModel, ChildModel> = {
 	[K in keyof ParentModel]: ParentModel[K] extends ChildModel ? K : never
 }[keyof ParentModel] &
 	string
@@ -33,55 +33,55 @@ export type Lift<ParentModel, ParentMessage, ChildMessage, R> = {
 	(model: ParentModel): (fields: ParentMessageValue<ChildMessage>) => Update.Return<ParentModel, ParentMessage, R>
 }
 
-export type FieldFoldConfig<ParentModel, ParentMessage, ChildModel, ChildMessage> = Readonly<{
-	field: ChildField<ParentModel, ChildModel>
+export type ParentKeyFoldConfig<ParentModel, ParentMessage, ChildModel, ChildMessage> = Readonly<{
+	field: ChildModelKey<ParentModel, ChildModel>
 	toParentMessage: GotWrapper<ChildMessage, ParentMessage>
 }>
 
-type MissingParentModelFieldConfig = {
+type MissingParentModelKeyConfig = {
 	readonly field: never
 	readonly toParentMessage: never
 }
 
 export type LiftConfig<ParentModel, ParentMessage, ChildModel, ChildMessage> =
 	| FoldLens<ParentModel, ParentMessage, ChildModel, ChildMessage>
-	| FieldFoldConfig<ParentModel, ParentMessage, ChildModel, ChildMessage>
+	| ParentKeyFoldConfig<ParentModel, ParentMessage, ChildModel, ChildMessage>
 
-export type LiftField<ChildModel, ChildMessage, R> = {
+export type LiftQuery<ChildModel, ChildMessage, R> = {
 	<ParentModel, ParentMessage>(
 		config: FoldLens<ParentModel, ParentMessage, ChildModel, ChildMessage>
-	): Lifted.Field<ParentModel, ParentMessage, ChildMessage, R>
+	): Lifted.Query<ParentModel, ParentMessage, ChildMessage, R>
 	<ParentModel = never, ParentMessage = never>(): [ParentMessage] extends [never]
 		? <InferredParentMessage>(
 				config: [ParentModel] extends [never]
-					? MissingParentModelFieldConfig
-					: FieldFoldConfig<ParentModel, InferredParentMessage, ChildModel, ChildMessage>
-			) => Lifted.Field<ParentModel, InferredParentMessage, ChildMessage, R>
+					? MissingParentModelKeyConfig
+					: ParentKeyFoldConfig<ParentModel, InferredParentMessage, ChildModel, ChildMessage>
+			) => Lifted.Query<ParentModel, InferredParentMessage, ChildMessage, R>
 		: (
 				config: [ParentModel] extends [never]
-					? MissingParentModelFieldConfig
-					: FieldFoldConfig<ParentModel, ParentMessage, ChildModel, ChildMessage>
-			) => Lifted.Field<ParentModel, ParentMessage, ChildMessage, R>
+					? MissingParentModelKeyConfig
+					: ParentKeyFoldConfig<ParentModel, ParentMessage, ChildModel, ChildMessage>
+			) => Lifted.Query<ParentModel, ParentMessage, ChildMessage, R>
 }
 
-export type LiftKeyed<ChildModel, ChildMessage, Args, R> = {
+export type LiftKeyedQuery<ChildModel, ChildMessage, Args, R> = {
 	<ParentModel, ParentMessage>(
 		config: FoldLens<ParentModel, ParentMessage, ChildModel, ChildMessage>
-	): Lifted.Keyed<ParentModel, ParentMessage, ChildMessage, Args, R>
+	): Lifted.KeyedQuery<ParentModel, ParentMessage, ChildMessage, Args, R>
 	<ParentModel = never, ParentMessage = never>(): [ParentMessage] extends [never]
 		? <InferredParentMessage>(
 				config: [ParentModel] extends [never]
-					? MissingParentModelFieldConfig
-					: FieldFoldConfig<ParentModel, InferredParentMessage, ChildModel, ChildMessage>
-			) => Lifted.Keyed<ParentModel, InferredParentMessage, ChildMessage, Args, R>
+					? MissingParentModelKeyConfig
+					: ParentKeyFoldConfig<ParentModel, InferredParentMessage, ChildModel, ChildMessage>
+			) => Lifted.KeyedQuery<ParentModel, InferredParentMessage, ChildMessage, Args, R>
 		: (
 				config: [ParentModel] extends [never]
-					? MissingParentModelFieldConfig
-					: FieldFoldConfig<ParentModel, ParentMessage, ChildModel, ChildMessage>
-			) => Lifted.Keyed<ParentModel, ParentMessage, ChildMessage, Args, R>
+					? MissingParentModelKeyConfig
+					: ParentKeyFoldConfig<ParentModel, ParentMessage, ChildModel, ChildMessage>
+			) => Lifted.KeyedQuery<ParentModel, ParentMessage, ChildMessage, Args, R>
 }
 
-const isFieldFoldConfig = <ParentModel, ParentMessage, ChildModel, ChildMessage>(
+const isParentKeyFoldConfig = <ParentModel, ParentMessage, ChildModel, ChildMessage>(
 	config: LiftConfig<ParentModel, ParentMessage, ChildModel, ChildMessage>
 ): config is Extract<LiftConfig<ParentModel, ParentMessage, ChildModel, ChildMessage>, { readonly field: string }> =>
 	Predicate.hasProperty(config, "field")
@@ -89,7 +89,7 @@ const isFieldFoldConfig = <ParentModel, ParentMessage, ChildModel, ChildMessage>
 export function resolveFoldLens<ParentModel, ParentMessage, ChildModel, ChildMessage>(
 	config: LiftConfig<ParentModel, ParentMessage, ChildModel, ChildMessage>
 ): FoldLens<ParentModel, ParentMessage, ChildModel, ChildMessage> {
-	if (!isFieldFoldConfig(config)) return config
+	if (!isParentKeyFoldConfig(config)) return config
 
 	const field = config.field
 	const evolve = makeConstrainedEvo<ParentModel & globalThis.Record<string, unknown>>()
@@ -226,7 +226,7 @@ export type KeyedInterruptArgs<Fields extends Schema.Struct.Fields> = Pick<
 >
 
 export namespace Lifted {
-	export type Field<ParentModel, ParentMessage, ChildMessage, R = never> = Lift<
+	export type Query<ParentModel, ParentMessage, ChildMessage, R = never> = Lift<
 		ParentModel,
 		ParentMessage,
 		ChildMessage,
@@ -245,7 +245,7 @@ export namespace Lifted {
 			) => Subscription.EntryWithoutKeepAlive<ParentModel, ParentMessage, { readonly isWatching: boolean }, R>
 		}>
 
-	export type Keyed<ParentModel, ParentMessage, ChildMessage, Args, R = never> = Lift<
+	export type KeyedQuery<ParentModel, ParentMessage, ChildMessage, Args, R = never> = Lift<
 		ParentModel,
 		ParentMessage,
 		ChildMessage,

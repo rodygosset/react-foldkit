@@ -135,9 +135,9 @@ const notesClient = {
 
 const NotesClientLive = Layer.succeed(NotesClient, notesClient)
 
-describe("Query.HttpApi.Service.query field", () => {
-	it("is a Field whose run depends on the client tag", () => {
-		expectTypeOf(notes).toMatchTypeOf<Query.Field.Any>()
+describe("Query.HttpApi.Service.query", () => {
+	it("is a Query whose run depends on the client tag", () => {
+		expectTypeOf(notes).toMatchTypeOf<Query.Query.Any>()
 		expectTypeOf(notes.run).toEqualTypeOf<
 			Effect.Effect<AsyncData.AsyncData<ReadonlyArray<Note>, string>, never, NotesClient>
 		>()
@@ -151,9 +151,9 @@ describe("Query.HttpApi.Service.query field", () => {
 	)
 })
 
-describe("Query.HttpApi.Service.query keyed", () => {
-	it("is a Keyed Submodel over the client request", () => {
-		expectTypeOf(noteById).toMatchTypeOf<Query.Keyed.Any>()
+describe("Query.HttpApi.Service.query KeyedQuery", () => {
+	it("is a KeyedQuery Submodel over the client request", () => {
+		expectTypeOf(noteById).toMatchTypeOf<Query.KeyedQuery.Any>()
 		expectTypeOf(noteById.run).parameter(0).toEqualTypeOf<{
 			readonly params: { readonly id: string }
 		}>()
@@ -326,7 +326,7 @@ describe("Query.HttpApi.Service.query empty success", () => {
 })
 
 describe("Query.HttpApi.Service.query middleware", () => {
-	it("includes middleware errors in the Field error type", () => {
+	it("includes middleware errors in the Query error type", () => {
 		expectTypeOf(guarded.run).toEqualTypeOf<
 			Effect.Effect<AsyncData.AsyncData<Note, string | NotesAuthError>, never, NotesClient>
 		>()
