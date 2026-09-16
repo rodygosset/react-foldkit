@@ -1,11 +1,11 @@
 import { Predicate } from "effect"
 import * as AsyncData from "../asyncData"
 import { Lifted, type ParentMessage, type ParentMessageValue } from "./internal"
-import { defineKeyedQuery, type KeyedQuery, type KeyedQueryConfig, type SyncFields } from "./keyed-query"
+import { defineKeyedQuery, type KeyedQuery, type KeyedQueryConfig, type SyncFields } from "./keyedQuery"
 import { defineQuery, type Query, type QueryConfig } from "./query"
 
+export type { KeyedQuery, KeyedQueryConfig, SyncFields } from "./keyedQuery"
 export type { Query, QueryConfig } from "./query"
-export type { KeyedQuery, KeyedQueryConfig, SyncFields } from "./keyed-query"
 export { Lifted }
 export type { ParentMessage, ParentMessageValue }
 
@@ -27,15 +27,7 @@ export function define<Name extends string, A, AI, E, EI, R = never>(
 	ReturnType<typeof defineQuery<Name, A, AI, E, EI, R>>["Message"],
 	R
 >
-export function define<
-	Name extends string,
-	A,
-	AI,
-	E,
-	EI,
-	Fields extends SyncFields,
-	R = never,
->(
+export function define<Name extends string, A, AI, E, EI, Fields extends SyncFields, R = never>(
 	config: KeyedQueryConfig<Name, A, AI, E, EI, Fields, R>
 ): KeyedQuery<
 	Name,

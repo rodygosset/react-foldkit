@@ -190,18 +190,16 @@ export function defineKeyedQuery<Name extends string, A, AI, E, EI, Fields exten
 			RequestedReplace: ({ args }) => replaceSlot(store, model, args),
 			RequestedWatch: ({ live }) => watchSlots(model, HashMap.toValues(live)),
 			RequestedForget: ({ args }) => forgetSlot(model, args),
-			SettledFetch: ({ args, result }) => {
-				if (!hasSlot(model, args)) {
-					return { model }
-				}
+			SettledFetch({ args, result }) {
+				if (!hasSlot(model, args)) return { model }
+
 				return {
 					model: store.write(model, args, AsyncData.settle(store.read(model, args), result)),
 				}
 			},
-			CompletedCancelFetch: ({ args, outcome }) => {
-				if (!hasSlot(model, args)) {
-					return { model }
-				}
+			CompletedCancelFetch({ args, outcome }) {
+				if (!hasSlot(model, args)) return { model }
+
 				return completeCancel(store, model, args, outcome)
 			},
 		})
@@ -226,10 +224,10 @@ export function defineKeyedQuery<Name extends string, A, AI, E, EI, Fields exten
 	const init = (): Model => HashMap.empty()
 	const read = (model: Model, args: Args): SlotState => store.read(model, args)
 
-	const liftFromLens = function <ParentModel, ParentMessage>(
+	const liftFromLens = <ParentModel, ParentMessage>(
 		foldConfig: FoldLens<ParentModel, ParentMessage, Model, Message>
-	) {
-		return attachFold(asLift(Update.foldChild({ update, ...foldConfig })), {
+	) =>
+		attachFold(asLift(Update.foldChild({ update, ...foldConfig })), {
 			revalidate: foldChildFromInform(informRevalidate, foldConfig),
 			revalidateOrLoad: foldChildFromInform(informRevalidateOrLoad, foldConfig),
 			loadIfMissing: foldChildFromInform(informLoadIfMissing, foldConfig),
@@ -241,7 +239,6 @@ export function defineKeyedQuery<Name extends string, A, AI, E, EI, Fields exten
 				modelToArgs: (model: ParentModel) => ReadonlyArray<Args>
 			) => watchKeyedQuerySubscription(entry, foldConfig.toParentMessage, modelToArgs),
 		})
-	}
 
 	const lift = function <ParentModel, ParentMessage>(
 		config?: LiftConfig<ParentModel, ParentMessage, Model, Message>

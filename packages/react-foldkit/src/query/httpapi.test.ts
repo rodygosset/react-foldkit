@@ -1,8 +1,8 @@
 import { describe, it } from "@effect/vitest"
 import { Cause, Effect, Exit, HashMap, Layer, Option, Schema } from "effect"
-import type * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient"
 import { HttpClientError, HttpClientRequest } from "effect/unstable/http"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware } from "effect/unstable/httpapi"
+import type * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient"
 import { expect, expectTypeOf } from "vitest"
 import * as AsyncData from "../asyncData"
 import * as Store from "../store"
@@ -271,10 +271,7 @@ describe("Query.HttpApi.Service.query extra args", () => {
 			])
 			const store = yield* Effect.acquireRelease(
 				Effect.sync(function () {
-					return Store.boot(
-						{ update: noteByIdNonce.update, layer: live },
-						both
-					)
+					return Store.boot({ update: noteByIdNonce.update, layer: live }, both)
 				}),
 				function (liveStore) {
 					return Effect.sync(function () {
@@ -304,12 +301,10 @@ describe("Query.HttpApi.Service.query extra args", () => {
 				return Option.none()
 			})
 
-			expect(
-				noteByIdNonce.read(model, { params: { id: "a" }, query: { nonce: "1" } })
-			).toEqual(AsyncData.Idle())
-			expect(
-				noteByIdNonce.read(model, { params: { id: "a" }, query: { nonce: "2" } })
-			).toEqual(AsyncData.Success({ data: { id: "a", body: "2" } }))
+			expect(noteByIdNonce.read(model, { params: { id: "a" }, query: { nonce: "1" } })).toEqual(AsyncData.Idle())
+			expect(noteByIdNonce.read(model, { params: { id: "a" }, query: { nonce: "2" } })).toEqual(
+				AsyncData.Success({ data: { id: "a", body: "2" } })
+			)
 			expect(attempts["1"]).toBe(1)
 			expect(attempts["2"]).toBe(1)
 		})
