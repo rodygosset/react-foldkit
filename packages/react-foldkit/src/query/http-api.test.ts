@@ -137,6 +137,7 @@ const NotesClientLive = Layer.succeed(NotesClient, notesClient)
 
 describe("Query.HttpApi.Service.query field", () => {
 	it("is a Field whose run depends on the client tag", () => {
+		expectTypeOf(notes).toMatchTypeOf<Query.Field.Any>()
 		expectTypeOf(notes.run).toEqualTypeOf<
 			Effect.Effect<AsyncData.AsyncData<ReadonlyArray<Note>, string>, never, NotesClient>
 		>()
@@ -152,6 +153,7 @@ describe("Query.HttpApi.Service.query field", () => {
 
 describe("Query.HttpApi.Service.query keyed", () => {
 	it("is a Keyed Submodel over the client request", () => {
+		expectTypeOf(noteById).toMatchTypeOf<Query.Keyed.Any>()
 		expectTypeOf(noteById.run).parameter(0).toEqualTypeOf<{
 			readonly params: { readonly id: string }
 		}>()

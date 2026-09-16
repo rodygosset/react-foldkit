@@ -50,27 +50,3 @@ export function define(config: DefineConfig): unknown {
 
 	return defineField(config)
 }
-
-export type DefinedField<Name extends string, A, AI, E, EI, R = never> = Field<
-	Name,
-	ReturnType<typeof defineField<Name, A, AI, E, EI, R>>["Model"],
-	ReturnType<typeof defineField<Name, A, AI, E, EI, R>>["Message"],
-	R
->
-
-export type DefinedKeyed<
-	Name extends string,
-	A,
-	AI,
-	E,
-	EI,
-	Fields extends SyncFields,
-	R = never,
-> = Keyed<
-	Name,
-	ReturnType<typeof defineKeyed<Name, A, AI, E, EI, Fields, R>>["Model"],
-	ReturnType<typeof defineKeyed<Name, A, AI, E, EI, Fields, R>>["Message"],
-	Fields,
-	AsyncData.AsyncData<A, E>,
-	R
->

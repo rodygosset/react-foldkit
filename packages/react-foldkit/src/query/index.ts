@@ -1,7 +1,5 @@
 export {
 	define,
-	type DefinedField,
-	type DefinedKeyed,
 	type Field,
 	type Keyed,
 	Lifted,
