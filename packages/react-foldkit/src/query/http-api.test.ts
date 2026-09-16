@@ -1,10 +1,11 @@
 import { describe, it } from "@effect/vitest"
-import { Cause, Context, Effect, Exit, HashMap, Layer, Schema } from "effect"
+import { Cause, Effect, Exit, HashMap, Layer, Option, Schema } from "effect"
 import type * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient"
 import { HttpClientError, HttpClientRequest } from "effect/unstable/http"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware } from "effect/unstable/httpapi"
 import { expect, expectTypeOf } from "vitest"
 import * as AsyncData from "../asyncData"
+import * as Store from "../store"
 import * as Query from "./index"
 
 const Note = Schema.Struct({ id: Schema.String, body: Schema.String })
@@ -80,9 +81,7 @@ type NotesApiGroups = typeof Api extends HttpApi.HttpApi<infer _I, infer G> ? G 
 
 const notes = NotesClient.query("Notes", "notes", "list")
 const noteById = NotesClient.query("Note", "notes", "getById")
-const noteByIdNonce = NotesClient.query("NoteNonce", "notes", "getByIdNonce", {
-	keyFields: ["params"],
-})
+const noteByIdNonce = NotesClient.query("NoteNonce", "notes", "getByIdNonce")
 const createNote = NotesClient.query("CreateNote", "notes", "create")
 const guarded = NotesClient.query("Guarded", "notes", "guarded")
 const ping = NotesClient.query("Ping", "notes", "ping")
@@ -215,8 +214,8 @@ describe("Query.HttpApi.Service.query keyed", () => {
 	})
 })
 
-describe("Query.HttpApi.Service.query keyFields", () => {
-	it("keyFields without toKey keep nested params in the slot key", () => {
+describe("Query.HttpApi.Service.query extra args", () => {
+	it("distinct extra args keep distinct slots and Fetch keys", () => {
 		const first = noteByIdNonce.informLoadIfMissing(noteByIdNonce.init(), {
 			params: { id: "a" },
 			query: { nonce: "1" },
@@ -238,10 +237,81 @@ describe("Query.HttpApi.Service.query keyFields", () => {
 				query: { nonce: "2" },
 			})
 		).toEqual(AsyncData.Loading())
-		expect(noteByIdNonce.Fetch({ params: { id: "a" }, query: { nonce: "1" } }).key).toEqual(
+		expect(noteByIdNonce.Fetch({ params: { id: "a" }, query: { nonce: "1" } }).key).not.toEqual(
 			noteByIdNonce.Fetch({ params: { id: "a" }, query: { nonce: "2" } }).key
 		)
 	})
+
+	it.effect("forgetting one extra-arg slot leaves the sibling client call running", () =>
+		Effect.gen(function* () {
+			const attempts: Record<string, number> = {}
+			const client = {
+				notes: {
+					...notesClient.notes,
+					getByIdNonce: function (request: {
+						readonly params: { readonly id: string }
+						readonly query: { readonly nonce: string }
+					}) {
+						return Effect.suspend(function () {
+							attempts[request.query.nonce] = (attempts[request.query.nonce] ?? 0) + 1
+							if (request.query.nonce === "1") {
+								return Effect.never
+							}
+							return Effect.succeed({ id: request.params.id, body: request.query.nonce })
+						})
+					},
+				},
+			} as unknown as HttpApiClient.Client<NotesApiGroups>
+			const live = Layer.succeed(NotesClient, client)
+			const both = noteByIdNonce.informWatch(noteByIdNonce.init(), [
+				{ params: { id: "a" }, query: { nonce: "1" } },
+				{ params: { id: "a" }, query: { nonce: "2" } },
+			])
+			const store = yield* Effect.acquireRelease(
+				Effect.sync(function () {
+					return Store.boot(
+						{ update: noteByIdNonce.update, layer: live },
+						both
+					)
+				}),
+				function (liveStore) {
+					return Effect.sync(function () {
+						liveStore.dispose()
+					})
+				}
+			)
+
+			yield* Effect.yieldNow
+			yield* Effect.yieldNow
+			store.dispatch(
+				noteByIdNonce.Message.RequestedForget({
+					args: { params: { id: "a" }, query: { nonce: "1" } },
+				})
+			)
+
+			const model = yield* Store.takeWhen(store, function (current) {
+				const dropped = noteByIdNonce.read(current, {
+					params: { id: "a" },
+					query: { nonce: "1" },
+				})
+				const kept = noteByIdNonce.read(current, {
+					params: { id: "a" },
+					query: { nonce: "2" },
+				})
+				if (AsyncData.isIdle(dropped) && AsyncData.isSuccess(kept)) return Option.some(current)
+				return Option.none()
+			})
+
+			expect(
+				noteByIdNonce.read(model, { params: { id: "a" }, query: { nonce: "1" } })
+			).toEqual(AsyncData.Idle())
+			expect(
+				noteByIdNonce.read(model, { params: { id: "a" }, query: { nonce: "2" } })
+			).toEqual(AsyncData.Success({ data: { id: "a", body: "2" } }))
+			expect(attempts["1"]).toBe(1)
+			expect(attempts["2"]).toBe(1)
+		})
+	)
 })
 
 describe("Query.HttpApi.Service.query empty success", () => {

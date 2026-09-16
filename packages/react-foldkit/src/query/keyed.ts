@@ -1,4 +1,4 @@
-import { Array, Effect, Function, HashMap, HashSet, Option, Order, pipe, Record, Schema, Stream, Struct } from "effect"
+import { Array, Effect, Function, HashMap, HashSet, Option, Order, pipe, Record, Schema, Stream } from "effect"
 import * as AsyncData from "../asyncData"
 import * as Command from "../command"
 import { defineMessageUnion } from "../message"
@@ -15,7 +15,7 @@ import {
 	foldChildFromInform,
 	type FoldLens,
 	type KeyedArgs,
-	type KeyedKeyArgs,
+	type KeyedInterruptArgs,
 	type LiftConfig,
 	type LiftKeyed,
 	type ParentMessage,
@@ -37,15 +37,13 @@ export type KeyedConfig<
 	E,
 	EI,
 	Fields extends SyncFields,
-	KeyField extends keyof Schema.Schema.Type<Schema.Struct<Fields>> & string,
 	R,
 > = Readonly<{
 	name: Name
 	data: Schema.Codec<A, AI>
 	error: Schema.Codec<E, EI>
 	args: Fields
-	keyFields?: Array.NonEmptyReadonlyArray<KeyField>
-	toKey?: (args: Pick<Schema.Schema.Type<Schema.Struct<Fields>>, KeyField>) => string
+	toKey?: (args: Schema.Schema.Type<Schema.Struct<Fields>>) => string
 	execute: (args: Schema.Schema.Type<Schema.Struct<Fields>>) => Effect.Effect<A, E, R>
 }>
 
@@ -55,7 +53,6 @@ export interface Keyed<
 	Model extends Schema.Top,
 	Message extends Schema.Top,
 	Fields extends Schema.Struct.Fields,
-	KeyField extends keyof Schema.Schema.Type<Schema.Struct<Fields>> & string,
 	Data,
 	R = never,
 > {
@@ -65,7 +62,7 @@ export interface Keyed<
 	readonly Fetch: Command.Interruptible.DefinitionWithArgs<
 		`Fetch${Name}`,
 		Fields,
-		KeyedKeyArgs<Fields, KeyField>,
+		KeyedInterruptArgs<Fields>,
 		Effect.Effect<SettledFetchOf<Message>, never, R>
 	>
 	readonly init: () => Model["Type"]
@@ -98,7 +95,7 @@ export interface Keyed<
 
 export namespace Keyed {
 	export type Any = Pick<
-		Keyed<string, Schema.Top, Schema.Top, Schema.Struct.Fields, string, unknown>,
+		Keyed<string, Schema.Top, Schema.Top, Schema.Struct.Fields, unknown>,
 		"Model" | "Message" | "init"
 	>
 }
@@ -110,9 +107,8 @@ export function defineKeyed<
 	E,
 	EI,
 	Fields extends SyncFields,
-	KeyField extends keyof Schema.Schema.Type<Schema.Struct<Fields>> & string,
 	R,
->(config: KeyedConfig<Name, A, AI, E, EI, Fields, KeyField, R>) {
+>(config: KeyedConfig<Name, A, AI, E, EI, Fields, R>) {
 	const states = AsyncData.Schema(config.data, config.error)
 	type SlotState = typeof states.schema.Type
 	const Args = Schema.Struct(config.args)
@@ -121,10 +117,12 @@ export function defineKeyed<
 	if (!Array.isReadonlyArrayNonEmpty(argsKeys))
 		throw new Error(`Query.define("${config.name}"): keyed args must include at least one field`)
 
-	const keyFields: Array.NonEmptyReadonlyArray<KeyField> =
-		config.keyFields ?? (argsKeys as unknown as Array.NonEmptyReadonlyArray<KeyField>)
-	const toKey = config.toKey ?? encodeKey(Args)
-	const toInterruptKey = config.toKey ?? encodeKey(Schema.Struct(Struct.pick(config.args, keyFields)))
+	const keyFields = argsKeys as unknown as Array.NonEmptyReadonlyArray<keyof Args & string>
+	function toKey(args: Args): string {
+		if (config.toKey !== undefined) return config.toKey(args)
+
+		return encodeKey(Args)(args)
+	}
 
 	const Slot = Schema.Struct({
 		args: Args,
@@ -154,7 +152,7 @@ export function defineKeyed<
 		messages: [Message.SettledFetch],
 		interrupt: {
 			keyFields,
-			toKey: toInterruptKey,
+			toKey: (keyArgs: Pick<Args, keyof Args & string>) => toKey(keyArgs as Args),
 		},
 		execute: (args: Args) =>
 			pipe(
@@ -318,5 +316,5 @@ export function defineKeyed<
 		lift,
 		watchSubscription,
 		run,
-	} satisfies Keyed<Name, typeof Model, typeof Message, Fields, KeyField, SlotState, R>
+	} satisfies Keyed<Name, typeof Model, typeof Message, Fields, SlotState, R>
 }
