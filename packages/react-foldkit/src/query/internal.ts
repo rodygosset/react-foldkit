@@ -200,7 +200,13 @@ export const completeCancel = <Model, Args, A, E, Message, R>(
 ): Update.Return<Model, Message, R> =>
 	Command.Interruptible.Outcome.match<Update.Return<Model, Message, R>>(outcome, {
 		Interrupted: () => ({ model, commands: [store.load(args)] }),
-		NotFound: () => applyPolicy(store, model, args, "revalidateOrLoad"),
+		NotFound: () => {
+			if (AsyncData.isPending(store.read(model, args))) {
+				return { model, commands: [store.load(args)] }
+			}
+
+			return applyPolicy(store, model, args, "revalidateOrLoad")
+		},
 	})
 
 export const runExecute = <A, E, R>(
@@ -216,10 +222,10 @@ export type SettledFetchOf<Message extends Schema.Top> = Extract<Message["Type"]
 
 export type KeyedArgs<Fields extends Schema.Struct.Fields> = Schema.Schema.Type<Schema.Struct<Fields>>
 
-export type KeyedKeyArgs<
-	Fields extends Schema.Struct.Fields,
-	KeyField extends keyof Schema.Schema.Type<Schema.Struct<Fields>> & string,
-> = Pick<Schema.Schema.Type<Schema.Struct<Fields>>, KeyField>
+export type KeyedInterruptArgs<Fields extends Schema.Struct.Fields> = Pick<
+	KeyedArgs<Fields>,
+	keyof KeyedArgs<Fields> & string
+>
 
 export namespace Lifted {
 	export type Field<ParentModel, ParentMessage, ChildMessage, R = never> = Lift<

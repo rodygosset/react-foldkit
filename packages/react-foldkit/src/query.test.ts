@@ -43,7 +43,6 @@ const noteByIdPreview = Query.define({
 	data: Note,
 	error: Schema.String,
 	args: { noteId: Schema.String, preview: Schema.Boolean },
-	keyFields: ["noteId"],
 	toKey: ({ noteId }) => noteId,
 	execute: ({ noteId }) => Effect.succeed({ id: noteId, body: "hello" }),
 })
@@ -209,6 +208,18 @@ describe("Query.define field — interrupt lifecycle", () => {
 		expect(started.commands).toBeUndefined()
 	})
 
+	it("CompletedCancelFetch NotFound on a pending field restarts Fetch", () => {
+		const pending = notes.informRevalidateOrLoad(notes.init())
+		const restarted = notes.update(
+			pending.model,
+			notes.Message.CompletedCancelFetch({
+				outcome: Command.Interruptible.Outcome.NotFound(),
+			})
+		)
+		expect(restarted.model).toEqual(AsyncData.Loading())
+		expect(restarted.commands?.map(commandShape)).toEqual([commandShape(notes.Fetch())])
+	})
+
 	it.effect("replace through Store.boot interrupts the first fetch and settles the reload", () =>
 		Effect.gen(function* () {
 			let attempts = 0
@@ -341,6 +352,19 @@ describe("Query.define keyed — isolation", () => {
 		expect(HashMap.isEmpty(started.model)).toBe(true)
 		expect(started.commands).toBeUndefined()
 	})
+
+	it("CompletedCancelFetch NotFound on a pending key restarts Fetch", () => {
+		const pending = noteById.informLoadIfMissing(noteById.init(), { noteId: "1" })
+		const restarted = noteById.update(
+			pending.model,
+			noteById.Message.CompletedCancelFetch({
+				args: { noteId: "1" },
+				outcome: Command.Interruptible.Outcome.NotFound(),
+			})
+		)
+		expect(noteById.read(restarted.model, { noteId: "1" })).toEqual(AsyncData.Loading())
+		expect(restarted.commands?.map(commandShape)).toEqual([commandShape(noteById.Fetch({ noteId: "1" }))])
+	})
 })
 
 describe("Query.lift field", () => {
@@ -417,6 +441,32 @@ describe("Query.lift keyed", () => {
 		expect(noteById.read(started.model.notes, { noteId: "1" })).toEqual(AsyncData.Loading())
 		expect(started.commands?.map(commandShape)).toEqual([commandShape(noteById.Fetch({ noteId: "1" }))])
 	})
+
+	it("fold applies SettledFetch through the parent wrapper", () => {
+		const pending = foldNotes.loadIfMissing({ notes: noteById.init() }, { noteId: "1" })
+		const folded = foldNotes(pending.model, {
+			message: noteById.Message.SettledFetch({
+				args: { noteId: "1" },
+				result: Result.succeed({ id: "1", body: "hello" }),
+			}),
+		})
+		expect(noteById.read(folded.model.notes, { noteId: "1" })).toEqual(
+			AsyncData.Success({ data: { id: "1", body: "hello" } })
+		)
+	})
+
+	it("replace while pending returns Interrupt for that key", () => {
+		const pending = foldNotes.loadIfMissing({ notes: noteById.init() }, { noteId: "1" })
+		const replaced = foldNotes.replace(pending.model, { noteId: "1" })
+		expect(noteById.read(replaced.model.notes, { noteId: "1" })).toEqual(AsyncData.Loading())
+		expect(replaced.commands?.map(commandShape)).toEqual([
+			commandShape(
+				noteById.Fetch.Interrupt({ noteId: "1" }, (outcome) =>
+					noteById.Message.CompletedCancelFetch({ args: { noteId: "1" }, outcome })
+				)
+			),
+		])
+	})
 })
 
 describe("Query.lift field lens", () => {
@@ -478,7 +528,7 @@ describe("Query.define keyed — toKey", () => {
 		expect(HashMap.has(started.model, "1:en")).toBe(false)
 	})
 
-	it("keeps Interrupt identity on keyFields when extra args are present", () => {
+	it("a custom toKey shares the slot and Interrupt identity across extra args", () => {
 		const pending = noteByIdPreview.informLoadIfMissing(noteByIdPreview.init(), {
 			noteId: "1",
 			preview: true,
@@ -486,24 +536,85 @@ describe("Query.define keyed — toKey", () => {
 		const sameKey = noteByIdPreview.informLoadIfMissing(pending.model, { noteId: "1", preview: false })
 		expect(sameKey.commands).toBeUndefined()
 		expect(HashMap.has(pending.model, "1")).toBe(true)
+		expect(noteByIdPreview.Fetch({ noteId: "1", preview: true }).key).toEqual(
+			noteByIdPreview.Fetch({ noteId: "1", preview: false }).key
+		)
 	})
 
-	it("keyFields without toKey keep distinct slots and share Interrupt identity", () => {
+	it("omitted toKey gives each extra-arg combo its own slot and Interrupt key", () => {
 		const previewById = Query.define({
 			name: "NotePreviewSlots",
 			data: Note,
 			error: Schema.String,
 			args: { noteId: Schema.String, preview: Schema.Boolean },
-			keyFields: ["noteId"],
 			execute: ({ noteId }) => Effect.succeed({ id: noteId, body: "hello" }),
 		})
 		const first = previewById.informLoadIfMissing(previewById.init(), { noteId: "1", preview: true })
 		const second = previewById.informLoadIfMissing(first.model, { noteId: "1", preview: false })
 		expect(HashMap.size(second.model)).toBe(2)
-		expect(previewById.Fetch({ noteId: "1", preview: true }).key).toEqual(
+		expect(previewById.Fetch({ noteId: "1", preview: true }).key).not.toEqual(
 			previewById.Fetch({ noteId: "1", preview: false }).key
 		)
 	})
+
+	it.effect("forgetting one extra-arg slot leaves the sibling Fetch running", () =>
+		Effect.gen(function* () {
+			const attempts: Record<string, number> = {}
+			const previewById = Query.define({
+				name: "NotePreviewIsolate",
+				data: Note,
+				error: Schema.String,
+				args: { noteId: Schema.String, preview: Schema.Boolean },
+				execute: function (args) {
+					return Effect.suspend(function () {
+						const slot = args.preview ? "preview" : "full"
+						attempts[slot] = (attempts[slot] ?? 0) + 1
+						if (slot === "preview") {
+							return Effect.never
+						}
+						return Effect.succeed({ id: args.noteId, body: "hello" })
+					})
+				},
+			})
+
+			const both = previewById.informWatch(previewById.init(), [
+				{ noteId: "1", preview: true },
+				{ noteId: "1", preview: false },
+			])
+			const store = yield* Effect.acquireRelease(
+				Effect.sync(function () {
+					return Store.boot({ update: previewById.update }, both)
+				}),
+				function (live) {
+					return Effect.sync(function () {
+						live.dispose()
+					})
+				}
+			)
+
+			yield* Effect.yieldNow
+			yield* Effect.yieldNow
+			store.dispatch(
+				previewById.Message.RequestedForget({
+					args: { noteId: "1", preview: true },
+				})
+			)
+
+			const model = yield* Store.takeWhen(store, function (current) {
+				const preview = previewById.read(current, { noteId: "1", preview: true })
+				const full = previewById.read(current, { noteId: "1", preview: false })
+				if (AsyncData.isIdle(preview) && AsyncData.isSuccess(full)) return Option.some(current)
+				return Option.none()
+			})
+
+			expect(previewById.read(model, { noteId: "1", preview: true })).toEqual(AsyncData.Idle())
+			expect(previewById.read(model, { noteId: "1", preview: false })).toEqual(
+				AsyncData.Success({ data: { id: "1", body: "hello" } })
+			)
+			expect(attempts["preview"]).toBe(1)
+			expect(attempts["full"]).toBe(1)
+		})
+	)
 })
 
 describe("Query.define keyed — watch and forget", () => {
@@ -865,7 +976,10 @@ describe("Query.Field and Query.Keyed types", () => {
 			return undefined
 		}
 		takesKeyed(noteById)
-		expectTypeOf(noteByIdPreview.Fetch.Interrupt).parameter(0).toEqualTypeOf<{ readonly noteId: string }>()
+		expectTypeOf(noteByIdPreview.Fetch.Interrupt).parameter(0).toEqualTypeOf<{
+			readonly noteId: string
+			readonly preview: boolean
+		}>()
 		expectTypeOf(noteByIdAndLocale.Fetch.Interrupt).parameter(0).toEqualTypeOf<{
 			readonly noteId: string
 			readonly locale: string

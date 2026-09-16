@@ -97,13 +97,8 @@ type InferredFields<Endpoint> = Endpoint extends HttpApiEndpoint.ConstraintReque
 
 type KeyedRequestArgs<Endpoint> = RequestBody<ClientRequestOf<Endpoint>>
 
-type KeyedRequestKeyField<Endpoint> = keyof KeyedRequestArgs<Endpoint> & string
-
-type StructKeyField<Fields extends Schema.Struct.Fields> = keyof Schema.Schema.Type<Schema.Struct<Fields>> & string
-
-type KeyedQueryOptions<Endpoint, KeyField extends KeyedRequestKeyField<Endpoint>> = {
-	readonly toKey?: (args: Pick<KeyedRequestArgs<Endpoint>, KeyField>) => string
-	readonly keyFields?: Array.NonEmptyReadonlyArray<KeyField>
+type KeyedQueryOptions<Endpoint> = {
+	readonly toKey?: (args: KeyedRequestArgs<Endpoint>) => string
 }
 
 interface QueryFrom<Self, Groups extends HttpApiGroup.Constraint> {
@@ -113,15 +108,13 @@ interface QueryFrom<Self, Groups extends HttpApiGroup.Constraint> {
 		const EndpointId extends EndpointIdOf<Groups, GroupId>,
 		Endpoint extends EndpointFrom<Groups, GroupId, EndpointId> = EndpointFrom<Groups, GroupId, EndpointId>,
 		Fields extends SyncFields = InferredFields<Endpoint> extends SyncFields ? InferredFields<Endpoint> : SyncFields,
-		KeyField extends KeyedRequestKeyField<Endpoint> & StructKeyField<Fields> = KeyedRequestKeyField<Endpoint> &
-			StructKeyField<Fields>,
 	>(
 		name: Name,
 		group: GroupId,
 		endpoint: EndpointId,
 		...options: IsFieldRequest<ClientRequestOf<Endpoint>> extends true
 			? []
-			: [options?: KeyedQueryOptions<Endpoint, KeyField>]
+			: [options?: KeyedQueryOptions<Endpoint>]
 	): IsFieldRequest<ClientRequestOf<Endpoint>> extends true
 		? DefinedField<
 				Name,
@@ -138,7 +131,6 @@ interface QueryFrom<Self, Groups extends HttpApiGroup.Constraint> {
 				EndpointError<Endpoint>,
 				EndpointErrorEncoded<Endpoint>,
 				Fields,
-				KeyField,
 				Self
 			>
 }
@@ -235,7 +227,6 @@ const makeQuery = <Self, ApiId extends string, Groups extends HttpApiGroup.Const
 		group: GroupId,
 		endpointId: EndpointId,
 		options?: {
-			readonly keyFields?: Array.NonEmptyReadonlyArray<string>
 			readonly toKey?: (args: unknown) => string
 		}
 	) {
@@ -270,7 +261,6 @@ const makeQuery = <Self, ApiId extends string, Groups extends HttpApiGroup.Const
 			data,
 			error,
 			args,
-			keyFields: options?.keyFields,
 			toKey: options?.toKey,
 			execute,
 		})
@@ -282,7 +272,7 @@ const makeQuery = <Self, ApiId extends string, Groups extends HttpApiGroup.Const
  * Empty client request (no params, query, payload, or headers) is a Field.
  * Anything else is Keyed. Keyed args are the HttpApiClient request. Args
  * schemas are `Schema.Codec`s (no encoding or decoding services). Omit `toKey`
- * to JSON-encode args. Interrupt identity defaults to `keyFields`.
+ * to JSON-encode args. Slot key and Interrupt identity share that function.
  *
  * @example
  * ```ts

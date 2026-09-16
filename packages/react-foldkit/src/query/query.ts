@@ -1,4 +1,4 @@
-import { Predicate, Schema } from "effect"
+import { Predicate } from "effect"
 import * as AsyncData from "../asyncData"
 import { defineField, type Field, type FieldConfig } from "./field"
 import { Lifted, type ParentMessage, type ParentMessageValue } from "./internal"
@@ -11,11 +11,11 @@ export type { ParentMessage, ParentMessageValue }
 
 type DefineConfig =
 	| (FieldConfig<string, unknown, unknown, unknown, unknown, any> & { readonly args?: never; readonly toKey?: never })
-	| KeyedConfig<string, unknown, unknown, unknown, unknown, any, any, any>
+	| KeyedConfig<string, unknown, unknown, unknown, unknown, any, any>
 
 const isKeyedConfig = (
 	config: DefineConfig
-): config is KeyedConfig<string, unknown, unknown, unknown, unknown, any, any, any> =>
+): config is KeyedConfig<string, unknown, unknown, unknown, unknown, any, any> =>
 	Predicate.hasProperty(config, "args")
 
 /** Defines a remote-data Submodel as {@link Field} or {@link Keyed}. */
@@ -34,16 +34,14 @@ export function define<
 	E,
 	EI,
 	Fields extends SyncFields,
-	KeyField extends keyof Schema.Schema.Type<Schema.Struct<Fields>> & string,
 	R = never,
 >(
-	config: KeyedConfig<Name, A, AI, E, EI, Fields, KeyField, R>
+	config: KeyedConfig<Name, A, AI, E, EI, Fields, R>
 ): Keyed<
 	Name,
-	ReturnType<typeof defineKeyed<Name, A, AI, E, EI, Fields, KeyField, R>>["Model"],
-	ReturnType<typeof defineKeyed<Name, A, AI, E, EI, Fields, KeyField, R>>["Message"],
+	ReturnType<typeof defineKeyed<Name, A, AI, E, EI, Fields, R>>["Model"],
+	ReturnType<typeof defineKeyed<Name, A, AI, E, EI, Fields, R>>["Message"],
 	Fields,
-	KeyField,
 	AsyncData.AsyncData<A, E>,
 	R
 >
@@ -67,14 +65,12 @@ export type DefinedKeyed<
 	E,
 	EI,
 	Fields extends SyncFields,
-	KeyField extends keyof Schema.Schema.Type<Schema.Struct<Fields>> & string,
 	R = never,
 > = Keyed<
 	Name,
-	ReturnType<typeof defineKeyed<Name, A, AI, E, EI, Fields, KeyField, R>>["Model"],
-	ReturnType<typeof defineKeyed<Name, A, AI, E, EI, Fields, KeyField, R>>["Message"],
+	ReturnType<typeof defineKeyed<Name, A, AI, E, EI, Fields, R>>["Model"],
+	ReturnType<typeof defineKeyed<Name, A, AI, E, EI, Fields, R>>["Message"],
 	Fields,
-	KeyField,
 	AsyncData.AsyncData<A, E>,
 	R
 >

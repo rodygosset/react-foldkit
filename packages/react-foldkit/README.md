@@ -102,9 +102,8 @@ API Cache (hand-rolled AsyncData), and API Cache Query (`Query.define`).
 `{ args, data }` slots. Read `data` with `query.read(model, args)`. Keyed
 `args` fields are `Schema.Codec`s (no encoding or decoding services). Omit
 `toKey` to JSON-encode args with `Schema.toCodecJson` and
-`Schema.fromJsonString`. `keyFields` defaults to every `args` key and is the
-Interrupt identity. `Query.HttpApi.Service.query` uses the same defaults for a
-keyed endpoint.
+`Schema.fromJsonString`. Slot key and Interrupt identity share `toKey`.
+`Query.HttpApi.Service.query` uses the same default for a keyed endpoint.
 
 `query.lift` returns a callable parent handle. Bind the parent Model in a
 `Got*` handler (`GotPostsMessage: foldPosts(model)`). The bound function takes
