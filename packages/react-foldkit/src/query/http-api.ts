@@ -7,9 +7,9 @@ import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient"
 import * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint"
 import type * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup"
 import * as AsyncData from "../asyncData"
-import { defineField, type Field } from "./field"
-import { defineKeyed, type Keyed, type SyncFields } from "./keyed"
-import { define } from "./query"
+import { define } from "./define"
+import { defineKeyedQuery, type KeyedQuery, type SyncFields } from "./keyed-query"
+import { defineQuery, type Query } from "./query"
 
 type EndpointFrom<
 	Groups extends HttpApiGroup.Constraint,
@@ -49,7 +49,7 @@ type EndpointErrorEncoded<Endpoint> = Endpoint extends HttpApiEndpoint.Constrain
 	? Endpoint["~Error"]["Encoded"] | HttpApiMiddleware.ErrorSchema<Endpoint["~Middleware"]>["Encoded"]
 	: unknown
 
-type IsFieldRequest<Request> = [RequestBody<Request>] extends [never]
+type IsEmptyRequest<Request> = [RequestBody<Request>] extends [never]
 	? true
 	: [keyof RequestBody<Request>] extends [never]
 		? true
@@ -103,12 +103,12 @@ type KeyedQueryOptions<Endpoint> = {
 	readonly toKey?: (args: KeyedRequestArgs<Endpoint>) => string
 }
 
-type FieldFromDefine<Name extends string, A, AI, E, EI, R> = ReturnType<
-	typeof defineField<Name, A, AI, E, EI, R>
+type QueryFromDefine<Name extends string, A, AI, E, EI, R> = ReturnType<
+	typeof defineQuery<Name, A, AI, E, EI, R>
 >
 
-type KeyedFromDefine<Name extends string, A, AI, E, EI, Fields extends SyncFields, R> = ReturnType<
-	typeof defineKeyed<Name, A, AI, E, EI, Fields, R>
+type KeyedQueryFromDefine<Name extends string, A, AI, E, EI, Fields extends SyncFields, R> = ReturnType<
+	typeof defineKeyedQuery<Name, A, AI, E, EI, Fields, R>
 >
 
 interface QueryFrom<Self, Groups extends HttpApiGroup.Constraint> {
@@ -122,13 +122,13 @@ interface QueryFrom<Self, Groups extends HttpApiGroup.Constraint> {
 		name: Name,
 		group: GroupId,
 		endpoint: EndpointId,
-		...options: IsFieldRequest<ClientRequestOf<Endpoint>> extends true
+		...options: IsEmptyRequest<ClientRequestOf<Endpoint>> extends true
 			? []
 			: [options?: KeyedQueryOptions<Endpoint>]
-	): IsFieldRequest<ClientRequestOf<Endpoint>> extends true
-		? Field<
+	): IsEmptyRequest<ClientRequestOf<Endpoint>> extends true
+		? Query<
 				Name,
-				FieldFromDefine<
+				QueryFromDefine<
 					Name,
 					EndpointSuccess<Endpoint>,
 					EndpointSuccessEncoded<Endpoint>,
@@ -136,7 +136,7 @@ interface QueryFrom<Self, Groups extends HttpApiGroup.Constraint> {
 					EndpointErrorEncoded<Endpoint>,
 					Self
 				>["Model"],
-				FieldFromDefine<
+				QueryFromDefine<
 					Name,
 					EndpointSuccess<Endpoint>,
 					EndpointSuccessEncoded<Endpoint>,
@@ -146,9 +146,9 @@ interface QueryFrom<Self, Groups extends HttpApiGroup.Constraint> {
 				>["Message"],
 				Self
 			>
-		: Keyed<
+		: KeyedQuery<
 				Name,
-				KeyedFromDefine<
+				KeyedQueryFromDefine<
 					Name,
 					EndpointSuccess<Endpoint>,
 					EndpointSuccessEncoded<Endpoint>,
@@ -157,7 +157,7 @@ interface QueryFrom<Self, Groups extends HttpApiGroup.Constraint> {
 					Fields,
 					Self
 				>["Model"],
-				KeyedFromDefine<
+				KeyedQueryFromDefine<
 					Name,
 					EndpointSuccess<Endpoint>,
 					EndpointSuccessEncoded<Endpoint>,
@@ -174,7 +174,7 @@ interface QueryFrom<Self, Groups extends HttpApiGroup.Constraint> {
 
 /**
  * A class-style `Context.Service` whose value is `HttpApiClient.Client<Groups>`.
- * `.query` turns a group/endpoint into a Query Field or Keyed Submodel.
+ * `.query` turns a group/endpoint into a Query or KeyedQuery Submodel.
  *
  * @example
  * ```ts
@@ -306,8 +306,8 @@ const makeQuery = <Self, ApiId extends string, Groups extends HttpApiGroup.Const
 /**
  * Builds a class-style HttpApi service tag. Extend it, then call `.query`.
  *
- * Empty client request (no params, query, payload, or headers) is a Field.
- * Anything else is Keyed. Keyed args are the HttpApiClient request. Args
+ * Empty client request (no params, query, payload, or headers) is a Query.
+ * Anything else is KeyedQuery. KeyedQuery args are the HttpApiClient request. Args
  * schemas are `Schema.Codec`s (no encoding or decoding services). Omit `toKey`
  * to JSON-encode args. Slot key and Interrupt identity share that function.
  *

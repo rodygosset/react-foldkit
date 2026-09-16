@@ -98,8 +98,8 @@ API Cache (hand-rolled AsyncData), and API Cache Query (`Query.define`).
 
 ## Query watch, forget, and run
 
-`Query.define` is a remote-data Submodel. Keyed `Model` is a `HashMap` of
-`{ args, data }` slots. Read `data` with `query.read(model, args)`. Keyed
+`Query.define` is a remote-data Submodel. A KeyedQuery `Model` is a `HashMap` of
+`{ args, data }` slots. Read `data` with `query.read(model, args)`. KeyedQuery
 `args` fields are `Schema.Codec`s (no encoding or decoding services). Omit
 `toKey` to JSON-encode args with `Schema.toCodecJson` and
 `Schema.fromJsonString`. Slot key and Interrupt identity share `toKey`.
@@ -129,8 +129,8 @@ including Interrupt of a pending Fetch. Per-key start/stop Messages are not used
 Foldkit `switchMap` on subscription deps cannot report removals. A late
 `SettledFetch` does not resurrect a forgotten slot.
 
-`Query.run` (Field) is an `Effect` that runs `execute` and returns settled
-`AsyncData` via `Effect.result` + `AsyncData.settle`. Keyed `run(args)` does the
+`Query.run` on a Query is an `Effect` that runs `execute` and returns settled
+`AsyncData` via `Effect.result` + `AsyncData.settle`. KeyedQuery `run(args)` does the
 same for one slot. Neither writes into a store; callers that seed HashMap slots
 build them from the settled value.
 
