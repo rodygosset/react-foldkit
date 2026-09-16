@@ -1,9 +1,2 @@
-export {
-	define,
-	type Query,
-	type KeyedQuery,
-	Lifted,
-	type ParentMessage,
-	type ParentMessageValue,
-} from "./define"
-export * as HttpApi from "./http-api"
+export { define, Lifted, type KeyedQuery, type ParentMessage, type ParentMessageValue, type Query } from "./define"
+export * as HttpApi from "./httpapi"

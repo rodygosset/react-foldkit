@@ -8,7 +8,7 @@ import * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint"
 import type * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup"
 import * as AsyncData from "../asyncData"
 import { define } from "./define"
-import { defineKeyedQuery, type KeyedQuery, type SyncFields } from "./keyed-query"
+import { defineKeyedQuery, type KeyedQuery, type SyncFields } from "./keyedQuery"
 import { defineQuery, type Query } from "./query"
 
 type EndpointFrom<
@@ -103,9 +103,7 @@ type KeyedQueryOptions<Endpoint> = {
 	readonly toKey?: (args: KeyedRequestArgs<Endpoint>) => string
 }
 
-type QueryFromDefine<Name extends string, A, AI, E, EI, R> = ReturnType<
-	typeof defineQuery<Name, A, AI, E, EI, R>
->
+type QueryFromDefine<Name extends string, A, AI, E, EI, R> = ReturnType<typeof defineQuery<Name, A, AI, E, EI, R>>
 
 type KeyedQueryFromDefine<Name extends string, A, AI, E, EI, Fields extends SyncFields, R> = ReturnType<
 	typeof defineKeyedQuery<Name, A, AI, E, EI, Fields, R>
