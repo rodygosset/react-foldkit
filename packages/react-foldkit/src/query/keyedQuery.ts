@@ -7,7 +7,6 @@ import * as Update from "../update"
 import {
 	applyPolicy,
 	asLift,
-	attachFold,
 	type CacheStore,
 	completeCancel,
 	FetchInterruptOutcome,
@@ -39,41 +38,118 @@ export type KeyedQueryConfig<Name extends string, A, AI, E, EI, Fields extends S
 	execute: (args: Schema.Schema.Type<Schema.Struct<Fields>>) => Effect.Effect<A, E, R>
 }>
 
+const makeKeyedQueryMessage = <A, AI, E, EI, Fields extends SyncFields>(
+	data: Schema.Codec<A, AI>,
+	error: Schema.Codec<E, EI>,
+	Args: Schema.Struct<Fields>
+) =>
+	defineMessageUnion({
+		RequestedRevalidate: { args: Args },
+		RequestedRevalidateOrLoad: { args: Args },
+		RequestedLoadIfMissing: { args: Args },
+		RequestedReplace: { args: Args },
+		RequestedWatch: { live: Schema.HashMap(Schema.String, Args) },
+		RequestedForget: { args: Args },
+		SettledFetch: { args: Args, result: Schema.Result(data, error) },
+		CompletedCancelFetch: {
+			args: Args,
+			outcome: FetchInterruptOutcome,
+		},
+	})
+
+export type KeyedQueryMessage<A, AI, E, EI, Fields extends SyncFields> = ReturnType<
+	typeof makeKeyedQueryMessage<A, AI, E, EI, Fields>
+>
+
+export function makeKeyedQueryModel<A, AI, E, EI, Fields extends SyncFields>(
+	data: Schema.Codec<A, AI>,
+	error: Schema.Codec<E, EI>,
+	Args: Schema.Struct<Fields>
+) {
+	const states = AsyncData.Schema(data, error)
+	return Schema.HashMap(
+		Schema.String,
+		Schema.Struct({
+			args: Args,
+			data: states.schema,
+		})
+	)
+}
+
+export type KeyedQueryModel<A, AI, E, EI, Fields extends SyncFields> = ReturnType<
+	typeof makeKeyedQueryModel<A, AI, E, EI, Fields>
+>
+
 /** KeyedQuery remote-data Submodel. `Model` is a `HashMap` of `{ args, data }` slots. */
-export interface KeyedQuery<
-	Name extends string,
-	Model extends Schema.Top,
-	Message extends Schema.Top,
-	Fields extends Schema.Struct.Fields,
-	Data,
-	R = never,
-> {
-	readonly Model: Model
-	readonly Message: Message
-	readonly ParentMessage: ParentMessage<Message>
+export interface KeyedQuery<Name extends string, A, AI, E, EI, Fields extends SyncFields, R = never> {
+	readonly Model: KeyedQueryModel<A, AI, E, EI, Fields>
+	readonly Message: KeyedQueryMessage<A, AI, E, EI, Fields>
+	readonly ParentMessage: ParentMessage<KeyedQueryMessage<A, AI, E, EI, Fields>>
 	readonly Fetch: Command.Interruptible.DefinitionWithArgs<
 		`Fetch${Name}`,
 		Fields,
 		KeyedInterruptArgs<Fields>,
-		Effect.Effect<SettledFetchOf<Message>, never, R>
+		Effect.Effect<SettledFetchOf<KeyedQueryMessage<A, AI, E, EI, Fields>>, never, R>
 	>
-	readonly init: () => Model["Type"]
-	readonly read: (model: Model["Type"], args: KeyedArgs<Fields>) => Data
+	readonly init: () => KeyedQueryModel<A, AI, E, EI, Fields>["Type"]
+	readonly read: (
+		model: KeyedQueryModel<A, AI, E, EI, Fields>["Type"],
+		args: KeyedArgs<Fields>
+	) => AsyncData.AsyncData<A, E>
 	readonly update: (
-		model: Model["Type"],
-		message: Message["Type"]
-	) => Update.Return<Model["Type"], Message["Type"], R>
-	readonly informRevalidate: Update.Fold<Model["Type"], Message["Type"], KeyedArgs<Fields>, R>
-	readonly informRevalidateOrLoad: Update.Fold<Model["Type"], Message["Type"], KeyedArgs<Fields>, R>
-	readonly informLoadIfMissing: Update.Fold<Model["Type"], Message["Type"], KeyedArgs<Fields>, R>
-	readonly informReplace: Update.Fold<Model["Type"], Message["Type"], KeyedArgs<Fields>, R>
-	readonly informWatch: Update.Fold<Model["Type"], Message["Type"], ReadonlyArray<KeyedArgs<Fields>>, R>
-	readonly informForget: Update.Fold<Model["Type"], Message["Type"], KeyedArgs<Fields>, R>
-	readonly lift: LiftKeyedQuery<Model["Type"], Message["Type"], KeyedArgs<Fields>, R>
+		model: KeyedQueryModel<A, AI, E, EI, Fields>["Type"],
+		message: KeyedQueryMessage<A, AI, E, EI, Fields>["Type"]
+	) => Update.Return<
+		KeyedQueryModel<A, AI, E, EI, Fields>["Type"],
+		KeyedQueryMessage<A, AI, E, EI, Fields>["Type"],
+		R
+	>
+	readonly informRevalidate: Update.Fold<
+		KeyedQueryModel<A, AI, E, EI, Fields>["Type"],
+		KeyedQueryMessage<A, AI, E, EI, Fields>["Type"],
+		KeyedArgs<Fields>,
+		R
+	>
+	readonly informRevalidateOrLoad: Update.Fold<
+		KeyedQueryModel<A, AI, E, EI, Fields>["Type"],
+		KeyedQueryMessage<A, AI, E, EI, Fields>["Type"],
+		KeyedArgs<Fields>,
+		R
+	>
+	readonly informLoadIfMissing: Update.Fold<
+		KeyedQueryModel<A, AI, E, EI, Fields>["Type"],
+		KeyedQueryMessage<A, AI, E, EI, Fields>["Type"],
+		KeyedArgs<Fields>,
+		R
+	>
+	readonly informReplace: Update.Fold<
+		KeyedQueryModel<A, AI, E, EI, Fields>["Type"],
+		KeyedQueryMessage<A, AI, E, EI, Fields>["Type"],
+		KeyedArgs<Fields>,
+		R
+	>
+	readonly informWatch: Update.Fold<
+		KeyedQueryModel<A, AI, E, EI, Fields>["Type"],
+		KeyedQueryMessage<A, AI, E, EI, Fields>["Type"],
+		ReadonlyArray<KeyedArgs<Fields>>,
+		R
+	>
+	readonly informForget: Update.Fold<
+		KeyedQueryModel<A, AI, E, EI, Fields>["Type"],
+		KeyedQueryMessage<A, AI, E, EI, Fields>["Type"],
+		KeyedArgs<Fields>,
+		R
+	>
+	readonly lift: LiftKeyedQuery<
+		KeyedQueryModel<A, AI, E, EI, Fields>["Type"],
+		KeyedQueryMessage<A, AI, E, EI, Fields>["Type"],
+		KeyedArgs<Fields>,
+		R
+	>
 	readonly watchSubscription: <ParentModel, ParentMessage>(
 		entry: Subscription.EntryBuilder<ParentModel, ParentMessage, R>,
 		config: {
-			readonly toParentMessage: (message: Message["Type"]) => ParentMessage
+			readonly toParentMessage: (message: KeyedQueryMessage<A, AI, E, EI, Fields>["Type"]) => ParentMessage
 			readonly modelToArgs: (model: ParentModel) => ReadonlyArray<KeyedArgs<Fields>>
 		}
 	) => Subscription.EntryWithoutKeepAlive<
@@ -82,19 +158,20 @@ export interface KeyedQuery<
 		{ readonly args: ReadonlyArray<KeyedArgs<Fields>> },
 		R
 	>
-	readonly run: (args: KeyedArgs<Fields>) => Effect.Effect<Data, never, R>
+	readonly run: (args: KeyedArgs<Fields>) => Effect.Effect<AsyncData.AsyncData<A, E>, never, R>
 }
 
 export namespace KeyedQuery {
-	export type Any = Pick<
-		KeyedQuery<string, Schema.Top, Schema.Top, Schema.Struct.Fields, unknown>,
-		"Model" | "Message" | "init"
-	>
+	export type Any = {
+		readonly Model: Schema.Top
+		readonly Message: Schema.Top
+		readonly init: () => unknown
+	}
 }
 
 export function defineKeyedQuery<Name extends string, A, AI, E, EI, Fields extends SyncFields, R>(
 	config: KeyedQueryConfig<Name, A, AI, E, EI, Fields, R>
-) {
+): KeyedQuery<Name, A, AI, E, EI, Fields, R> {
 	const states = AsyncData.Schema(config.data, config.error)
 	type SlotState = typeof states.schema.Type
 	const Args = Schema.Struct(config.args)
@@ -106,26 +183,8 @@ export function defineKeyedQuery<Name extends string, A, AI, E, EI, Fields exten
 	const keyFields = argsKeys as unknown as Array.NonEmptyReadonlyArray<keyof Args & string>
 	const toKey = (args: Args): string => (config.toKey !== undefined ? config.toKey(args) : encodeKey(Args)(args))
 
-	const Slot = Schema.Struct({
-		args: Args,
-		data: states.schema,
-	})
-	type Slot = typeof Slot.Type
-
-	const Message = defineMessageUnion({
-		RequestedRevalidate: { args: Args },
-		RequestedRevalidateOrLoad: { args: Args },
-		RequestedLoadIfMissing: { args: Args },
-		RequestedReplace: { args: Args },
-		RequestedWatch: { live: Schema.HashMap(Schema.String, Args) },
-		RequestedForget: { args: Args },
-		SettledFetch: { args: Args, result: Schema.Result(config.data, config.error) },
-		CompletedCancelFetch: {
-			args: Args,
-			outcome: FetchInterruptOutcome,
-		},
-	})
-	type Message = typeof Message.Type
+	const Message = makeKeyedQueryMessage(config.data, config.error, Args)
+	type Message = KeyedQueryMessage<A, AI, E, EI, Fields>["Type"]
 	type MessageArgs = Parameters<typeof Message.RequestedRevalidate>[0]["args"]
 	const toMessageArgs = (args: Args): MessageArgs => args as MessageArgs
 
@@ -144,7 +203,8 @@ export function defineKeyedQuery<Name extends string, A, AI, E, EI, Fields exten
 			),
 	})
 
-	type Model = HashMap.HashMap<string, Slot>
+	const Model = makeKeyedQueryModel(config.data, config.error, Args)
+	type Model = KeyedQueryModel<A, AI, E, EI, Fields>["Type"]
 	type UpdateReturn = Update.Return<Model, Message, R>
 	type UpdateStep = Update.Step<Model, Message, R>
 
@@ -226,19 +286,19 @@ export function defineKeyedQuery<Name extends string, A, AI, E, EI, Fields exten
 
 	const liftFromLens = <ParentModel, ParentMessage>(
 		foldConfig: FoldLens<ParentModel, ParentMessage, Model, Message>
-	) =>
-		attachFold(asLift(Update.foldChild({ update, ...foldConfig })), {
-			revalidate: foldChildFromInform(informRevalidate, foldConfig),
-			revalidateOrLoad: foldChildFromInform(informRevalidateOrLoad, foldConfig),
-			loadIfMissing: foldChildFromInform(informLoadIfMissing, foldConfig),
-			replace: foldChildFromInform(informReplace, foldConfig),
-			watch: foldChildFromInform(informWatch, foldConfig),
-			forget: foldChildFromInform(informForget, foldConfig),
-			watchSubscription: (
-				entry: Subscription.EntryBuilder<ParentModel, ParentMessage, R>,
-				modelToArgs: (model: ParentModel) => ReadonlyArray<Args>
-			) => watchKeyedQuerySubscription(entry, foldConfig.toParentMessage, modelToArgs),
-		})
+	) => ({
+		fold: asLift(Update.foldChild({ update, ...foldConfig })),
+		revalidate: foldChildFromInform(informRevalidate, foldConfig),
+		revalidateOrLoad: foldChildFromInform(informRevalidateOrLoad, foldConfig),
+		loadIfMissing: foldChildFromInform(informLoadIfMissing, foldConfig),
+		replace: foldChildFromInform(informReplace, foldConfig),
+		watch: foldChildFromInform(informWatch, foldConfig),
+		forget: foldChildFromInform(informForget, foldConfig),
+		watchSubscription: (
+			entry: Subscription.EntryBuilder<ParentModel, ParentMessage, R>,
+			modelToArgs: (model: ParentModel) => ReadonlyArray<Args>
+		) => watchKeyedQuerySubscription(entry, foldConfig.toParentMessage, modelToArgs),
+	})
 
 	const lift = function <ParentModel, ParentMessage>(
 		config?: LiftConfig<ParentModel, ParentMessage, Model, Message>
@@ -276,8 +336,6 @@ export function defineKeyedQuery<Name extends string, A, AI, E, EI, Fields exten
 
 	const run = (args: Args): Effect.Effect<SlotState, never, R> => runExecute(config.execute(args))
 
-	const Model = Schema.HashMap(Schema.String, Slot)
-
 	return {
 		Model,
 		Message,
@@ -295,5 +353,5 @@ export function defineKeyedQuery<Name extends string, A, AI, E, EI, Fields exten
 		lift,
 		watchSubscription,
 		run,
-	} satisfies KeyedQuery<Name, typeof Model, typeof Message, Fields, SlotState, R>
+	} satisfies KeyedQuery<Name, A, AI, E, EI, Fields, R>
 }

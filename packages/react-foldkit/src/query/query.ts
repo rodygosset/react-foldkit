@@ -7,7 +7,6 @@ import * as Update from "../update"
 import {
 	applyPolicy,
 	asLift,
-	attachFold,
 	type CacheStore,
 	completeCancel,
 	FetchInterruptOutcome,
@@ -29,55 +28,79 @@ export type QueryConfig<Name extends string, A, AI, E, EI, R> = Readonly<{
 	execute: Effect.Effect<A, E, R>
 }>
 
-/** Single-slot remote-data Submodel. `Model` is the `AsyncData` codec. */
-export interface Query<Name extends string, Model extends Schema.Top, Message extends Schema.Top, R = never> {
-	readonly Model: Model
-	readonly Message: Message
-	readonly ParentMessage: ParentMessage<Message>
-	readonly Fetch: Command.Interruptible.DefinitionNoArgs<
-		`Fetch${Name}`,
-		Effect.Effect<SettledFetchOf<Message>, never, R>
-	>
-	readonly init: () => Model["Type"]
-	readonly update: (
-		model: Model["Type"],
-		message: Message["Type"]
-	) => Update.Return<Model["Type"], Message["Type"], R>
-	readonly informRevalidate: (model: Model["Type"]) => Update.Return<Model["Type"], Message["Type"], R>
-	readonly informRevalidateOrLoad: (model: Model["Type"]) => Update.Return<Model["Type"], Message["Type"], R>
-	readonly informLoadIfMissing: (model: Model["Type"]) => Update.Return<Model["Type"], Message["Type"], R>
-	readonly informReplace: (model: Model["Type"]) => Update.Return<Model["Type"], Message["Type"], R>
-	readonly informWatch: (model: Model["Type"]) => Update.Return<Model["Type"], Message["Type"], R>
-	readonly informForget: (model: Model["Type"]) => Update.Return<Model["Type"], Message["Type"], R>
-	readonly lift: LiftQuery<Model["Type"], Message["Type"], R>
-	readonly watchSubscription: <ParentModel, ParentMessage>(
-		entry: Subscription.EntryBuilder<ParentModel, ParentMessage, R>,
-		config: {
-			readonly toParentMessage: (message: Message["Type"]) => ParentMessage
-			readonly modelToIsWatching: (model: ParentModel) => boolean
-		}
-	) => Subscription.EntryWithoutKeepAlive<ParentModel, ParentMessage, { readonly isWatching: boolean }, R>
-	readonly run: Effect.Effect<Model["Type"], never, R>
-}
-
-export namespace Query {
-	export type Any = Pick<Query<string, Schema.Top, Schema.Top>, "Model" | "Message" | "init">
-}
-
-export function defineQuery<Name extends string, A, AI, E, EI, R>(config: QueryConfig<Name, A, AI, E, EI, R>) {
-	const states = AsyncData.Schema(config.data, config.error)
-
-	const Message = defineMessageUnion({
+const makeQueryMessage = <A, AI, E, EI>(data: Schema.Codec<A, AI>, error: Schema.Codec<E, EI>) =>
+	defineMessageUnion({
 		RequestedRevalidate: {},
 		RequestedRevalidateOrLoad: {},
 		RequestedLoadIfMissing: {},
 		RequestedReplace: {},
 		RequestedWatch: {},
 		RequestedForget: {},
-		SettledFetch: { result: Schema.Result(config.data, config.error) },
+		SettledFetch: { result: Schema.Result(data, error) },
 		CompletedCancelFetch: { outcome: FetchInterruptOutcome },
 	})
-	type Message = typeof Message.Type
+
+export type QueryMessage<A, AI, E, EI> = ReturnType<typeof makeQueryMessage<A, AI, E, EI>>
+
+export type QueryModel<A, AI, E, EI> = AsyncData.AsyncDataSchema<A, AI, E, EI>["schema"]
+
+/** Single-slot remote-data Submodel. `Model` is the `AsyncData` codec. */
+export interface Query<Name extends string, A, AI, E, EI, R = never> {
+	readonly Model: QueryModel<A, AI, E, EI>
+	readonly Message: QueryMessage<A, AI, E, EI>
+	readonly ParentMessage: ParentMessage<QueryMessage<A, AI, E, EI>>
+	readonly Fetch: Command.Interruptible.DefinitionNoArgs<
+		`Fetch${Name}`,
+		Effect.Effect<SettledFetchOf<QueryMessage<A, AI, E, EI>>, never, R>
+	>
+	readonly init: () => AsyncData.AsyncData<A, E>
+	readonly update: (
+		model: AsyncData.AsyncData<A, E>,
+		message: QueryMessage<A, AI, E, EI>["Type"]
+	) => Update.Return<AsyncData.AsyncData<A, E>, QueryMessage<A, AI, E, EI>["Type"], R>
+	readonly informRevalidate: (
+		model: AsyncData.AsyncData<A, E>
+	) => Update.Return<AsyncData.AsyncData<A, E>, QueryMessage<A, AI, E, EI>["Type"], R>
+	readonly informRevalidateOrLoad: (
+		model: AsyncData.AsyncData<A, E>
+	) => Update.Return<AsyncData.AsyncData<A, E>, QueryMessage<A, AI, E, EI>["Type"], R>
+	readonly informLoadIfMissing: (
+		model: AsyncData.AsyncData<A, E>
+	) => Update.Return<AsyncData.AsyncData<A, E>, QueryMessage<A, AI, E, EI>["Type"], R>
+	readonly informReplace: (
+		model: AsyncData.AsyncData<A, E>
+	) => Update.Return<AsyncData.AsyncData<A, E>, QueryMessage<A, AI, E, EI>["Type"], R>
+	readonly informWatch: (
+		model: AsyncData.AsyncData<A, E>
+	) => Update.Return<AsyncData.AsyncData<A, E>, QueryMessage<A, AI, E, EI>["Type"], R>
+	readonly informForget: (
+		model: AsyncData.AsyncData<A, E>
+	) => Update.Return<AsyncData.AsyncData<A, E>, QueryMessage<A, AI, E, EI>["Type"], R>
+	readonly lift: LiftQuery<AsyncData.AsyncData<A, E>, QueryMessage<A, AI, E, EI>["Type"], R>
+	readonly watchSubscription: <ParentModel, ParentMessage>(
+		entry: Subscription.EntryBuilder<ParentModel, ParentMessage, R>,
+		config: {
+			readonly toParentMessage: (message: QueryMessage<A, AI, E, EI>["Type"]) => ParentMessage
+			readonly modelToIsWatching: (model: ParentModel) => boolean
+		}
+	) => Subscription.EntryWithoutKeepAlive<ParentModel, ParentMessage, { readonly isWatching: boolean }, R>
+	readonly run: Effect.Effect<AsyncData.AsyncData<A, E>, never, R>
+}
+
+export namespace Query {
+	export type Any = {
+		readonly Model: Schema.Top
+		readonly Message: Schema.Top
+		readonly init: () => unknown
+	}
+}
+
+export function defineQuery<Name extends string, A, AI, E, EI, R>(
+	config: QueryConfig<Name, A, AI, E, EI, R>
+): Query<Name, A, AI, E, EI, R> {
+	const states = AsyncData.Schema(config.data, config.error)
+	const Message = makeQueryMessage(config.data, config.error)
+	type Message = QueryMessage<A, AI, E, EI>["Type"]
 
 	const Fetch = Command.define(`Fetch${config.name}`, {
 		messages: [Message.SettledFetch],
@@ -157,19 +180,19 @@ export function defineQuery<Name extends string, A, AI, E, EI, R>(config: QueryC
 
 	const liftFromLens = <ParentModel, ParentMessage>(
 		foldConfig: FoldLens<ParentModel, ParentMessage, Model, Message>
-	) =>
-		attachFold(asLift(Update.foldChild({ update, ...foldConfig })), {
-			revalidate: Update.foldChildStep({ update: informRevalidate, ...foldConfig }),
-			revalidateOrLoad: Update.foldChildStep({ update: informRevalidateOrLoad, ...foldConfig }),
-			loadIfMissing: Update.foldChildStep({ update: informLoadIfMissing, ...foldConfig }),
-			replace: Update.foldChildStep({ update: informReplace, ...foldConfig }),
-			watch: Update.foldChildStep({ update: informWatch, ...foldConfig }),
-			forget: Update.foldChildStep({ update: informForget, ...foldConfig }),
-			watchSubscription: (
-				entry: Subscription.EntryBuilder<ParentModel, ParentMessage, R>,
-				modelToIsWatching: (model: ParentModel) => boolean
-			) => watchQuerySubscription(entry, foldConfig.toParentMessage, modelToIsWatching),
-		})
+	) => ({
+		fold: asLift(Update.foldChild({ update, ...foldConfig })),
+		revalidate: Update.foldChildStep({ update: informRevalidate, ...foldConfig }),
+		revalidateOrLoad: Update.foldChildStep({ update: informRevalidateOrLoad, ...foldConfig }),
+		loadIfMissing: Update.foldChildStep({ update: informLoadIfMissing, ...foldConfig }),
+		replace: Update.foldChildStep({ update: informReplace, ...foldConfig }),
+		watch: Update.foldChildStep({ update: informWatch, ...foldConfig }),
+		forget: Update.foldChildStep({ update: informForget, ...foldConfig }),
+		watchSubscription: (
+			entry: Subscription.EntryBuilder<ParentModel, ParentMessage, R>,
+			modelToIsWatching: (model: ParentModel) => boolean
+		) => watchQuerySubscription(entry, foldConfig.toParentMessage, modelToIsWatching),
+	})
 
 	const lift = function <ParentModel, ParentMessage>(
 		config?: LiftConfig<ParentModel, ParentMessage, Model, Message>
@@ -207,5 +230,5 @@ export function defineQuery<Name extends string, A, AI, E, EI, R>(config: QueryC
 		lift,
 		watchSubscription,
 		run,
-	} satisfies Query<Name, typeof states.schema, typeof Message, R>
+	} satisfies Query<Name, A, AI, E, EI, R>
 }

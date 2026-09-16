@@ -88,19 +88,19 @@ type Message = typeof Message.Type
 
 type UpdateReturn = Update.Return<Model, Message>
 
-const foldPosts = postsQuery.lift<Model, Message>()({
+const postsChild = postsQuery.lift<Model, Message>()({
 	field: "posts",
-	toParentMessage: Message.GotPostsMessage,
+	parentMessage: Message.GotPostsMessage,
 })
 
-const foldStats = statsQuery.lift<Model, Message>()({
+const statsChild = statsQuery.lift<Model, Message>()({
 	field: "stats",
-	toParentMessage: Message.GotStatsMessage,
+	parentMessage: Message.GotStatsMessage,
 })
 
-const foldPostDetail = postDetailQuery.lift<Model, Message>()({
+const postDetailChild = postDetailQuery.lift<Model, Message>()({
 	field: "postDetailById",
-	toParentMessage: Message.GotPostDetailMessage,
+	parentMessage: Message.GotPostDetailMessage,
 })
 
 function activateTab(model: Model, tab: Tab): UpdateReturn {
@@ -108,17 +108,17 @@ function activateTab(model: Model, tab: Tab): UpdateReturn {
 
 	return Match.value(tab).pipe(
 		Match.withReturnType<UpdateReturn>(),
-		Match.when("Posts", () => foldPosts.loadIfMissing(modelWithActiveTab)),
-		Match.when("Stats", () => foldStats.loadIfMissing(modelWithActiveTab)),
+		Match.when("Posts", () => postsChild.loadIfMissing(modelWithActiveTab)),
+		Match.when("Stats", () => statsChild.loadIfMissing(modelWithActiveTab)),
 		Match.exhaustive
 	)
 }
 
 const update = (model: Model, message: Message): UpdateReturn =>
 	Message.match<UpdateReturn>(message, {
-		GotPostsMessage: foldPosts(model),
-		GotStatsMessage: foldStats(model),
-		GotPostDetailMessage: foldPostDetail(model),
+		GotPostsMessage: postsChild.fold(model),
+		GotStatsMessage: statsChild.fold(model),
+		GotPostDetailMessage: postDetailChild.fold(model),
 		ClickedTab: ({ tab }) => activateTab(model, tab),
 		ClickedPost: ({ postId }) =>
 			Update.identity(
@@ -127,16 +127,16 @@ const update = (model: Model, message: Message): UpdateReturn =>
 				})
 			),
 		ClickedBackToPosts: () => Update.identity(evo(model, { maybeSelectedPostId: () => Option.none() })),
-		ClickedInvalidatePosts: () => foldPosts.revalidateOrLoad(model),
-		ClickedRetryPosts: () => foldPosts.revalidateOrLoad(model),
-		ClickedRetryPostDetail: ({ postId }) => foldPostDetail.revalidateOrLoad(model, { postId }),
-		ClickedRefreshStats: () => foldStats.revalidateOrLoad(model),
-		ClickedRetryStats: () => foldStats.revalidateOrLoad(model),
-		TickedRevalidateStats: () => foldStats.revalidate(model),
+		ClickedInvalidatePosts: () => postsChild.revalidateOrLoad(model),
+		ClickedRetryPosts: () => postsChild.revalidateOrLoad(model),
+		ClickedRetryPostDetail: ({ postId }) => postDetailChild.revalidateOrLoad(model, { postId }),
+		ClickedRefreshStats: () => statsChild.revalidateOrLoad(model),
+		ClickedRetryStats: () => statsChild.revalidateOrLoad(model),
+		TickedRevalidateStats: () => statsChild.revalidate(model),
 	})
 
 const init = (): UpdateReturn =>
-	foldPosts.revalidateOrLoad({
+	postsChild.revalidateOrLoad({
 		activeTab: "Posts",
 		posts: postsQuery.init(),
 		postDetailById: postDetailQuery.init(),
@@ -160,7 +160,7 @@ const subscriptions = Subscription.make<Model, Message>()((entry) => ({
 				),
 		}
 	),
-	watchPostDetail: foldPostDetail.watchSubscription(entry, (model) =>
+	watchPostDetail: postDetailChild.watchSubscription(entry, (model) =>
 		Option.match(model.maybeSelectedPostId, {
 			onNone: () => [],
 			onSome: (postId) => [{ postId }],

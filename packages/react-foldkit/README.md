@@ -103,24 +103,24 @@ API Cache (hand-rolled AsyncData), and API Cache Query (`Query.define`).
 `args` fields are `Schema.Codec`s (no encoding or decoding services). Omit
 `toKey` to JSON-encode args with `Schema.toCodecJson` and
 `Schema.fromJsonString`. Slot key and Interrupt identity share `toKey`.
-`Query.HttpApi.Service.query` uses the same default for a keyed endpoint.
+`Query.HttpApi.Service.query` uses the same default for a keyed GET or HEAD
+endpoint. POST, PUT, PATCH, and DELETE are not queries.
 
-`query.lift` returns a callable parent handle. Bind the parent Model in a
-`Got*` handler (`GotPostsMessage: foldPosts(model)`). The bound function takes
-`{ message: childMessage }`, the same fields as `query.ParentMessage`. Call
-`foldPosts(model, { message })` when you already have those fields. Policy Steps
-hang on the same function (`foldPosts.revalidateOrLoad(model)`). Declare the
-parent case with `query.ParentMessage`
-(`GotPostsMessage: postsQuery.ParentMessage`) and pass the constructor as
-`toParentMessage` (`toParentMessage: Message.GotPostsMessage`).
+`query.lift` returns a child record. Bind it as `postsChild`. A `Got*` handler
+calls `postsChild.fold(model)`. That fold takes `{ message: childMessage }`, the
+same fields as `query.ParentMessage`. Call `postsChild.fold(model, { message })`
+when you already have those fields. Policy Steps live on the same record
+(`postsChild.revalidateOrLoad(model)`). Declare the parent case with
+`query.ParentMessage` (`GotPostsMessage: postsQuery.ParentMessage`) and pass the
+constructor as `parentMessage` (`parentMessage: Message.GotPostsMessage`).
 For an always-present slot, call
-`lift<Model, Message>()({ field: "posts", toParentMessage: Message.GotPostsMessage })`.
+`lift<Model, Message>()({ field: "posts", parentMessage: Message.GotPostsMessage })`.
 Name both parent types so the handle is the full parent Message union, not only the
 `Got*` variant the constructor returns.
 A full `read` / `write` lens still infers `ParentModel` from `read` and takes
 Foldkit's `(childMessage) => parentMessage` mapper.
-`foldPosts.watchSubscription(entry, modelToArgs)` reuses that lift's
-`toParentMessage`.
+`postsChild.watchSubscription(entry, modelToArgs)` reuses that lift's
+parent Message wrap.
 
 `informWatch` / `RequestedWatch` is the full live key set. The Message payload is
 a `HashMap` of `toKey` to args. `informWatch` still takes an array of args.

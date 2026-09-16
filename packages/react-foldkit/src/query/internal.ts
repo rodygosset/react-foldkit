@@ -35,12 +35,12 @@ export type Lift<ParentModel, ParentMessage, ChildMessage, R> = {
 
 export type ParentKeyFoldConfig<ParentModel, ParentMessage, ChildModel, ChildMessage> = Readonly<{
 	field: ChildModelKey<ParentModel, ChildModel>
-	toParentMessage: GotWrapper<ChildMessage, ParentMessage>
+	parentMessage: GotWrapper<ChildMessage, ParentMessage>
 }>
 
 type MissingParentModelKeyConfig = {
 	readonly field: never
-	readonly toParentMessage: never
+	readonly parentMessage: never
 }
 
 export type LiftConfig<ParentModel, ParentMessage, ChildModel, ChildMessage> =
@@ -103,14 +103,9 @@ export function resolveFoldLens<ParentModel, ParentMessage, ChildModel, ChildMes
 					[field]: () => nextChild,
 				} as unknown as Parameters<typeof evolve>[1]
 			),
-		toParentMessage: (childMessage: ChildMessage) => config.toParentMessage({ message: childMessage }),
+		toParentMessage: (childMessage: ChildMessage) => config.parentMessage({ message: childMessage }),
 	}
 }
-
-export const attachFold = <FoldFn extends object, Policies extends object>(
-	fold: FoldFn,
-	policies: Policies
-): FoldFn & Policies => Object.assign(fold, policies)
 
 export function asLift<ParentModel, ParentMessage, ChildMessage, R>(
 	fold: Update.Fold<ParentModel, ParentMessage, ChildMessage, R>
@@ -200,11 +195,7 @@ export const completeCancel = <Model, Args, A, E, Message, R>(
 ): Update.Return<Model, Message, R> =>
 	Command.Interruptible.Outcome.match<Update.Return<Model, Message, R>>(outcome, {
 		Interrupted: () => ({ model, commands: [store.load(args)] }),
-		NotFound() {
-			if (AsyncData.isPending(store.read(model, args))) return { model, commands: [store.load(args)] }
-
-			return applyPolicy(store, model, args, "revalidateOrLoad")
-		},
+		NotFound: () => ({ model }),
 	})
 
 export const runExecute = <A, E, R>(
@@ -226,46 +217,31 @@ export type KeyedInterruptArgs<Fields extends Schema.Struct.Fields> = Pick<
 >
 
 export namespace Lifted {
-	export type Query<ParentModel, ParentMessage, ChildMessage, R = never> = Lift<
-		ParentModel,
-		ParentMessage,
-		ChildMessage,
-		R
-	> &
-		Readonly<{
-			revalidate: Update.Step<ParentModel, ParentMessage, R>
-			revalidateOrLoad: Update.Step<ParentModel, ParentMessage, R>
-			loadIfMissing: Update.Step<ParentModel, ParentMessage, R>
-			replace: Update.Step<ParentModel, ParentMessage, R>
-			watch: Update.Step<ParentModel, ParentMessage, R>
-			forget: Update.Step<ParentModel, ParentMessage, R>
-			watchSubscription: (
-				entry: Subscription.EntryBuilder<ParentModel, ParentMessage, R>,
-				modelToIsWatching: (model: ParentModel) => boolean
-			) => Subscription.EntryWithoutKeepAlive<ParentModel, ParentMessage, { readonly isWatching: boolean }, R>
-		}>
+	export type Query<ParentModel, ParentMessage, ChildMessage, R = never> = Readonly<{
+		fold: Lift<ParentModel, ParentMessage, ChildMessage, R>
+		revalidate: Update.Step<ParentModel, ParentMessage, R>
+		revalidateOrLoad: Update.Step<ParentModel, ParentMessage, R>
+		loadIfMissing: Update.Step<ParentModel, ParentMessage, R>
+		replace: Update.Step<ParentModel, ParentMessage, R>
+		watch: Update.Step<ParentModel, ParentMessage, R>
+		forget: Update.Step<ParentModel, ParentMessage, R>
+		watchSubscription: (
+			entry: Subscription.EntryBuilder<ParentModel, ParentMessage, R>,
+			modelToIsWatching: (model: ParentModel) => boolean
+		) => Subscription.EntryWithoutKeepAlive<ParentModel, ParentMessage, { readonly isWatching: boolean }, R>
+	}>
 
-	export type KeyedQuery<ParentModel, ParentMessage, ChildMessage, Args, R = never> = Lift<
-		ParentModel,
-		ParentMessage,
-		ChildMessage,
-		R
-	> &
-		Readonly<{
-			revalidate: Update.Fold<ParentModel, ParentMessage, Args, R>
-			revalidateOrLoad: Update.Fold<ParentModel, ParentMessage, Args, R>
-			loadIfMissing: Update.Fold<ParentModel, ParentMessage, Args, R>
-			replace: Update.Fold<ParentModel, ParentMessage, Args, R>
-			watch: Update.Fold<ParentModel, ParentMessage, ReadonlyArray<Args>, R>
-			forget: Update.Fold<ParentModel, ParentMessage, Args, R>
-			watchSubscription: (
-				entry: Subscription.EntryBuilder<ParentModel, ParentMessage, R>,
-				modelToArgs: (model: ParentModel) => ReadonlyArray<Args>
-			) => Subscription.EntryWithoutKeepAlive<
-				ParentModel,
-				ParentMessage,
-				{ readonly args: ReadonlyArray<Args> },
-				R
-			>
-		}>
+	export type KeyedQuery<ParentModel, ParentMessage, ChildMessage, Args, R = never> = Readonly<{
+		fold: Lift<ParentModel, ParentMessage, ChildMessage, R>
+		revalidate: Update.Fold<ParentModel, ParentMessage, Args, R>
+		revalidateOrLoad: Update.Fold<ParentModel, ParentMessage, Args, R>
+		loadIfMissing: Update.Fold<ParentModel, ParentMessage, Args, R>
+		replace: Update.Fold<ParentModel, ParentMessage, Args, R>
+		watch: Update.Fold<ParentModel, ParentMessage, ReadonlyArray<Args>, R>
+		forget: Update.Fold<ParentModel, ParentMessage, Args, R>
+		watchSubscription: (
+			entry: Subscription.EntryBuilder<ParentModel, ParentMessage, R>,
+			modelToArgs: (model: ParentModel) => ReadonlyArray<Args>
+		) => Subscription.EntryWithoutKeepAlive<ParentModel, ParentMessage, { readonly args: ReadonlyArray<Args> }, R>
+	}>
 }
