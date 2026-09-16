@@ -6,8 +6,10 @@ import type * as HttpApi from "effect/unstable/httpapi/HttpApi"
 import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient"
 import * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint"
 import type * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup"
-import type { SyncFields } from "./keyed"
-import { define, type DefinedField, type DefinedKeyed } from "./query"
+import * as AsyncData from "../asyncData"
+import { defineField, type Field } from "./field"
+import { defineKeyed, type Keyed, type SyncFields } from "./keyed"
+import { define } from "./query"
 
 type EndpointFrom<
 	Groups extends HttpApiGroup.Constraint,
@@ -101,6 +103,14 @@ type KeyedQueryOptions<Endpoint> = {
 	readonly toKey?: (args: KeyedRequestArgs<Endpoint>) => string
 }
 
+type FieldFromDefine<Name extends string, A, AI, E, EI, R> = ReturnType<
+	typeof defineField<Name, A, AI, E, EI, R>
+>
+
+type KeyedFromDefine<Name extends string, A, AI, E, EI, Fields extends SyncFields, R> = ReturnType<
+	typeof defineKeyed<Name, A, AI, E, EI, Fields, R>
+>
+
 interface QueryFrom<Self, Groups extends HttpApiGroup.Constraint> {
 	<
 		Name extends string,
@@ -116,21 +126,48 @@ interface QueryFrom<Self, Groups extends HttpApiGroup.Constraint> {
 			? []
 			: [options?: KeyedQueryOptions<Endpoint>]
 	): IsFieldRequest<ClientRequestOf<Endpoint>> extends true
-		? DefinedField<
+		? Field<
 				Name,
-				EndpointSuccess<Endpoint>,
-				EndpointSuccessEncoded<Endpoint>,
-				EndpointError<Endpoint>,
-				EndpointErrorEncoded<Endpoint>,
+				FieldFromDefine<
+					Name,
+					EndpointSuccess<Endpoint>,
+					EndpointSuccessEncoded<Endpoint>,
+					EndpointError<Endpoint>,
+					EndpointErrorEncoded<Endpoint>,
+					Self
+				>["Model"],
+				FieldFromDefine<
+					Name,
+					EndpointSuccess<Endpoint>,
+					EndpointSuccessEncoded<Endpoint>,
+					EndpointError<Endpoint>,
+					EndpointErrorEncoded<Endpoint>,
+					Self
+				>["Message"],
 				Self
 			>
-		: DefinedKeyed<
+		: Keyed<
 				Name,
-				EndpointSuccess<Endpoint>,
-				EndpointSuccessEncoded<Endpoint>,
-				EndpointError<Endpoint>,
-				EndpointErrorEncoded<Endpoint>,
+				KeyedFromDefine<
+					Name,
+					EndpointSuccess<Endpoint>,
+					EndpointSuccessEncoded<Endpoint>,
+					EndpointError<Endpoint>,
+					EndpointErrorEncoded<Endpoint>,
+					Fields,
+					Self
+				>["Model"],
+				KeyedFromDefine<
+					Name,
+					EndpointSuccess<Endpoint>,
+					EndpointSuccessEncoded<Endpoint>,
+					EndpointError<Endpoint>,
+					EndpointErrorEncoded<Endpoint>,
+					Fields,
+					Self
+				>["Message"],
 				Fields,
+				AsyncData.AsyncData<EndpointSuccess<Endpoint>, EndpointError<Endpoint>>,
 				Self
 			>
 }
