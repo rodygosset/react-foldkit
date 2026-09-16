@@ -200,10 +200,8 @@ export const completeCancel = <Model, Args, A, E, Message, R>(
 ): Update.Return<Model, Message, R> =>
 	Command.Interruptible.Outcome.match<Update.Return<Model, Message, R>>(outcome, {
 		Interrupted: () => ({ model, commands: [store.load(args)] }),
-		NotFound: () => {
-			if (AsyncData.isPending(store.read(model, args))) {
-				return { model, commands: [store.load(args)] }
-			}
+		NotFound() {
+			if (AsyncData.isPending(store.read(model, args))) return { model, commands: [store.load(args)] }
 
 			return applyPolicy(store, model, args, "revalidateOrLoad")
 		},

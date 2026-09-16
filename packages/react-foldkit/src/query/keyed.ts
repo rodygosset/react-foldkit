@@ -30,15 +30,7 @@ export type SyncFields = { readonly [x: PropertyKey]: Schema.Codec<unknown, unkn
 const encodeKey = <S extends Schema.Codec<unknown, unknown>>(schema: S) =>
 	schema.pipe(Schema.toCodecJson, Schema.fromJsonString, Schema.encodeUnknownSync)
 
-export type KeyedConfig<
-	Name extends string,
-	A,
-	AI,
-	E,
-	EI,
-	Fields extends SyncFields,
-	R,
-> = Readonly<{
+export type KeyedConfig<Name extends string, A, AI, E, EI, Fields extends SyncFields, R> = Readonly<{
 	name: Name
 	data: Schema.Codec<A, AI>
 	error: Schema.Codec<E, EI>
@@ -100,15 +92,9 @@ export namespace Keyed {
 	>
 }
 
-export function defineKeyed<
-	Name extends string,
-	A,
-	AI,
-	E,
-	EI,
-	Fields extends SyncFields,
-	R,
->(config: KeyedConfig<Name, A, AI, E, EI, Fields, R>) {
+export function defineKeyed<Name extends string, A, AI, E, EI, Fields extends SyncFields, R>(
+	config: KeyedConfig<Name, A, AI, E, EI, Fields, R>
+) {
 	const states = AsyncData.Schema(config.data, config.error)
 	type SlotState = typeof states.schema.Type
 	const Args = Schema.Struct(config.args)
@@ -118,11 +104,7 @@ export function defineKeyed<
 		throw new Error(`Query.define("${config.name}"): keyed args must include at least one field`)
 
 	const keyFields = argsKeys as unknown as Array.NonEmptyReadonlyArray<keyof Args & string>
-	function toKey(args: Args): string {
-		if (config.toKey !== undefined) return config.toKey(args)
-
-		return encodeKey(Args)(args)
-	}
+	const toKey = (args: Args): string => (config.toKey !== undefined ? config.toKey(args) : encodeKey(Args)(args))
 
 	const Slot = Schema.Struct({
 		args: Args,
