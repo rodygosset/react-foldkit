@@ -1,5 +1,5 @@
 import { describe, it } from "@effect/vitest"
-import { Array, Context, Effect, Equal, HashMap, Layer, Option, Result, Schema } from "effect"
+import { Array, Context, Effect, Equal, HashMap, Latch, Layer, Option, Result, Schema } from "effect"
 import { expect, expectTypeOf } from "vitest"
 import * as AsyncData from "./asyncData"
 import * as Command from "./command"
@@ -208,16 +208,28 @@ describe("Query.define — interrupt lifecycle", () => {
 		expect(started.commands).toBeUndefined()
 	})
 
-	it("CompletedCancelFetch NotFound on a pending Query restarts Fetch", () => {
+	it("CompletedCancelFetch NotFound on a pending Query does not start Fetch", () => {
 		const pending = notes.informRevalidateOrLoad(notes.init())
-		const restarted = notes.update(
+		const next = notes.update(
 			pending.model,
 			notes.Message.CompletedCancelFetch({
 				outcome: Command.Interruptible.Outcome.NotFound(),
 			})
 		)
-		expect(restarted.model).toEqual(AsyncData.Loading())
-		expect(restarted.commands?.map(commandShape)).toEqual([commandShape(notes.Fetch())])
+		expect(next.model).toEqual(AsyncData.Loading())
+		expect(next.commands).toBeUndefined()
+	})
+
+	it("CompletedCancelFetch NotFound on Success does not start Fetch", () => {
+		const success = notes.update(AsyncData.Loading(), notes.Message.SettledFetch({ result: Result.succeed(hello) }))
+		const next = notes.update(
+			success.model,
+			notes.Message.CompletedCancelFetch({
+				outcome: Command.Interruptible.Outcome.NotFound(),
+			})
+		)
+		expect(next.model).toEqual(AsyncData.Success({ data: hello }))
+		expect(next.commands).toBeUndefined()
 	})
 
 	it.effect("replace through Store.boot interrupts the first fetch and settles the reload", () =>
@@ -238,7 +250,10 @@ describe("Query.define — interrupt lifecycle", () => {
 
 			const store = yield* Effect.acquireRelease(
 				Effect.sync(() =>
-					Store.boot({ update: deferredNotes.update }, deferredNotes.informRevalidateOrLoad(deferredNotes.init()))
+					Store.boot(
+						{ update: deferredNotes.update },
+						deferredNotes.informRevalidateOrLoad(deferredNotes.init())
+					)
 				),
 				(live) => Effect.sync(() => live.dispose())
 			)
@@ -252,6 +267,55 @@ describe("Query.define — interrupt lifecycle", () => {
 			)
 			expect(model).toEqual(AsyncData.Success({ data: hello }))
 			expect(attempts).toBe(2)
+		})
+	)
+
+	it.effect("NotFound while a Fetch is in flight lets that Fetch settle and does not start another", () =>
+		Effect.gen(function* () {
+			let attempts = 0
+			const latch = Latch.makeUnsafe()
+			const latchedNotes = Query.define({
+				name: "LatchedNotes",
+				data: Schema.Array(Note),
+				error: Schema.String,
+				execute: Effect.suspend(function () {
+					attempts += 1
+					return Effect.gen(function* () {
+						yield* latch.await
+						return hello
+					})
+				}),
+			})
+
+			const store = yield* Effect.acquireRelease(
+				Effect.sync(function () {
+					return Store.boot(
+						{ update: latchedNotes.update },
+						latchedNotes.informRevalidateOrLoad(latchedNotes.init())
+					)
+				}),
+				function (live) {
+					return Effect.sync(function () {
+						live.dispose()
+					})
+				}
+			)
+
+			expect(store.getModel()).toEqual(AsyncData.Loading())
+			yield* Effect.yieldNow
+			yield* Effect.yieldNow
+			store.dispatch(
+				latchedNotes.Message.CompletedCancelFetch({
+					outcome: Command.Interruptible.Outcome.NotFound(),
+				})
+			)
+			expect(store.getModel()).toEqual(AsyncData.Loading())
+			Effect.runSync(latch.open)
+			const model = yield* Store.takeWhen(store, function (current) {
+				return AsyncData.isSuccess(current) ? Option.some(current) : Option.none()
+			})
+			expect(model).toEqual(AsyncData.Success({ data: hello }))
+			expect(attempts).toBe(1)
 		})
 	)
 })
@@ -353,17 +417,17 @@ describe("Query.define KeyedQuery — isolation", () => {
 		expect(started.commands).toBeUndefined()
 	})
 
-	it("CompletedCancelFetch NotFound on a pending key restarts Fetch", () => {
+	it("CompletedCancelFetch NotFound on a pending key does not start Fetch", () => {
 		const pending = noteById.informLoadIfMissing(noteById.init(), { noteId: "1" })
-		const restarted = noteById.update(
+		const next = noteById.update(
 			pending.model,
 			noteById.Message.CompletedCancelFetch({
 				args: { noteId: "1" },
 				outcome: Command.Interruptible.Outcome.NotFound(),
 			})
 		)
-		expect(noteById.read(restarted.model, { noteId: "1" })).toEqual(AsyncData.Loading())
-		expect(restarted.commands?.map(commandShape)).toEqual([commandShape(noteById.Fetch({ noteId: "1" }))])
+		expect(noteById.read(next.model, { noteId: "1" })).toEqual(AsyncData.Loading())
+		expect(next.commands).toBeUndefined()
 	})
 })
 
@@ -377,22 +441,22 @@ describe("Query.lift", () => {
 	})
 	type Message = typeof Message.Type
 
-	const foldNotes = notes.lift<Model>()({
+	const notesChild = notes.lift<Model>()({
 		field: "notes",
-		toParentMessage: Message.GotNotesMessage,
+		parentMessage: Message.GotNotesMessage,
 	})
 
 	const update = (model: Model, message: Message) =>
 		Message.match<Update.Return<Model, Message>>(message, {
-			GotNotesMessage: foldNotes(model),
+			GotNotesMessage: notesChild.fold(model),
 			ClickedLoad: function () {
-				return foldNotes.revalidateOrLoad(model)
+				return notesChild.revalidateOrLoad(model)
 			},
 		})
 
 	it.effect("settles an init load through the parent Got* wrapper", () =>
 		Effect.gen(function* () {
-			const init = foldNotes.revalidateOrLoad({ notes: notes.init() })
+			const init = notesChild.revalidateOrLoad({ notes: notes.init() })
 			const store = yield* Effect.acquireRelease(
 				Effect.sync(() => Store.boot({ update }, init)),
 				(live) => Effect.sync(() => live.dispose())
@@ -407,7 +471,7 @@ describe("Query.lift", () => {
 	)
 
 	it("fold applies SettledFetch through the parent wrapper", () => {
-		const folded = foldNotes(
+		const folded = notesChild.fold(
 			{ notes: AsyncData.Loading() },
 			{ message: notes.Message.SettledFetch({ result: Result.succeed(hello) }) }
 		)
@@ -416,7 +480,7 @@ describe("Query.lift", () => {
 
 	it("replace returns an Interrupt Command while a fetch is pending", () => {
 		const pending = notes.informRevalidateOrLoad(notes.init())
-		const parent = foldNotes.replace({ notes: pending.model })
+		const parent = notesChild.replace({ notes: pending.model })
 		expect(parent.model.notes).toEqual(AsyncData.Loading())
 		expect(parent.commands?.map((command) => command.name)).toEqual(["FetchNotes.Interrupt"])
 	})
@@ -431,20 +495,20 @@ describe("Query.lift KeyedQuery", () => {
 	})
 	type Message = typeof Message.Type
 
-	const foldNotes = noteById.lift<Model>()({
+	const notesChild = noteById.lift<Model>()({
 		field: "notes",
-		toParentMessage: Message.GotNoteMessage,
+		parentMessage: Message.GotNoteMessage,
 	})
 
 	it("loadIfMissing through lift writes Loading for a miss and FetchNote", () => {
-		const started = foldNotes.loadIfMissing({ notes: noteById.init() }, { noteId: "1" })
+		const started = notesChild.loadIfMissing({ notes: noteById.init() }, { noteId: "1" })
 		expect(noteById.read(started.model.notes, { noteId: "1" })).toEqual(AsyncData.Loading())
 		expect(started.commands?.map(commandShape)).toEqual([commandShape(noteById.Fetch({ noteId: "1" }))])
 	})
 
 	it("fold applies SettledFetch through the parent wrapper", () => {
-		const pending = foldNotes.loadIfMissing({ notes: noteById.init() }, { noteId: "1" })
-		const folded = foldNotes(pending.model, {
+		const pending = notesChild.loadIfMissing({ notes: noteById.init() }, { noteId: "1" })
+		const folded = notesChild.fold(pending.model, {
 			message: noteById.Message.SettledFetch({
 				args: { noteId: "1" },
 				result: Result.succeed({ id: "1", body: "hello" }),
@@ -456,8 +520,8 @@ describe("Query.lift KeyedQuery", () => {
 	})
 
 	it("replace while pending returns Interrupt for that key", () => {
-		const pending = foldNotes.loadIfMissing({ notes: noteById.init() }, { noteId: "1" })
-		const replaced = foldNotes.replace(pending.model, { noteId: "1" })
+		const pending = notesChild.loadIfMissing({ notes: noteById.init() }, { noteId: "1" })
+		const replaced = notesChild.replace(pending.model, { noteId: "1" })
 		expect(noteById.read(replaced.model.notes, { noteId: "1" })).toEqual(AsyncData.Loading())
 		expect(replaced.commands?.map(commandShape)).toEqual([
 			commandShape(
@@ -478,11 +542,11 @@ describe("Query.lift parent-key vs lens", () => {
 	type Message = typeof Message.Type
 
 	it("parent-key config writes the same Loading and Fetch as a ChildFold lens", () => {
-		const foldFromParentKey = notes.lift<Model>()({
+		const notesChildFromField = notes.lift<Model>()({
 			field: "notes",
-			toParentMessage: Message.GotNotesMessage,
+			parentMessage: Message.GotNotesMessage,
 		})
-		const foldFromLens = notes.lift({
+		const notesChildFromLens = notes.lift({
 			read: function (model: Model) {
 				return Option.some(model.notes)
 			},
@@ -494,23 +558,23 @@ describe("Query.lift parent-key vs lens", () => {
 			},
 		})
 		const parent = { notes: notes.init() }
-		const fromParentKey = foldFromParentKey.revalidateOrLoad(parent)
-		const fromLens = foldFromLens.revalidateOrLoad(parent)
+		const fromParentKey = notesChildFromField.revalidateOrLoad(parent)
+		const fromLens = notesChildFromLens.revalidateOrLoad(parent)
 		expect(fromParentKey.model).toEqual(fromLens.model)
 		expect(fromParentKey.commands?.map(commandShape)).toEqual(fromLens.commands?.map(commandShape))
 	})
 
 	it("the fold binds Model first and takes ParentMessageValue", () => {
-		const foldFromParentKey = notes.lift<Model>()({
+		const notesChild = notes.lift<Model>()({
 			field: "notes",
-			toParentMessage: Message.GotNotesMessage,
+			parentMessage: Message.GotNotesMessage,
 		})
 		const parent = { notes: AsyncData.Loading() }
 		const fields = {
 			message: notes.Message.SettledFetch({ result: Result.succeed(hello) }),
 		}
-		const dataFirst = foldFromParentKey(parent, fields)
-		const viaCurry = foldFromParentKey(parent)(fields)
+		const dataFirst = notesChild.fold(parent, fields)
+		const viaCurry = notesChild.fold(parent)(fields)
 		expect(dataFirst.model.notes).toEqual(AsyncData.Success({ data: hello }))
 		expect(Equal.equals(dataFirst.model.notes, viaCurry.model.notes)).toBe(true)
 	})
@@ -706,10 +770,7 @@ describe("Query.define — watch and forget", () => {
 	it("SettledFetch after forget does not resurrect Idle", () => {
 		const pending = notes.informLoadIfMissing(notes.init())
 		const forgotten = notes.informForget(pending.model)
-		const late = notes.update(
-			forgotten.model,
-			notes.Message.SettledFetch({ result: Result.succeed(hello) })
-		)
+		const late = notes.update(forgotten.model, notes.Message.SettledFetch({ result: Result.succeed(hello) }))
 		expect(late.model).toEqual(AsyncData.Idle())
 	})
 })
@@ -779,21 +840,21 @@ describe("Query watch subscription and run", () => {
 			})
 			type ParentMessage = typeof ParentMessage.Type
 
-			const foldNotes = noteById.lift<ParentModel, ParentMessage>()({
+			const notesChild = noteById.lift<ParentModel, ParentMessage>()({
 				field: "notes",
-				toParentMessage: ParentMessage.GotNoteMessage,
+				parentMessage: ParentMessage.GotNoteMessage,
 			})
 
 			const update = (model: ParentModel, message: ParentMessage) =>
 				ParentMessage.match<Update.Return<ParentModel, ParentMessage>>(message, {
-					GotNoteMessage: foldNotes(model),
+					GotNoteMessage: notesChild.fold(model),
 					SetWatchedNoteIds: ({ noteIds }) => ({
 						model: evo(model, { watchedNoteIds: () => noteIds }),
 					}),
 				})
 
 			const subscriptions = Subscription.make<ParentModel, ParentMessage>()((entry) => ({
-				watchNotes: foldNotes.watchSubscription(entry, (model) =>
+				watchNotes: notesChild.watchSubscription(entry, (model) =>
 					Array.map(model.watchedNoteIds, (noteId) => ({ noteId }))
 				),
 			}))
@@ -852,23 +913,29 @@ describe("Query watch subscription and run", () => {
 			})
 			type ParentMessage = typeof ParentMessage.Type
 
-			const foldNotes = notes.lift<ParentModel, ParentMessage>()({
+			const notesChild = notes.lift<ParentModel, ParentMessage>()({
 				field: "notes",
-				toParentMessage: ParentMessage.GotNotesMessage,
+				parentMessage: ParentMessage.GotNotesMessage,
 			})
 
 			const update = function (model: ParentModel, message: ParentMessage) {
 				return ParentMessage.match<Update.Return<ParentModel, ParentMessage>>(message, {
-					GotNotesMessage: foldNotes(model),
+					GotNotesMessage: notesChild.fold(model),
 					SetWatching: function ({ watching }) {
-						return { model: evo(model, { watching: function () { return watching } }) }
+						return {
+							model: evo(model, {
+								watching: function () {
+									return watching
+								},
+							}),
+						}
 					},
 				})
 			}
 
 			const subscriptions = Subscription.make<ParentModel, ParentMessage>()(function (entry) {
 				return {
-					watchNotes: foldNotes.watchSubscription(entry, function (model) {
+					watchNotes: notesChild.watchSubscription(entry, function (model) {
 						return model.watching
 					}),
 				}
@@ -876,10 +943,7 @@ describe("Query watch subscription and run", () => {
 
 			const store = yield* Effect.acquireRelease(
 				Effect.sync(function () {
-					return Store.boot(
-						{ update, subscriptions },
-						{ model: { notes: notes.init(), watching: true } }
-					)
+					return Store.boot({ update, subscriptions }, { model: { notes: notes.init(), watching: true } })
 				}),
 				function (live) {
 					return Effect.sync(function () {
@@ -968,6 +1032,19 @@ describe("Query.define execute services", () => {
 
 describe("Query.Query and Query.KeyedQuery types", () => {
 	it("Query.Any and KeyedQuery.Any accept define results", () => {
+		expectTypeOf(notes).toExtend<
+			Query.Query<"Notes", ReadonlyArray<Note>, ReadonlyArray<typeof Note.Encoded>, string, string>
+		>()
+		expectTypeOf(noteById).toExtend<
+			Query.KeyedQuery<
+				"Note",
+				Note,
+				typeof Note.Encoded,
+				string,
+				string,
+				{ readonly noteId: typeof Schema.String }
+			>
+		>()
 		const takesQuery = function (_query: Query.Query.Any) {
 			return undefined
 		}
@@ -998,20 +1075,29 @@ describe("Query.Query and Query.KeyedQuery types", () => {
 		})
 		type ParentMessage = typeof ParentMessage.Type
 
-		const foldNotes = notes.lift<ParentModel>()({
+		const notesChild = notes.lift<ParentModel>()({
 			field: "notes",
-			toParentMessage: ParentMessage.GotNotesMessage,
+			parentMessage: ParentMessage.GotNotesMessage,
 		})
 
-		expectTypeOf(foldNotes).toMatchTypeOf<
+		expectTypeOf(notesChild).toMatchTypeOf<
 			Query.Lifted.Query<ParentModel, ParentMessage, typeof notes.Message.Type>
 		>()
-		expectTypeOf(foldNotes).toBeCallableWith({ notes: notes.init() }, {
+		expectTypeOf(notesChild.fold).toBeCallableWith(
+			{ notes: notes.init() },
+			{
+				message: notes.Message.RequestedWatch(),
+			}
+		)
+		expectTypeOf(notesChild.fold({ notes: notes.init() })).toBeCallableWith({
 			message: notes.Message.RequestedWatch(),
 		})
-		expectTypeOf(foldNotes({ notes: notes.init() })).toBeCallableWith({
-			message: notes.Message.RequestedWatch(),
-		})
+		expectTypeOf(notesChild).not.toMatchTypeOf<
+			(
+				model: ParentModel,
+				fields: { readonly message: (typeof notes.Message)["Type"] }
+			) => Update.Return<ParentModel, ParentMessage>
+		>()
 
 		const KeyedParent = Schema.Struct({ notes: noteById.Model })
 		type KeyedParent = typeof KeyedParent.Type
@@ -1020,7 +1106,7 @@ describe("Query.Query and Query.KeyedQuery types", () => {
 		})
 		type KeyedParentMessage = typeof KeyedParentMessage.Type
 
-		const foldKeyed = noteById.lift({
+		const noteByIdChild = noteById.lift({
 			read: function (model: KeyedParent) {
 				return Option.some(model.notes)
 			},
@@ -1032,8 +1118,13 @@ describe("Query.Query and Query.KeyedQuery types", () => {
 			},
 		})
 
-		expectTypeOf(foldKeyed).toMatchTypeOf<
-			Query.Lifted.KeyedQuery<KeyedParent, KeyedParentMessage, typeof noteById.Message.Type, { readonly noteId: string }>
+		expectTypeOf(noteByIdChild).toExtend<
+			Query.Lifted.KeyedQuery<
+				KeyedParent,
+				KeyedParentMessage,
+				typeof noteById.Message.Type,
+				{ readonly noteId: string }
+			>
 		>()
 	})
 
@@ -1043,24 +1134,21 @@ describe("Query.Query and Query.KeyedQuery types", () => {
 		const ParentMessage = defineMessageUnion({
 			GotNotesMessage: notes.ParentMessage,
 		})
-		const foldNotes = notes.lift<ParentModel>()({
+		const notesChild = notes.lift<ParentModel>()({
 			field: "notes",
-			toParentMessage: ParentMessage.GotNotesMessage,
+			parentMessage: ParentMessage.GotNotesMessage,
 		})
 		const takesChildMessage = function (
-			_fold: (
-				model: ParentModel,
-				message: (typeof notes.Message)["Type"]
-			) => Update.Return<ParentModel, unknown>
+			_fold: (model: ParentModel, message: (typeof notes.Message)["Type"]) => Update.Return<ParentModel, unknown>
 		) {
 			return undefined
 		}
-		expectTypeOf(foldNotes).toBeCallableWith(
+		expectTypeOf(notesChild.fold).toBeCallableWith(
 			{ notes: notes.init() },
 			{ message: notes.Message.RequestedWatch() }
 		)
 		// @ts-expect-error
-		takesChildMessage(foldNotes)
+		takesChildMessage(notesChild.fold)
 	})
 
 	it("parent-key lift without ParentModel rejects field", () => {
@@ -1068,7 +1156,7 @@ describe("Query.Query and Query.KeyedQuery types", () => {
 			// @ts-expect-error
 			field: "notes",
 			// @ts-expect-error
-			toParentMessage: function (message: (typeof notes.Message)["Type"]) {
+			parentMessage: function (message: (typeof notes.Message)["Type"]) {
 				return message
 			},
 		})
@@ -1079,7 +1167,7 @@ describe("Query.Query and Query.KeyedQuery types", () => {
 		notes.lift<Parent>()({
 			// @ts-expect-error
 			field: "label",
-			toParentMessage: function (fields: { readonly message: (typeof notes.Message)["Type"] }) {
+			parentMessage: function (fields: { readonly message: (typeof notes.Message)["Type"] }) {
 				return fields.message
 			},
 		})
@@ -1097,7 +1185,7 @@ describe("Query.Query and Query.KeyedQuery types", () => {
 		notes.lift<Parent, Message>()({
 			field: "notes",
 			// @ts-expect-error
-			toParentMessage: Wrong.GotNotesMessage,
+			parentMessage: Wrong.GotNotesMessage,
 		})
 	})
 })

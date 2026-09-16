@@ -1,5 +1,5 @@
 import { describe, it } from "@effect/vitest"
-import { Cause, Effect, Exit, HashMap, Layer, Option, Schema } from "effect"
+import { Effect, HashMap, Layer, Option, Result, Schema } from "effect"
 import { HttpClientError, HttpClientRequest } from "effect/unstable/http"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware } from "effect/unstable/httpapi"
 import type * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient"
@@ -44,6 +44,13 @@ const Api = HttpApi.make("Api").add(
 			})
 		)
 		.add(
+			HttpApiEndpoint.head("headById", "/notes/:id", {
+				params: { id: Schema.String },
+				success: Note,
+				error: Schema.String,
+			})
+		)
+		.add(
 			HttpApiEndpoint.post("create", "/notes", {
 				payload: Note,
 				success: Note,
@@ -82,27 +89,34 @@ type NotesApiGroups = typeof Api extends HttpApi.HttpApi<infer _I, infer G> ? G 
 const notes = NotesClient.query("Notes", "notes", "list")
 const noteById = NotesClient.query("Note", "notes", "getById")
 const noteByIdNonce = NotesClient.query("NoteNonce", "notes", "getByIdNonce")
-const createNote = NotesClient.query("CreateNote", "notes", "create")
+const noteHead = NotesClient.query("NoteHead", "notes", "headById")
 const guarded = NotesClient.query("Guarded", "notes", "guarded")
 const ping = NotesClient.query("Ping", "notes", "ping")
 
-function transportError(): HttpClientError.HttpClientError {
-	return new HttpClientError.HttpClientError({
+const transportError = (): HttpClientError.HttpClientError =>
+	new HttpClientError.HttpClientError({
 		reason: new HttpClientError.TransportError({
 			request: HttpClientRequest.get("/notes"),
 			description: "offline",
 		}),
 	})
-}
 
-function schemaError(): Schema.SchemaError {
-	try {
-		Schema.decodeUnknownSync(Schema.Number)("nope")
-	} catch (error) {
-		if (Schema.isSchemaError(error)) return error
-	}
-	throw new Error("expected Schema.decodeUnknownSync to throw SchemaError")
-}
+const schemaError = (): Schema.SchemaError =>
+	Schema.decodeUnknownResult(Schema.Number)("nope").pipe(Result.flip, Result.getOrThrow)
+
+const httpClientFailure = (error: HttpClientError.HttpClientError) =>
+	AsyncData.Failure({
+		error: Query.HttpApi.HttpApiClientError.make({
+			reason: HttpClientError.HttpClientErrorSchema.fromHttpClientError(error),
+		}),
+	})
+
+const schemaFailure = (error: Schema.SchemaError) =>
+	AsyncData.Failure({
+		error: Query.HttpApi.HttpApiClientError.make({
+			reason: Query.HttpApi.SchemaError.fromSchemaError(error),
+		}),
+	})
 
 const notesClient = {
 	notes: {
@@ -121,6 +135,9 @@ const notesClient = {
 		}) {
 			return Effect.succeed({ id: request.params.id, body: request.query.nonce })
 		},
+		headById: function (request: { readonly params: { readonly id: string } }) {
+			return Effect.succeed({ id: request.params.id, body: "head" })
+		},
 		create: function (request: { readonly payload: Note }) {
 			return Effect.succeed(request.payload)
 		},
@@ -137,9 +154,13 @@ const NotesClientLive = Layer.succeed(NotesClient, notesClient)
 
 describe("Query.HttpApi.Service.query", () => {
 	it("is a Query whose run depends on the client tag", () => {
-		expectTypeOf(notes).toMatchTypeOf<Query.Query.Any>()
+		expectTypeOf(notes).toExtend<Query.Query.Any>()
 		expectTypeOf(notes.run).toEqualTypeOf<
-			Effect.Effect<AsyncData.AsyncData<ReadonlyArray<Note>, string>, never, NotesClient>
+			Effect.Effect<
+				AsyncData.AsyncData<ReadonlyArray<Note>, string | Query.HttpApi.HttpApiClientError>,
+				never,
+				NotesClient
+			>
 		>()
 	})
 
@@ -157,8 +178,8 @@ describe("Query.HttpApi.Service.query KeyedQuery", () => {
 		expectTypeOf(noteById.run).parameter(0).toEqualTypeOf<{
 			readonly params: { readonly id: string }
 		}>()
-		expectTypeOf(createNote.run).parameter(0).toEqualTypeOf<{
-			readonly payload: Note
+		expectTypeOf(noteHead.run).parameter(0).toEqualTypeOf<{
+			readonly params: { readonly id: string }
 		}>()
 	})
 
@@ -169,6 +190,13 @@ describe("Query.HttpApi.Service.query KeyedQuery", () => {
 		})
 	)
 
+	it.effect("run forwards params on HEAD", () =>
+		Effect.gen(function* () {
+			const data = yield* Effect.provide(noteHead.run({ params: { id: "7" } }), NotesClientLive)
+			expect(data).toEqual(AsyncData.Success({ data: { id: "7", body: "head" } }))
+		})
+	)
+
 	it.effect("run settles a declared endpoint error", () =>
 		Effect.gen(function* () {
 			const data = yield* Effect.provide(noteById.run({ params: { id: "missing" } }), NotesClientLive)
@@ -176,35 +204,17 @@ describe("Query.HttpApi.Service.query KeyedQuery", () => {
 		})
 	)
 
-	it.effect("run dies on HttpClientError", () =>
+	it.effect("run settles HttpClientError as Failure", () =>
 		Effect.gen(function* () {
-			const exit = yield* Effect.exit(
-				Effect.provide(noteById.run({ params: { id: "transport" } }), NotesClientLive)
-			)
-			expect(Exit.isFailure(exit)).toBe(true)
-			if (Exit.isFailure(exit)) {
-				expect(Cause.hasDies(exit.cause)).toBe(true)
-				expect(HttpClientError.isHttpClientError(Cause.squash(exit.cause))).toBe(true)
-			}
+			const data = yield* Effect.provide(noteById.run({ params: { id: "transport" } }), NotesClientLive)
+			expect(data).toEqual(httpClientFailure(transportError()))
 		})
 	)
 
-	it.effect("run dies on SchemaError", () =>
+	it.effect("run settles SchemaError as Failure", () =>
 		Effect.gen(function* () {
-			const exit = yield* Effect.exit(Effect.provide(noteById.run({ params: { id: "schema" } }), NotesClientLive))
-			expect(Exit.isFailure(exit)).toBe(true)
-			if (Exit.isFailure(exit)) {
-				expect(Cause.hasDies(exit.cause)).toBe(true)
-				expect(Schema.isSchemaError(Cause.squash(exit.cause))).toBe(true)
-			}
-		})
-	)
-
-	it.effect("run forwards payload on POST", () =>
-		Effect.gen(function* () {
-			const payload = { id: "9", body: "created" }
-			const data = yield* Effect.provide(createNote.run({ payload }), NotesClientLive)
-			expect(data).toEqual(AsyncData.Success({ data: payload }))
+			const data = yield* Effect.provide(noteById.run({ params: { id: "schema" } }), NotesClientLive)
+			expect(data).toEqual(schemaFailure(schemaError()))
 		})
 	)
 
@@ -323,7 +333,11 @@ describe("Query.HttpApi.Service.query empty success", () => {
 describe("Query.HttpApi.Service.query middleware", () => {
 	it("includes middleware errors in the Query error type", () => {
 		expectTypeOf(guarded.run).toEqualTypeOf<
-			Effect.Effect<AsyncData.AsyncData<Note, string | NotesAuthError>, never, NotesClient>
+			Effect.Effect<
+				AsyncData.AsyncData<Note, string | NotesAuthError | Query.HttpApi.HttpApiClientError>,
+				never,
+				NotesClient
+			>
 		>()
 	})
 })
