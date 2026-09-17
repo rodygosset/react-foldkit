@@ -219,13 +219,17 @@ const update = (model: Model, message: Message): UpdateReturn =>
 		SettledClearCompleted: ({ result }) => {
 			const next = applySettledItems(model, result)
 			if (model.filter === "completed" && Result.isSuccess(result)) {
-				return { model: evo(next, { filter: () => "all" as const }), commands: [NavigateFilter({ filter: "all" })] }
+				return {
+					model: evo(next, { filter: () => "all" as const }),
+					commands: [NavigateFilter({ filter: "all" })],
+				}
 			}
 			return { model: next }
 		},
 	})
 
 const { Provider, useModel, useDispatch } = ReactFoldkit.make({
+	Model,
 	update,
 	layer: TodoRepository.layer,
 })
