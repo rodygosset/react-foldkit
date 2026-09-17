@@ -295,7 +295,7 @@ const makeQuery = <Self, ApiId extends string, Groups extends HttpApiGroup.Const
 				.use(function (client: any) {
 					const clientMethod: HttpApiClient.Client.Method<Endpoint, unknown, unknown> = isTopLevelGroup(group)
 						? client[endpointId]
-						: (client[group.identifier][endpointId] as never)
+						: client[group.identifier][endpointId]
 					const args: any = request === undefined ? {} : request
 					return clientMethod(args)
 				})
