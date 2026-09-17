@@ -1,8 +1,8 @@
 import { describe, it } from "@effect/vitest"
 import { Effect, HashMap, Layer, Option, Result, Schema } from "effect"
-import { HttpClientError, HttpClientRequest } from "effect/unstable/http"
-import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware } from "effect/unstable/httpapi"
-import type * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient"
+import { HttpClient, HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema } from "effect/unstable/httpapi"
+import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient"
 import { expect, expectTypeOf } from "vitest"
 import * as AsyncData from "../asyncData"
 import * as Store from "../store"
@@ -73,7 +73,50 @@ const Api = HttpApi.make("Api").add(
 				success: Schema.String as Schema.Codec<string, string, "SecretDecode">,
 			})
 		)
+		.add(
+			HttpApiEndpoint.get("events", "/events", {
+				success: HttpApiSchema.StreamSse({ data: Note }),
+			})
+		)
+		.add(
+			HttpApiEndpoint.get("bytes", "/bytes", {
+				success: HttpApiSchema.StreamUint8Array(),
+			})
+		)
+		.add(
+			HttpApiEndpoint.get("headerEvents", "/header-events", {
+				success: HttpApiSchema.WithHeaders(HttpApiSchema.StreamSse({ data: Note }), { "x-count": Schema.Int }),
+			})
+		)
 )
+
+const TopLevelApi = HttpApi.make("TopLevelApi").add(
+	HttpApiGroup.make("notes", { topLevel: true }).add(
+		HttpApiEndpoint.get("list", "/notes", {
+			success: Schema.Array(Note),
+		})
+	)
+)
+
+class TopLevelNotesClient extends Query.HttpApi.Service<TopLevelNotesClient>()("TopLevelNotesClient", {
+	api: TopLevelApi,
+}) {}
+
+const topLevelNotes = TopLevelNotesClient.query("Notes", "notes", "list")
+
+function jsonClient(body: unknown): HttpClient.HttpClient {
+	return HttpClient.make(function (request) {
+		return Effect.succeed(
+			HttpClientResponse.fromWeb(
+				request,
+				new Response(JSON.stringify(body), {
+					status: 200,
+					headers: { "content-type": "application/json" },
+				})
+			)
+		)
+	})
+}
 
 class NotesClient extends Query.HttpApi.Service<NotesClient>()("NotesClient", { api: Api }) {}
 
@@ -157,6 +200,20 @@ describe("Query.HttpApi.Service.query", () => {
 	it.effect("run uses the HttpApiClient method", () =>
 		Effect.gen(function* () {
 			const data = yield* Effect.provide(notes.run, NotesClientLive)
+			expect(data).toEqual(AsyncData.Success({ data: [{ id: "1", body: "hello" }] }))
+		})
+	)
+
+	it.effect("run uses a top-level HttpApiClient method", () =>
+		Effect.gen(function* () {
+			const live = Layer.effect(
+				TopLevelNotesClient,
+				HttpApiClient.makeWith(TopLevelApi, {
+					baseUrl: "http://test",
+					httpClient: jsonClient([{ id: "1", body: "hello" }]),
+				})
+			)
+			const data = yield* Effect.provide(topLevelNotes.run, live)
 			expect(data).toEqual(AsyncData.Success({ data: [{ id: "1", body: "hello" }] }))
 		})
 	)
@@ -334,6 +391,14 @@ describe("Query.HttpApi.Service.query middleware", () => {
 })
 
 describe("Query.HttpApi.Service.query construction", () => {
+	it("rejects stream success endpoints from query construction", () => {
+		type QueryEndpointId = Parameters<typeof NotesClient.query>[2]
+		expectTypeOf<"list">().toExtend<QueryEndpointId>()
+		expectTypeOf<"events">().not.toExtend<QueryEndpointId>()
+		expectTypeOf<"bytes">().not.toExtend<QueryEndpointId>()
+		expectTypeOf<"headerEvents">().not.toExtend<QueryEndpointId>()
+	})
+
 	it("rejects an endpoint whose success codec requires encoding services", () => {
 		NotesClient.query(
 			"Secret",
