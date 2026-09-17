@@ -1,4 +1,4 @@
-import { Array, Context, Effect, Record, Schema } from "effect"
+import { Array, Context, Effect, Option, Predicate, Record, Schema } from "effect"
 import type { Simplify } from "effect/Types"
 import { HttpClientError } from "effect/unstable/http"
 import { HttpApiMiddleware, HttpApiSchema } from "effect/unstable/httpapi"
@@ -84,10 +84,30 @@ type RequestServices<Endpoint> = Endpoint extends HttpApiEndpoint.ConstraintRequ
 		| SchemaServices<Endpoint["~Payload"]>
 	: never
 
-type QueryableEndpoint<Endpoint> = [SuccessServices<Endpoint> | RequestServices<Endpoint>] extends [never]
-	? [HttpApiEndpoint.ErrorServicesDecode<Endpoint> | HttpApiEndpoint.ErrorServicesEncode<Endpoint>] extends [never]
-		? Endpoint
-		: never
+type UnwrapHeaders<S> =
+	S extends HttpApiSchema.WithHeaders<infer Inner extends Schema.Top, infer _Headers extends Schema.Top>
+		? UnwrapHeaders<Inner>
+		: S
+
+type IsStreamSuccess<S> =
+	UnwrapHeaders<S> extends HttpApiSchema.StreamSse<infer _Events, infer _Error, infer _Value>
+		? true
+		: UnwrapHeaders<S> extends HttpApiSchema.StreamUint8Array
+			? true
+			: false
+
+type QueryableEndpoint<Endpoint> = Endpoint extends {
+	readonly "~Success": infer S extends Schema.Constraint
+}
+	? [IsStreamSuccess<S>] extends [true]
+		? never
+		: [SuccessServices<Endpoint> | RequestServices<Endpoint>] extends [never]
+			? [HttpApiEndpoint.ErrorServicesDecode<Endpoint> | HttpApiEndpoint.ErrorServicesEncode<Endpoint>] extends [
+					never,
+				]
+				? Endpoint
+				: never
+			: never
 	: never
 
 type EndpointIdOf<
@@ -204,6 +224,57 @@ function getErrorSchemas(endpoint: HttpApiEndpoint.Top): Array<Schema.Top> {
 	return globalThis.Array.from(schemas)
 }
 
+type ClientEndpoint = (request?: unknown) => Effect.Effect<unknown, unknown, unknown>
+
+function asReadonlyRecord(value: object): Record.ReadonlyRecord<string, unknown> {
+	return value as Record.ReadonlyRecord<string, unknown>
+}
+
+function readNamedFunction(holder: object, name: string): Option.Option<ClientEndpoint> {
+	const maybeValue = Record.get(asReadonlyRecord(holder), name)
+	if (Option.isNone(maybeValue)) {
+		return Option.none()
+	}
+	if (!Predicate.isFunction(maybeValue.value)) {
+		return Option.none()
+	}
+	return Option.some(maybeValue.value as ClientEndpoint)
+}
+
+function isTopLevelGroup(apiGroup: HttpApiGroup.Constraint): boolean {
+	return Predicate.hasProperty(apiGroup, "topLevel") && apiGroup.topLevel === true
+}
+
+function missingClientEndpoint(apiGroup: HttpApiGroup.Constraint, endpointId: string): ClientEndpoint {
+	return function missing() {
+		return Effect.die(`HttpApi client is missing ${apiGroup.identifier}.${endpointId}`)
+	}
+}
+
+function readClientEndpoint(client: unknown, apiGroup: HttpApiGroup.Constraint, endpointId: string): ClientEndpoint {
+	if (!Predicate.isObject(client)) {
+		return missingClientEndpoint(apiGroup, endpointId)
+	}
+
+	const maybeMethod = isTopLevelGroup(apiGroup)
+		? readNamedFunction(client, endpointId)
+		: Option.flatMap(
+				Option.flatMap(
+					Record.get(asReadonlyRecord(client), apiGroup.identifier),
+					Option.liftPredicate(Predicate.isObject)
+				),
+				function (grouped) {
+					return readNamedFunction(grouped, endpointId)
+				}
+			)
+
+	if (Option.isSome(maybeMethod)) {
+		return maybeMethod.value
+	}
+
+	return missingClientEndpoint(apiGroup, endpointId)
+}
+
 const successCodec = (endpoint: HttpApiEndpoint.Top): Schema.Codec<unknown, unknown> =>
 	Schema.Union(getSuccessSchemas(endpoint)) as never
 
@@ -246,9 +317,8 @@ const makeQuery = <Self, ApiId extends string, Groups extends HttpApiGroup.Const
 			readonly toKey?: (args: unknown) => string
 		}
 	) {
-		const endpoint = (tag.api.groups[group] as HttpApiGroup.WithIdentifier<Groups, GroupId>).endpoints[
-			endpointId
-		] as HttpApiEndpoint.Top
+		const apiGroup = tag.api.groups[group] as HttpApiGroup.WithIdentifier<Groups, GroupId>
+		const endpoint = apiGroup.endpoints[endpointId] as HttpApiEndpoint.Top
 
 		const data = successCodec(endpoint)
 		const error = errorCodec(endpoint)
@@ -269,9 +339,11 @@ const makeQuery = <Self, ApiId extends string, Groups extends HttpApiGroup.Const
 
 		const execute = (request?: unknown) =>
 			tag
-				.use(function (client: any) {
-					const method = client[group][endpointId]
-					if (request === undefined) return method()
+				.use(function (client: HttpApiClient.Client<Groups>) {
+					const method = readClientEndpoint(client, apiGroup, endpointId)
+					if (request === undefined) {
+						return method()
+					}
 					return method(request)
 				})
 				.pipe(mapError)
