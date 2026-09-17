@@ -155,7 +155,7 @@ interface QueryFrom<Self, Groups extends HttpApiGroup.Constraint> {
 
 /**
  * A class-style `Context.Service` whose value is `HttpApiClient.Client<Groups>`.
- * `.query` turns a GET or HEAD group/endpoint into a Query or KeyedQuery Submodel.
+ * `.query` turns a group/endpoint into a Query or KeyedQuery Submodel.
  *
  * @example
  * ```ts
@@ -175,10 +175,10 @@ export interface Service<
 	readonly query: QueryFrom<Self, Groups>
 }
 
-type QueryTag<Self, ApiId extends string, Groups extends HttpApiGroup.Constraint> = Context.Service<
+interface QueryTag<Self, ApiId extends string, Groups extends HttpApiGroup.Constraint> extends Context.Service<
 	Self,
 	HttpApiClient.Client<Groups>
-> & {
+> {
 	readonly api: HttpApi.HttpApi<ApiId, Groups>
 }
 
@@ -298,7 +298,7 @@ const makeQuery = <Self, ApiId extends string, Groups extends HttpApiGroup.Const
 /**
  * Builds a class-style HttpApi service tag. Extend it, then call `.query`.
  *
- * GET and HEAD only. Empty client request (no params, query, payload, or headers) is a Query.
+ * Empty client request (no params, query, payload, or headers) is a Query.
  * Anything else is KeyedQuery. KeyedQuery args are the HttpApiClient request. Args
  * schemas are `Schema.Codec`s (no encoding or decoding services). Omit `toKey`
  * to JSON-encode args. Slot key and Interrupt identity share that function.

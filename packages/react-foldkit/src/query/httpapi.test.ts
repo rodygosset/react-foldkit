@@ -44,13 +44,6 @@ const Api = HttpApi.make("Api").add(
 			})
 		)
 		.add(
-			HttpApiEndpoint.head("headById", "/notes/:id", {
-				params: { id: Schema.String },
-				success: Note,
-				error: Schema.String,
-			})
-		)
-		.add(
 			HttpApiEndpoint.post("create", "/notes", {
 				payload: Note,
 				success: Note,
@@ -89,7 +82,7 @@ type NotesApiGroups = typeof Api extends HttpApi.HttpApi<infer _I, infer G> ? G 
 const notes = NotesClient.query("Notes", "notes", "list")
 const noteById = NotesClient.query("Note", "notes", "getById")
 const noteByIdNonce = NotesClient.query("NoteNonce", "notes", "getByIdNonce")
-const noteHead = NotesClient.query("NoteHead", "notes", "headById")
+const createNote = NotesClient.query("CreateNote", "notes", "create")
 const guarded = NotesClient.query("Guarded", "notes", "guarded")
 const ping = NotesClient.query("Ping", "notes", "ping")
 
@@ -135,9 +128,6 @@ const notesClient = {
 		}) {
 			return Effect.succeed({ id: request.params.id, body: request.query.nonce })
 		},
-		headById: function (request: { readonly params: { readonly id: string } }) {
-			return Effect.succeed({ id: request.params.id, body: "head" })
-		},
 		create: function (request: { readonly payload: Note }) {
 			return Effect.succeed(request.payload)
 		},
@@ -178,8 +168,8 @@ describe("Query.HttpApi.Service.query KeyedQuery", () => {
 		expectTypeOf(noteById.run).parameter(0).toEqualTypeOf<{
 			readonly params: { readonly id: string }
 		}>()
-		expectTypeOf(noteHead.run).parameter(0).toEqualTypeOf<{
-			readonly params: { readonly id: string }
+		expectTypeOf(createNote.run).parameter(0).toEqualTypeOf<{
+			readonly payload: Note
 		}>()
 	})
 
@@ -187,13 +177,6 @@ describe("Query.HttpApi.Service.query KeyedQuery", () => {
 		Effect.gen(function* () {
 			const data = yield* Effect.provide(noteById.run({ params: { id: "7" } }), NotesClientLive)
 			expect(data).toEqual(AsyncData.Success({ data: { id: "7", body: "hello" } }))
-		})
-	)
-
-	it.effect("run forwards params on HEAD", () =>
-		Effect.gen(function* () {
-			const data = yield* Effect.provide(noteHead.run({ params: { id: "7" } }), NotesClientLive)
-			expect(data).toEqual(AsyncData.Success({ data: { id: "7", body: "head" } }))
 		})
 	)
 
@@ -215,6 +198,14 @@ describe("Query.HttpApi.Service.query KeyedQuery", () => {
 		Effect.gen(function* () {
 			const data = yield* Effect.provide(noteById.run({ params: { id: "schema" } }), NotesClientLive)
 			expect(data).toEqual(schemaFailure(schemaError()))
+		})
+	)
+
+	it.effect("run forwards payload on POST", () =>
+		Effect.gen(function* () {
+			const payload = { id: "9", body: "created" }
+			const data = yield* Effect.provide(createNote.run({ payload }), NotesClientLive)
+			expect(data).toEqual(AsyncData.Success({ data: payload }))
 		})
 	)
 
