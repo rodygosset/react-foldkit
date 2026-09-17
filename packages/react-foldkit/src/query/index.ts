@@ -1,13 +1,5 @@
-export {
-	define,
-	Lifted,
-	type KeyedQuery,
-	type KeyedQueryMessage,
-	type KeyedQueryModel,
-	type ParentMessage,
-	type ParentMessageValue,
-	type Query,
-	type QueryMessage,
-	type QueryModel,
-} from "./define"
+export { define } from "./define"
 export * as HttpApi from "./httpapi"
+export { Lifted, type ParentMessage, type ParentMessageValue } from "./internal"
+export type { KeyedQuery, KeyedQueryMessage, KeyedQueryModel } from "./keyedQuery"
+export type { Query, QueryMessage, QueryModel } from "./query"
