@@ -1,11 +1,11 @@
-import { Array, Context, Effect, Option, Predicate, Record, Schema } from "effect"
+import { Array, Context, Effect, Predicate, Record, Schema } from "effect"
 import type { Simplify } from "effect/Types"
 import { HttpClientError } from "effect/unstable/http"
 import { HttpApiMiddleware, HttpApiSchema } from "effect/unstable/httpapi"
 import type * as HttpApi from "effect/unstable/httpapi/HttpApi"
 import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient"
 import * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint"
-import type * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup"
+import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup"
 import { define } from "./define"
 import type { KeyedQuery, SyncFields } from "./keyedQuery"
 import type { Query } from "./query"
@@ -224,56 +224,8 @@ function getErrorSchemas(endpoint: HttpApiEndpoint.Top): Array<Schema.Top> {
 	return globalThis.Array.from(schemas)
 }
 
-type ClientEndpoint = (request?: unknown) => Effect.Effect<unknown, unknown, unknown>
-
-function asReadonlyRecord(value: object): Record.ReadonlyRecord<string, unknown> {
-	return value as Record.ReadonlyRecord<string, unknown>
-}
-
-function readNamedFunction(holder: object, name: string): Option.Option<ClientEndpoint> {
-	const maybeValue = Record.get(asReadonlyRecord(holder), name)
-	if (Option.isNone(maybeValue)) {
-		return Option.none()
-	}
-	if (!Predicate.isFunction(maybeValue.value)) {
-		return Option.none()
-	}
-	return Option.some(maybeValue.value as ClientEndpoint)
-}
-
-function isTopLevelGroup(apiGroup: HttpApiGroup.Constraint): boolean {
-	return Predicate.hasProperty(apiGroup, "topLevel") && apiGroup.topLevel === true
-}
-
-function missingClientEndpoint(apiGroup: HttpApiGroup.Constraint, endpointId: string): ClientEndpoint {
-	return function missing() {
-		return Effect.die(`HttpApi client is missing ${apiGroup.identifier}.${endpointId}`)
-	}
-}
-
-function readClientEndpoint(client: unknown, apiGroup: HttpApiGroup.Constraint, endpointId: string): ClientEndpoint {
-	if (!Predicate.isObject(client)) {
-		return missingClientEndpoint(apiGroup, endpointId)
-	}
-
-	const maybeMethod = isTopLevelGroup(apiGroup)
-		? readNamedFunction(client, endpointId)
-		: Option.flatMap(
-				Option.flatMap(
-					Record.get(asReadonlyRecord(client), apiGroup.identifier),
-					Option.liftPredicate(Predicate.isObject)
-				),
-				function (grouped) {
-					return readNamedFunction(grouped, endpointId)
-				}
-			)
-
-	if (Option.isSome(maybeMethod)) {
-		return maybeMethod.value
-	}
-
-	return missingClientEndpoint(apiGroup, endpointId)
-}
+const isTopLevelGroup = (group: HttpApiGroup.Constraint): boolean =>
+	Predicate.hasProperty(group, "topLevel") && group.topLevel === true
 
 const successCodec = (endpoint: HttpApiEndpoint.Top): Schema.Codec<unknown, unknown> =>
 	Schema.Union(getSuccessSchemas(endpoint)) as never
@@ -309,16 +261,17 @@ const makeQuery = <Self, ApiId extends string, Groups extends HttpApiGroup.Const
 		EndpointId extends HttpApiEndpoint.Identifier<
 			HttpApiGroup.Endpoints<HttpApiGroup.WithIdentifier<Groups, GroupId>>
 		>,
+		Endpoint extends HttpApiEndpoint.ConstraintRequest,
 	>(
 		name: string,
-		group: GroupId,
+		groupId: GroupId,
 		endpointId: EndpointId,
 		options?: {
 			readonly toKey?: (args: unknown) => string
 		}
 	) {
-		const apiGroup = tag.api.groups[group] as HttpApiGroup.WithIdentifier<Groups, GroupId>
-		const endpoint = apiGroup.endpoints[endpointId] as HttpApiEndpoint.Top
+		const group = tag.api.groups[groupId] as HttpApiGroup.WithIdentifier<Groups, GroupId>
+		const endpoint = group.endpoints[endpointId] as HttpApiEndpoint.Top
 
 		const data = successCodec(endpoint)
 		const error = errorCodec(endpoint)
@@ -339,12 +292,12 @@ const makeQuery = <Self, ApiId extends string, Groups extends HttpApiGroup.Const
 
 		const execute = (request?: unknown) =>
 			tag
-				.use(function (client: HttpApiClient.Client<Groups>) {
-					const method = readClientEndpoint(client, apiGroup, endpointId)
-					if (request === undefined) {
-						return method()
-					}
-					return method(request)
+				.use(function (client: any) {
+					const clientMethod: HttpApiClient.Client.Method<Endpoint, unknown, unknown> = isTopLevelGroup(group)
+						? client[endpointId]
+						: (client[group.identifier][endpointId] as never)
+					const args: any = request === undefined ? {} : request
+					return clientMethod(args)
 				})
 				.pipe(mapError)
 
