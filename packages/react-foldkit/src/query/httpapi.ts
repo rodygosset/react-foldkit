@@ -261,7 +261,6 @@ const makeQuery = <Self, ApiId extends string, Groups extends HttpApiGroup.Const
 		EndpointId extends HttpApiEndpoint.Identifier<
 			HttpApiGroup.Endpoints<HttpApiGroup.WithIdentifier<Groups, GroupId>>
 		>,
-		Endpoint extends HttpApiEndpoint.ConstraintRequest,
 	>(
 		name: string,
 		groupId: GroupId,
@@ -293,9 +292,11 @@ const makeQuery = <Self, ApiId extends string, Groups extends HttpApiGroup.Const
 		const execute = (request?: unknown) =>
 			tag
 				.use(function (client: any) {
-					const clientMethod: HttpApiClient.Client.Method<Endpoint, unknown, unknown> = isTopLevelGroup(group)
-						? client[endpointId]
-						: client[group.identifier][endpointId]
+					const clientMethod: HttpApiClient.Client.Method<
+						HttpApiEndpoint.ConstraintRequest,
+						unknown,
+						unknown
+					> = isTopLevelGroup(group) ? client[endpointId] : client[group.identifier][endpointId]
 					const args: any = request === undefined ? {} : request
 					return clientMethod(args)
 				})
