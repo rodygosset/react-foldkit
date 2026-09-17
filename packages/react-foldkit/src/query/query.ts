@@ -9,11 +9,11 @@ import {
 	asLift,
 	type CacheStore,
 	completeCancel,
+	CancelIntent,
 	FetchInterruptOutcome,
 	type FoldLens,
 	type LiftConfig,
 	type LiftQuery,
-	type ParentKeyFoldConfig,
 	type ParentMessage,
 	replaceSlot,
 	resolveFoldLens,
@@ -37,7 +37,7 @@ const makeQueryMessage = <A, AI, E, EI>(data: Schema.Codec<A, AI>, error: Schema
 		RequestedWatch: {},
 		RequestedForget: {},
 		SettledFetch: { result: Schema.Result(data, error) },
-		CompletedCancelFetch: { outcome: FetchInterruptOutcome },
+		CompletedCancelFetch: { outcome: FetchInterruptOutcome, intent: CancelIntent },
 	})
 
 export type QueryMessage<A, AI, E, EI> = ReturnType<typeof makeQueryMessage<A, AI, E, EI>>
@@ -120,7 +120,11 @@ export function defineQuery<Name extends string, A, AI, E, EI, R>(
 		read: (model) => model,
 		write: (_model, _args, data) => data,
 		load: () => Fetch(),
-		interrupt: () => Fetch.Interrupt((outcome) => Message.CompletedCancelFetch({ outcome })),
+		interrupt: function (_args, intent) {
+			return Fetch.Interrupt(function (outcome) {
+				return Message.CompletedCancelFetch({ outcome, intent })
+			})
+		},
 	}
 
 	const hasSlot = (model: Model): boolean => !AsyncData.isIdle(model)
@@ -128,7 +132,8 @@ export function defineQuery<Name extends string, A, AI, E, EI, R>(
 	function forgetSlot(model: Model): UpdateReturn {
 		if (AsyncData.isIdle(model)) return { model }
 
-		if (AsyncData.isPending(model)) return { model: AsyncData.Idle(), commands: [store.interrupt(undefined)] }
+		if (AsyncData.isPending(model))
+			return { model: AsyncData.Idle(), commands: [store.interrupt(undefined, CancelIntent.Forget())] }
 
 		return { model: AsyncData.Idle() }
 	}
@@ -148,10 +153,10 @@ export function defineQuery<Name extends string, A, AI, E, EI, R>(
 					model: store.write(model, undefined, AsyncData.settle(store.read(model, undefined), result)),
 				}
 			},
-			CompletedCancelFetch({ outcome }) {
+			CompletedCancelFetch({ outcome, intent }) {
 				if (!hasSlot(model)) return { model }
 
-				return completeCancel(store, model, undefined, outcome)
+				return completeCancel(store, model, undefined, outcome, intent)
 			},
 		})
 
@@ -195,13 +200,9 @@ export function defineQuery<Name extends string, A, AI, E, EI, R>(
 	})
 
 	const lift = function <ParentModel, ParentMessage>(
-		config?: LiftConfig<ParentModel, ParentMessage, Model, Message>
+		config: LiftConfig<ParentModel, ParentMessage, Model, Message>
 	) {
-		if (arguments.length === 0)
-			return (parentKeyConfig: ParentKeyFoldConfig<ParentModel, ParentMessage, Model, Message>) =>
-				liftFromLens(resolveFoldLens(parentKeyConfig))
-
-		return liftFromLens(resolveFoldLens(config as LiftConfig<ParentModel, ParentMessage, Model, Message>))
+		return liftFromLens(resolveFoldLens(config))
 	} as LiftQuery<Model, Message, R>
 
 	const watchSubscription = <ParentModel, ParentMessage>(

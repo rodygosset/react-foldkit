@@ -9,6 +9,7 @@ import {
 	asLift,
 	type CacheStore,
 	completeCancel,
+	CancelIntent,
 	FetchInterruptOutcome,
 	foldChildFromInform,
 	type FoldLens,
@@ -16,7 +17,6 @@ import {
 	type KeyedInterruptArgs,
 	type LiftConfig,
 	type LiftKeyedQuery,
-	type ParentKeyFoldConfig,
 	type ParentMessage,
 	replaceSlot,
 	resolveFoldLens,
@@ -54,6 +54,7 @@ const makeKeyedQueryMessage = <A, AI, E, EI, Fields extends SyncFields>(
 		CompletedCancelFetch: {
 			args: Args,
 			outcome: FetchInterruptOutcome,
+			intent: CancelIntent,
 		},
 	})
 
@@ -213,8 +214,11 @@ export function defineKeyedQuery<Name extends string, A, AI, E, EI, Fields exten
 			AsyncData.fromOptionOrIdle(Option.map(HashMap.get(model, toKey(args)), (slot) => slot.data)),
 		write: (model, args, data) => HashMap.set(model, toKey(args), { args, data }),
 		load: (args) => Fetch(args),
-		interrupt: (args) =>
-			Fetch.Interrupt(args, (outcome) => Message.CompletedCancelFetch({ args: toMessageArgs(args), outcome })),
+		interrupt: function (args, intent) {
+			return Fetch.Interrupt(args, function (outcome) {
+				return Message.CompletedCancelFetch({ args: toMessageArgs(args), outcome, intent })
+			})
+		},
 	}
 
 	const hasSlot = (model: Model, args: Args): boolean => HashMap.has(model, toKey(args))
@@ -223,7 +227,8 @@ export function defineKeyedQuery<Name extends string, A, AI, E, EI, Fields exten
 		if (!hasSlot(model, args)) return { model }
 
 		const nextModel = HashMap.remove(model, toKey(args))
-		if (AsyncData.isPending(store.read(model, args))) return { model: nextModel, commands: [store.interrupt(args)] }
+		if (AsyncData.isPending(store.read(model, args)))
+			return { model: nextModel, commands: [store.interrupt(args, CancelIntent.Forget())] }
 
 		return { model: nextModel }
 	}
@@ -257,10 +262,10 @@ export function defineKeyedQuery<Name extends string, A, AI, E, EI, Fields exten
 					model: store.write(model, args, AsyncData.settle(store.read(model, args), result)),
 				}
 			},
-			CompletedCancelFetch({ args, outcome }) {
+			CompletedCancelFetch({ args, outcome, intent }) {
 				if (!hasSlot(model, args)) return { model }
 
-				return completeCancel(store, model, args, outcome)
+				return completeCancel(store, model, args, outcome, intent)
 			},
 		})
 
@@ -301,13 +306,9 @@ export function defineKeyedQuery<Name extends string, A, AI, E, EI, Fields exten
 	})
 
 	const lift = function <ParentModel, ParentMessage>(
-		config?: LiftConfig<ParentModel, ParentMessage, Model, Message>
+		config: LiftConfig<ParentModel, ParentMessage, Model, Message>
 	) {
-		if (arguments.length === 0)
-			return (parentKeyConfig: ParentKeyFoldConfig<ParentModel, ParentMessage, Model, Message>) =>
-				liftFromLens(resolveFoldLens(parentKeyConfig))
-
-		return liftFromLens(resolveFoldLens(config as LiftConfig<ParentModel, ParentMessage, Model, Message>))
+		return liftFromLens(resolveFoldLens(config))
 	} as LiftKeyedQuery<Model, Message, Args, R>
 
 	const watchKeyedQuerySubscription = <ParentModel, ParentMessage>(

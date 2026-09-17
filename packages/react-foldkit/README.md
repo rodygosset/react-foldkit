@@ -114,7 +114,7 @@ when you already have those fields. Policy Steps live on the same record
 `query.ParentMessage` (`GotPostsMessage: postsQuery.ParentMessage`) and pass the
 constructor as `parentMessage` (`parentMessage: Message.GotPostsMessage`).
 For an always-present slot, call
-`lift<Model, Message>()({ field: "posts", parentMessage: Message.GotPostsMessage })`.
+`lift<Model, Message>({ field: "posts", parentMessage: Message.GotPostsMessage })`.
 Name both parent types so the handle is the full parent Message union, not only the
 `Got*` variant the constructor returns.
 A full `read` / `write` lens still infers `ParentModel` from `read` and takes
