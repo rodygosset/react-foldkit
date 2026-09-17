@@ -2,6 +2,7 @@ import { Effect, Match, Option, Predicate, Schema, pipe } from "effect"
 import * as AsyncData from "../asyncData"
 import * as Command from "../command"
 import { defineMessageUnion } from "../message"
+import { defineTaggedUnion } from "../schema"
 import { makeConstrainedEvo } from "../struct"
 import * as Subscription from "../subscription"
 import * as Update from "../update"
@@ -38,11 +39,6 @@ export type ParentKeyFoldConfig<ParentModel, ParentMessage, ChildModel, ChildMes
 	parentMessage: GotWrapper<ChildMessage, ParentMessage>
 }>
 
-type MissingParentModelKeyConfig = {
-	readonly field: never
-	readonly parentMessage: never
-}
-
 export type LiftConfig<ParentModel, ParentMessage, ChildModel, ChildMessage> =
 	| FoldLens<ParentModel, ParentMessage, ChildModel, ChildMessage>
 	| ParentKeyFoldConfig<ParentModel, ParentMessage, ChildModel, ChildMessage>
@@ -51,34 +47,18 @@ export type LiftQuery<ChildModel, ChildMessage, R> = {
 	<ParentModel, ParentMessage>(
 		config: FoldLens<ParentModel, ParentMessage, ChildModel, ChildMessage>
 	): Lifted.Query<ParentModel, ParentMessage, ChildMessage, R>
-	<ParentModel = never, ParentMessage = never>(): [ParentMessage] extends [never]
-		? <InferredParentMessage>(
-				config: [ParentModel] extends [never]
-					? MissingParentModelKeyConfig
-					: ParentKeyFoldConfig<ParentModel, InferredParentMessage, ChildModel, ChildMessage>
-			) => Lifted.Query<ParentModel, InferredParentMessage, ChildMessage, R>
-		: (
-				config: [ParentModel] extends [never]
-					? MissingParentModelKeyConfig
-					: ParentKeyFoldConfig<ParentModel, ParentMessage, ChildModel, ChildMessage>
-			) => Lifted.Query<ParentModel, ParentMessage, ChildMessage, R>
+	<ParentModel, ParentMessage>(
+		config: ParentKeyFoldConfig<ParentModel, ParentMessage, ChildModel, ChildMessage>
+	): Lifted.Query<ParentModel, ParentMessage, ChildMessage, R>
 }
 
 export type LiftKeyedQuery<ChildModel, ChildMessage, Args, R> = {
 	<ParentModel, ParentMessage>(
 		config: FoldLens<ParentModel, ParentMessage, ChildModel, ChildMessage>
 	): Lifted.KeyedQuery<ParentModel, ParentMessage, ChildMessage, Args, R>
-	<ParentModel = never, ParentMessage = never>(): [ParentMessage] extends [never]
-		? <InferredParentMessage>(
-				config: [ParentModel] extends [never]
-					? MissingParentModelKeyConfig
-					: ParentKeyFoldConfig<ParentModel, InferredParentMessage, ChildModel, ChildMessage>
-			) => Lifted.KeyedQuery<ParentModel, InferredParentMessage, ChildMessage, Args, R>
-		: (
-				config: [ParentModel] extends [never]
-					? MissingParentModelKeyConfig
-					: ParentKeyFoldConfig<ParentModel, ParentMessage, ChildModel, ChildMessage>
-			) => Lifted.KeyedQuery<ParentModel, ParentMessage, ChildMessage, Args, R>
+	<ParentModel, ParentMessage>(
+		config: ParentKeyFoldConfig<ParentModel, ParentMessage, ChildModel, ChildMessage>
+	): Lifted.KeyedQuery<ParentModel, ParentMessage, ChildMessage, Args, R>
 }
 
 const isParentKeyFoldConfig = <ParentModel, ParentMessage, ChildModel, ChildMessage>(
@@ -143,6 +123,12 @@ export const FetchInterruptOutcome = defineMessageUnion({
 	NotFound: {},
 })
 
+export const CancelIntent = defineTaggedUnion({
+	Replace: {},
+	Forget: {},
+})
+export type CancelIntent = typeof CancelIntent.Type
+
 type Transition = <A, E>(data: AsyncData.AsyncData<A, E>) => Option.Option<AsyncData.AsyncData<A, E>>
 
 const transitionFor = (policy: Policy): Transition =>
@@ -157,7 +143,7 @@ export type CacheStore<Model, Args, A, E, Message, R> = Readonly<{
 	read: (model: Model, args: Args) => AsyncData.AsyncData<A, E>
 	write: (model: Model, args: Args, data: AsyncData.AsyncData<A, E>) => Model
 	load: (args: Args) => Command.Command<Message, never, R>
-	interrupt: (args: Args) => Command.Command<Message, never, R>
+	interrupt: (args: Args, intent: CancelIntent) => Command.Command<Message, never, R>
 }>
 
 export const applyPolicy = <Model, Args, A, E, Message, R>(
@@ -183,7 +169,7 @@ export function replaceSlot<Model, Args, A, E, Message, R>(
 
 	return {
 		model,
-		commands: [store.interrupt(args)],
+		commands: [store.interrupt(args, CancelIntent.Replace())],
 	}
 }
 
@@ -191,11 +177,23 @@ export const completeCancel = <Model, Args, A, E, Message, R>(
 	store: CacheStore<Model, Args, A, E, Message, R>,
 	model: Model,
 	args: Args,
-	outcome: Command.Interruptible.Outcome
+	outcome: Command.Interruptible.Outcome,
+	intent: CancelIntent
 ): Update.Return<Model, Message, R> =>
 	Command.Interruptible.Outcome.match<Update.Return<Model, Message, R>>(outcome, {
-		Interrupted: () => ({ model, commands: [store.load(args)] }),
-		NotFound: () => ({ model }),
+		Interrupted: function () {
+			return CancelIntent.match<Update.Return<Model, Message, R>>(intent, {
+				Replace: function () {
+					return { model, commands: [store.load(args)] }
+				},
+				Forget: function () {
+					return { model }
+				},
+			})
+		},
+		NotFound: function () {
+			return { model }
+		},
 	})
 
 export const runExecute = <A, E, R>(

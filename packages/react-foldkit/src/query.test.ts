@@ -181,7 +181,11 @@ describe("Query.define — interrupt lifecycle", () => {
 		const replaced = notes.informReplace(pending.model)
 		expect(replaced.model).toEqual(AsyncData.Loading())
 		expect(replaced.commands?.map(commandShape)).toEqual([
-			commandShape(notes.Fetch.Interrupt((outcome) => notes.Message.CompletedCancelFetch({ outcome }))),
+			commandShape(
+				notes.Fetch.Interrupt(function (outcome) {
+					return notes.Message.CompletedCancelFetch({ outcome, intent: Query.CancelIntent.Replace() })
+				})
+			),
 		])
 	})
 
@@ -191,6 +195,7 @@ describe("Query.define — interrupt lifecycle", () => {
 			pending.model,
 			notes.Message.CompletedCancelFetch({
 				outcome: Command.Interruptible.Outcome.Interrupted(),
+				intent: Query.CancelIntent.Replace(),
 			})
 		)
 		expect(restarted.model).toEqual(AsyncData.Loading())
@@ -202,6 +207,7 @@ describe("Query.define — interrupt lifecycle", () => {
 			notes.init(),
 			notes.Message.CompletedCancelFetch({
 				outcome: Command.Interruptible.Outcome.NotFound(),
+				intent: Query.CancelIntent.Replace(),
 			})
 		)
 		expect(started.model).toEqual(AsyncData.Idle())
@@ -214,6 +220,7 @@ describe("Query.define — interrupt lifecycle", () => {
 			pending.model,
 			notes.Message.CompletedCancelFetch({
 				outcome: Command.Interruptible.Outcome.NotFound(),
+				intent: Query.CancelIntent.Replace(),
 			})
 		)
 		expect(next.model).toEqual(AsyncData.Loading())
@@ -226,6 +233,7 @@ describe("Query.define — interrupt lifecycle", () => {
 			success.model,
 			notes.Message.CompletedCancelFetch({
 				outcome: Command.Interruptible.Outcome.NotFound(),
+				intent: Query.CancelIntent.Replace(),
 			})
 		)
 		expect(next.model).toEqual(AsyncData.Success({ data: hello }))
@@ -307,6 +315,7 @@ describe("Query.define — interrupt lifecycle", () => {
 			store.dispatch(
 				latchedNotes.Message.CompletedCancelFetch({
 					outcome: Command.Interruptible.Outcome.NotFound(),
+					intent: Query.CancelIntent.Replace(),
 				})
 			)
 			expect(store.getModel()).toEqual(AsyncData.Loading())
@@ -316,6 +325,63 @@ describe("Query.define — interrupt lifecycle", () => {
 			})
 			expect(model).toEqual(AsyncData.Success({ data: hello }))
 			expect(attempts).toBe(1)
+		})
+	)
+
+	it("Interrupted with forget does not start Fetch after re-watch", () => {
+		const pending = notes.informRevalidateOrLoad(notes.init())
+		const forgotten = notes.informForget(pending.model)
+		const watching = notes.informWatch(forgotten.model)
+		expect(watching.model).toEqual(AsyncData.Loading())
+		const next = notes.update(
+			watching.model,
+			notes.Message.CompletedCancelFetch({
+				outcome: Command.Interruptible.Outcome.Interrupted(),
+				intent: Query.CancelIntent.Forget(),
+			})
+		)
+		expect(next.model).toEqual(AsyncData.Loading())
+		expect(next.commands).toBeUndefined()
+	})
+
+	it.effect("forget then watch through Store.boot does not start a third Fetch", () =>
+		Effect.gen(function* () {
+			let attempts = 0
+			const deferredNotes = Query.define({
+				name: "ForgetRewatchNotes",
+				data: Schema.Array(Note),
+				error: Schema.String,
+				execute: Effect.suspend(function () {
+					attempts += 1
+					if (attempts === 1) return Effect.never
+					return Effect.succeed(hello)
+				}),
+			})
+
+			const store = yield* Effect.acquireRelease(
+				Effect.sync(function () {
+					return Store.boot(
+						{ update: deferredNotes.update },
+						deferredNotes.informRevalidateOrLoad(deferredNotes.init())
+					)
+				}),
+				function (live) {
+					return Effect.sync(function () {
+						live.dispose()
+					})
+				}
+			)
+
+			expect(store.getModel()).toEqual(AsyncData.Loading())
+			yield* Effect.yieldNow
+			yield* Effect.yieldNow
+			store.dispatch(deferredNotes.Message.RequestedForget())
+			store.dispatch(deferredNotes.Message.RequestedWatch())
+			const model = yield* Store.takeWhen(store, function (current) {
+				return AsyncData.isSuccess(current) ? Option.some(current) : Option.none()
+			})
+			expect(model).toEqual(AsyncData.Success({ data: hello }))
+			expect(attempts).toBe(2)
 		})
 	)
 })
@@ -386,7 +452,7 @@ describe("Query.define KeyedQuery — isolation", () => {
 		expect(replaced.commands?.map(commandShape)).toEqual([
 			commandShape(
 				noteById.Fetch.Interrupt({ noteId: "1" }, (outcome) =>
-					noteById.Message.CompletedCancelFetch({ args: { noteId: "1" }, outcome })
+					noteById.Message.CompletedCancelFetch({ args: { noteId: "1" }, outcome, intent: Query.CancelIntent.Replace() })
 				)
 			),
 		])
@@ -399,6 +465,7 @@ describe("Query.define KeyedQuery — isolation", () => {
 			noteById.Message.CompletedCancelFetch({
 				args: { noteId: "1" },
 				outcome: Command.Interruptible.Outcome.Interrupted(),
+				intent: Query.CancelIntent.Replace(),
 			})
 		)
 		expect(noteById.read(restarted.model, { noteId: "1" })).toEqual(AsyncData.Loading())
@@ -411,6 +478,7 @@ describe("Query.define KeyedQuery — isolation", () => {
 			noteById.Message.CompletedCancelFetch({
 				args: { noteId: "1" },
 				outcome: Command.Interruptible.Outcome.NotFound(),
+				intent: Query.CancelIntent.Replace(),
 			})
 		)
 		expect(HashMap.isEmpty(started.model)).toBe(true)
@@ -424,6 +492,7 @@ describe("Query.define KeyedQuery — isolation", () => {
 			noteById.Message.CompletedCancelFetch({
 				args: { noteId: "1" },
 				outcome: Command.Interruptible.Outcome.NotFound(),
+				intent: Query.CancelIntent.Replace(),
 			})
 		)
 		expect(noteById.read(next.model, { noteId: "1" })).toEqual(AsyncData.Loading())
@@ -441,7 +510,7 @@ describe("Query.lift", () => {
 	})
 	type Message = typeof Message.Type
 
-	const notesChild = notes.lift<Model>()({
+	const notesChild = notes.lift<Model, Message>({
 		field: "notes",
 		parentMessage: Message.GotNotesMessage,
 	})
@@ -495,7 +564,7 @@ describe("Query.lift KeyedQuery", () => {
 	})
 	type Message = typeof Message.Type
 
-	const notesChild = noteById.lift<Model>()({
+	const notesChild = noteById.lift<Model, Message>({
 		field: "notes",
 		parentMessage: Message.GotNoteMessage,
 	})
@@ -526,7 +595,7 @@ describe("Query.lift KeyedQuery", () => {
 		expect(replaced.commands?.map(commandShape)).toEqual([
 			commandShape(
 				noteById.Fetch.Interrupt({ noteId: "1" }, (outcome) =>
-					noteById.Message.CompletedCancelFetch({ args: { noteId: "1" }, outcome })
+					noteById.Message.CompletedCancelFetch({ args: { noteId: "1" }, outcome, intent: Query.CancelIntent.Replace() })
 				)
 			),
 		])
@@ -542,7 +611,7 @@ describe("Query.lift parent-key vs lens", () => {
 	type Message = typeof Message.Type
 
 	it("parent-key config writes the same Loading and Fetch as a ChildFold lens", () => {
-		const notesChildFromField = notes.lift<Model>()({
+		const notesChildFromField = notes.lift<Model, Message>({
 			field: "notes",
 			parentMessage: Message.GotNotesMessage,
 		})
@@ -565,7 +634,7 @@ describe("Query.lift parent-key vs lens", () => {
 	})
 
 	it("the fold binds Model first and takes ParentMessageValue", () => {
-		const notesChild = notes.lift<Model>()({
+		const notesChild = notes.lift<Model, Message>({
 			field: "notes",
 			parentMessage: Message.GotNotesMessage,
 		})
@@ -697,7 +766,7 @@ describe("Query.define KeyedQuery — watch and forget", () => {
 		expect(onlyOne.commands?.map(commandShape)).toEqual([
 			commandShape(
 				noteById.Fetch.Interrupt({ noteId: "2" }, (outcome) =>
-					noteById.Message.CompletedCancelFetch({ args: { noteId: "2" }, outcome })
+					noteById.Message.CompletedCancelFetch({ args: { noteId: "2" }, outcome, intent: Query.CancelIntent.Forget() })
 				)
 			),
 		])
@@ -710,7 +779,7 @@ describe("Query.define KeyedQuery — watch and forget", () => {
 		expect(forgotten.commands?.map(commandShape)).toEqual([
 			commandShape(
 				noteById.Fetch.Interrupt({ noteId: "2" }, (outcome) =>
-					noteById.Message.CompletedCancelFetch({ args: { noteId: "2" }, outcome })
+					noteById.Message.CompletedCancelFetch({ args: { noteId: "2" }, outcome, intent: Query.CancelIntent.Forget() })
 				)
 			),
 		])
@@ -763,7 +832,11 @@ describe("Query.define — watch and forget", () => {
 		const forgotten = notes.informForget(pending.model)
 		expect(forgotten.model).toEqual(AsyncData.Idle())
 		expect(forgotten.commands?.map(commandShape)).toEqual([
-			commandShape(notes.Fetch.Interrupt((outcome) => notes.Message.CompletedCancelFetch({ outcome }))),
+			commandShape(
+				notes.Fetch.Interrupt(function (outcome) {
+					return notes.Message.CompletedCancelFetch({ outcome, intent: Query.CancelIntent.Forget() })
+				})
+			),
 		])
 	})
 
@@ -824,6 +897,56 @@ describe("Query.define KeyedQuery — Store interrupt", () => {
 			expect(attempts["2"]).toBe(1)
 		})
 	)
+
+	it.effect("watch-drop then re-watch through Store.boot does not start a third Fetch", () =>
+		Effect.gen(function* () {
+			const attempts: globalThis.Record<string, number> = {}
+			const deferredNotes = Query.define({
+				name: "ForgetRewatchNote",
+				data: Note,
+				error: Schema.String,
+				args: { noteId: Schema.String },
+				execute: function ({ noteId }) {
+					return Effect.suspend(function () {
+						attempts[noteId] = (attempts[noteId] ?? 0) + 1
+						if (attempts[noteId] === 1) return Effect.never
+						return Effect.succeed({ id: noteId, body: "hello" })
+					})
+				},
+			})
+
+			const started = deferredNotes.informWatch(deferredNotes.init(), [{ noteId: "1" }])
+			const store = yield* Effect.acquireRelease(
+				Effect.sync(function () {
+					return Store.boot({ update: deferredNotes.update }, started)
+				}),
+				function (live) {
+					return Effect.sync(function () {
+						live.dispose()
+					})
+				}
+			)
+
+			yield* Effect.yieldNow
+			yield* Effect.yieldNow
+			store.dispatch(deferredNotes.Message.RequestedWatch({ live: HashMap.empty() }))
+			store.dispatch(
+				deferredNotes.Message.RequestedWatch({
+					live: HashMap.make([slotKey({ noteId: "1" }), { noteId: "1" }]),
+				})
+			)
+
+			const model = yield* Store.takeWhen(store, function (current) {
+				return AsyncData.isSuccess(deferredNotes.read(current, { noteId: "1" }))
+					? Option.some(current)
+					: Option.none()
+			})
+			expect(deferredNotes.read(model, { noteId: "1" })).toEqual(
+				AsyncData.Success({ data: { id: "1", body: "hello" } })
+			)
+			expect(attempts["1"]).toBe(2)
+		})
+	)
 })
 
 describe("Query watch subscription and run", () => {
@@ -840,7 +963,7 @@ describe("Query watch subscription and run", () => {
 			})
 			type ParentMessage = typeof ParentMessage.Type
 
-			const notesChild = noteById.lift<ParentModel, ParentMessage>()({
+			const notesChild = noteById.lift<ParentModel, ParentMessage>({
 				field: "notes",
 				parentMessage: ParentMessage.GotNoteMessage,
 			})
@@ -913,7 +1036,7 @@ describe("Query watch subscription and run", () => {
 			})
 			type ParentMessage = typeof ParentMessage.Type
 
-			const notesChild = notes.lift<ParentModel, ParentMessage>()({
+			const notesChild = notes.lift<ParentModel, ParentMessage>({
 				field: "notes",
 				parentMessage: ParentMessage.GotNotesMessage,
 			})
@@ -1075,7 +1198,7 @@ describe("Query.Query and Query.KeyedQuery types", () => {
 		})
 		type ParentMessage = typeof ParentMessage.Type
 
-		const notesChild = notes.lift<ParentModel>()({
+		const notesChild = notes.lift<ParentModel, ParentMessage>({
 			field: "notes",
 			parentMessage: ParentMessage.GotNotesMessage,
 		})
@@ -1134,7 +1257,8 @@ describe("Query.Query and Query.KeyedQuery types", () => {
 		const ParentMessage = defineMessageUnion({
 			GotNotesMessage: notes.ParentMessage,
 		})
-		const notesChild = notes.lift<ParentModel>()({
+		type ParentMessage = typeof ParentMessage.Type
+		const notesChild = notes.lift<ParentModel, ParentMessage>({
 			field: "notes",
 			parentMessage: ParentMessage.GotNotesMessage,
 		})
@@ -1151,25 +1275,16 @@ describe("Query.Query and Query.KeyedQuery types", () => {
 		takesChildMessage(notesChild.fold)
 	})
 
-	it("parent-key lift without ParentModel rejects field", () => {
-		notes.lift()({
-			// @ts-expect-error
-			field: "notes",
-			// @ts-expect-error
-			parentMessage: function (message: (typeof notes.Message)["Type"]) {
-				return message
-			},
-		})
-	})
-
 	it("parent-key lift rejects a key that is not the query Model", () => {
 		type Parent = { notes: (typeof notes.Model)["Type"]; label: string }
-		notes.lift<Parent>()({
+		const Message = defineMessageUnion({
+			GotNotesMessage: notes.ParentMessage,
+		})
+		type Message = typeof Message.Type
+		notes.lift<Parent, Message>({
 			// @ts-expect-error
 			field: "label",
-			parentMessage: function (fields: { readonly message: (typeof notes.Message)["Type"] }) {
-				return fields.message
-			},
+			parentMessage: Message.GotNotesMessage,
 		})
 	})
 
@@ -1182,9 +1297,9 @@ describe("Query.Query and Query.KeyedQuery types", () => {
 		const Wrong = defineMessageUnion({
 			GotNotesMessage: { message: Schema.String },
 		})
-		notes.lift<Parent, Message>()({
+		// @ts-expect-error Wrong.GotNotesMessage payload is string, not the query Message
+		notes.lift<Parent, Message>({
 			field: "notes",
-			// @ts-expect-error
 			parentMessage: Wrong.GotNotesMessage,
 		})
 	})

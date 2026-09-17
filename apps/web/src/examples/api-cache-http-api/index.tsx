@@ -112,17 +112,17 @@ type Message = typeof Message.Type
 
 type UpdateReturn = Update.Return<Model, Message, BlogClient>
 
-const postsChild = postsQuery.lift<Model, Message>()({
+const postsChild = postsQuery.lift<Model, Message>({
 	field: "posts",
 	parentMessage: Message.GotPostsMessage,
 })
 
-const statsChild = statsQuery.lift<Model, Message>()({
+const statsChild = statsQuery.lift<Model, Message>({
 	field: "stats",
 	parentMessage: Message.GotStatsMessage,
 })
 
-const postDetailChild = postDetailQuery.lift<Model, Message>()({
+const postDetailChild = postDetailQuery.lift<Model, Message>({
 	field: "postDetailById",
 	parentMessage: Message.GotPostDetailMessage,
 })
