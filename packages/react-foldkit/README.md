@@ -103,8 +103,8 @@ API Cache (hand-rolled AsyncData), and API Cache Query (`Query.define`).
 `args` fields are `Schema.Codec`s (no encoding or decoding services). Omit
 `toKey` to JSON-encode args with `Schema.toCodecJson` and
 `Schema.fromJsonString`. Slot key and Interrupt identity share `toKey`.
-`Query.HttpApi.Service.query` uses the same default for a keyed GET or HEAD
-endpoint. POST, PUT, PATCH, and DELETE are not queries.
+`Query.HttpApi.Service.query` uses the same default for a keyed endpoint.
+`.query` is for a request you are willing to run again (watch, revalidate).
 
 `query.lift` returns a child record. Bind it as `postsChild`. A `Got*` handler
 calls `postsChild.fold(model)`. That fold takes `{ message: childMessage }`, the
