@@ -34,14 +34,15 @@ import { defineMessageUnion } from "react-foldkit/message"
 
 ## Package surface
 
-| Export                                                       | Role                                              |
-| ------------------------------------------------------------ | ------------------------------------------------- |
-| `./react`                                                    | `make()` → `Provider`, `useModel`, `useDispatch`  |
-| `./store`                                                    | `boot()` for tests and non-React hosts            |
-| `./command`, `./message`, `./update`, `./struct`, `./schema` | TEA vocabulary (`defineMessageUnion`, `Update.foldChild`, …) |
-| `./asyncData`                                                | Remote data helpers (`settle`, `revalidate`, …)              |
-| `./subscription`                                             | Model-gated standing orders (`Subscription.make`)            |
-| `./eslint`                                                   | Recommended + strict ESLint presets                          |
+| Export                                                       | Role                                                                                  |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------- |
+| `./react`                                                    | `make({ Model, update, … })` → `Provider` (`init`), `Seed`, `useModel`, `useDispatch` |
+| `./store`                                                    | `boot()` and `takeWhen()` for tests and non-React hosts                               |
+| `./query`                                                    | Remote-data Submodel factory (`Query.define`, watch, forget, `run`)                   |
+| `./command`, `./message`, `./update`, `./struct`, `./schema` | TEA vocabulary (`defineMessageUnion`, `Update.foldChild`, …)                          |
+| `./asyncData`                                                | Remote data helpers (`settle`, `revalidate`, …)                                       |
+| `./subscription`                                             | Model-gated standing orders (`Subscription.make`)                                     |
+| `./eslint`                                                   | Recommended + strict ESLint presets                                                   |
 
 ## Quick start
 
@@ -56,55 +57,105 @@ const Model = Schema.Struct({ count: Schema.Number })
 type Model = typeof Model.Type
 
 const Message = defineMessageUnion({
-  Increment: {},
+	Increment: {},
 })
 type Message = typeof Message.Type
 
 const update = (model: Model, message: Message): Update.Return<Model, Message> =>
-  Message.match<Update.Return<Model, Message>>(message, {
-    Increment: () => ({ model: evo(model, { count: (n) => n + 1 }) }),
-  })
+	Message.match<Update.Return<Model, Message>>(message, {
+		Increment: () => ({ model: evo(model, { count: (n) => n + 1 }) }),
+	})
 
-const { Provider, useModel, useDispatch } = ReactFoldkit.make({ update })
+const { Provider, useModel, useDispatch } = ReactFoldkit.make({ Model, update })
 
 function CounterView() {
-  const count = useModel((m) => m.count)
-  const dispatch = useDispatch()
+	const count = useModel((m) => m.count)
+	const dispatch = useDispatch()
 
-  return (
-    <button type="button" onClick={function () { dispatch(Message.Increment()) }}>
-      {count}
-    </button>
-  )
+	return (
+		<button
+			type="button"
+			onClick={function () {
+				dispatch(Message.Increment())
+			}}
+		>
+			{count}
+		</button>
+	)
 }
 
 export function Counter() {
-  return (
-    <Provider init={{ model: { count: 0 } }}>
-      <CounterView />
-    </Provider>
-  )
+	return (
+		<Provider init={{ model: { count: 0 } }}>
+			<CounterView />
+		</Provider>
+	)
 }
 ```
 
-See `apps/web` in this monorepo for Todo (AsyncData) and Stopwatch (Subscription)
-examples.
+See `apps/web` in this monorepo for Todo (AsyncData), Stopwatch (Subscription),
+API Cache (hand-rolled AsyncData), and API Cache Query (`Query.define`).
+
+## Query watch, forget, and run
+
+`Query.define` creates a remote-data Submodel. Initialize each Query with an
+instance ID, then use `query.read(model)` or `keyedQuery.read(model, args)` to
+read its `AsyncData`. A KeyedQuery Model keeps slots and request identity. A
+completion from an earlier request or another Model instance cannot overwrite
+the current slot.
+
+Call policies directly: `query.loadIfMissing(model)`, `query.revalidate(model)`,
+`query.replace(model)`, `query.watch(model)`, and `query.forget(model)`. Keyed
+policies also take args. `watch(model, argsArray)` reconciles the whole live
+key set. `watchSubscription` emits the corresponding watch Message when its
+dependencies change.
+
+Fetch interruption is opt in: pass `interrupt: true` to `Query.define`. With
+interruption enabled, replacing a pending Fetch waits for cancellation, and
+forgetting a pending slot interrupts its Fetch. With the default plain Fetch,
+request IDs still prevent late completions from changing a replaced or
+forgotten slot.
+
+`query.lift` returns `fold`, policy steps, and `watchSubscription` for a parent
+Model. Declare the parent Message case as `{ message: query.Message }`, and
+pass `toParentMessage: message => Message.GotQueryMessage({ message })` to
+`lift`. A `Got*` handler calls `queryChild.fold(model, message)`. The same
+config accepts a parent field or a full `read` / `write` lens.
+
+`Query.run` executes without writing to a Model. A Query exposes a settled
+`Effect`; a KeyedQuery exposes `run(args)`. `Query.HttpApi.Service.query` derives
+the data and error Schemas, service, and keyed args from an HTTP API endpoint.
+
+## Seed
+
+`Seed` writes a full Model into the inactive Provider store before `activate`,
+so SSR and first paint see preloaded data. Equivalent Models (via
+`Schema.toEquivalence`) are a no-op. Seeding after the store is active throws.
+
+```tsx
+const { Provider, Seed, useModel } = ReactFoldkit.make({ Model, update })
+
+<Provider init={{ model: empty }}>
+  <Seed model={preloaded}>
+    <View />
+  </Seed>
+</Provider>
+```
 
 ## Server rendering
 
-`Provider` renders its init Model on the server. Commands, Subscriptions, and
-Layer resources start only after client hydration, so the client must receive
-the same init Model that produced the server HTML. Dispatches while the live
-runtime is disconnected are ignored.
+`Provider` renders its init Model on the server (or the Seed Model when Seed
+runs during the render). Commands, Subscriptions, and Layer resources start only
+after client hydration, so the client must receive the same Model that produced
+the server HTML. Dispatches while the live runtime is disconnected are ignored.
 
 Init Commands belong to the Provider instance. Each runs until it produces its
 result once; an interrupted init Command restarts when React reconnects Effects,
 while completed init Commands do not. Subscriptions and Layer resources reconnect
 with each Effect activation.
 
-The `schema` config describes the Model but does not transfer it automatically.
-Applications that preload a Model on the server must encode it into the response
-and decode it with the same Schema before hydrating `Provider`.
+`make` takes a `Store.Config` plus `Model: Schema.Codec`. Applications that
+preload on the server should pass that Model into `Seed`.
 
 ## ESLint
 
