@@ -1,0 +1,59 @@
+{
+	"compilerOptions": {
+		"target": "ES2022",
+		"lib": ["ES2022", "DOM", "DOM.Iterable"],
+		"module": "ESNext",
+		"moduleResolution": "bundler",
+		"jsx": "react-jsx",
+		"noUncheckedIndexedAccess": true,
+		"skipLibCheck": true,
+		"strict": true,
+		"noEmit": true,
+		"ignoreDeprecations": "6.0",
+		"plugins": [
+			{
+				"name": "@effect/language-service",
+				"diagnostics": true,
+				"ignoreEffectWarningsInTscExitCode": true,
+				"diagnosticSeverity": {
+					"abortControllerInEffect": "warning",
+					"asyncFunction": "warning",
+					"cryptoRandomUUID": "warning",
+					"cryptoRandomUUIDInEffect": "warning",
+					"extendsNativeError": "warning",
+					"globalConsole": "warning",
+					"globalConsoleInEffect": "warning",
+					"globalDate": "warning",
+					"globalDateInEffect": "warning",
+					"globalFetch": "warning",
+					"globalFetchInEffect": "warning",
+					"globalRandom": "warning",
+					"globalRandomInEffect": "warning",
+					"globalTimers": "warning",
+					"globalTimersInEffect": "warning",
+					"instanceOfSchema": "warning",
+					"newPromise": "warning",
+					"nodeBuiltinImport": "warning",
+					"preferSchemaOverJson": "warning",
+					"processEnv": "warning",
+					"processEnvInEffect": "warning",
+					"schemaSync": "warning"
+				}
+			}
+		]
+	},
+	"include": [
+		"src/**/*.ts",
+		"src/**/*.tsx",
+		"test/**/*.ts",
+		"test/**/*.tsx",
+		"eslint/src/**/*.ts",
+		"vitest.config.ts",
+		"vitest.browser.config.ts",
+		"vitest.package.config.ts",
+		"vitest.setup.ts",
+		"tsup.config.ts",
+		"tsup.eslint.config.ts"
+	],
+	"exclude": ["node_modules", "dist", "eslint/dist", "test/types"]
+}

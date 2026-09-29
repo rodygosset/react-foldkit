@@ -1,0 +1,117 @@
+{
+	"name": "react-foldkit",
+	"version": "0.1.0",
+	"description": "React bindings for Foldkit programs: application Providers, Model hooks, the Store, and Submodels.",
+	"type": "module",
+	"license": "MIT",
+	"author": "Rody Gosset",
+	"keywords": [
+		"react",
+		"tea",
+		"elm-architecture",
+		"effect",
+		"foldkit"
+	],
+	"scripts": {
+		"build": "NODE_OPTIONS=\"--import ../../eslint/ts6-register.mjs\" tsup && NODE_OPTIONS=\"--import ../../eslint/ts6-register.mjs\" tsup --config tsup.eslint.config.ts && bun run build:types",
+		"build:types": "tsc --project tsconfig.build.json",
+		"prepack": "bun run build",
+		"lint": "bun run check:filenames && bun run test:eslint && NODE_OPTIONS=\"--import ../../eslint/ts6-register.mjs\" eslint",
+		"check:filenames": "node scripts/checkFilenames.mjs",
+		"format": "prettier --write \"**/*.{ts,tsx}\"",
+		"typecheck": "tsc --noEmit",
+		"test": "vitest run",
+		"test:watch": "vitest",
+		"test:browser": "vitest run --config vitest.browser.config.ts",
+		"test:package": "bun run build && bun run test:package:built",
+		"test:types:package": "tsc --project test/types/tsconfig.json",
+		"coverage": "vitest run --coverage",
+		"pack:dry": "bun run build && npm pack --dry-run",
+		"test:types:example": "tsc --project examples/projectCache/tsconfig.json",
+		"test:package:built": "vitest run --config vitest.package.config.ts",
+		"test:eslint": "node --import ../../eslint/ts6-register.mjs --test eslint/test/rules.test.mjs",
+		"docs:generate": "node scripts/publicApi.mjs generate",
+		"check:docs": "node scripts/publicApi.mjs check",
+		"check:api": "node scripts/publicApi.mjs api",
+		"test:consumer": "node scripts/testConsumer.mjs",
+		"test:browser:cold": "node scripts/testBrowserCold.mjs",
+		"browser:install": "playwright install chromium"
+	},
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js"
+		},
+		"./react": {
+			"types": "./dist/react.d.ts",
+			"import": "./dist/react.js"
+		},
+		"./store": {
+			"types": "./dist/store.d.ts",
+			"import": "./dist/store.js"
+		},
+		"./submodel": {
+			"types": "./dist/submodel.d.ts",
+			"import": "./dist/submodel.js"
+		},
+		"./eslint": {
+			"types": "./eslint/dist/index.d.ts",
+			"import": "./eslint/dist/index.js",
+			"default": "./eslint/dist/index.js"
+		},
+		"./modelSource": {
+			"types": "./dist/modelSource.d.ts",
+			"import": "./dist/modelSource.js"
+		}
+	},
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"files": [
+		"dist",
+		"eslint/dist",
+		"eslint/README.md",
+		"LICENSE",
+		"README.md",
+		"THIRD-PARTY-NOTICES.md",
+		"docs"
+	],
+	"peerDependencies": {
+		"effect": "^4.0.0",
+		"foldkit": "^0.168.0",
+		"eslint": "^9",
+		"react": "^19.2.6"
+	},
+	"peerDependenciesMeta": {
+		"eslint": {
+			"optional": true
+		}
+	},
+	"dependencies": {
+		"picomatch": "^4.0.5",
+		"use-sync-external-store": "1.6.0"
+	},
+	"devDependencies": {
+		"@effect/vitest": "4.0.0",
+		"@tanstack/react-router": "1.170.33",
+		"@testing-library/react": "^16.3.2",
+		"@types/estree": "^1.0.8",
+		"@types/picomatch": "^4.0.3",
+		"@types/react": "^19",
+		"@types/react-dom": "^19.2.4",
+		"@types/use-sync-external-store": "1.5.0",
+		"@vitest/browser-playwright": "5.0.3",
+		"@vitest/coverage-v8": "5.0.3",
+		"effect": "4.0.0",
+		"eslint": "^9",
+		"foldkit": "0.168.0",
+		"happy-dom": "^20.10.4",
+		"playwright": "^1.61.0",
+		"react": "^19.2.6",
+		"react-dom": "^19.2.6",
+		"seroval": "1.6.2",
+		"tsup": "^8.5.0",
+		"typescript": "^7",
+		"vite": "8.2.0",
+		"vitest": "5.0.3"
+	}
+}
