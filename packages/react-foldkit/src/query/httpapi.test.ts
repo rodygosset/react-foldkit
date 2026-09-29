@@ -1,15 +1,38 @@
-import { describe, it } from "@effect/vitest"
-import { Effect, HashMap, Layer, Option, Result, Schema } from "effect"
+import { Array, Context, Effect, HashMap, Layer, Option, Schema } from "effect"
 import { HttpClient, HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
-import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema } from "effect/unstable/httpapi"
-import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient"
+import {
+	HttpApi,
+	HttpApiClient,
+	HttpApiEndpoint,
+	HttpApiGroup,
+	HttpApiMiddleware,
+	HttpApiSchema,
+} from "effect/unstable/httpapi"
 import { expect, expectTypeOf } from "vitest"
+
+import { describe, it } from "@effect/vitest"
+
 import * as AsyncData from "../asyncData"
-import * as Store from "../store"
 import * as Query from "./index"
 
 const Note = Schema.Struct({ id: Schema.String, body: Schema.String })
 type Note = typeof Note.Type
+
+class NotesSecretService extends Context.Service<NotesSecretService, { readonly token: string }>()(
+	"NotesSecretService"
+) {}
+
+const stringNeedingDecode = Schema.String.pipe(
+	Schema.optional,
+	Schema.withDecodingDefault(
+		Effect.gen(function* () {
+			yield* NotesSecretService
+			return ""
+		})
+	)
+)
+
+const stringNeedingEncode = Schema.flip(stringNeedingDecode)
 
 class NotesAuthError extends Schema.Error<NotesAuthError>("NotesAuthError")({
 	_tag: Schema.tag("NotesAuthError"),
@@ -32,7 +55,7 @@ const Api = HttpApi.make("Api").add(
 			HttpApiEndpoint.get("getById", "/notes/:id", {
 				params: { id: Schema.String },
 				success: Note,
-				error: Schema.String,
+				error: Schema.String.pipe(HttpApiSchema.status(404)),
 			})
 		)
 		.add(
@@ -59,18 +82,20 @@ const Api = HttpApi.make("Api").add(
 		.add(HttpApiEndpoint.get("ping", "/ping"))
 		.add(
 			HttpApiEndpoint.get("secret", "/secret", {
-				success: Schema.String as Schema.Codec<string, string, never, "SecretEncode">,
+				success: stringNeedingEncode,
 			})
 		)
 		.add(
 			HttpApiEndpoint.get("locked", "/locked/:id", {
-				params: { id: Schema.String as Schema.Codec<string, string, never, "ParamEncode"> },
+				params: {
+					id: stringNeedingEncode,
+				},
 				success: Note,
 			})
 		)
 		.add(
 			HttpApiEndpoint.get("decoded", "/decoded", {
-				success: Schema.String as Schema.Codec<string, string, "SecretDecode">,
+				success: stringNeedingDecode,
 			})
 		)
 		.add(
@@ -90,10 +115,118 @@ const Api = HttpApi.make("Api").add(
 		)
 )
 
+class NotesClient extends Query.HttpApi.Service<NotesClient>()("NotesClient", {
+	api: Api,
+}) {}
+
+const notes = NotesClient.query("Notes", "notes", "list")
+const noteById = NotesClient.query("Note", "notes", "getById")
+const noteByIdNonce = NotesClient.query("NoteNonce", "notes", "getByIdNonce")
+const createNote = NotesClient.query("CreateNote", "notes", "create")
+const guarded = NotesClient.query("Guarded", "notes", "guarded")
+const ping = NotesClient.query("Ping", "notes", "ping")
+
+const NotesAuthLive = HttpApiMiddleware.layerClient(NotesAuth, function ({ next, request }) {
+	return next(request)
+})
+
+const jsonResponse = (status: number, body: unknown): Response =>
+	new Response(JSON.stringify(body), {
+		status,
+		headers: { "content-type": "application/json" },
+	})
+
+const emptyResponse = (status: number): Response => new Response(null, { status })
+
+type NotesHandler = (
+	request: HttpClientRequest.HttpClientRequest,
+	url: URL
+) => Effect.Effect<HttpClientResponse.HttpClientResponse, HttpClientError.HttpClientError>
+
+const defaultNotesHandler: NotesHandler = function (request, url) {
+	if (request.method === "GET" && url.pathname === "/notes") {
+		return Effect.succeed(HttpClientResponse.fromWeb(request, jsonResponse(200, [{ id: "1", body: "hello" }])))
+	}
+
+	if (request.method === "GET" && url.pathname === "/ping") {
+		return Effect.succeed(HttpClientResponse.fromWeb(request, emptyResponse(204)))
+	}
+
+	if (request.method === "GET" && url.pathname === "/notes/guarded") {
+		return Effect.succeed(HttpClientResponse.fromWeb(request, jsonResponse(200, { id: "1", body: "hello" })))
+	}
+
+	const maybeNoncePath = Option.fromNullishOr(url.pathname.match(/^\/notes\/([^/]+)\/nonce$/))
+	if (Option.isSome(maybeNoncePath)) {
+		const nonce = url.searchParams.get("nonce") ?? ""
+		const id = Option.getOrElse(Array.get(maybeNoncePath.value, 1), function () {
+			return ""
+		})
+		if (nonce === "1") {
+			return Effect.never
+		}
+		return Effect.succeed(HttpClientResponse.fromWeb(request, jsonResponse(200, { id, body: nonce })))
+	}
+
+	const maybeNotePath = Option.fromNullishOr(url.pathname.match(/^\/notes\/([^/]+)$/))
+	if (request.method === "GET" && Option.isSome(maybeNotePath)) {
+		const id = Option.getOrElse(Array.get(maybeNotePath.value, 1), function () {
+			return ""
+		})
+		if (id === "missing") {
+			return Effect.succeed(HttpClientResponse.fromWeb(request, jsonResponse(404, "not found")))
+		}
+		if (id === "transport") {
+			return Effect.fail(
+				new HttpClientError.HttpClientError({
+					reason: new HttpClientError.TransportError({
+						request,
+						description: "offline",
+					}),
+				})
+			)
+		}
+		if (id === "schema") {
+			return Effect.succeed(HttpClientResponse.fromWeb(request, jsonResponse(200, { id })))
+		}
+		return Effect.succeed(HttpClientResponse.fromWeb(request, jsonResponse(200, { id, body: "hello" })))
+	}
+
+	if (request.method === "POST" && url.pathname === "/notes") {
+		if (request.body._tag === "Uint8Array") {
+			const payload: unknown = JSON.parse(new TextDecoder().decode(request.body.body))
+			return Effect.succeed(HttpClientResponse.fromWeb(request, jsonResponse(200, payload)))
+		}
+	}
+
+	return Effect.fail(
+		new HttpClientError.HttpClientError({
+			reason: new HttpClientError.TransportError({
+				request,
+				description: `unhandled ${request.method} ${url.pathname}`,
+			}),
+		})
+	)
+}
+
+const notesClientLayer = (handle: NotesHandler): Layer.Layer<NotesClient> =>
+	Layer.effect(
+		NotesClient,
+		HttpApiClient.makeWith(Api, {
+			baseUrl: "http://test",
+			httpClient: HttpClient.make(function (request, url) {
+				return handle(request, url)
+			}),
+		})
+	).pipe(Layer.provide(NotesAuthLive))
+
+const NotesClientLive = notesClientLayer(defaultNotesHandler)
+
 const TopLevelApi = HttpApi.make("TopLevelApi").add(
 	HttpApiGroup.make("notes", { topLevel: true }).add(
 		HttpApiEndpoint.get("list", "/notes", {
 			success: Schema.Array(Note),
+			error: Schema.String,
 		})
 	)
 )
@@ -104,86 +237,15 @@ class TopLevelNotesClient extends Query.HttpApi.Service<TopLevelNotesClient>()("
 
 const topLevelNotes = TopLevelNotesClient.query("Notes", "notes", "list")
 
-function jsonClient(body: unknown): HttpClient.HttpClient {
-	return HttpClient.make(function (request) {
-		return Effect.succeed(
-			HttpClientResponse.fromWeb(
-				request,
-				new Response(JSON.stringify(body), {
-					status: 200,
-					headers: { "content-type": "application/json" },
-				})
-			)
-		)
-	})
-}
-
-class NotesClient extends Query.HttpApi.Service<NotesClient>()("NotesClient", { api: Api }) {}
-
-type NotesApiGroups = typeof Api extends HttpApi.HttpApi<infer _I, infer G> ? G : never
-
-const notes = NotesClient.query("Notes", "notes", "list")
-const noteById = NotesClient.query("Note", "notes", "getById")
-const noteByIdNonce = NotesClient.query("NoteNonce", "notes", "getByIdNonce")
-const createNote = NotesClient.query("CreateNote", "notes", "create")
-const guarded = NotesClient.query("Guarded", "notes", "guarded")
-const ping = NotesClient.query("Ping", "notes", "ping")
-
-const transportError = (): HttpClientError.HttpClientError =>
-	new HttpClientError.HttpClientError({
-		reason: new HttpClientError.TransportError({
-			request: HttpClientRequest.get("/notes"),
-			description: "offline",
+const TopLevelNotesClientLive = Layer.effect(
+	TopLevelNotesClient,
+	HttpApiClient.makeWith(TopLevelApi, {
+		baseUrl: "http://test",
+		httpClient: HttpClient.make(function (request, url) {
+			return defaultNotesHandler(request, url)
 		}),
 	})
-
-const schemaError = (): Schema.SchemaError =>
-	Schema.decodeUnknownResult(Schema.Number)("nope").pipe(Result.flip, Result.getOrThrow)
-
-const httpClientFailure = (error: HttpClientError.HttpClientError) =>
-	AsyncData.Failure({
-		error: Query.HttpApi.HttpApiClientError.make({
-			reason: HttpClientError.HttpClientErrorSchema.fromHttpClientError(error),
-		}),
-	})
-
-const schemaFailure = (error: Schema.SchemaError) =>
-	AsyncData.Failure({
-		error: Query.HttpApi.HttpApiClientError.make({
-			reason: Query.HttpApi.SchemaError.fromSchemaError(error),
-		}),
-	})
-
-const notesClient = {
-	notes: {
-		list: function () {
-			return Effect.succeed([{ id: "1", body: "hello" }])
-		},
-		getById: function (request: { readonly params: { readonly id: string } }) {
-			if (request.params.id === "missing") return Effect.fail("not found")
-			if (request.params.id === "transport") return Effect.fail(transportError())
-			if (request.params.id === "schema") return Effect.fail(schemaError())
-			return Effect.succeed({ id: request.params.id, body: "hello" })
-		},
-		getByIdNonce: function (request: {
-			readonly params: { readonly id: string }
-			readonly query: { readonly nonce: string }
-		}) {
-			return Effect.succeed({ id: request.params.id, body: request.query.nonce })
-		},
-		create: function (request: { readonly payload: Note }) {
-			return Effect.succeed(request.payload)
-		},
-		guarded: function () {
-			return Effect.succeed({ id: "1", body: "hello" })
-		},
-		ping: function () {
-			return Effect.void
-		},
-	},
-} as unknown as HttpApiClient.Client<NotesApiGroups>
-
-const NotesClientLive = Layer.succeed(NotesClient, notesClient)
+)
 
 describe("Query.HttpApi.Service.query", () => {
 	it("is a Query whose run depends on the client tag", () => {
@@ -204,16 +266,9 @@ describe("Query.HttpApi.Service.query", () => {
 		})
 	)
 
-	it.effect("run uses a top-level HttpApiClient method", () =>
+	it.effect("run uses a top-level client method", () =>
 		Effect.gen(function* () {
-			const live = Layer.effect(
-				TopLevelNotesClient,
-				HttpApiClient.makeWith(TopLevelApi, {
-					baseUrl: "http://test",
-					httpClient: jsonClient([{ id: "1", body: "hello" }]),
-				})
-			)
-			const data = yield* Effect.provide(topLevelNotes.run, live)
+			const data = yield* Effect.provide(topLevelNotes.run, TopLevelNotesClientLive)
 			expect(data).toEqual(AsyncData.Success({ data: [{ id: "1", body: "hello" }] }))
 		})
 	)
@@ -247,14 +302,25 @@ describe("Query.HttpApi.Service.query KeyedQuery", () => {
 	it.effect("run settles HttpClientError as Failure", () =>
 		Effect.gen(function* () {
 			const data = yield* Effect.provide(noteById.run({ params: { id: "transport" } }), NotesClientLive)
-			expect(data).toEqual(httpClientFailure(transportError()))
+			expect(AsyncData.isFailure(data)).toBe(true)
+			if (AsyncData.isFailure(data) && typeof data.error !== "string") {
+				expect(data.error._tag).toBe("HttpApiClientError")
+				expect(data.error.reason._tag).toBe("HttpError")
+				if (data.error.reason._tag === "HttpError") {
+					expect(data.error.reason.kind).toBe("TransportError")
+				}
+			}
 		})
 	)
 
 	it.effect("run settles SchemaError as Failure", () =>
 		Effect.gen(function* () {
 			const data = yield* Effect.provide(noteById.run({ params: { id: "schema" } }), NotesClientLive)
-			expect(data).toEqual(schemaFailure(schemaError()))
+			expect(AsyncData.isFailure(data)).toBe(true)
+			if (AsyncData.isFailure(data) && typeof data.error !== "string") {
+				expect(data.error._tag).toBe("HttpApiClientError")
+				expect(data.error.reason._tag).toBe("SerializableSchemaError")
+			}
 		})
 	)
 
@@ -267,8 +333,12 @@ describe("Query.HttpApi.Service.query KeyedQuery", () => {
 	)
 
 	it("distinct params keep distinct slots", () => {
-		const first = noteById.informLoadIfMissing(noteById.init(), { params: { id: "a" } })
-		const second = noteById.informLoadIfMissing(first.model, { params: { id: "b" } })
+		const first = noteById.loadIfMissing(noteById.init("note-by-id"), {
+			params: { id: "a" },
+		})
+		const second = noteById.loadIfMissing(first.model, {
+			params: { id: "b" },
+		})
 		expect(noteById.read(second.model, { params: { id: "a" } })).toEqual(AsyncData.Loading())
 		expect(noteById.read(second.model, { params: { id: "b" } })).toEqual(AsyncData.Loading())
 	})
@@ -276,15 +346,15 @@ describe("Query.HttpApi.Service.query KeyedQuery", () => {
 
 describe("Query.HttpApi.Service.query extra args", () => {
 	it("distinct extra args keep distinct slots and Fetch keys", () => {
-		const first = noteByIdNonce.informLoadIfMissing(noteByIdNonce.init(), {
+		const first = noteByIdNonce.loadIfMissing(noteByIdNonce.init("note-by-id-nonce"), {
 			params: { id: "a" },
 			query: { nonce: "1" },
 		})
-		const second = noteByIdNonce.informLoadIfMissing(first.model, {
+		const second = noteByIdNonce.loadIfMissing(first.model, {
 			params: { id: "a" },
 			query: { nonce: "2" },
 		})
-		expect(HashMap.size(second.model)).toBe(2)
+		expect(HashMap.size(second.model.slots)).toBe(2)
 		expect(
 			noteByIdNonce.read(second.model, {
 				params: { id: "a" },
@@ -297,76 +367,30 @@ describe("Query.HttpApi.Service.query extra args", () => {
 				query: { nonce: "2" },
 			})
 		).toEqual(AsyncData.Loading())
-		expect(noteByIdNonce.Fetch({ params: { id: "a" }, query: { nonce: "1" } }).key).not.toEqual(
-			noteByIdNonce.Fetch({ params: { id: "a" }, query: { nonce: "2" } }).key
-		)
 	})
 
-	it.effect("forgetting one extra-arg slot leaves the sibling client call running", () =>
-		Effect.gen(function* () {
-			const attempts: Record<string, number> = {}
-			const client = {
-				notes: {
-					...notesClient.notes,
-					getByIdNonce: function (request: {
-						readonly params: { readonly id: string }
-						readonly query: { readonly nonce: string }
-					}) {
-						return Effect.suspend(function () {
-							attempts[request.query.nonce] = (attempts[request.query.nonce] ?? 0) + 1
-							if (request.query.nonce === "1") {
-								return Effect.never
-							}
-							return Effect.succeed({ id: request.params.id, body: request.query.nonce })
-						})
-					},
-				},
-			} as unknown as HttpApiClient.Client<NotesApiGroups>
-			const live = Layer.succeed(NotesClient, client)
-			const both = noteByIdNonce.informWatch(noteByIdNonce.init(), [
-				{ params: { id: "a" }, query: { nonce: "1" } },
-				{ params: { id: "a" }, query: { nonce: "2" } },
-			])
-			const store = yield* Effect.acquireRelease(
-				Effect.sync(function () {
-					return Store.boot({ update: noteByIdNonce.update, layer: live }, both)
-				}),
-				function (liveStore) {
-					return Effect.sync(function () {
-						liveStore.dispose()
-					})
-				}
-			)
+	it("interrupt: true keys Fetch by instance id and slot", () => {
+		const interruptible = NotesClient.query("NoteNonceInterrupt", "notes", "getByIdNonce", { interrupt: true })
+		expectTypeOf(interruptible.init).parameter(0).toEqualTypeOf<string>()
+		expectTypeOf(noteByIdNonce.init).parameter(0).toEqualTypeOf<string>()
 
-			yield* Effect.yieldNow
-			yield* Effect.yieldNow
-			store.dispatch(
-				noteByIdNonce.Message.RequestedForget({
-					args: { params: { id: "a" }, query: { nonce: "1" } },
-				})
-			)
+		const sidebar = interruptible.init("sidebar")
+		const home = interruptible.init("home")
+		const firstArgs = { params: { id: "a" }, query: { nonce: "1" } }
+		const secondArgs = { params: { id: "a" }, query: { nonce: "2" } }
+		const sidebarFetch = interruptible.loadIfMissing(sidebar, firstArgs)
+		const homeFetch = interruptible.loadIfMissing(home, firstArgs)
+		const otherSlot = interruptible.loadIfMissing(sidebar, secondArgs)
+		const plain = noteByIdNonce.loadIfMissing(noteByIdNonce.init("note-by-id-nonce"), firstArgs)
 
-			const model = yield* Store.takeWhen(store, function (current) {
-				const dropped = noteByIdNonce.read(current, {
-					params: { id: "a" },
-					query: { nonce: "1" },
-				})
-				const kept = noteByIdNonce.read(current, {
-					params: { id: "a" },
-					query: { nonce: "2" },
-				})
-				if (AsyncData.isIdle(dropped) && AsyncData.isSuccess(kept)) return Option.some(current)
-				return Option.none()
-			})
-
-			expect(noteByIdNonce.read(model, { params: { id: "a" }, query: { nonce: "1" } })).toEqual(AsyncData.Idle())
-			expect(noteByIdNonce.read(model, { params: { id: "a" }, query: { nonce: "2" } })).toEqual(
-				AsyncData.Success({ data: { id: "a", body: "2" } })
-			)
-			expect(attempts["1"]).toBe(1)
-			expect(attempts["2"]).toBe(1)
-		})
-	)
+		expect(sidebarFetch.commands?.map((command) => command.key)).not.toEqual(
+			homeFetch.commands?.map((command) => command.key)
+		)
+		expect(sidebarFetch.commands?.map((command) => command.key)).not.toEqual(
+			otherSlot.commands?.map((command) => command.key)
+		)
+		expect(plain.commands?.map((command) => command.key)).toEqual([undefined])
+	})
 })
 
 describe("Query.HttpApi.Service.query empty success", () => {
@@ -391,38 +415,24 @@ describe("Query.HttpApi.Service.query middleware", () => {
 })
 
 describe("Query.HttpApi.Service.query construction", () => {
-	it("rejects stream success endpoints from query construction", () => {
-		type QueryEndpointId = Parameters<typeof NotesClient.query>[2]
-		expectTypeOf<"list">().toExtend<QueryEndpointId>()
-		expectTypeOf<"events">().not.toExtend<QueryEndpointId>()
-		expectTypeOf<"bytes">().not.toExtend<QueryEndpointId>()
-		expectTypeOf<"headerEvents">().not.toExtend<QueryEndpointId>()
-	})
+	type QueryEndpointId = Parameters<typeof NotesClient.query>[2]
 
 	it("rejects an endpoint whose success codec requires encoding services", () => {
-		NotesClient.query(
-			"Secret",
-			"notes",
-			// @ts-expect-error success EncodingServices is not never
-			"secret"
-		)
+		expectTypeOf<"list">().toExtend<QueryEndpointId>()
+		expectTypeOf<"secret">().not.toExtend<QueryEndpointId>()
 	})
 
 	it("rejects an endpoint whose request codec requires encoding services", () => {
-		NotesClient.query(
-			"Locked",
-			"notes",
-			// @ts-expect-error params EncodingServices is not never
-			"locked"
-		)
+		expectTypeOf<"locked">().not.toExtend<QueryEndpointId>()
 	})
 
 	it("rejects an endpoint whose success codec requires decoding services", () => {
-		NotesClient.query(
-			"Decoded",
-			"notes",
-			// @ts-expect-error success DecodingServices is not never
-			"decoded"
-		)
+		expectTypeOf<"decoded">().not.toExtend<QueryEndpointId>()
+	})
+
+	it("rejects stream success endpoints", () => {
+		expectTypeOf<"events">().not.toExtend<QueryEndpointId>()
+		expectTypeOf<"bytes">().not.toExtend<QueryEndpointId>()
+		expectTypeOf<"headerEvents">().not.toExtend<QueryEndpointId>()
 	})
 })

@@ -1,3 +1,4 @@
+// oxlint-disable typescript/consistent-type-assertions
 import { Array, Context, Effect, Predicate, Record, Schema } from "effect"
 import type { Simplify } from "effect/Types"
 import { HttpClientError } from "effect/unstable/http"
@@ -6,8 +7,9 @@ import type * as HttpApi from "effect/unstable/httpapi/HttpApi"
 import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient"
 import * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint"
 import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup"
+
 import { define } from "./define"
-import type { KeyedQuery, SyncFields } from "./keyedQuery"
+import { type KeyedQuery, type SyncFields, encodeKey } from "./keyedQuery"
 import type { Query } from "./query"
 
 type EndpointFrom<
@@ -33,26 +35,32 @@ type ClientRequestOf<Endpoint> = Endpoint extends HttpApiEndpoint.ConstraintRequ
 		>
 	: never
 
-type RequestBody<Request> = Omit<Extract<Request, object>, "responseMode">
+type RequestBody<Request> = Omit<Extract<Request, object>, "responseMode" | "sseOptions">
 
-type EndpointSuccess<Endpoint> = Endpoint extends { readonly "~Success": infer S extends Schema.Constraint }
+type EndpointSuccess<Endpoint> = Endpoint extends {
+	readonly "~Success": infer S extends Schema.Constraint
+}
 	? S["Type"]
 	: unknown
-type EndpointSuccessEncoded<Endpoint> = Endpoint extends { readonly "~Success": infer S extends Schema.Constraint }
+type EndpointSuccessEncoded<Endpoint> = Endpoint extends {
+	readonly "~Success": infer S extends Schema.Constraint
+}
 	? S["Encoded"]
 	: unknown
 
-export class SchemaError extends Schema.TaggedError<SchemaError>("Query/HttpApi/SchemaError")("SchemaError", {
+export class SerializableSchemaError extends Schema.TaggedError<SerializableSchemaError>(
+	"Query/HttpApi/SerializableSchemaError"
+)("SerializableSchemaError", {
 	message: Schema.String,
 }) {
-	static readonly fromSchemaError = (error: Schema.SchemaError): SchemaError =>
-		SchemaError.make({ message: error.message })
+	static readonly fromSchemaError = (error: Schema.SchemaError): SerializableSchemaError =>
+		SerializableSchemaError.make({ message: error.message })
 }
 
 export class HttpApiClientError extends Schema.TaggedError<HttpApiClientError>("Query/HttpApi/HttpApiClientError")(
 	"HttpApiClientError",
 	{
-		reason: Schema.Union([HttpClientError.HttpClientErrorSchema, SchemaError]),
+		reason: Schema.Union([HttpClientError.HttpClientErrorSchema, SerializableSchemaError]),
 	}
 ) {}
 
@@ -73,7 +81,9 @@ type IsEmptyRequest<Request> = [RequestBody<Request>] extends [never]
 
 type SchemaServices<S> = S extends Schema.Constraint ? S["DecodingServices"] | S["EncodingServices"] : never
 
-type SuccessServices<Endpoint> = Endpoint extends { readonly "~Success": infer S extends Schema.Constraint }
+type SuccessServices<Endpoint> = Endpoint extends {
+	readonly "~Success": infer S extends Schema.Constraint
+}
 	? SchemaServices<S>
 	: never
 
@@ -133,11 +143,27 @@ type InferredFields<Endpoint> = Endpoint extends HttpApiEndpoint.ConstraintReque
 		: never
 	: never
 
-type KeyedRequestArgs<Endpoint> = RequestBody<ClientRequestOf<Endpoint>>
-
-type KeyedQueryOptions<Endpoint> = {
-	readonly toKey?: (args: KeyedRequestArgs<Endpoint>) => string
-}
+type HttpApiEndpointQuery<Name extends string, Endpoint, Fields extends SyncFields, Self, Interrupt extends boolean> =
+	IsEmptyRequest<ClientRequestOf<Endpoint>> extends true
+		? Query<
+				Name,
+				EndpointSuccess<Endpoint>,
+				EndpointSuccessEncoded<Endpoint>,
+				EndpointError<Endpoint>,
+				EndpointErrorEncoded<Endpoint>,
+				Self,
+				Interrupt
+			>
+		: KeyedQuery<
+				Name,
+				EndpointSuccess<Endpoint>,
+				EndpointSuccessEncoded<Endpoint>,
+				EndpointError<Endpoint>,
+				EndpointErrorEncoded<Endpoint>,
+				Fields,
+				Self,
+				Interrupt
+			>
 
 interface QueryFrom<Self, Groups extends HttpApiGroup.Constraint> {
 	<
@@ -150,27 +176,20 @@ interface QueryFrom<Self, Groups extends HttpApiGroup.Constraint> {
 		name: Name,
 		group: GroupId,
 		endpoint: EndpointId,
-		...options: IsEmptyRequest<ClientRequestOf<Endpoint>> extends true
-			? []
-			: [options?: KeyedQueryOptions<Endpoint>]
-	): IsEmptyRequest<ClientRequestOf<Endpoint>> extends true
-		? Query<
-				Name,
-				EndpointSuccess<Endpoint>,
-				EndpointSuccessEncoded<Endpoint>,
-				EndpointError<Endpoint>,
-				EndpointErrorEncoded<Endpoint>,
-				Self
-			>
-		: KeyedQuery<
-				Name,
-				EndpointSuccess<Endpoint>,
-				EndpointSuccessEncoded<Endpoint>,
-				EndpointError<Endpoint>,
-				EndpointErrorEncoded<Endpoint>,
-				Fields,
-				Self
-			>
+		options: { readonly interrupt: true }
+	): HttpApiEndpointQuery<Name, Endpoint, Fields, Self, true>
+	<
+		Name extends string,
+		const GroupId extends HttpApiGroup.Identifier<Groups>,
+		const EndpointId extends EndpointIdOf<Groups, GroupId>,
+		Endpoint extends EndpointFrom<Groups, GroupId, EndpointId> = EndpointFrom<Groups, GroupId, EndpointId>,
+		Fields extends SyncFields = InferredFields<Endpoint> extends SyncFields ? InferredFields<Endpoint> : SyncFields,
+	>(
+		name: Name,
+		group: GroupId,
+		endpoint: EndpointId,
+		options?: { readonly interrupt?: false }
+	): HttpApiEndpointQuery<Name, Endpoint, Fields, Self, false>
 }
 
 /**
@@ -204,9 +223,7 @@ interface QueryTag<Self, ApiId extends string, Groups extends HttpApiGroup.Const
 
 function getPayloadSchemas(endpoint: HttpApiEndpoint.Top): Array<Schema.Top> {
 	const result: Array<Schema.Top> = []
-	for (const { schemas } of endpoint.payload.values()) {
-		result.push(...schemas)
-	}
+	for (const { schemas } of endpoint.payload.values()) result.push(...schemas)
 	return result
 }
 
@@ -218,7 +235,7 @@ function getSuccessSchemas(endpoint: HttpApiEndpoint.Top): [Schema.Top, ...Array
 function getErrorSchemas(endpoint: HttpApiEndpoint.Top): Array<Schema.Top> {
 	const schemas = new Set<Schema.Top>(endpoint.error)
 	for (const middleware of endpoint.middlewares) {
-		const key = middleware as any as HttpApiMiddleware.AnyService
+		const key = middleware as HttpApiMiddleware.AnyService
 		for (const schema of key.error) schemas.add(schema)
 	}
 	return globalThis.Array.from(schemas)
@@ -244,12 +261,21 @@ function payloadCodec(endpoint: HttpApiEndpoint.Top): Schema.Top | undefined {
 
 function clientRequestFields(endpoint: HttpApiEndpoint.Top): SyncFields | undefined {
 	const fields: globalThis.Record<string, Schema.Top> = {}
-	if (endpoint.params !== undefined) fields.params = endpoint.params
-	if (endpoint.query !== undefined) fields.query = endpoint.query
-	if (endpoint.headers !== undefined) fields.headers = endpoint.headers
+	if (endpoint.params !== undefined) {
+		fields["params"] = endpoint.params
+	}
+	if (endpoint.query !== undefined) {
+		fields["query"] = endpoint.query
+	}
+	if (endpoint.headers !== undefined) {
+		fields["headers"] = endpoint.headers
+	}
 	const payload = payloadCodec(endpoint)
-	if (payload !== undefined) fields.payload = payload
+	if (payload !== undefined) {
+		fields["payload"] = payload
+	}
 	if (Record.isEmptyRecord(fields)) return undefined
+
 	return fields as never
 }
 
@@ -266,7 +292,7 @@ const makeQuery = <Self, ApiId extends string, Groups extends HttpApiGroup.Const
 		groupId: GroupId,
 		endpointId: EndpointId,
 		options?: {
-			readonly toKey?: (args: unknown) => string
+			readonly interrupt?: boolean
 		}
 	) {
 		const group = tag.api.groups[groupId] as HttpApiGroup.WithIdentifier<Groups, GroupId>
@@ -280,35 +306,71 @@ const makeQuery = <Self, ApiId extends string, Groups extends HttpApiGroup.Const
 			effect.pipe(
 				Effect.mapError(function (e) {
 					if (Schema.isSchemaError(e))
-						return HttpApiClientError.make({ reason: SchemaError.fromSchemaError(e) })
+						return HttpApiClientError.make({
+							reason: SerializableSchemaError.fromSchemaError(e),
+						})
+
 					if (HttpClientError.isHttpClientError(e))
 						return HttpApiClientError.make({
 							reason: HttpClientError.HttpClientErrorSchema.fromHttpClientError(e),
 						})
+
 					return e
 				})
 			)
 
+		type ClientMethod = (
+			request: unknown
+		) => Effect.Effect<unknown, Schema.SchemaError | HttpClientError.HttpClientError, Self>
+
+		const missingClientMethod: ClientMethod = () =>
+			Effect.die(`Missing client method ${group.identifier}/${endpointId}`)
+
+		function readClientMethod(client: HttpApiClient.Client<Groups>): ClientMethod {
+			const methods: Record<string, ClientMethod | Record<string, ClientMethod>> = client as never
+			const selected = isTopLevelGroup(group) ? methods[endpointId] : methods[group.identifier]
+
+			if (typeof selected === "function") return selected
+			if (selected === undefined) return missingClientMethod
+
+			const method = selected[endpointId]
+			if (method === undefined) return missingClientMethod
+
+			return method
+		}
+
 		const execute = (request?: unknown) =>
-			tag
-				.use(function (client: any) {
-					const clientMethod: HttpApiClient.Client.Method<
-						HttpApiEndpoint.ConstraintRequest,
-						unknown,
-						unknown
-					> = isTopLevelGroup(group) ? client[endpointId] : client[group.identifier][endpointId]
-					const args: any = request === undefined ? {} : request
-					return clientMethod(args)
-				})
-				.pipe(mapError)
+			tag.use((client) => readClientMethod(client)(request === undefined ? {} : request)).pipe(mapError)
 
 		const args = clientRequestFields(endpoint)
-		if (args === undefined)
+		if (args === undefined) {
+			if (options?.interrupt === true)
+				return define({
+					name,
+					data,
+					error,
+					execute: execute(),
+					interrupt: true,
+				})
+
 			return define({
 				name,
 				data,
 				error,
 				execute: execute(),
+			})
+		}
+
+		const toKey = encodeKey(Schema.Struct(args))
+		if (options?.interrupt === true)
+			return define({
+				name,
+				data,
+				error,
+				args,
+				toKey,
+				execute,
+				interrupt: true,
 			})
 
 		return define({
@@ -316,7 +378,7 @@ const makeQuery = <Self, ApiId extends string, Groups extends HttpApiGroup.Const
 			data,
 			error,
 			args,
-			toKey: options?.toKey,
+			toKey,
 			execute,
 		})
 	} as QueryFrom<Self, Groups>
@@ -326,8 +388,11 @@ const makeQuery = <Self, ApiId extends string, Groups extends HttpApiGroup.Const
  *
  * Empty client request (no params, query, payload, or headers) is a Query.
  * Anything else is KeyedQuery. KeyedQuery args are the HttpApiClient request. Args
- * schemas are `Schema.Codec`s (no encoding or decoding services). Omit `toKey`
- * to JSON-encode args. Slot key and Interrupt identity share that function.
+ * schemas are `Schema.Codec`s (no encoding or decoding services). The slot key is
+ * the JSON encoding of those args.
+ *
+ * Omit the config and Fetch is not interruptible. Pass `{ interrupt: true }` when
+ * forget or replace should stop that Effect. `init` always takes an `instanceId`.
  *
  * @example
  * ```ts
