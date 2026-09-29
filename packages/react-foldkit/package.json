@@ -44,6 +44,10 @@
 			"types": "./dist/message.d.ts",
 			"import": "./dist/message.js"
 		},
+		"./query": {
+			"types": "./dist/query.d.ts",
+			"import": "./dist/query.js"
+		},
 		"./schema": {
 			"types": "./dist/schema.d.ts",
 			"import": "./dist/schema.js"

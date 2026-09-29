@@ -19,6 +19,7 @@ export type ReactStore<Model, Message> = Readonly<{
 	subscribe: (listener: () => void) => () => void
 	dispatch: (message: Message) => void
 	activate: () => () => void
+	seed: (model: Model) => void
 }>
 
 const trackCompletion = <Message, R>(state: InitCommandState<Message, R>): InitCommand<Message, R> =>
@@ -31,16 +32,22 @@ export function make<Model, Message, R = never>(
 	init: Update.Return<Model, Message, R>
 ): ReactStore<Model, Message> {
 	const listeners = new Set<() => void>()
-	const initialModel = init.model
 	const initCommands = init.commands ?? []
 	const initCommandStates = initCommands.map(function (command) {
 		return { command, isComplete: false }
 	})
-	let inactiveModel = initialModel
+	let inactiveModel = init.model
+	let serverModel = inactiveModel
 	let activeStore: Store.Store<Model, Message> | null = null
 
 	function notifyListeners(): void {
 		for (const listener of listeners) listener()
+	}
+
+	function seed(model: Model): void {
+		if (activeStore !== null) throw new Error("react-foldkit <Seed> cannot run after the store is active")
+		inactiveModel = model
+		serverModel = model
 	}
 
 	function activate(): () => void {
@@ -71,15 +78,22 @@ export function make<Model, Message, R = never>(
 
 	return {
 		[ReactStoreTypeId]: ReactStoreTypeId,
-		getModel: () => (activeStore === null ? inactiveModel : activeStore.getModel()),
-		getServerModel: () => initialModel,
+		getModel: function getModel() {
+			return activeStore === null ? inactiveModel : activeStore.getModel()
+		},
+		getServerModel: function getServerModel() {
+			return serverModel
+		},
 		subscribe(listener) {
 			listeners.add(listener)
-			return () => listeners.delete(listener)
+			return function unsubscribe() {
+				listeners.delete(listener)
+			}
 		},
 		dispatch(message) {
 			if (activeStore !== null) activeStore.dispatch(message)
 		},
 		activate,
+		seed,
 	}
 }
