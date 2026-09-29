@@ -71,9 +71,9 @@ const Model = Schema.Struct({
 type Model = typeof Model.Type
 
 const Message = defineMessageUnion({
-	GotPostsMessage: postsQuery.ParentMessage,
-	GotStatsMessage: statsQuery.ParentMessage,
-	GotPostDetailMessage: postDetailQuery.ParentMessage,
+	GotPostsMessage: { message: postsQuery.Message },
+	GotStatsMessage: { message: statsQuery.Message },
+	GotPostDetailMessage: { message: postDetailQuery.Message },
 	ClickedTab: { tab: Tab },
 	ClickedPost: { postId: Schema.String },
 	ClickedBackToPosts: {},
@@ -90,17 +90,17 @@ type UpdateReturn = Update.Return<Model, Message>
 
 const postsChild = postsQuery.lift<Model, Message>({
 	field: "posts",
-	parentMessage: Message.GotPostsMessage,
+	toParentMessage: (message) => Message.GotPostsMessage({ message }),
 })
 
 const statsChild = statsQuery.lift<Model, Message>({
 	field: "stats",
-	parentMessage: Message.GotStatsMessage,
+	toParentMessage: (message) => Message.GotStatsMessage({ message }),
 })
 
 const postDetailChild = postDetailQuery.lift<Model, Message>({
 	field: "postDetailById",
-	parentMessage: Message.GotPostDetailMessage,
+	toParentMessage: (message) => Message.GotPostDetailMessage({ message }),
 })
 
 function activateTab(model: Model, tab: Tab): UpdateReturn {
@@ -116,9 +116,9 @@ function activateTab(model: Model, tab: Tab): UpdateReturn {
 
 const update = (model: Model, message: Message): UpdateReturn =>
 	Message.match<UpdateReturn>(message, {
-		GotPostsMessage: postsChild.fold(model),
-		GotStatsMessage: statsChild.fold(model),
-		GotPostDetailMessage: postDetailChild.fold(model),
+		GotPostsMessage: (value) => postsChild.fold(model, value.message),
+		GotStatsMessage: (value) => statsChild.fold(model, value.message),
+		GotPostDetailMessage: (value) => postDetailChild.fold(model, value.message),
 		ClickedTab: ({ tab }) => activateTab(model, tab),
 		ClickedPost: ({ postId }) =>
 			Update.identity(
@@ -138,10 +138,10 @@ const update = (model: Model, message: Message): UpdateReturn =>
 const init = (): UpdateReturn =>
 	postsChild.revalidateOrLoad({
 		activeTab: "Posts",
-		posts: postsQuery.init(),
-		postDetailById: postDetailQuery.init(),
+		posts: postsQuery.init("posts"),
+		postDetailById: postDetailQuery.init("postDetail"),
 		maybeSelectedPostId: Option.none(),
-		stats: statsQuery.init(),
+		stats: statsQuery.init("stats"),
 	})
 
 const subscriptions = Subscription.make<Model, Message>()((entry) => ({
@@ -149,7 +149,7 @@ const subscriptions = Subscription.make<Model, Message>()((entry) => ({
 		{ isObservingStats: Schema.Boolean },
 		{
 			modelToDependencies: (model) => ({
-				isObservingStats: model.activeTab === "Stats" && AsyncData.hasData(model.stats),
+				isObservingStats: model.activeTab === "Stats" && AsyncData.hasData(statsQuery.read(model.stats)),
 			}),
 			dependenciesToStream: ({ isObservingStats }) =>
 				Stream.when(
@@ -246,7 +246,8 @@ const PostDetailCard = (props: { detail: PostDetail; fetchedAt: number }) => (
 function PostsListView() {
 	const model = useModel()
 	const dispatch = useDispatch()
-	const isPending = AsyncData.isPending(model.posts)
+	const postsData = postsQuery.read(model.posts)
+	const isPending = AsyncData.isPending(postsData)
 
 	return (
 		<div className="flex flex-col gap-4">
@@ -260,16 +261,16 @@ function PostsListView() {
 						dispatch(Message.ClickedInvalidatePosts())
 					}}
 				>
-					{AsyncData.isRefreshing(model.posts) ? "Refreshing…" : "Invalidate"}
+					{AsyncData.isRefreshing(postsData) ? "Refreshing…" : "Invalidate"}
 				</Button>
 			</div>
 			<p className="text-sm text-muted-foreground">
 				Open a post, then go back. The list stays Success. <code>watchSubscription</code> keeps the live key
-				set. A dropped key runs the same forget path as <code>informForget</code>, including Interrupt while
-				pending. Open the same post again to load it fresh. The Cached badge uses{" "}
+				set. A dropped key runs the same forget path as <code>forget</code>, including optional interruption
+				while pending. Open the same post again to load it fresh. The Cached badge uses{" "}
 				<code>postDetailQuery.read</code>, which returns the slot&apos;s <code>AsyncData</code>.
 			</p>
-			{AsyncData.matchDataSplitEmpty(model.posts, {
+			{AsyncData.matchDataSplitEmpty(postsData, {
 				onIdle: () => <LoadingPanel text="Loading posts…" />,
 				onLoading: () => <LoadingPanel text="Loading posts…" />,
 				onFailure: (error) => (
@@ -282,7 +283,7 @@ function PostsListView() {
 				),
 				onData: ({ posts }) => (
 					<div className="flex flex-col gap-4">
-						{Option.match(AsyncData.getError(model.posts), {
+						{Option.match(AsyncData.getError(postsData), {
 							onNone: () => null,
 							onSome: (error) => (
 								<ErrorPanel
@@ -394,7 +395,8 @@ const StatsCards = (props: { stats: Stats; fetchedAt: number; isRefreshing: bool
 function StatsTabView() {
 	const model = useModel()
 	const dispatch = useDispatch()
-	const isPending = AsyncData.isPending(model.stats)
+	const statsData = statsQuery.read(model.stats)
+	const isPending = AsyncData.isPending(statsData)
 
 	return (
 		<div className="flex flex-col gap-4">
@@ -415,7 +417,7 @@ function StatsTabView() {
 				Stats refetch every 5 seconds while this tab is open. The old numbers stay on screen while the new ones
 				load. Query.define owns those AsyncData transitions.
 			</p>
-			{AsyncData.matchDataSplitEmpty(model.stats, {
+			{AsyncData.matchDataSplitEmpty(statsData, {
 				onIdle: () => <LoadingPanel text="Loading stats…" />,
 				onLoading: () => <LoadingPanel text="Loading stats…" />,
 				onFailure: (error) => (
@@ -428,7 +430,7 @@ function StatsTabView() {
 				),
 				onData: ({ stats, fetchedAt }) => (
 					<div className="flex flex-col gap-4">
-						{Option.match(AsyncData.getError(model.stats), {
+						{Option.match(AsyncData.getError(statsData), {
 							onNone: () => null,
 							onSome: (error) => (
 								<ErrorPanel
@@ -442,7 +444,7 @@ function StatsTabView() {
 						<StatsCards
 							stats={stats}
 							fetchedAt={fetchedAt}
-							isRefreshing={AsyncData.isRefreshing(model.stats)}
+							isRefreshing={AsyncData.isRefreshing(statsData)}
 						/>
 					</div>
 				),
@@ -493,7 +495,7 @@ function TabList() {
 const View = () => (
 	<ExampleShell
 		title="API Cache (Query)"
-		description="The same Model-as-cache TEA as API Cache. Query.define owns settle, retry, dedup, and keyed slots ({ args, data }). watchSubscription reconciles the live key set with Interrupt on drop. The parent only folds Got* and intent."
+		description="The same Model-as-cache TEA as API Cache. Query.define owns settle, retry, dedup, and keyed slots ({ args, data, maybePendingRequestId }). watchSubscription reconciles the live key set with Interrupt on drop. The parent only folds Got* and intent."
 	>
 		<div className="mx-auto flex w-full max-w-lg flex-1 flex-col gap-6 px-6 pt-8 pb-16">
 			<TabList />

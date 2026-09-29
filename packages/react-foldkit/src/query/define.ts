@@ -1,9 +1,13 @@
 import { Predicate } from "effect"
-import { defineKeyedQuery, type KeyedQuery, type KeyedQueryConfig, type SyncFields } from "./keyedQuery"
-import { defineQuery, type Query, type QueryConfig } from "./query"
+
+import { type KeyedQuery, type KeyedQueryConfig, type SyncFields, defineKeyedQuery } from "./keyedQuery"
+import { type Query, type QueryConfig, defineQuery } from "./query"
 
 type DefineConfig =
-	| (QueryConfig<string, unknown, unknown, unknown, unknown, any> & { readonly args?: never; readonly toKey?: never })
+	| (QueryConfig<string, unknown, unknown, unknown, unknown, any> & {
+			readonly args?: never
+			readonly toKey?: never
+	  })
 	| KeyedQueryConfig<string, unknown, unknown, unknown, unknown, SyncFields, any>
 
 const isKeyedQueryConfig = (
@@ -12,12 +16,30 @@ const isKeyedQueryConfig = (
 	Predicate.hasProperty(config, "args")
 
 /** Defines a remote-data Submodel as {@link Query} or {@link KeyedQuery}. */
-export function define<Name extends string, A, AI, E, EI, R = never>(
-	config: QueryConfig<Name, A, AI, E, EI, R> & { readonly args?: never; readonly toKey?: never }
-): Query<Name, A, AI, E, EI, R>
 export function define<Name extends string, A, AI, E, EI, Fields extends SyncFields, R = never>(
-	config: KeyedQueryConfig<Name, A, AI, E, EI, Fields, R>
-): KeyedQuery<Name, A, AI, E, EI, Fields, R>
+	config: KeyedQueryConfig<Name, A, AI, E, EI, Fields, R> & {
+		readonly interrupt: true
+	}
+): KeyedQuery<Name, A, AI, E, EI, Fields, R, true>
+export function define<Name extends string, A, AI, E, EI, Fields extends SyncFields, R = never>(
+	config: KeyedQueryConfig<Name, A, AI, E, EI, Fields, R> & {
+		readonly interrupt?: false
+	}
+): KeyedQuery<Name, A, AI, E, EI, Fields, R, false>
+export function define<Name extends string, A, AI, E, EI, R = never>(
+	config: QueryConfig<Name, A, AI, E, EI, R> & {
+		readonly interrupt: true
+		readonly args?: never
+		readonly toKey?: never
+	}
+): Query<Name, A, AI, E, EI, R, true>
+export function define<Name extends string, A, AI, E, EI, R = never>(
+	config: QueryConfig<Name, A, AI, E, EI, R> & {
+		readonly interrupt?: false
+		readonly args?: never
+		readonly toKey?: never
+	}
+): Query<Name, A, AI, E, EI, R, false>
 export function define(config: DefineConfig): unknown {
 	if (isKeyedQueryConfig(config)) return defineKeyedQuery(config)
 

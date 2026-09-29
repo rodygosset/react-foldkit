@@ -34,15 +34,15 @@ import { defineMessageUnion } from "react-foldkit/message"
 
 ## Package surface
 
-| Export                                                       | Role                                                              |
-| ------------------------------------------------------------ | ----------------------------------------------------------------- |
+| Export                                                       | Role                                                                                  |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------- |
 | `./react`                                                    | `make({ Model, update, … })` → `Provider` (`init`), `Seed`, `useModel`, `useDispatch` |
-| `./store`                                                    | `boot()` and `takeWhen()` for tests and non-React hosts           |
-| `./query`                                                    | Remote-data Submodel factory (`Query.define`, watch, forget, `run`) |
-| `./command`, `./message`, `./update`, `./struct`, `./schema` | TEA vocabulary (`defineMessageUnion`, `Update.foldChild`, …)      |
-| `./asyncData`                                                | Remote data helpers (`settle`, `revalidate`, …)                   |
-| `./subscription`                                             | Model-gated standing orders (`Subscription.make`)                 |
-| `./eslint`                                                   | Recommended + strict ESLint presets                               |
+| `./store`                                                    | `boot()` and `takeWhen()` for tests and non-React hosts                               |
+| `./query`                                                    | Remote-data Submodel factory (`Query.define`, watch, forget, `run`)                   |
+| `./command`, `./message`, `./update`, `./struct`, `./schema` | TEA vocabulary (`defineMessageUnion`, `Update.foldChild`, …)                          |
+| `./asyncData`                                                | Remote data helpers (`settle`, `revalidate`, …)                                       |
+| `./subscription`                                             | Model-gated standing orders (`Subscription.make`)                                     |
+| `./eslint`                                                   | Recommended + strict ESLint presets                                                   |
 
 ## Quick start
 
@@ -98,43 +98,33 @@ API Cache (hand-rolled AsyncData), and API Cache Query (`Query.define`).
 
 ## Query watch, forget, and run
 
-`Query.define` is a remote-data Submodel. A KeyedQuery `Model` is a `HashMap` of
-`{ args, data }` slots. Read `data` with `query.read(model, args)`. KeyedQuery
-`args` fields are `Schema.Codec`s (no encoding or decoding services). Omit
-`toKey` to JSON-encode args with `Schema.toCodecJson` and
-`Schema.fromJsonString`. Slot key and Interrupt identity share `toKey`.
-`Query.HttpApi.Service.query` uses the same default for a keyed endpoint.
-`.query` is for a request you are willing to run again (watch, revalidate).
+`Query.define` creates a remote-data Submodel. Initialize each Query with an
+instance ID, then use `query.read(model)` or `keyedQuery.read(model, args)` to
+read its `AsyncData`. A KeyedQuery Model keeps slots and request identity. A
+completion from an earlier request or another Model instance cannot overwrite
+the current slot.
 
-`query.lift` returns a child record. Bind it as `postsChild`. A `Got*` handler
-calls `postsChild.fold(model)`. That fold takes `{ message: childMessage }`, the
-same fields as `query.ParentMessage`. Call `postsChild.fold(model, { message })`
-when you already have those fields. Policy Steps live on the same record
-(`postsChild.revalidateOrLoad(model)`). Declare the parent case with
-`query.ParentMessage` (`GotPostsMessage: postsQuery.ParentMessage`) and pass the
-constructor as `parentMessage` (`parentMessage: Message.GotPostsMessage`).
-For an always-present slot, call
-`lift<Model, Message>({ field: "posts", parentMessage: Message.GotPostsMessage })`.
-Name both parent types so the handle is the full parent Message union, not only the
-`Got*` variant the constructor returns.
-A full `read` / `write` lens still infers `ParentModel` from `read` and takes
-Foldkit's `(childMessage) => parentMessage` mapper.
-`postsChild.watchSubscription(entry, modelToArgs)` reuses that lift's
-parent Message wrap.
+Call policies directly: `query.loadIfMissing(model)`, `query.revalidate(model)`,
+`query.replace(model)`, `query.watch(model)`, and `query.forget(model)`. Keyed
+policies also take args. `watch(model, argsArray)` reconciles the whole live
+key set. `watchSubscription` emits the corresponding watch Message when its
+dependencies change.
 
-`informWatch` / `RequestedWatch` is the full live key set. The Message payload is
-a `HashMap` of `toKey` to args. `informWatch` still takes an array of args.
-Missing keys `loadIfMissing`. Extras run the same forget path as `informForget`,
-including Interrupt of a pending Fetch. Per-key start/stop Messages are not used.
-Foldkit `switchMap` on subscription deps cannot report removals. A late
-`SettledFetch` does not resurrect a forgotten slot.
+Fetch interruption is opt in: pass `interrupt: true` to `Query.define`. With
+interruption enabled, replacing a pending Fetch waits for cancellation, and
+forgetting a pending slot interrupts its Fetch. With the default plain Fetch,
+request IDs still prevent late completions from changing a replaced or
+forgotten slot.
 
-`Query.run` on a Query is an `Effect` that runs `execute` and returns settled
-`AsyncData` via `Effect.result` + `AsyncData.settle`. KeyedQuery `run(args)` does the
-same for one slot. Neither writes into a store; callers that seed HashMap slots
-build them from the settled value.
+`query.lift` returns `fold`, policy steps, and `watchSubscription` for a parent
+Model. Declare the parent Message case as `{ message: query.Message }`, and
+pass `toParentMessage: message => Message.GotQueryMessage({ message })` to
+`lift`. A `Got*` handler calls `queryChild.fold(model, message)`. The same
+config accepts a parent field or a full `read` / `write` lens.
 
-`watchSubscription` is one Foldkit `Subscription.make` entry, not a React hook.
+`Query.run` executes without writing to a Model. A Query exposes a settled
+`Effect`; a KeyedQuery exposes `run(args)`. `Query.HttpApi.Service.query` derives
+the data and error Schemas, service, and keyed args from an HTTP API endpoint.
 
 ## Seed
 
