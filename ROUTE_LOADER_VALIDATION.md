@@ -19,7 +19,7 @@ tests, a shared-app Node SSR isolation test, and two Chromium scheduling tests.
   client refetch. SSR/hydration runs in Happy DOM.
 
 Queue-pressure tests target the accepted revision and check that the edit is
-still queued before delivery. `useCommitSource` and commit deliver the data.
+still queued before delivery. Provider `commitSource` and commit deliver the data.
 Chromium uses the native clock/MessageChannel and checks that the root stays mounted.
 
 ## Integration boundary

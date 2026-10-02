@@ -25,7 +25,7 @@
 		"test:types:package": "tsc --project test/types/tsconfig.json",
 		"coverage": "vitest run --coverage",
 		"pack:dry": "bun run build && npm pack --dry-run",
-		"test:types:example": "tsc --project examples/project-cache/tsconfig.json"
+		"test:types:example": "tsc --project examples/project-cache/tsconfig.json && tsc --project examples/site-notice/tsconfig.json"
 	},
 	"exports": {
 		".": {

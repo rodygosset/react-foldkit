@@ -8,6 +8,7 @@
   deliveries, preserving Commands and delivery records.
 - Public `Query.AsyncData` (Foldkit AsyncData Schema factory) for slot codecs.
 - `Loader.Load` from `fromQuery`, plus `Loader.settleIfLoad` for Loader-shaped settlement.
+- `Loader.MappedLoader` type alias for `mapMessages` results (attachments stripped).
 - `defineSubmodel<Model, Message>()`, child Providers, selectors, dispatch, and
   root/child projections. Optional projections track presence and keep departing
   snapshots; equal selections skip source-driven renders.
@@ -40,6 +41,9 @@
 - `TanStackSource.make` accepts only piped Declarations (no `[declaration, map]` tuples).
 - Prefer `query.AsyncData` / `Loader.Load` over digging into `Model.fields`.
 - `settleIfLoad` is on `react-foldkit/loader`, not on Query.
+- `settleIfLoad` keeps one overloaded API for keyed and unkeyed targets. Keyed
+  dispatch brands keyed `settleIf` at Query/lift creation instead of counting
+  load keys.
 - `ReactFoldkit.make` becomes `defineApplication`, also exported from
   `react-foldkit/react`.
 - `defineApplication` takes flat `Store.Config` plus a Model Codec. Provider creates

@@ -184,8 +184,12 @@ keyed args where applicable.
 
 Reuse `query.AsyncData` for Foldkit AsyncData Schemas. Loader payloads live on
 `Loader.fromQuery(...).Load`. Prefer `Loader.settleIfLoad(queryOrLift, …)` for
-Loader-shaped settlement. Update checks freshness; `ROUTE_LOADER_API_SPEC.md`
-describes delivery.
+Loader-shaped settlement (one overloaded API for keyed and unkeyed). Update
+checks freshness via `fresher`. Delivery tokens, resource keys, and app
+revisions are separate layers; see the identity table in
+[COMMIT_SOURCE_COMPOSITION_SPEC.md](../../COMMIT_SOURCE_COMPOSITION_SPEC.md).
+That composition spec is the contract of record for Loader wiring and Provider
+`commitSource`.
 
 ## Commit and external sources
 
