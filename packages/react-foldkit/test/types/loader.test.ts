@@ -86,7 +86,7 @@ describe("Loader public types", () => {
 		})
 		expectTypeOf(homeLoader.Load.Type).toExtend<{ readonly result: unknown }>()
 		expectTypeOf(homeLoader.Load.Type).not.toExtend<{ readonly id: string }>()
-		// @ts-expect-error Unkeyed Queries require options.key.
+		// @ts-expect-error Queries require options.key.
 		Loader.fromQuery(query)
 	}
 })

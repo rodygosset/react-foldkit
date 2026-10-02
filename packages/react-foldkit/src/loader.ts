@@ -112,7 +112,7 @@ type LoadType<A, E> = {
 	readonly result: AsyncData.AsyncData<A, E>
 }
 
-export interface QueryLoader<A, I, LoadSchema extends Schema.Top> extends Loader<A, I> {
+type WithLoadSchema<A, I, LoadSchema extends Schema.Top> = Loader<A, I> & {
 	readonly Load: LoadSchema
 }
 
@@ -125,14 +125,15 @@ export interface KeyedQueryLoader<
 	Fields extends SyncFields,
 	R,
 	LoadSchema extends Schema.Top,
-> extends QueryLoader<KeyedLoadType<Fields, A, E>, Schema.Codec.Encoded<LoadSchema>, LoadSchema> {
+> extends WithLoadSchema<KeyedLoadType<Fields, A, E>, Schema.Codec.Encoded<LoadSchema>, LoadSchema> {
 	readonly query: KeyedQueryForLoader<Name, A, AI, E, EI, Fields, R>
 	readonly loadQuery: (
 		args: KeyedArgs<Fields>
 	) => Effect.Effect<Envelope<Schema.Codec.Encoded<LoadSchema>>, Schema.SchemaError, R>
 }
 
-export interface UnkeyedQueryLoader<
+/** Loader derived from a Query (no args). Matches Foldkit's Query vs KeyedQuery naming. */
+export interface QueryLoader<
 	Name extends string,
 	A,
 	AI,
@@ -140,7 +141,7 @@ export interface UnkeyedQueryLoader<
 	EI,
 	R,
 	LoadSchema extends Schema.Top,
-> extends QueryLoader<LoadType<A, E>, Schema.Codec.Encoded<LoadSchema>, LoadSchema> {
+> extends WithLoadSchema<LoadType<A, E>, Schema.Codec.Encoded<LoadSchema>, LoadSchema> {
 	readonly query: QueryForLoader<Name, A, AI, E, EI, R>
 	readonly loadQuery: Effect.Effect<Envelope<Schema.Codec.Encoded<LoadSchema>>, Schema.SchemaError, R>
 }
@@ -212,7 +213,7 @@ function attachKeyedQueryLoader<
 	return bound
 }
 
-function attachUnkeyedQueryLoader<
+function attachQueryLoader<
 	Name extends string,
 	A,
 	AI,
@@ -226,7 +227,7 @@ function attachUnkeyedQueryLoader<
 	loader: Loader<LoadType<A, E>, Schema.Codec.Encoded<LoadSchema>>,
 	Load: LoadSchema,
 	query: QueryForLoader<Name, A, AI, E, EI, R>
-): UnkeyedQueryLoader<Name, A, AI, E, EI, R, LoadSchema> {
+): QueryLoader<Name, A, AI, E, EI, R, LoadSchema> {
 	const loadQuery = query.run.pipe(
 		Effect.map(function (result) {
 			return { result } as LoadType<A, E>
@@ -261,7 +262,7 @@ export function fromQuery<Name extends string, A, AI, E, EI, R>(
 	options: {
 		readonly key: (load: LoadType<A, E>) => string
 	}
-): UnkeyedQueryLoader<
+): QueryLoader<
 	Name,
 	A,
 	AI,
@@ -298,14 +299,14 @@ export function fromQuery(query: any, options?: { readonly key?: (load: any) => 
 	const Load = Schema.Struct({ result: resultSchema })
 	const key = options?.key
 	if (key === undefined) {
-		throw new Error(`Loader.fromQuery("${query.name}"): unkeyed Queries require options.key`)
+		throw new Error(`Loader.fromQuery("${query.name}"): Queries require options.key`)
 	}
 	const loader = define({
 		name: query.name,
 		data: Load as unknown as Schema.Codec<LoadType<any, any>, typeof Load.Encoded>,
 		key,
 	})
-	return attachUnkeyedQueryLoader(loader, Load, query)
+	return attachQueryLoader(loader, Load, query)
 }
 
 /** Maps accepted deliveries while preserving loading, encoding, and receipt identity. */
