@@ -182,9 +182,9 @@ can interrupt the old Fetch. Request-specific keys protect newer work from delay
 cancellation. Direct `Fetch.Interrupt` calls need `requestId`, instance ID, and
 keyed args where applicable.
 
-Reuse `query.Model.fields.data` or
-`keyedQuery.Model.fields.slots.value.fields.data` for result Schemas. Update checks
-freshness; `ROUTE_LOADER_API_SPEC.md` describes delivery.
+Reuse `query.Result` / `query.Load` (or the keyed forms) for Message and Loader
+Schemas. Prefer `settleIfLoad` for Loader-shaped payloads. Update checks freshness;
+`ROUTE_LOADER_API_SPEC.md` describes delivery.
 
 ## Commit and external sources
 
@@ -239,11 +239,8 @@ and Commands start on client activation. Keep update pure for Strict Mode.
 
 Keep the source fixed while mounted. Adding, removing, or replacing it raises
 `CommitSourceError` with reason `SourceChanged`. Omit the prop when unused;
-changes to init do not reset the Model.
-
-For manual connections, use `useCommitSource({ source, initialSnapshot })` beneath
-the persistent Provider. Pass the exact snapshot folded into init and preserve
-its Commands. Use either the prop or one hook; both would duplicate delivery.
+changes to init do not reset the Model. Provider `commitSource` is the only
+bootstrap path: it folds the initial snapshot and connects later deliveries.
 
 ### Source contract
 

@@ -173,7 +173,9 @@ Add the optional `react-foldkit/tanstack` entry point:
 
 ```ts
 const source = TanStackSource.make(router, [
-	[Project.Loader, (load) => Application.Message.CompletedLoadProject({ load })],
+	Project.Loader.pipe(
+		Loader.mapMessages((load) => Application.Message.CompletedLoadProject({ load }))
+	),
 ])
 ```
 
@@ -211,8 +213,8 @@ The optional prop validates the snapshot, folds Messages through update in order
 preserves Commands, and uses that snapshot as the baseline. SSR/hydration reads
 the populated Model; activation connects without replaying initial Messages.
 
-Omit the prop for ordinary Provider behavior, or connect manually with
-`useCommitSource`. Keep the source fixed while mounted; changes raise `SourceChanged`.
+Omit the prop for ordinary Provider behavior. Provider `commitSource` is the only
+bootstrap path. Keep the source fixed while mounted; changes raise `SourceChanged`.
 Reconnects keep successful tokens and read the latest snapshot. Source removal
 leaves Model data intact.
 

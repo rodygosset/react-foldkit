@@ -16,7 +16,7 @@ afterEach(() => {
 
 describe("Provider commitSource", () => {
 	function providerFixture(initial: ReadonlyArray<CommitEntry<Message>> = [], source = fakeSource(initial)) {
-		return createSourceFixture(initial, source, "provider")
+		return createSourceFixture(initial, source)
 	}
 
 	it("bootstraps in snapshot order and delivers subsequent values without replay or lost edits", () => {
@@ -181,7 +181,6 @@ describe("generic commit source contract", () => {
 		let valuesBeforePublishReturns: ReadonlyArray<string> = []
 		act(() => {
 			f.source.publish([entry("b", 1), entry("a", "one")])
-			// update has run here; React can finish rendering after this callback.
 			valuesBeforePublishReturns = f.handled
 				.filter((message) => message._tag === "Received")
 				.map((message) => message.value)
@@ -210,28 +209,10 @@ describe("generic commit source contract", () => {
 		const f = fixture([entry("a", 1)])
 		const mounted = render(<f.Tree />)
 		act(() => f.source.publish([entry("a", 2, "new")]))
-		mounted.rerender(<f.Tree baseline={[]} />)
+		mounted.rerender(<f.Tree />)
 		act(() => f.source.notify())
 		expect(f.model.values).toEqual(["a", "new"])
 		expect(f.source.subscriptions).toBe(1)
-	})
-	it("rejects replacing a mounted source and cleans up its original connection", () => {
-		vi.spyOn(console, "error").mockImplementation(() => {})
-		const f = fixture()
-		const replacement = fakeSource<Message>()
-		function Connected({ source }: { source: typeof f.source.source }) {
-			f.App.useCommitSource({ source, initialSnapshot: [] })
-			return <f.View />
-		}
-		const tree = (source: typeof f.source.source) => (
-			<f.App.Provider init={f.init}>
-				<Connected source={source} />
-			</f.App.Provider>
-		)
-		const mounted = render(tree(f.source.source))
-		expect(() => mounted.rerender(tree(replacement.source))).toThrow("Commit source identity must remain stable")
-		expect(f.source.listeners).toBe(0)
-		expect(replacement.subscriptions).toBe(0)
 	})
 	it("releases the subscription when immediate notification fails validation", () => {
 		vi.spyOn(console, "error").mockImplementation(() => {})
@@ -245,32 +226,29 @@ describe("generic commit source contract", () => {
 		expect(f.handled).toEqual([])
 	})
 	it("Strict Mode retains successful tokens and catches changes during its cleanup/setup gap", () => {
-		const initial = [entry("a", 1)]
-		const source = fakeSource(initial)
-		// This entry is delivered after bootstrap and must survive reconnect without replay.
+		const source = fakeSource([entry("a", 1)])
 		const retained = entry("stable", 1, "retained")
 		source.set([retained, entry("a", 2, "before-activation")])
 		source.onUnsubscribe((count) => {
 			if (count === 1) source.set([retained, entry("a", 3, "gap")])
 		})
-		const f = fixture(initial, source)
+		const f = fixture([], source)
 		render(
 			<React.StrictMode>
 				<f.Tree />
 			</React.StrictMode>
 		)
-		expect(f.model.values).toEqual(["a", "retained", "before-activation", "gap"])
-		expect(f.handled).toHaveLength(4)
+		expect(f.model.values).toEqual(["retained", "before-activation", "gap"])
+		expect(f.handled).toHaveLength(5)
 		expect(source.subscriptions).toBe(2)
 		expect(source.unsubscriptions).toBe(1)
 		expect(source.listeners).toBe(1)
 		act(() => source.notify())
-		expect(f.handled).toHaveLength(4)
+		expect(f.handled).toHaveLength(5)
 	})
 	it("catches the latest value after Activity reconnects without resetting bookkeeping", () => {
 		const f = fixture([entry("a", 1)])
 		const mounted = render(<f.Tree />)
-		// Retain a live delivery, not just an entry already acknowledged by bootstrap.
 		const retained = entry("stable", 1, "retained")
 		act(() => f.source.publish([retained, entry("a", 2, "before-hide")]))
 		expect(f.model.values).toEqual(["a", "retained", "before-hide"])

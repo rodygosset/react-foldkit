@@ -1,7 +1,6 @@
-// Check the emitted public exports independently of source files and router augmentation.
 import { Context, Layer, Result, Schema } from "effect"
 import { defineMessageUnion } from "react-foldkit/message"
-import { defineApplication, type CommitEntry, type CommitSource, type CommitSourceOptions } from "react-foldkit/react"
+import { defineApplication, type CommitEntry, type CommitSource } from "react-foldkit/react"
 import type { CommitError } from "react-foldkit/store"
 import type * as Update from "react-foldkit/update"
 import { describe, expectTypeOf, it } from "vitest"
@@ -23,12 +22,10 @@ describe("React public types", () => {
 		expectTypeOf(App.useCommit).returns.toEqualTypeOf<(message: Message) => Result.Result<void, CommitError>>()
 	})
 
-	it("useCommitSource binds the source and baseline to the app Message", () => {
-		expectTypeOf(App.useCommitSource).toEqualTypeOf<(options: CommitSourceOptions<Message>) => void>()
+	it("Provider commitSource binds to the app Message", () => {
 		expectTypeOf<CommitEntry<Message>["version"]>().toEqualTypeOf<string | number>()
 	})
 
-	// Foldkit uses unreachable blocks for compile-only calls that must not execute.
 	if (false) {
 		App.Provider({ init: { model: { count: 0 } }, children: null })
 		App.Provider({ init: { model: { count: 0 } }, commitSource: source, children: null })
@@ -36,10 +33,8 @@ describe("React public types", () => {
 		App.Provider({ init: { model: { count: 0 } }, commitSource: foreign, children: null })
 		// @ts-expect-error A consumer cannot widen the app's Message union.
 		commit({ _tag: "Other" })
-		// @ts-expect-error The bound source hook cannot widen the app Message union.
-		App.useCommitSource({ source: foreign, initialSnapshot: [] })
-		// @ts-expect-error The baseline must contain the app's own Messages.
-		App.useCommitSource({ source, initialSnapshot: foreign.getSnapshot() })
+		// @ts-expect-error Manual useCommitSource is not part of the public API.
+		App.useCommitSource
 		const numericKey: CommitEntry<Message> = {
 			// @ts-expect-error Entry keys are strings.
 			key: 1,
@@ -58,13 +53,13 @@ describe("React public types", () => {
 			version: {},
 			message: Message.Increment(),
 		}
+		void [numericKey, asynchronous, entry]
 	}
 })
 
 class Resource extends Context.Service<Resource, { readonly value: string }>()("ReactTypeTest/Resource") {}
 declare const servicefulModel: Schema.Codec<Model, typeof Model.Encoded, Resource, Resource>
 
-// Configuration constraints belong in compile-only tests of the emitted API.
 if (false) {
 	const update = (model: Model, _message: Message): Update.Return<Model, Message, Resource> => ({ model })
 	defineApplication({ Model, update, layer: Layer.succeed(Resource, { value: "ok" }) })

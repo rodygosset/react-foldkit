@@ -95,7 +95,6 @@ export function defineSubmodel<Model, Message>() {
 	return { Provider, useModel, useDispatch, ...projectionHooks(useSource) }
 }
 
-/** Projection creation reads the store handle, never subscribes to the whole parent Model. */
 function projectionHooks<ParentModel, ParentMessage>(
 	useSource: () => ModelSource.ModelSource<ParentModel, ParentMessage>
 ) {
@@ -208,16 +207,6 @@ export function defineApplication<ModelSchema extends ModelCodec, Message, R = n
 	/** Completes a Message's Model transition synchronously; Commands remain asynchronous. */
 	const useCommit = () => useStore().commit
 
-	/** Reconciles active external values through the root store's synchronous commit. */
-	function useCommitSource(options: CommitSource.CommitSourceOptions<Message>): void {
-		const store = useStore()
-		const [connection] = React.useState(() => Result.getOrThrow(CommitSource.make(options)))
-		if (connection.source !== options.source) {
-			throw new CommitSource.CommitSourceError({ reason: "SourceChanged" })
-		}
-		useCommitConnection(store, connection)
-	}
-
 	function useSource(): ModelSource.ModelSource<Type<ModelSchema>, Message> {
 		const store = useStore()
 		return React.useMemo(
@@ -243,5 +232,5 @@ export function defineApplication<ModelSchema extends ModelCodec, Message, R = n
 		return ModelHooks.useModel(useSource(), selector, isEqual)
 	}
 
-	return { Provider, useModel, useDispatch, useCommit, useCommitSource, ...projectionHooks(useSource) }
+	return { Provider, useModel, useDispatch, useCommit, ...projectionHooks(useSource) }
 }

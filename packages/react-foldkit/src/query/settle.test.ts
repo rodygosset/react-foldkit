@@ -95,10 +95,14 @@ describe("Query.settle", () => {
 		const differs = function (incoming: string, current: string) {
 			return incoming !== current
 		}
-		const empty = keyed.init("home")
-		const load = { ...a, result: external }
-		expect(keyed.settleIfLoad(empty, load, { fresher: differs }).model).toEqual(
-			keyed.settleIf(empty, a, external, { fresher: differs }).model
+		const emptyKeyed = keyed.init("home")
+		const keyedLoad = { ...a, result: external }
+		expect(keyed.settleIfLoad(emptyKeyed, keyedLoad, { fresher: differs }).model).toEqual(
+			keyed.settleIf(emptyKeyed, a, external, { fresher: differs }).model
+		)
+		const emptySingle = single.init("home")
+		expect(single.settleIfLoad(emptySingle, { result: external }, { fresher: differs }).model).toEqual(
+			single.settleIf(emptySingle, external, { fresher: differs }).model
 		)
 	})
 

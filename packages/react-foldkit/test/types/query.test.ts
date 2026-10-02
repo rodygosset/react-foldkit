@@ -41,10 +41,16 @@ describe("Query settlement public types", () => {
 			Query.Lifted.KeyedQuery<Parent, Message, typeof keyed.Message.Type, { readonly id: number }, Api>
 		>()
 		expectTypeOf(lifted.settle({ id: 1 }, AsyncData.Loading())).toEqualTypeOf<Update.Step<Parent, Message>>()
-		expectTypeOf(single.Model.fields.data).toExtend<Schema.Codec<AsyncData.AsyncData<Date, string>, unknown>>()
-		expectTypeOf(keyed.Model.fields.slots.value.fields.data).toExtend<
-			Schema.Codec<AsyncData.AsyncData<Date, string>, unknown>
-		>()
+		expectTypeOf(single.Result).toExtend<Schema.Codec<AsyncData.AsyncData<Date, string>, unknown>>()
+		expectTypeOf(keyed.Result).toExtend<Schema.Codec<AsyncData.AsyncData<Date, string>, unknown>>()
+		expectTypeOf(single.Load.Type).toExtend<{ readonly result: AsyncData.AsyncData<Date, string> }>()
+		expectTypeOf(keyed.Load.Type).toExtend<{ readonly id: number; readonly result: AsyncData.AsyncData<Date, string> }>()
+		expectTypeOf(
+			single.settleIfLoad(single.init("a"), { result }, { fresher: () => true })
+		).toExtend<Update.Return<typeof single.Model.Type, typeof single.Message.Type>>()
+		expectTypeOf(
+			lifted.settleIfLoad(parent, { id: 1, result }, { fresher: () => true })
+		).toExtend<Update.Return<Parent, Message>>()
 	})
 
 	if (false) {

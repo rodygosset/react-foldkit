@@ -2,7 +2,7 @@ import type { AnyRouter } from "@tanstack/react-router"
 import type { Readable } from "@tanstack/react-store"
 import { HashMap, Option, Predicate, Result, Schema } from "effect"
 import type { CommitEntry, CommitSource } from "./commitSource"
-import { mapMessages, type Declaration, type Receipt } from "./loader"
+import type { Declaration } from "./loader"
 import { EnvelopeHeader } from "./internal/loader-envelope"
 
 // The tested router exposes Readable at runtime but omits the React-store augmentation.
@@ -19,41 +19,25 @@ export class RegistryError extends Schema.Error<RegistryError>("react-foldkit/Ta
 	}
 }
 
-type MessageOfEntry<E> = E extends readonly [any, (message: any, receipt: Receipt) => infer Message]
-	? Message
-	: E extends Declaration<infer Message>
-		? Message
-		: never
-
-/** A declaration or a `[declaration, mapMessages]` pair for the TanStack registry. */
-export type RegistryEntry =
-	| Declaration<unknown>
-	| readonly [Declaration<any>, (message: any, receipt: Receipt) => any]
+type MessageOfDeclaration<D> = D extends Declaration<infer Message> ? Message : never
 
 const encodeEntryKey = Schema.Tuple([Schema.String, Schema.String, Schema.String]).pipe(
 	Schema.fromJsonString,
 	Schema.encodeSync
 )
 
-function normalizeEntry(entry: RegistryEntry): Declaration<unknown> {
-	if (Array.isArray(entry)) {
-		const [declaration, mapMessage] = entry
-		return declaration.pipe(mapMessages(mapMessage))
-	}
-	return entry as Declaration<unknown>
-}
-
 /** Reads accepted matches through one synchronous router-store subscription. */
-export function make<
-	const D extends ReadonlyArray<
-		Declaration<unknown> | readonly [Declaration<any>, (message: any, receipt: Receipt) => any]
-	>,
->(router: AnyRouter, declarations: D): CommitSource<MessageOfEntry<D[number]>>
-export function make(router: AnyRouter, declarations: ReadonlyArray<RegistryEntry>): CommitSource<unknown> {
-	const normalized = declarations.map(normalizeEntry)
+export function make<const D extends ReadonlyArray<Declaration<unknown>>>(
+	router: AnyRouter,
+	declarations: D
+): CommitSource<MessageOfDeclaration<D[number]>>
+export function make(
+	router: AnyRouter,
+	declarations: ReadonlyArray<Declaration<unknown>>
+): CommitSource<unknown> {
 	const registry = Result.gen(function* () {
 		let registry = HashMap.empty<string, Declaration<unknown>>()
-		for (const declaration of normalized) {
+		for (const declaration of declarations) {
 			if (HashMap.has(registry, declaration.name)) {
 				return yield* Result.fail(new RegistryError({ declarationName: declaration.name }))
 			}
