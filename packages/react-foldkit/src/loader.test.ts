@@ -85,7 +85,11 @@ describe("Loader.fromQuery", () => {
 
 	it("derives Load schema and key from a keyed Query", () => {
 		const result = AsyncData.Success({ data: { id: "p1", revision: 1 } })
-		const envelope = Effect.runSync(Loader.loadQuery(ProjectLoader, keyed, { projectId: "p1" }))
+		const envelope = Effect.runSync(ProjectLoader.loadQuery({ projectId: "p1" }))
+		const dual = Effect.runSync(Loader.loadQuery(ProjectLoader, { projectId: "p1" }))
+		expect(dual.name).toBe(envelope.name)
+		expect(dual.key).toBe(envelope.key)
+		expect(dual.payload).toEqual(envelope.payload)
 		expect(envelope.name).toBe("Project")
 		expect(envelope.key).toBe("p1")
 		expect(ProjectLoader.decode(envelope)).toEqual({ projectId: "p1", result })

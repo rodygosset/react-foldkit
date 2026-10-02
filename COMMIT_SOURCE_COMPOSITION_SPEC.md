@@ -9,7 +9,7 @@ This replaces the app-owned envelopes/adapter in
 - `Loader.define` / `Loader.fromQuery` for typed loader envelopes.
 - `Loader.mapMessages` for root Message composition at the parent wire.
 - `Loader.load` (dual) and `Loader.loadQuery` for envelope programs.
-- `Query.settleIf` for freshness-gated external settlement.
+- `Query.settleIf` / `Query.settleIfLoad` for freshness-gated external settlement.
 - `TanStackSource.make` for accepted router results.
 - `SubmodelProvider` for inline child Provider composition.
 - `CommitSource` remains the sync delivery protocol only.
@@ -93,8 +93,8 @@ Declarations are Pipeable. Methods work in pipelines without a JavaScript receiv
 ### load / loadQuery
 
 ```ts
-const program = Loader.loadQuery(Project.Loader, Project.query, { projectId })
-// dual: Project.Loader.pipe(Loader.loadQuery(Project.query, { projectId }))
+const program = Project.Loader.loadQuery({ projectId })
+// dual: Loader.loadQuery({ projectId })(Project.Loader)
 ```
 
 `Loader.load` (dual) lazily produces an envelope:
@@ -173,7 +173,7 @@ Add the optional `react-foldkit/tanstack` entry point:
 
 ```ts
 const source = TanStackSource.make(router, [
-	Project.Loader.pipe(Loader.mapMessages((load) => Application.Message.CompletedLoadProject({ load }))),
+	[Project.Loader, (load) => Application.Message.CompletedLoadProject({ load })],
 ])
 ```
 
@@ -372,8 +372,7 @@ export { View } from "./ui/view"
 import * as Loader from "react-foldkit/loader"
 import * as Project from "@/entities/project"
 
-export const load = (projectId: string) =>
-	Loader.loadQuery(Project.Loader, Project.query, { projectId })
+export const load = (projectId: string) => Project.Loader.loadQuery({ projectId })
 ```
 
 ```tsx
@@ -425,7 +424,7 @@ export const Model = Schema.Struct({ projects: Project.Model })
 export type Model = typeof Model.Type
 export const Message = defineMessageUnion({
 	GotProjectMessage: { message: Project.Message },
-	CompletedLoadProject: { load: Project.Load },
+	CompletedLoadProject: { load: Project.Loader.Load },
 	ClickedRefreshProject: { projectId: Schema.String },
 })
 export type Message = typeof Message.Type
@@ -441,7 +440,7 @@ export const update = (model: Model, message: Message) =>
 	Message.match<Update.Return<Model, Message>>(message, {
 		GotProjectMessage: ({ message }) => projects.fold(model, message),
 		CompletedLoadProject: ({ load }) =>
-			projects.settleIf(model, { projectId: load.projectId }, load.result, {
+			projects.settleIfLoad(model, load, {
 				fresher: (incoming, current) => incoming.revision > current.revision,
 			}),
 		ClickedRefreshProject: ({ projectId }) => projects.revalidateOrLoad(model, { projectId }),
@@ -463,7 +462,6 @@ export const { Provider, useModel, useDispatch, SubmodelProvider } = defineAppli
 // app/providers/provider.tsx
 import * as React from "react"
 import { useRouter } from "@tanstack/react-router"
-import * as Loader from "react-foldkit/loader"
 import * as TanStackSource from "react-foldkit/tanstack"
 import * as Project from "@/entities/project"
 import * as Application from "../model/application"
