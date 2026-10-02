@@ -93,9 +93,21 @@ describe("Loader.fromQuery", () => {
 		expect(envelope.name).toBe("Project")
 		expect(envelope.key).toBe("p1")
 		expect(envelope._tag).toBe("react-foldkit/Loader")
-		expect(ProjectLoader.Load).toBe(keyed.Load)
-		expect(ProjectLoader.Load.fields.result).toBe(keyed.Result)
+		expect(ProjectLoader.Load.fields.result).toBe(keyed.AsyncData.schema)
 		expect(ProjectLoader.decode(envelope)).toEqual({ projectId: "p1", result })
+		expect(
+			Loader.settleIfLoad(keyed, keyed.init("home"), { projectId: "p1", result }, {
+				fresher: function () {
+					return true
+				},
+			}).model
+		).toEqual(
+			keyed.settleIf(keyed.init("home"), { projectId: "p1" }, result, {
+				fresher: function () {
+					return true
+				},
+			}).model
+		)
 		expect(Schema.decodeUnknownSync(ProjectLoader.Load)({ projectId: "p1", result })).toEqual({
 			projectId: "p1",
 			result,

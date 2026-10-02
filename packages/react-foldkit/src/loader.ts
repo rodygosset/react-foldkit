@@ -1,9 +1,10 @@
 import { Effect, Function, Pipeable, Predicate, Schema } from "effect"
 import type * as AsyncData from "./asyncData"
 import { Envelope, EnvelopeHeader, Receipt } from "./internal/loader-envelope"
-import type { KeyedArgs } from "./query/internal"
+import type { KeyedArgs, KeyedSettleIf, SettleIfOptions } from "./query/internal"
 import type { KeyedQuery, SyncFields } from "./query/keyedQuery"
 import type { Query } from "./query/query"
+import type * as Update from "./update"
 
 export { Receipt } from "./internal/loader-envelope"
 export type { Envelope } from "./internal/loader-envelope"
@@ -104,12 +105,41 @@ type QueryForLoader<Name extends string, A, AI, E, EI, R> = Query<Name, A, AI, E
 	readonly name: Name
 }
 
-type KeyedLoadType<Fields extends SyncFields, A, E> = KeyedArgs<Fields> & {
+/** Loader-shaped payload: query args (empty for unkeyed) plus an AsyncData outcome. */
+export type LoadPayload<Args, A, E> = Args & {
 	readonly result: AsyncData.AsyncData<A, E>
 }
 
-type LoadType<A, E> = {
-	readonly result: AsyncData.AsyncData<A, E>
+type KeyedLoadType<Fields extends SyncFields, A, E> = LoadPayload<KeyedArgs<Fields>, A, E>
+
+type LoadType<A, E> = LoadPayload<{}, A, E>
+
+/** Settles a Loader payload through a Query or lifted child's `settleIf`. */
+export interface SettleIfLoad<Model, Message, Args, A, E> {
+	(
+		model: Model,
+		load: LoadPayload<Args, A, E>,
+		options: SettleIfOptions<A, E>
+	): Update.Return<Model, Message>
+	(load: LoadPayload<Args, A, E>, options: SettleIfOptions<A, E>): Update.Step<Model, Message>
+}
+
+type SettleIfTarget<Model, Message, A, E> = {
+	readonly settleIf: {
+		(
+			model: Model,
+			result: AsyncData.AsyncData<A, E>,
+			options: SettleIfOptions<A, E>
+		): Update.Return<Model, Message>
+		(
+			result: AsyncData.AsyncData<A, E>,
+			options: SettleIfOptions<A, E>
+		): Update.Step<Model, Message>
+	}
+}
+
+type KeyedSettleIfTarget<Model, Message, Args, A, E> = {
+	readonly settleIf: KeyedSettleIf<Model, Message, Args, A, E>
 }
 
 type WithLoadSchema<A, I, LoadSchema extends Schema.Top> = Loader<A, I> & {
@@ -245,6 +275,13 @@ function attachQueryLoader<
 	>
 }
 
+type LoadResultCodec = Schema.Codec<
+	AsyncData.AsyncData<unknown, unknown>,
+	AsyncData.AsyncData<unknown, unknown>,
+	never,
+	never
+>
+
 /** Derives a Loader Schema and resource key from a Query. */
 export function fromQuery<Name extends string, A, AI, E, EI, Fields extends SyncFields, R>(
 	query: KeyedQueryForLoader<Name, A, AI, E, EI, Fields, R>,
@@ -282,8 +319,12 @@ export function fromQuery<Name extends string, A, AI, E, EI, R>(
 	}>
 >
 export function fromQuery(query: any, options?: { readonly key?: (load: any) => string }): any {
+	const result = query.AsyncData.schema as LoadResultCodec
 	if (isKeyedQueryForLoader(query)) {
-		const Load = query.Load
+		const Load = Schema.Struct({
+			...query.Args.fields,
+			result,
+		})
 		const key =
 			options?.key ??
 			function (load: KeyedLoadType<SyncFields, any, any>) {
@@ -302,7 +343,7 @@ export function fromQuery(query: any, options?: { readonly key?: (load: any) => 
 		)
 	}
 
-	const Load = query.Load
+	const Load = Schema.Struct({ result })
 	const key = options?.key
 	if (key === undefined) {
 		throw new Error(`Loader.fromQuery("${query.name}"): Queries require options.key`)
@@ -316,6 +357,59 @@ export function fromQuery(query: any, options?: { readonly key?: (load: any) => 
 		Load,
 		query
 	)
+}
+
+function settleIfLoadInto(
+	target: KeyedSettleIfTarget<any, any, any, any, any> | SettleIfTarget<any, any, any, any>,
+	model: any,
+	load: LoadPayload<Record<string, unknown>, any, any>,
+	options: SettleIfOptions<any, any>
+): Update.Return<any, any> {
+	const { result, ...args } = load
+	if (Object.keys(args).length > 0) {
+		return (target as KeyedSettleIfTarget<any, any, any, any, any>).settleIf(model, args, result, options)
+	}
+	return (target as SettleIfTarget<any, any, any, any>).settleIf(model, result, options)
+}
+
+/**
+ * Settles a Loader-shaped payload through a Query or lifted `settleIf`.
+ * Lives on Loader (react-foldkit), not on Foldkit Query.
+ */
+export function settleIfLoad<Model, Message, Args extends Record<string, unknown>, A, E>(
+	target: KeyedSettleIfTarget<Model, Message, Args, A, E>,
+	model: Model,
+	load: LoadPayload<Args, A, E>,
+	options: SettleIfOptions<A, E>
+): Update.Return<Model, Message>
+export function settleIfLoad<Model, Message, Args extends Record<string, unknown>, A, E>(
+	target: KeyedSettleIfTarget<Model, Message, Args, A, E>,
+	load: LoadPayload<Args, A, E>,
+	options: SettleIfOptions<A, E>
+): Update.Step<Model, Message>
+export function settleIfLoad<Model, Message, A, E>(
+	target: SettleIfTarget<Model, Message, A, E>,
+	model: Model,
+	load: LoadPayload<{}, A, E>,
+	options: SettleIfOptions<A, E>
+): Update.Return<Model, Message>
+export function settleIfLoad<Model, Message, A, E>(
+	target: SettleIfTarget<Model, Message, A, E>,
+	load: LoadPayload<{}, A, E>,
+	options: SettleIfOptions<A, E>
+): Update.Step<Model, Message>
+export function settleIfLoad(
+	target: KeyedSettleIfTarget<any, any, any, any, any> | SettleIfTarget<any, any, any, any>,
+	modelOrLoad: any,
+	loadOrOptions: any,
+	maybeOptions?: SettleIfOptions<any, any>
+): Update.Return<any, any> | Update.Step<any, any> {
+	if (maybeOptions !== undefined) {
+		return settleIfLoadInto(target, modelOrLoad, loadOrOptions, maybeOptions)
+	}
+	return function (model: any) {
+		return settleIfLoadInto(target, model, modelOrLoad, loadOrOptions)
+	}
 }
 
 /**
