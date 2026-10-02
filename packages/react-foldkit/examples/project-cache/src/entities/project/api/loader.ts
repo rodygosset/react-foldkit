@@ -1,6 +1,6 @@
-import * as Loader from "react-foldkit/loader"
+import { fromQuery } from "react-foldkit/loader"
 import { query } from "../model/query"
 
-export const ProjectLoader = Loader.fromQuery(query)
-export const Load = ProjectLoader.Load
+export const Loader = fromQuery(query)
+export const Load = Loader.Load
 export type Load = typeof Load.Type

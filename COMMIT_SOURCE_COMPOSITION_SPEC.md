@@ -49,7 +49,7 @@ revisions, still complete rejected requests so they do not stay pending.
   Callers use `Project.Provider`.
 - Views use these bindings and ReactFoldkit hooks. Keep route hooks in app glue
   and lifecycle hooks in Providers.
-- Use `Project.ProjectLoader` and the application namespace `Application`.
+- Use `Project.Loader` and the application namespace `Application`.
 - Use one project Query with static `Effect.succeed` data. Run Promises at route
   boundaries; omit server functions and custom async fetching.
 
@@ -68,9 +68,11 @@ encoding, and Message mapping live here.
 ### define / fromQuery
 
 ```ts
-const ProjectLoader = Loader.fromQuery(query)
-// unkeyed: Loader.fromQuery(query, { key: () => "home" })
-// or Loader.define({ name, data, key }) for non-Query payloads
+import { fromQuery } from "react-foldkit/loader"
+
+export const Loader = fromQuery(query)
+// unkeyed: fromQuery(query, { key: () => "home" })
+// or define({ name, data, key }) for non-Query payloads
 ```
 
 | Option | Contract                                                                                          |
@@ -91,8 +93,8 @@ Declarations are Pipeable. Methods work in pipelines without a JavaScript receiv
 ### load / loadQuery
 
 ```ts
-const program = Loader.loadQuery(Project.ProjectLoader, Project.query, { projectId })
-// dual: Project.ProjectLoader.pipe(Loader.loadQuery(Project.query, { projectId }))
+const program = Loader.loadQuery(Project.Loader, Project.query, { projectId })
+// dual: Project.Loader.pipe(Loader.loadQuery(Project.query, { projectId }))
 ```
 
 `Loader.load` (dual) lazily produces an envelope:
@@ -148,7 +150,7 @@ between Provider Command Layers and loader runtimes when needed.
 ### mapMessages
 
 ```ts
-Project.ProjectLoader.pipe(Loader.mapMessages((load) => Application.Message.CompletedLoadProject({ load })))
+Project.Loader.pipe(Loader.mapMessages((load) => Application.Message.CompletedLoadProject({ load })))
 ```
 
 Mappings compose in order when the adapter decodes accepted data. They preserve
@@ -171,7 +173,7 @@ Add the optional `react-foldkit/tanstack` entry point:
 
 ```ts
 const source = TanStackSource.make(router, [
-	Project.ProjectLoader.pipe(Loader.mapMessages((load) => Application.Message.CompletedLoadProject({ load }))),
+	Project.Loader.pipe(Loader.mapMessages((load) => Application.Message.CompletedLoadProject({ load }))),
 ])
 ```
 
@@ -324,11 +326,11 @@ export const { useModel, useDispatch, Provider } = defineSubmodel<Model, Message
 
 ```ts
 // entities/project/api/loader.ts
-import * as Loader from "react-foldkit/loader"
+import { fromQuery } from "react-foldkit/loader"
 import { query } from "../model/query"
 
-export const ProjectLoader = Loader.fromQuery(query)
-export const Load = ProjectLoader.Load
+export const Loader = fromQuery(query)
+export const Load = Loader.Load
 export type Load = typeof Load.Type
 ```
 
@@ -336,7 +338,7 @@ export type Load = typeof Load.Type
 // entities/project/index.ts
 export { Project } from "./model/project"
 export { query, Model, Message } from "./model/query"
-export { ProjectLoader, Load } from "./api/loader"
+export { Loader, Load } from "./api/loader"
 export { Provider, useModel, useDispatch } from "./ui/provider"
 ```
 
@@ -371,7 +373,7 @@ import * as Loader from "react-foldkit/loader"
 import * as Project from "@/entities/project"
 
 export const load = (projectId: string) =>
-	Loader.loadQuery(Project.ProjectLoader, Project.query, { projectId })
+	Loader.loadQuery(Project.Loader, Project.query, { projectId })
 ```
 
 ```tsx
@@ -470,7 +472,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
 	const router = useRouter()
 	const [source] = React.useState(() =>
 		TanStackSource.make(router, [
-			Project.ProjectLoader.pipe(
+			Project.Loader.pipe(
 				Loader.mapMessages((load) => Application.Message.CompletedLoadProject({ load }))
 			),
 		])
