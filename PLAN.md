@@ -11,8 +11,8 @@ Implemented:
 - Optional `Provider commitSource` for bootstrap and later deliveries.
 - Child view bindings through `defineSubmodel`, `useSubmodel`, and
   `useOptionalSubmodel`, plus `SubmodelProvider`.
-- `Query.settle` / `settleIf` / `settleIfLoad`, lifted forms, and request-specific Fetch interruption.
-- Public `Query.Result` / `Query.Load` Schemas for Loader composition.
+- `Query.settle` / `settleIf`, lifted forms, and request-specific Fetch interruption.
+- Public `Query.AsyncData` (Foldkit-native) plus Loader-owned `Load` / `settleIfLoad`.
 - Loader module (`define`, overloaded `fromQuery`, dual `load` / `loadQuery`, `mapMessages`),
   protocol-only `CommitSource`, and the optional TanStack adapter (pipe `mapMessages` registry).
 

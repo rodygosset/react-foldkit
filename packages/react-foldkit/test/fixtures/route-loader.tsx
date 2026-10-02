@@ -80,7 +80,7 @@ function searchUpdate(
 		GotQueryMessage: ({ message }) => resultsChild.fold(model, message),
 		Revalidated: ({ query }) => resultsChild.revalidateOrLoad(model, { query }),
 		LoadedFromRoute({ query: q, result }) {
-			const settled = resultsChild.settleIfLoad(model, { query: q, result }, {
+			const settled = Loader.settleIfLoad(resultsChild, model, { query: q, result }, {
 				fresher: function (incoming, current) {
 					return incoming.revision > current.revision
 				},

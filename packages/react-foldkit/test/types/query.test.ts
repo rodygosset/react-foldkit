@@ -1,5 +1,6 @@
 import { Context, Effect, Schema } from "effect"
 import * as AsyncData from "react-foldkit/asyncData"
+import * as Loader from "react-foldkit/loader"
 import * as Query from "react-foldkit/query"
 import type * as Update from "react-foldkit/update"
 import { describe, expectTypeOf, it } from "vitest"
@@ -41,15 +42,19 @@ describe("Query settlement public types", () => {
 			Query.Lifted.KeyedQuery<Parent, Message, typeof keyed.Message.Type, { readonly id: number }, Api>
 		>()
 		expectTypeOf(lifted.settle({ id: 1 }, AsyncData.Loading())).toEqualTypeOf<Update.Step<Parent, Message>>()
-		expectTypeOf(single.Result).toExtend<Schema.Codec<AsyncData.AsyncData<Date, string>, unknown>>()
-		expectTypeOf(keyed.Result).toExtend<Schema.Codec<AsyncData.AsyncData<Date, string>, unknown>>()
-		expectTypeOf(single.Load.Type).toExtend<{ readonly result: AsyncData.AsyncData<Date, string> }>()
-		expectTypeOf(keyed.Load.Type).toExtend<{ readonly id: number; readonly result: AsyncData.AsyncData<Date, string> }>()
+		expectTypeOf(single.AsyncData.schema).toExtend<Schema.Codec<AsyncData.AsyncData<Date, string>, unknown>>()
+		expectTypeOf(keyed.AsyncData.schema).toExtend<Schema.Codec<AsyncData.AsyncData<Date, string>, unknown>>()
+		const keyedLoader = Loader.fromQuery(keyed)
+		expectTypeOf(keyedLoader.Load.Type).toExtend<{
+			readonly id: number
+			readonly result: AsyncData.AsyncData<Date, string>
+		}>()
 		expectTypeOf(
-			single.settleIfLoad(single.init("a"), { result }, { fresher: () => true })
-		).toExtend<Update.Return<typeof single.Model.Type, typeof single.Message.Type>>()
-		expectTypeOf(
-			lifted.settleIfLoad(parent, { id: 1, result }, { fresher: () => true })
+			Loader.settleIfLoad(lifted, parent, { id: 1, result }, {
+				fresher: function () {
+					return true
+				},
+			})
 		).toExtend<Update.Return<Parent, Message>>()
 	})
 

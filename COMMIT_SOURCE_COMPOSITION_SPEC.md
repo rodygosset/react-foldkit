@@ -9,7 +9,7 @@ This replaces the app-owned envelopes/adapter in
 - `Loader.define` / `Loader.fromQuery` for typed loader envelopes.
 - `Loader.mapMessages` for root Message composition at the parent wire.
 - `Loader.load` (dual) and `Loader.loadQuery` for envelope programs.
-- `Query.settleIf` / `Query.settleIfLoad` for freshness-gated external settlement.
+- `Query.settleIf` for freshness-gated external settlement; `Loader.settleIfLoad` for Loader-shaped payloads.
 - `TanStackSource.make` for accepted router results.
 - `SubmodelProvider` for inline child Provider composition.
 - `CommitSource` remains the sync delivery protocol only.
@@ -417,6 +417,7 @@ export { View } from "./ui/view"
 ```ts
 // app/model/application.ts
 import { Schema } from "effect"
+import * as Loader from "react-foldkit/loader"
 import { defineMessageUnion } from "react-foldkit/message"
 import { defineApplication, defineSubmodelProjection } from "react-foldkit/react"
 import type * as Update from "react-foldkit/update"
@@ -442,7 +443,7 @@ export const update = (model: Model, message: Message) =>
 	Message.match<Update.Return<Model, Message>>(message, {
 		GotProjectMessage: ({ message }) => projects.fold(model, message),
 		CompletedLoadProject: ({ load }) =>
-			projects.settleIfLoad(model, load, {
+			Loader.settleIfLoad(projects, model, load, {
 				fresher: (incoming, current) => incoming.revision > current.revision,
 			}),
 		ClickedRefreshProject: ({ projectId }) => projects.revalidateOrLoad(model, { projectId }),

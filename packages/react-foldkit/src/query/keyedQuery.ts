@@ -13,10 +13,8 @@ import {
 	FetchInterruptOutcome,
 	type FoldLens,
 	type KeyedArgs,
-	type LoadPayload,
 	type KeyedSettle,
 	type KeyedSettleIf,
-	type SettleIfLoad,
 	type LiftConfig,
 	type LiftKeyedQuery,
 	type Lifted,
@@ -35,7 +33,6 @@ import {
 	sameRequest,
 	settleSlot,
 	shouldSettle,
-	loadArgsFromPayload,
 } from "./internal"
 
 export type SyncFields = {
@@ -118,12 +115,8 @@ export interface KeyedQuery<
 	readonly name: Name
 	readonly Args: Schema.Struct<Fields>
 	readonly toKey: (args: KeyedArgs<Fields>) => string
-	readonly Result: Schema.Codec<AsyncData.AsyncData<A, E>, AsyncData.AsyncData<AI, EI>, never, never>
-	readonly Load: Schema.Struct<
-		Fields & {
-			readonly result: Schema.Codec<AsyncData.AsyncData<A, E>, AsyncData.AsyncData<AI, EI>, never, never>
-		}
-	>
+	/** Foldkit AsyncData Schema factory for each slot (`Idle` / `Loading` / `Success` / …). */
+	readonly AsyncData: AsyncData.AsyncDataSchema<A, AI, E, EI>
 	readonly Model: KeyedQueryModel<A, AI, E, EI, Fields>
 	readonly Message: KeyedQueryMessage<A, AI, E, EI, Fields>
 	readonly Fetch: Interrupt extends true
@@ -205,13 +198,6 @@ export interface KeyedQuery<
 	>
 	/** Settles only when Success is fresher or Failure hits an empty non-pending slot. */
 	readonly settleIf: KeyedSettleIf<
-		KeyedQueryModel<A, AI, E, EI, Fields>["Type"],
-		KeyedQueryMessage<A, AI, E, EI, Fields>["Type"],
-		KeyedArgs<Fields>,
-		A,
-		E
-	>
-	readonly settleIfLoad: SettleIfLoad<
 		KeyedQueryModel<A, AI, E, EI, Fields>["Type"],
 		KeyedQueryMessage<A, AI, E, EI, Fields>["Type"],
 		KeyedArgs<Fields>,
@@ -316,12 +302,7 @@ export function defineKeyedQuery<Name extends string, A, AI, E, EI, Fields exten
 	})
 	const Fetch = config.interrupt === true ? InterruptibleFetch : PlainFetch
 
-	const Result = states.schema
-	const Load = Schema.Struct({
-		...Args.fields,
-		result: Result,
-	})
-	const Model = makeKeyedQueryModel(Result, Args)
+	const Model = makeKeyedQueryModel(states.schema, Args)
 	type Model = typeof Model.Type
 	type UpdateReturn = Update.Return<Model, Message, R>
 	type UpdateStep = Update.Step<Model, Message, R>
@@ -496,18 +477,6 @@ export function defineKeyedQuery<Name extends string, A, AI, E, EI, Fields exten
 			return settle(model, args, result)
 		}
 	)
-	const settleIfLoad: SettleIfLoad<Model, Message, Args, A, E> = Function.dual(
-		3,
-		function (
-			model: Model,
-			load: LoadPayload<Args, A, E>,
-			options: SettleIfOptions<A, E>
-		): Update.Return<Model, Message> {
-			const args = loadArgsFromPayload(load)
-			return settleIf(model, args, load.result, options)
-		}
-	)
-
 	function liftSettle<ParentModel, ParentMessage>(
 		lens: FoldLens<ParentModel, ParentMessage, Model, Message>
 	): KeyedSettle<ParentModel, ParentMessage, Args, A, E> {
@@ -550,34 +519,12 @@ export function defineKeyedQuery<Name extends string, A, AI, E, EI, Fields exten
 		)
 	}
 
-	function liftSettleIfLoad<ParentModel, ParentMessage>(
-		lens: FoldLens<ParentModel, ParentMessage, Model, Message>
-	): SettleIfLoad<ParentModel, ParentMessage, Args, A, E> {
-		const fold = Update.foldChild({
-			...lens,
-			update: function (
-				model: Model,
-				input: {
-					readonly load: LoadPayload<Args, A, E>
-					readonly options: SettleIfOptions<A, E>
-				}
-			) {
-				const args = loadArgsFromPayload(input.load)
-				return settleIf(model, args, input.load.result, input.options)
-			},
-		})
-		return Function.dual(3, function (model: ParentModel, load: LoadPayload<Args, A, E>, options: SettleIfOptions<A, E>) {
-			return fold(model, { load, options })
-		})
-	}
-
 	const liftFromLens = <ParentModel, ParentMessage>(
 		foldConfig: FoldLens<ParentModel, ParentMessage, Model, Message>
 	) => ({
 		fold: Update.foldChild({ update, ...foldConfig }),
 		settle: liftSettle(foldConfig),
 		settleIf: liftSettleIf(foldConfig),
-		settleIfLoad: liftSettleIfLoad(foldConfig),
 		revalidate: foldChildFromPolicy(revalidate, foldConfig),
 		revalidateOrLoad: foldChildFromPolicy(revalidateOrLoad, foldConfig),
 		loadIfMissing: foldChildFromPolicy(loadIfMissing, foldConfig),
@@ -638,8 +585,7 @@ export function defineKeyedQuery<Name extends string, A, AI, E, EI, Fields exten
 		name: config.name,
 		Args,
 		toKey,
-		Result,
-		Load,
+		AsyncData: states,
 		Model,
 		Message,
 		Fetch,
@@ -648,7 +594,6 @@ export function defineKeyedQuery<Name extends string, A, AI, E, EI, Fields exten
 		update,
 		settle,
 		settleIf,
-		settleIfLoad,
 		revalidate,
 		revalidateOrLoad,
 		loadIfMissing,

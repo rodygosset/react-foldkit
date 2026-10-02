@@ -182,9 +182,10 @@ can interrupt the old Fetch. Request-specific keys protect newer work from delay
 cancellation. Direct `Fetch.Interrupt` calls need `requestId`, instance ID, and
 keyed args where applicable.
 
-Reuse `query.Result` / `query.Load` (or the keyed forms) for Message and Loader
-Schemas. Prefer `settleIfLoad` for Loader-shaped payloads. Update checks freshness;
-`ROUTE_LOADER_API_SPEC.md` describes delivery.
+Reuse `query.AsyncData` for Foldkit AsyncData Schemas. Loader payloads live on
+`Loader.fromQuery(...).Load`. Prefer `Loader.settleIfLoad(queryOrLift, …)` for
+Loader-shaped settlement. Update checks freshness; `ROUTE_LOADER_API_SPEC.md`
+describes delivery.
 
 ## Commit and external sources
 

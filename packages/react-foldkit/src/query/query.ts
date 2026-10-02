@@ -18,7 +18,6 @@ import {
 	type ParentKeyFoldConfig,
 	type SettledFetchOf,
 	type SettleIfOptions,
-	type SettleIfLoad,
 	allocateRequestId,
 	applyPolicy,
 	completeCancel,
@@ -75,10 +74,8 @@ export type QueryModel<A, AI, E, EI> = ReturnType<typeof makeQueryModel<A, AI, E
 /** Single-slot remote-data Submodel. Read its `AsyncData` with `read`. */
 export interface Query<Name extends string, A, AI, E, EI, R = never, Interrupt extends boolean = false> {
 	readonly name: Name
-	readonly Result: Schema.Codec<AsyncData.AsyncData<A, E>, AsyncData.AsyncData<AI, EI>, never, never>
-	readonly Load: Schema.Struct<{
-		readonly result: Schema.Codec<AsyncData.AsyncData<A, E>, AsyncData.AsyncData<AI, EI>, never, never>
-	}>
+	/** Foldkit AsyncData Schema factory for this Query's slot (`Idle` / `Loading` / `Success` / …). */
+	readonly AsyncData: AsyncData.AsyncDataSchema<A, AI, E, EI>
 	readonly Model: QueryModel<A, AI, E, EI>
 	readonly Message: QueryMessage<A, AI, E, EI>
 	readonly Fetch: Interrupt extends true
@@ -135,13 +132,6 @@ export interface Query<Name extends string, A, AI, E, EI, R = never, Interrupt e
 			options: SettleIfOptions<A, E>
 		): Update.Step<QueryModel<A, AI, E, EI>["Type"], QueryMessage<A, AI, E, EI>["Type"]>
 	}
-	readonly settleIfLoad: SettleIfLoad<
-		QueryModel<A, AI, E, EI>["Type"],
-		QueryMessage<A, AI, E, EI>["Type"],
-		{},
-		A,
-		E
-	>
 	readonly lift: LiftQuery<QueryModel<A, AI, E, EI>["Type"], QueryMessage<A, AI, E, EI>["Type"], R, A, E>
 	readonly watchSubscription: <ParentModel, ParentMessage>(
 		entry: Subscription.EntryBuilder<ParentModel, ParentMessage, R>,
@@ -172,9 +162,7 @@ export function defineQuery<Name extends string, A, AI, E, EI, R>(
 ): Query<Name, A, AI, E, EI, R, true> | Query<Name, A, AI, E, EI, R, false>
 export function defineQuery<Name extends string, A, AI, E, EI, R>(config: QueryConfig<Name, A, AI, E, EI, R>): unknown {
 	const states = AsyncData.Schema(config.data, config.error)
-	const Result = states.schema
-	const Load = Schema.Struct({ result: Result })
-	const Model = makeQueryModel(Result)
+	const Model = makeQueryModel(states.schema)
 	const Message = makeQueryMessage(config.data, config.error)
 	type Message = QueryMessage<A, AI, E, EI>["Type"]
 	const FetchArgs = { instanceId: Schema.String, requestId: Schema.Number }
@@ -328,17 +316,6 @@ export function defineQuery<Name extends string, A, AI, E, EI, R>(config: QueryC
 			return settle(model, result)
 		}
 	)
-	const settleIfLoad: SettleIfLoad<Model, Message, {}, A, E> = Function.dual(
-		3,
-		function (
-			model: Model,
-			load: { readonly result: AsyncData.AsyncData<A, E> },
-			options: SettleIfOptions<A, E>
-		): Update.Return<Model, Message> {
-			return settleIf(model, load.result, options)
-		}
-	)
-
 	const watchQuerySubscription = <ParentModel, ParentMessage>(
 		entry: Subscription.EntryBuilder<ParentModel, ParentMessage, R>,
 		toParentMessage: (message: Message) => ParentMessage,
@@ -370,18 +347,6 @@ export function defineQuery<Name extends string, A, AI, E, EI, R>(config: QueryC
 				return settleIf(model, input.result, input.options)
 			},
 		})
-		const foldSettleIfLoad = Update.foldChild({
-			...foldConfig,
-			update: function (
-				model: Model,
-				input: {
-					readonly load: { readonly result: AsyncData.AsyncData<A, E> }
-					readonly options: SettleIfOptions<A, E>
-				}
-			) {
-				return settleIfLoad(model, input.load, input.options)
-			},
-		})
 		return {
 			fold: Update.foldChild({ update, ...foldConfig }),
 			settle: foldChildFromPolicy(settle, foldConfig),
@@ -389,16 +354,6 @@ export function defineQuery<Name extends string, A, AI, E, EI, R>(config: QueryC
 				3,
 				function (model: ParentModel, result: AsyncData.AsyncData<A, E>, options: SettleIfOptions<A, E>) {
 					return foldSettleIf(model, { result, options })
-				}
-			),
-			settleIfLoad: Function.dual(
-				3,
-				function (
-					model: ParentModel,
-					load: { readonly result: AsyncData.AsyncData<A, E> },
-					options: SettleIfOptions<A, E>
-				) {
-					return foldSettleIfLoad(model, { load, options })
 				}
 			),
 			revalidate: Update.foldChildStep({
@@ -447,8 +402,7 @@ export function defineQuery<Name extends string, A, AI, E, EI, R>(config: QueryC
 
 	return {
 		name: config.name,
-		Result,
-		Load,
+		AsyncData: states,
 		Model,
 		Message,
 		Fetch,
@@ -457,7 +411,6 @@ export function defineQuery<Name extends string, A, AI, E, EI, R>(config: QueryC
 		update,
 		settle,
 		settleIf,
-		settleIfLoad,
 		revalidate,
 		revalidateOrLoad,
 		loadIfMissing,
