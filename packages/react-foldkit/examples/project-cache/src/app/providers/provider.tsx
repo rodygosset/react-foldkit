@@ -9,7 +9,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
 	const router = useRouter()
 	const [source] = React.useState(function () {
 		return TanStackSource.make(router, [
-			Project.ProjectLoader.pipe(
+			Project.Loader.pipe(
 				Loader.mapMessages(function (load) {
 					return Application.Message.CompletedLoadProject({ load })
 				})
