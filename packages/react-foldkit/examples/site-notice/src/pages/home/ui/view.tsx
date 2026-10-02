@@ -1,8 +1,8 @@
 import { Option } from "effect"
-import * as Notice from "@/entities/notice"
+import * as Application from "@/app/model/application"
 
 export function View() {
-	const model = Notice.useModel()
+	const model = Application.useModel()
 	return (
 		<main>
 			{Option.match(model.notice, {

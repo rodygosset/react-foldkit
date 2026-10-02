@@ -19,12 +19,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
 
 	return (
 		<Application.Provider init={Application.init()} commitSource={source}>
-			<Application.SubmodelProvider
-				projection={Application.noticeProjection}
-				render={function ({ source }) {
-					return <Notice.Provider source={source}>{children}</Notice.Provider>
-				}}
-			/>
+			{children}
 		</Application.Provider>
 	)
 }
