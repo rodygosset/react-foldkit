@@ -1,4 +1,4 @@
-import { Context, Effect, Function, Schema } from "effect"
+import { Context, Effect, Schema } from "effect"
 import * as AsyncData from "react-foldkit/asyncData"
 import * as Loader from "react-foldkit/loader"
 import * as Query from "react-foldkit/query"
@@ -50,53 +50,20 @@ describe("Query settlement public types", () => {
 			readonly result: AsyncData.AsyncData<Date, string>
 		}>()
 		expectTypeOf(
-			Loader.settleIfLoad(lifted, parent, { id: 1, result }, {
+			lifted.settleIf(parent, { id: 1 }, result, {
 				fresher: function () {
 					return true
 				},
 			})
 		).toExtend<Update.Return<Parent, Message>>()
 		expectTypeOf(
-			Loader.settleIfLoad(single, single.init("a"), { result }, {
+			single.settleIf(single.init("a"), result, {
 				fresher: function () {
 					return true
 				},
 			})
 		).toExtend<Update.Return<typeof single.Model.Type, typeof single.Message.Type>>()
-		expectTypeOf(keyed.settleIf).toExtend<
-			Query.MarkedKeyedSettleIf<
-				Query.KeyedSettleIf<
-					typeof keyed.Model.Type,
-					typeof keyed.Message.Type,
-					{ readonly id: number },
-					Date,
-					string
-				>
-			>
-		>()
 	})
-
-	if (false) {
-		const unbrandedKeyedTarget = {
-			settleIf: Function.dual(
-				4,
-				function (
-					model: typeof keyed.Model.Type,
-					_args: { readonly id: number },
-					_result: AsyncData.AsyncData<Date, string>,
-					_options: { readonly fresher: () => boolean }
-				) {
-					return { model }
-				}
-			),
-		}
-		// @ts-expect-error settleIfLoad requires a branded keyed settleIf
-		Loader.settleIfLoad(unbrandedKeyedTarget, keyed.init("a"), { id: 1, result }, {
-			fresher: function () {
-				return true
-			},
-		})
-	}
 
 	if (false) {
 		const settled: Update.Return<typeof single.Model.Type, typeof single.Message.Type> = single.settle(

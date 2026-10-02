@@ -9,8 +9,8 @@ This replaces the app-owned envelopes/adapter in
 - `Loader.define` / `Loader.fromQuery` for typed loader envelopes.
 - `Loader.mapMessages` for root Message composition at the parent wire.
 - `Loader.load` (dual) and `Loader.loadQuery` for envelope programs.
-- `Query.settleIf` for freshness-gated external settlement; `Loader.settleIfLoad`
-  for Loader-shaped payloads.
+- `Query.settleIf` for freshness-gated external settlement of Loader payloads
+  (peel `result` / args at the call site).
 - `TanStackSource.make` for accepted router results.
 - `SubmodelProvider` for inline child Provider composition.
 - `CommitSource` remains the sync delivery protocol only.
@@ -23,11 +23,11 @@ Delivery, cache slots, and app freshness are separate. Do not conflate them.
 | ----- | ---------- | ----------- |
 | Resource key | Stable identity of the domain resource (from `Loader.key` / Query args) | Declaration / Query |
 | Delivery version (UUID) | One serializable token per accepted envelope; compared with `Object.is` | Loader encode + CommitSource |
-| App fresher | Payload revision or domain rule in `settleIf` / `settleIfLoad` | Application update |
+| App fresher | Payload revision or domain rule in `settleIf` | Application update |
 
 TanStack entry keys are `[matchId, name, resourceKey]`. Matches can share a
 resource without colliding; update chooses which delivery to keep. Delivery
-UUIDs do not order data. `settleIfLoad` installs outcomes; it does not decide
+UUIDs do not order data. `settleIf` installs outcomes; it does not decide
 which revision wins beyond the `fresher` you pass.
 
 ## Two-value pattern
@@ -78,10 +78,10 @@ revisions, still complete rejected requests so they do not stay pending.
 - Views use these bindings and ReactFoldkit hooks. Keep route hooks in app glue
   and lifecycle hooks in Providers.
 - Use `Project.Loader` and the application namespace `Application`.
-- Query-backed example: `examples/project-cache` (`fromQuery`, `settleIfLoad`,
+- Query-backed example: `examples/project-cache` (`fromQuery`, peel + `settleIf`,
   revision `fresher`).
 - Define-only example: `examples/site-notice` (`Loader.define`, no Query, flat
-  `CompletedLoadNotice`, Option Model write, no `settleIfLoad`, root Model hooks
+  `CompletedLoadNotice`, Option Model write, no Query settlement, root Model hooks
   without an identity Submodel).
 - Keep page `api/load.ts` thin in both examples.
 
@@ -458,7 +458,6 @@ export { View } from "./ui/view"
 ```ts
 // app/model/application.ts
 import { Schema } from "effect"
-import * as Loader from "react-foldkit/loader"
 import { defineMessageUnion } from "react-foldkit/message"
 import { defineApplication, defineSubmodelProjection } from "react-foldkit/react"
 import type * as Update from "react-foldkit/update"
@@ -483,10 +482,12 @@ const projects = Project.query.lift<Model, Message>({
 export const update = (model: Model, message: Message) =>
 	Message.match<Update.Return<Model, Message>>(message, {
 		GotProjectMessage: ({ message }) => projects.fold(model, message),
-		CompletedLoadProject: ({ load }) =>
-			Loader.settleIfLoad(projects, model, load, {
+		CompletedLoadProject: function ({ load }) {
+			const { result, ...args } = load
+			return projects.settleIf(model, args, result, {
 				fresher: (incoming, current) => incoming.revision > current.revision,
-			}),
+			})
+		},
 		ClickedRefreshProject: ({ projectId }) => projects.revalidateOrLoad(model, { projectId }),
 	})
 

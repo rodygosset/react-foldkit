@@ -7,7 +7,7 @@
 - Optional `Provider commitSource` applies initial Messages and connects later
   deliveries, preserving Commands and delivery records.
 - Public `Query.AsyncData` (Foldkit AsyncData Schema factory) for slot codecs.
-- `Loader.Load` from `fromQuery`, plus `Loader.settleIfLoad` for Loader-shaped settlement.
+- `Loader.Load` from `fromQuery` for Loader-shaped settlement payloads.
 - `defineSubmodel<Model, Message>()`, child Providers, selectors, dispatch, and
   root/child projections. Optional projections track presence and keep departing
   snapshots; equal selections skip source-driven renders.
@@ -39,10 +39,8 @@
 - `defineApplication` no longer returns `useCommitSource`. Use Provider `commitSource`.
 - `TanStackSource.make` accepts only piped Declarations (no `[declaration, map]` tuples).
 - Prefer `query.AsyncData` / `Loader.Load` over digging into `Model.fields`.
-- `settleIfLoad` is on `react-foldkit/loader`, not on Query.
-- `settleIfLoad` keeps one overloaded API for keyed and unkeyed targets. Keyed
-  dispatch brands keyed `settleIf` at Query/lift creation instead of counting
-  load keys.
+- Peel Loader payloads and call `Query.settleIf` / lifted `settleIf` directly.
+  There is no `Loader.settleIfLoad`.
 - `ReactFoldkit.make` becomes `defineApplication`, also exported from
   `react-foldkit/react`.
 - `defineApplication` takes flat `Store.Config` plus a Model Codec. Provider creates

@@ -5,7 +5,6 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import * as AsyncData from "./asyncData"
 import * as Loader from "./loader"
 import * as Query from "./query"
-import { isKeyedSettleIf } from "./query/internal"
 
 const Data = Schema.Struct({ id: Schema.String, at: Schema.DateFromString })
 type Data = typeof Data.Type
@@ -96,19 +95,6 @@ describe("Loader.fromQuery", () => {
 		expect(envelope._tag).toBe("react-foldkit/Loader")
 		expect(ProjectLoader.Load.fields.result).toBe(keyed.AsyncData.schema)
 		expect(ProjectLoader.decode(envelope)).toEqual({ projectId: "p1", result })
-		expect(
-			Loader.settleIfLoad(keyed, keyed.init("home"), { projectId: "p1", result }, {
-				fresher: function () {
-					return true
-				},
-			}).model
-		).toEqual(
-			keyed.settleIf(keyed.init("home"), { projectId: "p1" }, result, {
-				fresher: function () {
-					return true
-				},
-			}).model
-		)
 		expect(Schema.decodeUnknownSync(ProjectLoader.Load)({ projectId: "p1", result })).toEqual({
 			projectId: "p1",
 			result,
@@ -132,59 +118,9 @@ describe("Loader.fromQuery", () => {
 		expect(envelope.name).toBe("Home")
 		expect(envelope.key).toBe("home")
 		expect(HomeLoader.decode(envelope)).toEqual({ result })
-		expect(
-			Loader.settleIfLoad(query, query.init("home"), { result }, {
-				fresher: function () {
-					return true
-				},
-			}).model
-		).toEqual(
-			query.settleIf(query.init("home"), result, {
-				fresher: function () {
-					return true
-				},
-			}).model
-		)
 		expect(function () {
 			return Loader.fromQuery(query as never)
 		}).toThrow(/require options\.key/)
-	})
-
-	it("dispatches settleIfLoad by keyed brand even when the load carries only result", () => {
-		const keyed = Query.define({
-			name: "Project",
-			args: { projectId: Schema.String },
-			toKey: function ({ projectId }) {
-				return projectId
-			},
-			data: Schema.String,
-			error: Schema.String,
-			execute: function ({ projectId }) {
-				return Effect.succeed(projectId)
-			},
-		})
-		const query = Query.define({
-			name: "Home",
-			data: Schema.String,
-			error: Schema.String,
-			execute: Effect.succeed("home"),
-		})
-		expect(isKeyedSettleIf(keyed.settleIf)).toBe(true)
-		expect(isKeyedSettleIf(query.settleIf)).toBe(false)
-		const result = AsyncData.Success({ data: "p1" })
-		expect(
-			Loader.settleIfLoad(keyed, keyed.init("home"), { result } as never, {
-				fresher: function () {
-					return true
-				},
-			}).model
-		).toEqual(
-			keyed.settleIf(keyed.init("home"), {} as never, result, {
-				fresher: function () {
-					return true
-				},
-			}).model
-		)
 	})
 })
 

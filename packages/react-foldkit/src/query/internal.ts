@@ -293,9 +293,6 @@ export function shouldSettle<A, E>(
 	})
 }
 
-export const KeyedSettleIfTypeId: unique symbol = Symbol.for("react-foldkit/KeyedSettleIf")
-export type KeyedSettleIfTypeId = typeof KeyedSettleIfTypeId
-
 export interface KeyedSettleIf<Model, Message, Args, A, E> {
 	(
 		model: Model,
@@ -308,23 +305,6 @@ export interface KeyedSettleIf<Model, Message, Args, A, E> {
 		result: AsyncData.AsyncData<A, E>,
 		options: SettleIfOptions<A, E>
 	): Update.Step<Model, Message>
-}
-
-export type MarkedKeyedSettleIf<S> = S & {
-	readonly [KeyedSettleIfTypeId]: KeyedSettleIfTypeId
-}
-
-export function markKeyedSettleIf<S>(settleIf: S): MarkedKeyedSettleIf<S> {
-	return Object.assign(settleIf as object, { [KeyedSettleIfTypeId]: KeyedSettleIfTypeId }) as MarkedKeyedSettleIf<S>
-}
-
-export function isKeyedSettleIf(
-	settleIf: unknown
-): settleIf is MarkedKeyedSettleIf<KeyedSettleIf<any, any, any, any, any>> {
-	return (
-		Predicate.hasProperty(settleIf, KeyedSettleIfTypeId) &&
-		settleIf[KeyedSettleIfTypeId] === KeyedSettleIfTypeId
-	)
 }
 
 export namespace Lifted {
@@ -372,7 +352,7 @@ export namespace Lifted {
 	> = Readonly<{
 		fold: Update.Fold<ParentModel, ParentMessage, ChildMessage, R>
 		settle: KeyedSettle<ParentModel, ParentMessage, Args, A, E>
-		settleIf: MarkedKeyedSettleIf<KeyedSettleIf<ParentModel, ParentMessage, Args, A, E>>
+		settleIf: KeyedSettleIf<ParentModel, ParentMessage, Args, A, E>
 		revalidate: Update.Fold<ParentModel, ParentMessage, Args, R>
 		revalidateOrLoad: Update.Fold<ParentModel, ParentMessage, Args, R>
 		loadIfMissing: Update.Fold<ParentModel, ParentMessage, Args, R>

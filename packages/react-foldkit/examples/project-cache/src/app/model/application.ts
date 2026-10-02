@@ -1,5 +1,4 @@
 import { Schema } from "effect"
-import * as Loader from "react-foldkit/loader"
 import { defineMessageUnion } from "react-foldkit/message"
 import { defineApplication, defineSubmodelProjection } from "react-foldkit/react"
 import type * as Update from "react-foldkit/update"
@@ -27,12 +26,14 @@ const projects = Project.query.lift<Model, Message>({
 export const update = (model: Model, message: Message) =>
 	Message.match<Update.Return<Model, Message>>(message, {
 		GotProjectMessage: ({ message }) => projects.fold(model, message),
-		CompletedLoadProject: ({ load }) =>
-			Loader.settleIfLoad(projects, model, load, {
+		CompletedLoadProject: function ({ load }) {
+			const { result, ...args } = load
+			return projects.settleIf(model, args, result, {
 				fresher: function (incoming, current) {
 					return incoming.revision > current.revision
 				},
-			}),
+			})
+		},
 		ClickedRefreshProject: ({ projectId }) => projects.revalidateOrLoad(model, { projectId }),
 	})
 
