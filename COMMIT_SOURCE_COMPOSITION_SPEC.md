@@ -36,7 +36,7 @@ Keep two values for a Query-backed loader:
 
 1. **Entity value.** `Loader.fromQuery` or `Loader.define`. Owns `load`,
    `Load`, and (for Query) `query` / `loadQuery`. Routes and pages import this.
-2. **Registry value.** `MappedLoader` from `Loader.mapMessages`. Adapter-facing
+2. **Registry value.** `Loader.mapMessages` result. Adapter-facing
    Declaration only. Pipe it into `TanStackSource.make`. Attachments are absent.
 
 Do not map Messages inside the entity module. Do not expect `.Load` / `.loadQuery`
@@ -189,9 +189,9 @@ Mappings compose in order when the adapter decodes accepted data. They preserve
 the Schema, name, key, encoding, and token, without fetching or changing the Model.
 Lift Messages at the parent wire (app registry), not in the entity module.
 
-The return type is `MappedLoader`: a plain Loader/Declaration. QueryLoader
-attachments (`Load`, `query`, `loadQuery`) are stripped. Keep the entity
-`fromQuery` / `define` value for those APIs; pipe a MappedLoader into the registry.
+The return type is a plain Loader/Declaration. QueryLoader attachments
+(`Load`, `query`, `loadQuery`) are stripped. Keep the entity `fromQuery` /
+`define` value for those APIs; pipe the mapped Loader into the registry.
 
 The optional second argument is the delivery receipt:
 
