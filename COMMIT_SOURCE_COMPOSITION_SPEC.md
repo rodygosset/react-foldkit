@@ -34,9 +34,9 @@ which revision wins beyond the `fresher` you pass.
 
 Keep two values for a Query-backed loader:
 
-1. **Entity value** — `Loader.fromQuery` or `Loader.define`. Owns `load`,
+1. **Entity value.** `Loader.fromQuery` or `Loader.define`. Owns `load`,
    `Load`, and (for Query) `query` / `loadQuery`. Routes and pages import this.
-2. **Registry value** — `MappedLoader` from `Loader.mapMessages`. Adapter-facing
+2. **Registry value.** `MappedLoader` from `Loader.mapMessages`. Adapter-facing
    Declaration only. Pipe it into `TanStackSource.make`. Attachments are absent.
 
 Do not map Messages inside the entity module. Do not expect `.Load` / `.loadQuery`
@@ -81,7 +81,8 @@ revisions, still complete rejected requests so they do not stay pending.
 - Query-backed example: `examples/project-cache` (`fromQuery`, `settleIfLoad`,
   revision `fresher`).
 - Define-only example: `examples/site-notice` (`Loader.define`, no Query, flat
-  `CompletedLoadNotice`, Option Model write — no `settleIfLoad`).
+  `CompletedLoadNotice`, Option Model write, no `settleIfLoad`, root Model hooks
+  without an identity Submodel).
 - Keep page `api/load.ts` thin in both examples.
 
 ## CommitSource protocol

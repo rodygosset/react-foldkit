@@ -1,4 +1,4 @@
-import { Effect, Function, Pipeable, Predicate, Schema } from "effect"
+import { Effect, Function, Pipeable, Predicate, Schema, Struct } from "effect"
 import type * as AsyncData from "./asyncData"
 import { Envelope, EnvelopeHeader, Receipt } from "./internal/loader-envelope"
 import type { KeyedArgs, KeyedSettleIf, SettleIfOptions } from "./query/internal"
@@ -329,9 +329,7 @@ export function fromQuery(query: any, options?: { readonly key?: (load: any) => 
 		const key =
 			options?.key ??
 			function (load: KeyedLoadType<SyncFields, any, any>) {
-				const args = { ...load } as Record<string, unknown>
-				delete args.result
-				return query.toKey(args as KeyedArgs<SyncFields>)
+				return query.toKey(Struct.omit(load, ["result"]) as KeyedArgs<SyncFields>)
 			}
 		return attachKeyedQueryLoader(
 			define({
@@ -363,8 +361,8 @@ export function fromQuery(query: any, options?: { readonly key?: (load: any) => 
 /**
  * Loader after Message mapping.
  * Adapter-facing Declaration + encode/load remain.
- * QueryLoader attachments (`Load`, `query`, `loadQuery`) are absent — keep the
- * `fromQuery` / `define` value for routes; pipe a MappedLoader into TanStackSource.make.
+ * QueryLoader attachments (`Load`, `query`, `loadQuery`) are absent. Keep the
+ * `fromQuery` / `define` value for routes. Pipe a MappedLoader into TanStackSource.make.
  */
 export type MappedLoader<A, I, Message = A> = Loader<A, I, Message>
 
@@ -375,10 +373,11 @@ function settleIfLoadInto(
 	options: SettleIfOptions<any, any>
 ): Update.Return<any, any> {
 	const { result, ...args } = load
-	if (isKeyedSettleIf(target.settleIf)) {
-		return (target as KeyedSettleIfTarget<any, any, any, any, any>).settleIf(model, args, result, options)
+	const settleIf = target.settleIf
+	if (isKeyedSettleIf(settleIf)) {
+		return settleIf(model, args, result, options)
 	}
-	return (target as SettleIfTarget<any, any, any, any>).settleIf(model, result, options)
+	return (settleIf as SettleIfTarget<any, any, any, any>["settleIf"])(model, result, options)
 }
 
 /**

@@ -295,8 +295,9 @@ export function shouldSettle<A, E>(
 
 /** Marks keyed `settleIf` so Loader.settleIfLoad can dispatch without inspecting load keys. */
 export const KeyedSettleIfTypeId: unique symbol = Symbol.for("react-foldkit/KeyedSettleIf")
+export type KeyedSettleIfTypeId = typeof KeyedSettleIfTypeId
 
-/** A keyed settleIf can also be used as a data-last Update step. */
+/** A keyed settleIf can also be used as a data-last Update step. Runtime brand is separate so overload resolution stays intact. */
 export interface KeyedSettleIf<Model, Message, Args, A, E> {
 	(
 		model: Model,
@@ -311,14 +312,23 @@ export interface KeyedSettleIf<Model, Message, Args, A, E> {
 	): Update.Step<Model, Message>
 }
 
-/** Brands a keyed settleIf dual for Loader.settleIfLoad dispatch. Runtime-only. */
-export function markKeyedSettleIf<S>(settleIf: S): S {
-	return Object.assign(settleIf as object, { [KeyedSettleIfTypeId]: KeyedSettleIfTypeId }) as S
+export type MarkedKeyedSettleIf<S> = S & {
+	readonly [KeyedSettleIfTypeId]: KeyedSettleIfTypeId
+}
+
+/** Brands a keyed settleIf dual for Loader.settleIfLoad dispatch. */
+export function markKeyedSettleIf<S>(settleIf: S): MarkedKeyedSettleIf<S> {
+	return Object.assign(settleIf as object, { [KeyedSettleIfTypeId]: KeyedSettleIfTypeId }) as MarkedKeyedSettleIf<S>
 }
 
 /** True when settleIf was created for a keyed Query or lift. */
-export function isKeyedSettleIf(settleIf: unknown): boolean {
-	return Predicate.hasProperty(settleIf, KeyedSettleIfTypeId)
+export function isKeyedSettleIf(
+	settleIf: unknown
+): settleIf is KeyedSettleIf<any, any, any, any, any> {
+	return (
+		Predicate.hasProperty(settleIf, KeyedSettleIfTypeId) &&
+		settleIf[KeyedSettleIfTypeId] === KeyedSettleIfTypeId
+	)
 }
 
 export namespace Lifted {
