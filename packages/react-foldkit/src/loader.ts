@@ -358,14 +358,6 @@ export function fromQuery(query: any, options?: { readonly key?: (load: any) => 
 	)
 }
 
-/**
- * Loader after Message mapping.
- * Adapter-facing Declaration + encode/load remain.
- * QueryLoader attachments (`Load`, `query`, `loadQuery`) are absent. Keep the
- * `fromQuery` / `define` value for routes. Pipe a MappedLoader into TanStackSource.make.
- */
-export type MappedLoader<A, I, Message = A> = Loader<A, I, Message>
-
 function settleIfLoadInto(
 	target: KeyedSettleIfTarget<any, any, any, any, any> | SettleIfTarget<any, any, any, any>,
 	model: any,
@@ -375,16 +367,13 @@ function settleIfLoadInto(
 	const { result, ...args } = load
 	const settleIf = target.settleIf
 	if (isKeyedSettleIf(settleIf)) {
-		return settleIf(model, args, result, options)
+		const keyedSettleIf: KeyedSettleIf<any, any, any, any, any> = settleIf
+		return keyedSettleIf(model, args, result, options)
 	}
 	return (settleIf as SettleIfTarget<any, any, any, any>["settleIf"])(model, result, options)
 }
 
-/**
- * Settles a Loader-shaped payload through a Query or lifted `settleIf`.
- * Lives on Loader (react-foldkit), not on Foldkit Query.
- * Keyed vs unkeyed dispatch uses a brand on keyed `settleIf`, not load key count.
- */
+/** Settles a Loader-shaped payload through a Query or lifted `settleIf`. */
 export function settleIfLoad<Model, Message, Args extends Record<string, unknown>, A, E>(
 	target: KeyedSettleIfTarget<Model, Message, Args, A, E>,
 	model: Model,
@@ -423,21 +412,21 @@ export function settleIfLoad(
 
 /**
  * Maps accepted deliveries while preserving loading, encoding, and receipt identity.
- * Returns a MappedLoader: QueryLoader attachments (`Load`, `query`, `loadQuery`)
+ * Returns a plain Loader. QueryLoader attachments (`Load`, `query`, `loadQuery`)
  * are stripped. Keep the `fromQuery` value for `loadQuery` / `Load`; pipe a mapped copy into the registry.
  */
 export const mapMessages: {
 	<Message, Next>(
 		f: (message: Message, receipt: Receipt) => Next
-	): <A, I>(self: Loader<A, I, Message>) => MappedLoader<A, I, Next>
+	): <A, I>(self: Loader<A, I, Message>) => Loader<A, I, Next>
 	<A, I, Message, Next>(
 		self: Loader<A, I, Message>,
 		f: (message: Message, receipt: Receipt) => Next
-	): MappedLoader<A, I, Next>
+	): Loader<A, I, Next>
 } = Function.dual(2, function <A, I, Message, Next>(
 	self: Loader<A, I, Message>,
 	f: (message: Message, receipt: Receipt) => Next
-): MappedLoader<A, I, Next> {
+): Loader<A, I, Next> {
 	const mapped = self as LoaderImpl<A, I, Message>
 	return new LoaderImpl(
 		self.name,

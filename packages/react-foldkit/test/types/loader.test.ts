@@ -43,7 +43,7 @@ describe("Loader public types", () => {
 		const mapped = RecordLoader.pipe(Loader.mapMessages(function (data, receipt) {
 			return { _tag: "Project" as const, data, receipt }
 		}))
-		expectTypeOf(mapped).toEqualTypeOf<Loader.MappedLoader<Data, typeof Data.Encoded, {
+		expectTypeOf(mapped).toEqualTypeOf<Loader.Loader<Data, typeof Data.Encoded, {
 			_tag: "Project", data: Data, receipt: Loader.Receipt,
 		}>>()
 		const other = Loader.define({ name: "Count", data: Schema.Number, key: function () { return "count" } }).pipe(

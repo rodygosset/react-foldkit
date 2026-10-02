@@ -8,7 +8,6 @@
   deliveries, preserving Commands and delivery records.
 - Public `Query.AsyncData` (Foldkit AsyncData Schema factory) for slot codecs.
 - `Loader.Load` from `fromQuery`, plus `Loader.settleIfLoad` for Loader-shaped settlement.
-- `Loader.MappedLoader` type alias for `mapMessages` results (attachments stripped).
 - `defineSubmodel<Model, Message>()`, child Providers, selectors, dispatch, and
   root/child projections. Optional projections track presence and keep departing
   snapshots; equal selections skip source-driven renders.
