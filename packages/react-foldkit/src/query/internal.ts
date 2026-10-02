@@ -293,6 +293,9 @@ export function shouldSettle<A, E>(
 	})
 }
 
+/** Marks keyed `settleIf` so Loader.settleIfLoad can dispatch without inspecting load keys. */
+export const KeyedSettleIfTypeId: unique symbol = Symbol.for("react-foldkit/KeyedSettleIf")
+
 /** A keyed settleIf can also be used as a data-last Update step. */
 export interface KeyedSettleIf<Model, Message, Args, A, E> {
 	(
@@ -306,6 +309,16 @@ export interface KeyedSettleIf<Model, Message, Args, A, E> {
 		result: AsyncData.AsyncData<A, E>,
 		options: SettleIfOptions<A, E>
 	): Update.Step<Model, Message>
+}
+
+/** Brands a keyed settleIf dual for Loader.settleIfLoad dispatch. Runtime-only. */
+export function markKeyedSettleIf<S>(settleIf: S): S {
+	return Object.assign(settleIf as object, { [KeyedSettleIfTypeId]: KeyedSettleIfTypeId }) as S
+}
+
+/** True when settleIf was created for a keyed Query or lift. */
+export function isKeyedSettleIf(settleIf: unknown): boolean {
+	return Predicate.hasProperty(settleIf, KeyedSettleIfTypeId)
 }
 
 export namespace Lifted {

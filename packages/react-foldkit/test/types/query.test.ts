@@ -56,6 +56,13 @@ describe("Query settlement public types", () => {
 				},
 			})
 		).toExtend<Update.Return<Parent, Message>>()
+		expectTypeOf(
+			Loader.settleIfLoad(single, single.init("a"), { result }, {
+				fresher: function () {
+					return true
+				},
+			})
+		).toExtend<Update.Return<typeof single.Model.Type, typeof single.Message.Type>>()
 	})
 
 	if (false) {

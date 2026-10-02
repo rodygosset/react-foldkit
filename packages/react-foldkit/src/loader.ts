@@ -2,6 +2,7 @@ import { Effect, Function, Pipeable, Predicate, Schema } from "effect"
 import type * as AsyncData from "./asyncData"
 import { Envelope, EnvelopeHeader, Receipt } from "./internal/loader-envelope"
 import type { KeyedArgs, KeyedSettleIf, SettleIfOptions } from "./query/internal"
+import { isKeyedSettleIf } from "./query/internal"
 import type { KeyedQuery, SyncFields } from "./query/keyedQuery"
 import type { Query } from "./query/query"
 import type * as Update from "./update"
@@ -359,6 +360,14 @@ export function fromQuery(query: any, options?: { readonly key?: (load: any) => 
 	)
 }
 
+/**
+ * Loader after Message mapping.
+ * Adapter-facing Declaration + encode/load remain.
+ * QueryLoader attachments (`Load`, `query`, `loadQuery`) are absent — keep the
+ * `fromQuery` / `define` value for routes; pipe a MappedLoader into TanStackSource.make.
+ */
+export type MappedLoader<A, I, Message = A> = Loader<A, I, Message>
+
 function settleIfLoadInto(
 	target: KeyedSettleIfTarget<any, any, any, any, any> | SettleIfTarget<any, any, any, any>,
 	model: any,
@@ -366,7 +375,7 @@ function settleIfLoadInto(
 	options: SettleIfOptions<any, any>
 ): Update.Return<any, any> {
 	const { result, ...args } = load
-	if (Object.keys(args).length > 0) {
+	if (isKeyedSettleIf(target.settleIf)) {
 		return (target as KeyedSettleIfTarget<any, any, any, any, any>).settleIf(model, args, result, options)
 	}
 	return (target as SettleIfTarget<any, any, any, any>).settleIf(model, result, options)
@@ -375,6 +384,7 @@ function settleIfLoadInto(
 /**
  * Settles a Loader-shaped payload through a Query or lifted `settleIf`.
  * Lives on Loader (react-foldkit), not on Foldkit Query.
+ * Keyed vs unkeyed dispatch uses a brand on keyed `settleIf`, not load key count.
  */
 export function settleIfLoad<Model, Message, Args extends Record<string, unknown>, A, E>(
 	target: KeyedSettleIfTarget<Model, Message, Args, A, E>,
@@ -414,21 +424,21 @@ export function settleIfLoad(
 
 /**
  * Maps accepted deliveries while preserving loading, encoding, and receipt identity.
- * Returns a plain Loader/Declaration: QueryLoader attachments (`Load`, `query`, `loadQuery`)
+ * Returns a MappedLoader: QueryLoader attachments (`Load`, `query`, `loadQuery`)
  * are stripped. Keep the `fromQuery` value for `loadQuery` / `Load`; pipe a mapped copy into the registry.
  */
 export const mapMessages: {
 	<Message, Next>(
 		f: (message: Message, receipt: Receipt) => Next
-	): <A, I>(self: Loader<A, I, Message>) => Loader<A, I, Next>
+	): <A, I>(self: Loader<A, I, Message>) => MappedLoader<A, I, Next>
 	<A, I, Message, Next>(
 		self: Loader<A, I, Message>,
 		f: (message: Message, receipt: Receipt) => Next
-	): Loader<A, I, Next>
+	): MappedLoader<A, I, Next>
 } = Function.dual(2, function <A, I, Message, Next>(
 	self: Loader<A, I, Message>,
 	f: (message: Message, receipt: Receipt) => Next
-): Loader<A, I, Next> {
+): MappedLoader<A, I, Next> {
 	const mapped = self as LoaderImpl<A, I, Message>
 	return new LoaderImpl(
 		self.name,

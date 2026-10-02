@@ -9,10 +9,38 @@ This replaces the app-owned envelopes/adapter in
 - `Loader.define` / `Loader.fromQuery` for typed loader envelopes.
 - `Loader.mapMessages` for root Message composition at the parent wire.
 - `Loader.load` (dual) and `Loader.loadQuery` for envelope programs.
-- `Query.settleIf` for freshness-gated external settlement; `Loader.settleIfLoad` for Loader-shaped payloads.
+- `Query.settleIf` for freshness-gated external settlement; `Loader.settleIfLoad`
+  for Loader-shaped payloads.
 - `TanStackSource.make` for accepted router results.
 - `SubmodelProvider` for inline child Provider composition.
 - `CommitSource` remains the sync delivery protocol only.
+
+## Identity layers
+
+Delivery, cache slots, and app freshness are separate. Do not conflate them.
+
+| Layer | What it is | Who owns it |
+| ----- | ---------- | ----------- |
+| Resource key | Stable identity of the domain resource (from `Loader.key` / Query args) | Declaration / Query |
+| Delivery version (UUID) | One serializable token per accepted envelope; compared with `Object.is` | Loader encode + CommitSource |
+| App fresher | Payload revision or domain rule in `settleIf` / `settleIfLoad` | Application update |
+
+TanStack entry keys are `[matchId, name, resourceKey]`. Matches can share a
+resource without colliding; update chooses which delivery to keep. Delivery
+UUIDs do not order data. `settleIfLoad` installs outcomes; it does not decide
+which revision wins beyond the `fresher` you pass.
+
+## Two-value pattern
+
+Keep two values for a Query-backed loader:
+
+1. **Entity value** — `Loader.fromQuery` or `Loader.define`. Owns `load`,
+   `Load`, and (for Query) `query` / `loadQuery`. Routes and pages import this.
+2. **Registry value** — `MappedLoader` from `Loader.mapMessages`. Adapter-facing
+   Declaration only. Pipe it into `TanStackSource.make`. Attachments are absent.
+
+Do not map Messages inside the entity module. Do not expect `.Load` / `.loadQuery`
+on the mapped registry value.
 
 ## State ownership
 
@@ -50,8 +78,11 @@ revisions, still complete rejected requests so they do not stay pending.
 - Views use these bindings and ReactFoldkit hooks. Keep route hooks in app glue
   and lifecycle hooks in Providers.
 - Use `Project.Loader` and the application namespace `Application`.
-- Use one project Query with static `Effect.succeed` data. Run Promises at route
-  boundaries; omit server functions and custom async fetching.
+- Query-backed example: `examples/project-cache` (`fromQuery`, `settleIfLoad`,
+  revision `fresher`).
+- Define-only example: `examples/site-notice` (`Loader.define`, no Query, flat
+  `CompletedLoadNotice`, Option Model write — no `settleIfLoad`).
+- Keep page `api/load.ts` thin in both examples.
 
 ## CommitSource protocol
 
@@ -156,6 +187,10 @@ Project.Loader.pipe(Loader.mapMessages((load) => Application.Message.CompletedLo
 Mappings compose in order when the adapter decodes accepted data. They preserve
 the Schema, name, key, encoding, and token, without fetching or changing the Model.
 Lift Messages at the parent wire (app registry), not in the entity module.
+
+The return type is `MappedLoader`: a plain Loader/Declaration. QueryLoader
+attachments (`Load`, `query`, `loadQuery`) are stripped. Keep the entity
+`fromQuery` / `define` value for those APIs; pipe a MappedLoader into the registry.
 
 The optional second argument is the delivery receipt:
 
@@ -346,6 +381,11 @@ export { Provider, useModel, useDispatch } from "./ui/provider"
 
 ### Feature and page
 
+Page `api/load.ts` stays thin: export a single Effect (usually
+`Loader.load` / `loadQuery`). Do not fold settlement, Model writes, or Message
+construction into the page load module. Those live in application update and
+the registry `mapMessages` pipe.
+
 ```tsx
 // features/refresh-project/ui/view.tsx
 import * as AsyncData from "react-foldkit/asyncData"
@@ -371,9 +411,9 @@ export { View } from "./ui/view"
 
 ```ts
 // pages/project-details/api/load.ts
-import * as Loader from "react-foldkit/loader"
 import * as Project from "@/entities/project"
 
+// Thin: one Effect export. No Model, Message, or settlement here.
 export const load = (projectId: string) => Project.Loader.loadQuery({ projectId })
 ```
 

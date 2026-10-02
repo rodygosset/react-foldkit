@@ -131,6 +131,19 @@ describe("Loader.fromQuery", () => {
 		expect(envelope.name).toBe("Home")
 		expect(envelope.key).toBe("home")
 		expect(HomeLoader.decode(envelope)).toEqual({ result })
+		expect(
+			Loader.settleIfLoad(query, query.init("home"), { result }, {
+				fresher: function () {
+					return true
+				},
+			}).model
+		).toEqual(
+			query.settleIf(query.init("home"), result, {
+				fresher: function () {
+					return true
+				},
+			}).model
+		)
 		expect(function () {
 			return Loader.fromQuery(query as never)
 		}).toThrow(/require options\.key/)

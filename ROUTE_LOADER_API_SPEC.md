@@ -1,11 +1,17 @@
 # External data delivery
 
+> **Superseded for composition.** The contract of record for Loader declarations,
+> `mapMessages`, TanStack registry wiring, and Provider `commitSource` is
+> [COMMIT_SOURCE_COMPOSITION_SPEC.md](COMMIT_SOURCE_COMPOSITION_SPEC.md).
+> Keep this document for historical delivery timing and Query settlement notes.
+> Do not follow the app-owned adapter or `useCommitSource` sketches below.
+
 Implemented: commit/source APIs, `Query.settle`, and child views.
 See [validation](COMMIT_SOURCE_VALIDATION.md). The Foldkit backport is deferred.
 
-This spec records the delivery contract and earlier app-owned adapter. The
-[composition spec](COMMIT_SOURCE_COMPOSITION_SPEC.md) replaces that adapter with
-public loader declarations and a TanStack entry point. The delivery contract still applies.
+This spec records the delivery contract and earlier app-owned adapter. Public
+loader composition lives in the composition spec. The delivery timing contract
+still applies.
 
 ## Ownership and timing
 
@@ -115,7 +121,9 @@ export interface CommitSourceOptions<Message> {
 }
 ```
 
-`defineApplication` exposes `useCommitSource(options)`, typed from update's Messages.
+~~`defineApplication` exposes `useCommitSource(options)`, typed from update's Messages.~~
+**Removed.** Bootstrap only through Provider `commitSource`. See the composition
+spec and package README.
 
 | Field             | Contract                                                                                      |
 | ----------------- | --------------------------------------------------------------------------------------------- |
@@ -201,9 +209,11 @@ Prefer `Provider commitSource`. It validates and folds the initial snapshot thro
 update, preserves Commands, supplies the populated Model to SSR/hydration, and
 connects after activation.
 
-For manual connections, capture the snapshot once, fold it into init with its
+~~For manual connections, capture the snapshot once, fold it into init with its
 Commands, and pass it to `useCommitSource({ source, initialSnapshot })`.
-Do not connect the same source through both prop and hook.
+Do not connect the same source through both prop and hook.~~
+**Removed.** There is no public `useCommitSource` hook. Use Provider
+`commitSource` only.
 
 Server/client sources need equivalent initial data and tokens. Keep the Provider
 mounted across navigation and the source stable. Feature views read through a
