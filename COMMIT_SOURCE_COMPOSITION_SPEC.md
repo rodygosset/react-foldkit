@@ -78,8 +78,11 @@ revisions, still complete rejected requests so they do not stay pending.
 - Views use these bindings and ReactFoldkit hooks. Keep route hooks in app glue
   and lifecycle hooks in Providers.
 - Use `Project.Loader` and the application namespace `Application`.
-- Use one project Query with static `Effect.succeed` data. Run Promises at route
-  boundaries; omit server functions and custom async fetching.
+- Query-backed example: `examples/project-cache` (`fromQuery`, `settleIfLoadKeyed`,
+  revision `fresher`).
+- Define-only example: `examples/site-notice` (`Loader.define`, no Query, flat
+  `CompletedLoadNotice`, Option Model write — no `settleIfLoad*`).
+- Keep page `api/load.ts` thin in both examples.
 
 ## CommitSource protocol
 

@@ -21,3 +21,5 @@ bun run test:types:example
 
 The example uses emitted `react-foldkit/*` exports, with no source imports or
 fixture-only router declarations.
+
+See also `examples/site-notice` for a `Loader.define` path with no Query.
