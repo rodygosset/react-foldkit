@@ -11,6 +11,7 @@ import {
 import { Context, Effect, Layer, Option, Schema } from "effect"
 import React from "react"
 import * as AsyncData from "../../src/asyncData"
+import * as Command from "../../src/command"
 import * as Loader from "../../src/loader"
 import * as TanStackSource from "../../src/tanstack"
 import { defineMessageUnion } from "../../src/message"
@@ -58,10 +59,6 @@ const SearchModel = Schema.Struct({
 const SearchMessage = defineMessageUnion({
 	GotQueryMessage: { message: query.Message },
 	Revalidated: { query: Schema.String },
-	LoadedFromRoute: {
-		query: Schema.String,
-		result: SearchLoader.Load.fields.result,
-	},
 })
 type SearchModel = typeof SearchModel.Type
 type SearchMessage = typeof SearchMessage.Type
@@ -77,15 +74,11 @@ function searchUpdate(
 	message: SearchMessage
 ): Update.Return<SearchModel, SearchMessage, LoaderApi> {
 	return SearchMessage.match(message, {
-		GotQueryMessage: ({ message }) => resultsChild.fold(model, message),
-		Revalidated: ({ query }) => resultsChild.revalidateOrLoad(model, { query }),
-		LoadedFromRoute({ query: q, result }) {
-			const settled = Loader.settleIfLoadKeyed(resultsChild, model, { query: q, result }, {
-				fresher: function (incoming, current) {
-					return incoming.revision > current.revision
-				},
-			})
-			return { ...settled, model: modifyFields(settled.model, { activeQuery: () => q }) }
+		GotQueryMessage: function ({ message }) {
+			return resultsChild.fold(model, message)
+		},
+		Revalidated: function ({ query }) {
+			return resultsChild.revalidateOrLoad(model, { query })
 		},
 	})
 }
@@ -95,16 +88,15 @@ export const AppModel = Schema.Struct({ search: SearchModel, edits: Schema.Numbe
 export type AppModel = typeof AppModel.Type
 const AppMessage = defineMessageUnion({
 	GotSearchMessage: { message: SearchMessage },
+	CompletedLoadSearch: { load: SearchLoader.Load },
 	Edited: {},
 	BurnedBudget: {},
 })
 export type AppMessage = typeof AppMessage.Type
 
 const routeLoader = SearchLoader.pipe(
-	Loader.mapMessages(function ({ query, result }) {
-		return AppMessage.GotSearchMessage({
-			message: SearchMessage.LoadedFromRoute({ query, result }),
-		})
+	Loader.mapMessages(function (load) {
+		return AppMessage.CompletedLoadSearch({ load })
 	}),
 )
 
@@ -146,17 +138,38 @@ export function createFixture(
 	})
 	function update(model: AppModel, message: AppMessage): Update.Return<AppModel, AppMessage, LoaderApi> {
 		return AppMessage.match(message, {
-			GotSearchMessage: ({ message }) => {
-				const folded = child(model, message)
+			GotSearchMessage: function ({ message }) {
+				return child(model, message)
+			},
+			CompletedLoadSearch: function ({ load }) {
+				const settled = Loader.settleIfLoadKeyed(resultsChild, model.search, load, {
+					fresher: function (incoming, current) {
+						return incoming.revision > current.revision
+					},
+				})
+				const search = modifyFields(settled.model, {
+					activeQuery: function () {
+						return load.query
+					},
+				})
 				return {
-					...folded,
-					model: modifyFields(folded.model, {
-						loads: (loads) => loads + (message._tag === "LoadedFromRoute" ? 1 : 0),
+					model: modifyFields(model, {
+						search: function () {
+							return search
+						},
+						loads: function (loads) {
+							return loads + 1
+						},
+					}),
+					commands: Command.mapMessages(settled.commands, function (message) {
+						return AppMessage.GotSearchMessage({ message })
 					}),
 				}
 			},
-			Edited: () => ({ model: modifyFields(model, { edits: (edits) => edits + 1 }) }),
-			BurnedBudget: () => {
+			Edited: function () {
+				return { model: modifyFields(model, { edits: function (edits) { return edits + 1 } }) }
+			},
+			BurnedBudget: function () {
 				options.onBurn?.()
 				return { model }
 			},
@@ -173,7 +186,7 @@ export function createFixture(
 		}),
 		update: (model: AppModel, message: AppMessage) => {
 			updates.push(message)
-			if (isSourceConnected && message._tag === "GotSearchMessage" && message.message._tag === "LoadedFromRoute")
+			if (isSourceConnected && message._tag === "CompletedLoadSearch")
 				liveRouteDeliveries.push(message)
 			return update(model, message)
 		},

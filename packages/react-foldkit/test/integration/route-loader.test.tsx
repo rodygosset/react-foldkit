@@ -40,10 +40,9 @@ describe("TanStack route loader handoff", () => {
 						pressured ||
 						!snapshot.some(
 							({ message }) =>
-								message._tag === "GotSearchMessage" &&
-								message.message._tag === "LoadedFromRoute" &&
-								AsyncData.isSuccess(message.message.result) &&
-								message.message.result.data.revision === expectedRevision
+								message._tag === "CompletedLoadSearch" &&
+								AsyncData.isSuccess(message.load.result) &&
+								message.load.result.data.revision === expectedRevision
 						)
 					)
 						return
