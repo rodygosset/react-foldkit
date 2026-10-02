@@ -12,7 +12,7 @@ Implemented:
 - Child view bindings through `defineSubmodel`, `useSubmodel`, and
   `useOptionalSubmodel`, plus `SubmodelProvider`.
 - `Query.settle` / `settleIf`, lifted forms, and request-specific Fetch interruption.
-- Public `Query.AsyncData` (Foldkit-native) plus Loader-owned `Load` / `settleIfLoad`.
+- Public `Query.AsyncData` (Foldkit-native) plus Loader-owned `Load`.
 - Loader module (`define`, overloaded `fromQuery`, dual `load` / `loadQuery`, `mapMessages`),
   protocol-only `CommitSource`, and the optional TanStack adapter (pipe `mapMessages` registry).
 
