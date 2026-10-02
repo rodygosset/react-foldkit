@@ -1,7 +1,7 @@
 import { Effect, Function, Pipeable, Predicate, Schema, Struct } from "effect"
 import type * as AsyncData from "./asyncData"
 import { Envelope, EnvelopeHeader, Receipt } from "./internal/loader-envelope"
-import type { KeyedArgs, KeyedSettleIf, SettleIfOptions } from "./query/internal"
+import type { KeyedArgs, KeyedSettleIf, MarkedKeyedSettleIf, SettleIfOptions } from "./query/internal"
 import { isKeyedSettleIf } from "./query/internal"
 import type { KeyedQuery, SyncFields } from "./query/keyedQuery"
 import type { Query } from "./query/query"
@@ -140,7 +140,7 @@ type SettleIfTarget<Model, Message, A, E> = {
 }
 
 type KeyedSettleIfTarget<Model, Message, Args, A, E> = {
-	readonly settleIf: KeyedSettleIf<Model, Message, Args, A, E>
+	readonly settleIf: MarkedKeyedSettleIf<KeyedSettleIf<Model, Message, Args, A, E>>
 }
 
 type WithLoadSchema<A, I, LoadSchema extends Schema.Top> = Loader<A, I> & {

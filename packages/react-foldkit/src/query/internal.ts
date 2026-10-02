@@ -372,7 +372,7 @@ export namespace Lifted {
 	> = Readonly<{
 		fold: Update.Fold<ParentModel, ParentMessage, ChildMessage, R>
 		settle: KeyedSettle<ParentModel, ParentMessage, Args, A, E>
-		settleIf: KeyedSettleIf<ParentModel, ParentMessage, Args, A, E>
+		settleIf: MarkedKeyedSettleIf<KeyedSettleIf<ParentModel, ParentMessage, Args, A, E>>
 		revalidate: Update.Fold<ParentModel, ParentMessage, Args, R>
 		revalidateOrLoad: Update.Fold<ParentModel, ParentMessage, Args, R>
 		loadIfMissing: Update.Fold<ParentModel, ParentMessage, Args, R>

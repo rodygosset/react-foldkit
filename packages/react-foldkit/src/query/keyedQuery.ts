@@ -15,6 +15,7 @@ import {
 	type KeyedArgs,
 	type KeyedSettle,
 	type KeyedSettleIf,
+	type MarkedKeyedSettleIf,
 	type LiftConfig,
 	type LiftKeyedQuery,
 	type Lifted,
@@ -198,12 +199,14 @@ export interface KeyedQuery<
 		E
 	>
 	/** Settles only when Success is fresher or Failure hits an empty non-pending slot. */
-	readonly settleIf: KeyedSettleIf<
-		KeyedQueryModel<A, AI, E, EI, Fields>["Type"],
-		KeyedQueryMessage<A, AI, E, EI, Fields>["Type"],
-		KeyedArgs<Fields>,
-		A,
-		E
+	readonly settleIf: MarkedKeyedSettleIf<
+		KeyedSettleIf<
+			KeyedQueryModel<A, AI, E, EI, Fields>["Type"],
+			KeyedQueryMessage<A, AI, E, EI, Fields>["Type"],
+			KeyedArgs<Fields>,
+			A,
+			E
+		>
 	>
 	readonly lift: LiftKeyedQuery<
 		KeyedQueryModel<A, AI, E, EI, Fields>["Type"],
@@ -466,7 +469,7 @@ export function defineKeyedQuery<Name extends string, A, AI, E, EI, Fields exten
 		slots: HashMap.empty(),
 	})
 	const read = (model: Model, args: Args): SlotState => store.read(model, args)
-	const settleIf: KeyedSettleIf<Model, Message, Args, A, E> = markKeyedSettleIf(
+	const settleIf = markKeyedSettleIf(
 		Function.dual(
 			4,
 			function (
@@ -495,7 +498,7 @@ export function defineKeyedQuery<Name extends string, A, AI, E, EI, Fields exten
 
 	function liftSettleIf<ParentModel, ParentMessage>(
 		lens: FoldLens<ParentModel, ParentMessage, Model, Message>
-	): KeyedSettleIf<ParentModel, ParentMessage, Args, A, E> {
+	): MarkedKeyedSettleIf<KeyedSettleIf<ParentModel, ParentMessage, Args, A, E>> {
 		const fold = Update.foldChild({
 			...lens,
 			update: function (

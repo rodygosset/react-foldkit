@@ -152,6 +152,9 @@ export function createFixture(
 						return load.query
 					},
 				})
+				const commands = Command.mapMessages(settled.commands, function (message) {
+					return AppMessage.GotSearchMessage({ message })
+				})
 				return {
 					model: modifyFields(model, {
 						search: function () {
@@ -161,9 +164,7 @@ export function createFixture(
 							return loads + 1
 						},
 					}),
-					commands: Command.mapMessages(settled.commands, function (message) {
-						return AppMessage.GotSearchMessage({ message })
-					}),
+					...(commands.length > 0 ? { commands } : {}),
 				}
 			},
 			Edited: function () {
