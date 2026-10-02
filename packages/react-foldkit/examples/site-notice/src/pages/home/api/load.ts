@@ -8,7 +8,7 @@ export const load = () =>
 			Notice.Notice.make({
 				id: "launch",
 				headline: "Launch week",
-				body: "Static payload — no Query slot.",
+				body: "Static payload. No Query slot.",
 			})
 		)
 	)
