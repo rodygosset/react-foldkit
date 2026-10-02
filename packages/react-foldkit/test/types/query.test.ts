@@ -50,12 +50,19 @@ describe("Query settlement public types", () => {
 			readonly result: AsyncData.AsyncData<Date, string>
 		}>()
 		expectTypeOf(
-			Loader.settleIfLoad(lifted, parent, { id: 1, result }, {
+			Loader.settleIfLoadKeyed(lifted, parent, { id: 1, result }, {
 				fresher: function () {
 					return true
 				},
 			})
 		).toExtend<Update.Return<Parent, Message>>()
+		expectTypeOf(
+			Loader.settleIfLoad(single, single.init("a"), { result }, {
+				fresher: function () {
+					return true
+				},
+			})
+		).toExtend<Update.Return<typeof single.Model.Type, typeof single.Message.Type>>()
 	})
 
 	if (false) {
@@ -78,5 +85,11 @@ describe("Query settlement public types", () => {
 		keyed.settle(keyed.init("a"), { id: "1" }, result)
 		// @ts-expect-error Interrupts target a specific request.
 		single.Fetch.Interrupt({ instanceId: "a" }, (outcome) => outcome)
+		// @ts-expect-error Keyed settle targets use settleIfLoadKeyed.
+		Loader.settleIfLoad(lifted, parent, { id: 1, result }, {
+			fresher: function () {
+				return true
+			},
+		})
 	}
 })

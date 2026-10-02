@@ -96,7 +96,7 @@ describe("Loader.fromQuery", () => {
 		expect(ProjectLoader.Load.fields.result).toBe(keyed.AsyncData.schema)
 		expect(ProjectLoader.decode(envelope)).toEqual({ projectId: "p1", result })
 		expect(
-			Loader.settleIfLoad(keyed, keyed.init("home"), { projectId: "p1", result }, {
+			Loader.settleIfLoadKeyed(keyed, keyed.init("home"), { projectId: "p1", result }, {
 				fresher: function () {
 					return true
 				},
@@ -131,6 +131,19 @@ describe("Loader.fromQuery", () => {
 		expect(envelope.name).toBe("Home")
 		expect(envelope.key).toBe("home")
 		expect(HomeLoader.decode(envelope)).toEqual({ result })
+		expect(
+			Loader.settleIfLoad(query, query.init("home"), { result }, {
+				fresher: function () {
+					return true
+				},
+			}).model
+		).toEqual(
+			query.settleIf(query.init("home"), result, {
+				fresher: function () {
+					return true
+				},
+			}).model
+		)
 		expect(function () {
 			return Loader.fromQuery(query as never)
 		}).toThrow(/require options\.key/)

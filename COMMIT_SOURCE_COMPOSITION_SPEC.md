@@ -480,7 +480,7 @@ export const update = (model: Model, message: Message) =>
 	Message.match<Update.Return<Model, Message>>(message, {
 		GotProjectMessage: ({ message }) => projects.fold(model, message),
 		CompletedLoadProject: ({ load }) =>
-			Loader.settleIfLoad(projects, model, load, {
+			Loader.settleIfLoadKeyed(projects, model, load, {
 				fresher: (incoming, current) => incoming.revision > current.revision,
 			}),
 		ClickedRefreshProject: ({ projectId }) => projects.revalidateOrLoad(model, { projectId }),

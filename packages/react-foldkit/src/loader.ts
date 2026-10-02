@@ -359,34 +359,37 @@ export function fromQuery(query: any, options?: { readonly key?: (load: any) => 
 	)
 }
 
-function settleIfLoadInto(
-	target: KeyedSettleIfTarget<any, any, any, any, any> | SettleIfTarget<any, any, any, any>,
+/**
+ * Loader after Message mapping.
+ * Adapter-facing Declaration + encode/load remain.
+ * QueryLoader attachments (`Load`, `query`, `loadQuery`) are absent — keep the
+ * `fromQuery` / `define` value for routes; pipe a MappedLoader into TanStackSource.make.
+ */
+export type MappedLoader<A, I, Message = A> = Loader<A, I, Message>
+
+function settleIfLoadUnkeyed(
+	target: SettleIfTarget<any, any, any, any>,
+	model: any,
+	load: LoadPayload<{}, any, any>,
+	options: SettleIfOptions<any, any>
+): Update.Return<any, any> {
+	return target.settleIf(model, load.result, options)
+}
+
+function settleIfLoadKeyedInto(
+	target: KeyedSettleIfTarget<any, any, any, any, any>,
 	model: any,
 	load: LoadPayload<Record<string, unknown>, any, any>,
 	options: SettleIfOptions<any, any>
 ): Update.Return<any, any> {
 	const { result, ...args } = load
-	if (Object.keys(args).length > 0) {
-		return (target as KeyedSettleIfTarget<any, any, any, any, any>).settleIf(model, args, result, options)
-	}
-	return (target as SettleIfTarget<any, any, any, any>).settleIf(model, result, options)
+	return target.settleIf(model, args, result, options)
 }
 
 /**
- * Settles a Loader-shaped payload through a Query or lifted `settleIf`.
- * Lives on Loader (react-foldkit), not on Foldkit Query.
+ * Settles an unkeyed Loader payload (`{ result }`) through a Query or lifted `settleIf`.
+ * Use `settleIfLoadKeyed` when the settle target is keyed.
  */
-export function settleIfLoad<Model, Message, Args extends Record<string, unknown>, A, E>(
-	target: KeyedSettleIfTarget<Model, Message, Args, A, E>,
-	model: Model,
-	load: LoadPayload<Args, A, E>,
-	options: SettleIfOptions<A, E>
-): Update.Return<Model, Message>
-export function settleIfLoad<Model, Message, Args extends Record<string, unknown>, A, E>(
-	target: KeyedSettleIfTarget<Model, Message, Args, A, E>,
-	load: LoadPayload<Args, A, E>,
-	options: SettleIfOptions<A, E>
-): Update.Step<Model, Message>
 export function settleIfLoad<Model, Message, A, E>(
 	target: SettleIfTarget<Model, Message, A, E>,
 	model: Model,
@@ -399,36 +402,65 @@ export function settleIfLoad<Model, Message, A, E>(
 	options: SettleIfOptions<A, E>
 ): Update.Step<Model, Message>
 export function settleIfLoad(
-	target: KeyedSettleIfTarget<any, any, any, any, any> | SettleIfTarget<any, any, any, any>,
+	target: SettleIfTarget<any, any, any, any>,
 	modelOrLoad: any,
 	loadOrOptions: any,
 	maybeOptions?: SettleIfOptions<any, any>
 ): Update.Return<any, any> | Update.Step<any, any> {
 	if (maybeOptions !== undefined) {
-		return settleIfLoadInto(target, modelOrLoad, loadOrOptions, maybeOptions)
+		return settleIfLoadUnkeyed(target, modelOrLoad, loadOrOptions, maybeOptions)
 	}
 	return function (model: any) {
-		return settleIfLoadInto(target, model, modelOrLoad, loadOrOptions)
+		return settleIfLoadUnkeyed(target, model, modelOrLoad, loadOrOptions)
+	}
+}
+
+/**
+ * Settles a keyed Loader payload (`{ ...args, result }`) through a keyed Query or lift.
+ * Peels `result` and remaining fields as args; no key-count heuristic.
+ */
+export function settleIfLoadKeyed<Model, Message, Args extends Record<string, unknown>, A, E>(
+	target: KeyedSettleIfTarget<Model, Message, Args, A, E>,
+	model: Model,
+	load: LoadPayload<Args, A, E>,
+	options: SettleIfOptions<A, E>
+): Update.Return<Model, Message>
+export function settleIfLoadKeyed<Model, Message, Args extends Record<string, unknown>, A, E>(
+	target: KeyedSettleIfTarget<Model, Message, Args, A, E>,
+	load: LoadPayload<Args, A, E>,
+	options: SettleIfOptions<A, E>
+): Update.Step<Model, Message>
+export function settleIfLoadKeyed(
+	target: KeyedSettleIfTarget<any, any, any, any, any>,
+	modelOrLoad: any,
+	loadOrOptions: any,
+	maybeOptions?: SettleIfOptions<any, any>
+): Update.Return<any, any> | Update.Step<any, any> {
+	if (maybeOptions !== undefined) {
+		return settleIfLoadKeyedInto(target, modelOrLoad, loadOrOptions, maybeOptions)
+	}
+	return function (model: any) {
+		return settleIfLoadKeyedInto(target, model, modelOrLoad, loadOrOptions)
 	}
 }
 
 /**
  * Maps accepted deliveries while preserving loading, encoding, and receipt identity.
- * Returns a plain Loader/Declaration: QueryLoader attachments (`Load`, `query`, `loadQuery`)
+ * Returns a MappedLoader: QueryLoader attachments (`Load`, `query`, `loadQuery`)
  * are stripped. Keep the `fromQuery` value for `loadQuery` / `Load`; pipe a mapped copy into the registry.
  */
 export const mapMessages: {
 	<Message, Next>(
 		f: (message: Message, receipt: Receipt) => Next
-	): <A, I>(self: Loader<A, I, Message>) => Loader<A, I, Next>
+	): <A, I>(self: Loader<A, I, Message>) => MappedLoader<A, I, Next>
 	<A, I, Message, Next>(
 		self: Loader<A, I, Message>,
 		f: (message: Message, receipt: Receipt) => Next
-	): Loader<A, I, Next>
+	): MappedLoader<A, I, Next>
 } = Function.dual(2, function <A, I, Message, Next>(
 	self: Loader<A, I, Message>,
 	f: (message: Message, receipt: Receipt) => Next
-): Loader<A, I, Next> {
+): MappedLoader<A, I, Next> {
 	const mapped = self as LoaderImpl<A, I, Message>
 	return new LoaderImpl(
 		self.name,

@@ -43,7 +43,7 @@ describe("Loader public types", () => {
 		const mapped = RecordLoader.pipe(Loader.mapMessages(function (data, receipt) {
 			return { _tag: "Project" as const, data, receipt }
 		}))
-		expectTypeOf(mapped).toEqualTypeOf<Loader.Loader<Data, typeof Data.Encoded, {
+		expectTypeOf(mapped).toEqualTypeOf<Loader.MappedLoader<Data, typeof Data.Encoded, {
 			_tag: "Project", data: Data, receipt: Loader.Receipt,
 		}>>()
 		const other = Loader.define({ name: "Count", data: Schema.Number, key: function () { return "count" } }).pipe(
@@ -74,6 +74,18 @@ describe("Loader public types", () => {
 		expectTypeOf(Loader.loadQuery(keyedLoader, { id: "a" })).toExtend<
 			Effect.Effect<Loader.Envelope<unknown>, Schema.SchemaError, never>
 		>()
+		const mappedKeyed = keyedLoader.pipe(
+			Loader.mapMessages(function (load) {
+				return { _tag: "Completed" as const, load }
+			})
+		)
+		// @ts-expect-error mapMessages strips Load
+		mappedKeyed.Load
+		// @ts-expect-error mapMessages strips query
+		mappedKeyed.query
+		// @ts-expect-error mapMessages strips loadQuery
+		mappedKeyed.loadQuery
+		expectTypeOf(keyedLoader.loadQuery).toBeFunction()
 
 		const query = Query.define({
 			name: "Home",
