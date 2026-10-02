@@ -3,6 +3,7 @@ import * as Foldkit from "react-foldkit"
 import * as AsyncData from "react-foldkit/asyncData"
 import * as Command from "react-foldkit/command"
 import * as CommitSource from "react-foldkit/commitSource"
+import * as Loader from "react-foldkit/loader"
 import * as Query from "react-foldkit/query"
 import * as ReactFoldkit from "react-foldkit/react"
 import * as Store from "react-foldkit/store"
@@ -29,6 +30,7 @@ describe("built package entry points", () => {
 	it("shares public error constructors across the root and subpath exports", () => {
 		expect(Foldkit.CommitSource.CommitSourceError).toBe(CommitSource.CommitSourceError)
 		expect(ReactFoldkit.CommitSourceError).toBe(CommitSource.CommitSourceError)
+		expect(Foldkit.Loader.define).toBe(Loader.define)
 		expect(Foldkit.Store.CommitError).toBe(Store.CommitError)
 		expect(Foldkit.ReactFoldkit.SubmodelProviderError).toBe(ReactFoldkit.SubmodelProviderError)
 

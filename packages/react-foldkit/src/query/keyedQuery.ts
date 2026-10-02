@@ -14,12 +14,14 @@ import {
 	type FoldLens,
 	type KeyedArgs,
 	type KeyedSettle,
+	type KeyedSettleIf,
 	type LiftConfig,
 	type LiftKeyedQuery,
 	type Lifted,
 	type ParentKeyFoldConfig,
 	type Policy,
 	type SettledFetchOf,
+	type SettleIfOptions,
 	allocateRequestId,
 	applyPolicy,
 	completeCancel,
@@ -30,6 +32,7 @@ import {
 	runExecute,
 	sameRequest,
 	settleSlot,
+	shouldSettle,
 } from "./internal"
 
 export type SyncFields = {
@@ -111,6 +114,9 @@ export interface KeyedQuery<
 	R = never,
 	Interrupt extends boolean = false,
 > {
+	readonly name: Name
+	readonly Args: Schema.Struct<Fields>
+	readonly toKey: (args: KeyedArgs<Fields>) => string
 	readonly Model: KeyedQueryModel<A, AI, E, EI, Fields>
 	readonly Message: KeyedQueryMessage<A, AI, E, EI, Fields>
 	readonly Fetch: Interrupt extends true
@@ -184,6 +190,14 @@ export interface KeyedQuery<
 	>
 	/** Installs Success/Failure for one slot without fetching or changing siblings. */
 	readonly settle: KeyedSettle<
+		KeyedQueryModel<A, AI, E, EI, Fields>["Type"],
+		KeyedQueryMessage<A, AI, E, EI, Fields>["Type"],
+		KeyedArgs<Fields>,
+		A,
+		E
+	>
+	/** Settles only when Success is fresher or Failure hits an empty non-pending slot. */
+	readonly settleIf: KeyedSettleIf<
 		KeyedQueryModel<A, AI, E, EI, Fields>["Type"],
 		KeyedQueryMessage<A, AI, E, EI, Fields>["Type"],
 		KeyedArgs<Fields>,
@@ -451,6 +465,18 @@ export function defineKeyedQuery<Name extends string, A, AI, E, EI, Fields exten
 		slots: HashMap.empty(),
 	})
 	const read = (model: Model, args: Args): SlotState => store.read(model, args)
+	const settleIf: KeyedSettleIf<Model, Message, Args, A, E> = Function.dual(
+		4,
+		function (
+			model: Model,
+			args: Args,
+			result: AsyncData.AsyncData<A, E>,
+			options: SettleIfOptions<A, E>
+		): Update.Return<Model, Message> {
+			if (!shouldSettle(read(model, args), result, options)) return { model }
+			return settle(model, args, result)
+		}
+	)
 
 	function liftSettle<ParentModel, ParentMessage>(
 		lens: FoldLens<ParentModel, ParentMessage, Model, Message>
@@ -465,11 +491,41 @@ export function defineKeyedQuery<Name extends string, A, AI, E, EI, Fields exten
 		)
 	}
 
+	function liftSettleIf<ParentModel, ParentMessage>(
+		lens: FoldLens<ParentModel, ParentMessage, Model, Message>
+	): KeyedSettleIf<ParentModel, ParentMessage, Args, A, E> {
+		const fold = Update.foldChild({
+			...lens,
+			update: function (
+				model: Model,
+				input: {
+					readonly args: Args
+					readonly result: AsyncData.AsyncData<A, E>
+					readonly options: SettleIfOptions<A, E>
+				}
+			) {
+				return settleIf(model, input.args, input.result, input.options)
+			},
+		})
+		return Function.dual(
+			4,
+			function (
+				model: ParentModel,
+				args: Args,
+				result: AsyncData.AsyncData<A, E>,
+				options: SettleIfOptions<A, E>
+			) {
+				return fold(model, { args, result, options })
+			}
+		)
+	}
+
 	const liftFromLens = <ParentModel, ParentMessage>(
 		foldConfig: FoldLens<ParentModel, ParentMessage, Model, Message>
 	) => ({
 		fold: Update.foldChild({ update, ...foldConfig }),
 		settle: liftSettle(foldConfig),
+		settleIf: liftSettleIf(foldConfig),
 		revalidate: foldChildFromPolicy(revalidate, foldConfig),
 		revalidateOrLoad: foldChildFromPolicy(revalidateOrLoad, foldConfig),
 		loadIfMissing: foldChildFromPolicy(loadIfMissing, foldConfig),
@@ -527,6 +583,9 @@ export function defineKeyedQuery<Name extends string, A, AI, E, EI, Fields exten
 	const run = (args: Args): Effect.Effect<SlotState, never, R> => runExecute(config.execute(args))
 
 	return {
+		name: config.name,
+		Args,
+		toKey,
 		Model,
 		Message,
 		Fetch,
@@ -534,6 +593,7 @@ export function defineKeyedQuery<Name extends string, A, AI, E, EI, Fields exten
 		read,
 		update,
 		settle,
+		settleIf,
 		revalidate,
 		revalidateOrLoad,
 		loadIfMissing,

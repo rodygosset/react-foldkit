@@ -1,6 +1,7 @@
 export * as AsyncData from "foldkit/asyncData"
 export * as Command from "foldkit/command"
 export * as CommitSource from "./commitSource"
+export * as Loader from "./loader"
 export * as Message from "./message"
 export * as Query from "./query"
 export * as ReactFoldkit from "./react"

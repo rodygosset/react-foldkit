@@ -57,6 +57,25 @@ describe("Query.settle", () => {
 		expect(single.read(current.model)).toEqual(AsyncData.Success({ data: "new" }))
 	})
 
+	it("settleIf installs fresher Success and empty Failure only", () => {
+		const always = function () {
+			return true
+		}
+		const differs = function (incoming: string, current: string) {
+			return incoming !== current
+		}
+		const empty = single.init("home")
+		expect(single.settleIf(empty, failure, { fresher: always }).model.data).toEqual(failure)
+		const known = single.settle(empty, external).model
+		expect(single.settleIf(known, failure, { fresher: always }).model).toBe(known)
+		expect(
+			single.settleIf(known, AsyncData.Success({ data: "newer" }), { fresher: differs }).model.data
+		).toEqual(AsyncData.Success({ data: "newer" }))
+		expect(single.settleIf(known, AsyncData.Success({ data: "external" }), { fresher: differs }).model).toBe(known)
+		const pending = single.revalidate(known).model
+		expect(single.settleIf(pending, failure, { fresher: always }).model).toBe(pending)
+	})
+
 	it("uses AsyncData's last-good-data policy and leaves non-outcomes inert", () => {
 		const empty = single.init("home")
 		expect(single.read(single.settle(empty, failure).model)).toEqual(failure)

@@ -1,7 +1,8 @@
 import type { AnyRouter } from "@tanstack/react-router"
 import type { Readable } from "@tanstack/react-store"
 import { HashMap, Option, Predicate, Result, Schema } from "effect"
-import type { CommitEntry, CommitSource, Declaration } from "./commitSource"
+import type { CommitEntry, CommitSource } from "./commitSource"
+import type { Declaration } from "./loader"
 import { EnvelopeHeader } from "./internal/loader-envelope"
 
 // The tested router exposes Readable at runtime but omits the React-store augmentation.

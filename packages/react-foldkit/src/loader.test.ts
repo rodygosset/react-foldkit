@@ -2,20 +2,22 @@
 
 import { Context, Deferred, Effect, Layer, ManagedRuntime, Result, Schema } from "effect"
 import { afterEach, describe, expect, it, vi } from "vitest"
-import * as CommitSource from "./commitSource"
+import * as AsyncData from "./asyncData"
+import * as Loader from "./loader"
+import * as Query from "./query"
 
 const Data = Schema.Struct({ id: Schema.String, at: Schema.DateFromString })
 type Data = typeof Data.Type
 const data: Data = { id: "a", at: new Date("2026-10-01T12:00:00Z") }
-const Loader = CommitSource.define({ name: "Record", data: Data, key: ({ id }) => id })
+const RecordLoader = Loader.define({ name: "Record", data: Data, key: function ({ id }) { return id } })
 
 afterEach(() => vi.restoreAllMocks())
 
-describe("CommitSource declarations", () => {
+describe("Loader declarations", () => {
 	it("loads lazily, encodes native Schema values, and allocates one token per execution", () => {
 		const tokens = vi.spyOn(crypto, "randomUUID")
 		const input = vi.fn(() => data)
-		const program = Loader.load(Effect.sync(input))
+		const program = RecordLoader.load(Effect.sync(input))
 		expect(input).not.toHaveBeenCalled()
 		expect(tokens).not.toHaveBeenCalled()
 		const first = Effect.runSync(program)
@@ -24,38 +26,36 @@ describe("CommitSource declarations", () => {
 		expect(first.version).not.toBe(second.version)
 		expect(input).toHaveBeenCalledTimes(2)
 		expect(tokens).toHaveBeenCalledTimes(2)
-		expect(Loader.decode(first)).toEqual(data)
-		expect(Loader.decode(JSON.parse(JSON.stringify(first)))).toEqual(data)
+		expect(RecordLoader.decode(first)).toEqual(data)
+		expect(RecordLoader.decode(JSON.parse(JSON.stringify(first)))).toEqual(data)
 		expect(tokens).toHaveBeenCalledTimes(2)
 	})
 
-	it("composes local and root mapping with unchanged receipt and loading identity", () => {
-		const local = CommitSource.define({
-			name: "Record",
-			data: Data,
-			key: ({ id }) => id,
-			toMessage: (data, receipt) => ({ _tag: "Loaded" as const, data, receipt }),
-		})
-		const root = local.pipe(
-			CommitSource.mapMessages((message, receipt) => ({ message, receipt })),
-			CommitSource.mapMessages((message, receipt) => ({ _tag: "Root" as const, ...message, latest: receipt }))
+	it("supports dual Loader.load and composes mapMessages with unchanged receipt identity", () => {
+		const root = RecordLoader.pipe(
+			Loader.mapMessages(function (message, receipt) {
+				return { message, receipt }
+			}),
+			Loader.mapMessages(function (message, receipt) {
+				return { _tag: "Root" as const, ...message, latest: receipt }
+			})
 		)
-		const envelope = Effect.runSync(root.load(Effect.succeed(data)))
+		const envelope = Effect.runSync(Loader.load(root, Effect.succeed(data)))
 		const message = root.decode(envelope)
-		expect(root.load).toBe(local.load)
-		expect(root.data).toBe(local.data)
+		expect(root.load).toBe(RecordLoader.load)
+		expect(root.data).toBe(RecordLoader.data)
 		expect(message.receipt).toEqual({ name: "Record", key: "a", version: envelope.version })
 		expect(message.latest).toBe(message.receipt)
-		expect(message.message.receipt).toBe(message.receipt)
-		expect(Schema.decodeUnknownSync(CommitSource.Receipt)(message.receipt)).toEqual(message.receipt)
+		expect(message.message).toEqual(data)
+		expect(Schema.decodeUnknownSync(Loader.Receipt)(message.receipt)).toEqual(message.receipt)
 	})
 
 	it("preserves input failures and encoding failures without allocating tokens", () => {
 		const tokens = vi.spyOn(crypto, "randomUUID")
-		expect(Effect.runSync(Effect.result(Loader.load(Effect.fail("unavailable"))))).toEqual(
+		expect(Effect.runSync(Effect.result(RecordLoader.load(Effect.fail("unavailable"))))).toEqual(
 			Result.fail("unavailable")
 		)
-		const invalid = Loader.load(Effect.succeed({ ...data, at: new Date(NaN) }))
+		const invalid = RecordLoader.load(Effect.succeed({ ...data, at: new Date(NaN) }))
 		const result = Effect.runSync(Effect.result(invalid))
 		expect(result._tag).toBe("Failure")
 		if (result._tag === "Failure") expect(Schema.isSchemaError(result.failure)).toBe(true)
@@ -63,36 +63,66 @@ describe("CommitSource declarations", () => {
 	})
 
 	it("rejects resource keys that do not match the decoded payload", () => {
-		const envelope = Effect.runSync(Loader.load(Effect.succeed(data)))
-		expect(() => Loader.decode({ ...envelope, key: "another-resource" })).toThrow(/resource key/)
+		const envelope = Effect.runSync(RecordLoader.load(Effect.succeed(data)))
+		expect(() => RecordLoader.decode({ ...envelope, key: "another-resource" })).toThrow(/resource key/)
 	})
 })
 
-class Reader extends Context.Service<Reader, { readonly read: Effect.Effect<Data> }>()("CommitSourceTest/Reader") {}
+describe("Loader.defineFromQuery", () => {
+	const query = Query.define({
+		name: "Project",
+		args: { projectId: Schema.String },
+		toKey: function ({ projectId }) {
+			return projectId
+		},
+		data: Schema.Struct({ id: Schema.String, revision: Schema.Number }),
+		error: Schema.String,
+		execute: function ({ projectId }) {
+			return Effect.succeed({ id: projectId, revision: 1 })
+		},
+	})
+	const ProjectLoader = Loader.defineFromQuery(query)
+
+	it("derives Load schema and key from the Query", () => {
+		const result = AsyncData.Success({ data: { id: "p1", revision: 1 } })
+		const envelope = Effect.runSync(Loader.loadQuery(ProjectLoader, query, { projectId: "p1" }))
+		expect(envelope.name).toBe("Project")
+		expect(envelope.key).toBe("p1")
+		expect(ProjectLoader.decode(envelope)).toEqual({ projectId: "p1", result })
+		expect(Schema.decodeUnknownSync(ProjectLoader.Load)({ projectId: "p1", result })).toEqual({
+			projectId: "p1",
+			result,
+		})
+	})
+})
+
+class Reader extends Context.Service<Reader, { readonly read: Effect.Effect<Data> }>()("LoaderTest/Reader") {}
 
 describe("host-owned Effect execution", () => {
 	it("acquires services lazily, reuses them within a runtime, and isolates requests", async () => {
 		let acquired = 0
 		let released = 0
-		const runtime = (id: string) =>
-			ManagedRuntime.make(
+		const runtime = function (id: string) {
+			return ManagedRuntime.make(
 				Layer.effect(
 					Reader,
 					Effect.acquireRelease(
-						Effect.sync(() => {
+						Effect.sync(function () {
 							acquired += 1
 							return { read: Effect.succeed({ ...data, id }) }
 						}),
-						() =>
-							Effect.sync(() => {
+						function () {
+							return Effect.sync(function () {
 								released += 1
 							})
+						}
 					)
 				)
 			)
+		}
 		const first = runtime("first")
 		const second = runtime("second")
-		const program = Loader.load(Effect.flatMap(Reader, (reader) => reader.read))
+		const program = RecordLoader.load(Effect.flatMap(Reader, function (reader) { return reader.read }))
 		expect(acquired).toBe(0)
 		try {
 			expect((await first.runPromise(program)).key).toBe("first")
@@ -114,11 +144,11 @@ describe("host-owned Effect execution", () => {
 		const runtime = ManagedRuntime.make(
 			Layer.effect(
 				Reader,
-				Effect.acquireRelease(Effect.succeed({ read: Effect.succeed(data) }), () =>
-					Effect.sync(() => {
+				Effect.acquireRelease(Effect.succeed({ read: Effect.succeed(data) }), function () {
+					return Effect.sync(function () {
 						released = true
 					})
-				)
+				})
 			)
 		)
 		const input = Effect.gen(function* () {
@@ -126,24 +156,28 @@ describe("host-owned Effect execution", () => {
 			yield* Deferred.succeed(started, undefined)
 			return yield* Effect.never
 		}).pipe(
-			Effect.onInterrupt(() =>
-				Effect.sync(() => {
+			Effect.onInterrupt(function () {
+				return Effect.sync(function () {
 					interrupted = true
 				})
-			)
+			})
 		)
 		const controller = new AbortController()
 		try {
-			const result = runtime.runPromise(Loader.load(input), { signal: controller.signal })
+			const result = runtime.runPromise(RecordLoader.load(input), { signal: controller.signal })
 			const rejected = expect(result).rejects.toBeDefined()
 			await Effect.runPromise(Deferred.await(started))
 			controller.abort()
 			await rejected
 			expect(interrupted).toBe(true)
 			expect(released).toBe(false)
-			expect((await runtime.runPromise(Loader.load(Effect.flatMap(Reader, (reader) => reader.read)))).key).toBe(
-				"a"
-			)
+			expect(
+				(
+					await runtime.runPromise(
+						RecordLoader.load(Effect.flatMap(Reader, function (reader) { return reader.read }))
+					)
+				).key
+			).toBe("a")
 		} finally {
 			await runtime.dispose()
 		}
@@ -154,7 +188,7 @@ describe("host-owned Effect execution", () => {
 		const runtime = ManagedRuntime.make(Layer.effect(Reader, Effect.fail("initialization failed")))
 		try {
 			await expect(
-				runtime.runPromise(Loader.load(Effect.flatMap(Reader, (reader) => reader.read)))
+				runtime.runPromise(RecordLoader.load(Effect.flatMap(Reader, function (reader) { return reader.read })))
 			).rejects.toThrow(/initialization failed/)
 		} finally {
 			await runtime.dispose()

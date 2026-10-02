@@ -17,6 +17,7 @@ import {
 	type Lifted,
 	type ParentKeyFoldConfig,
 	type SettledFetchOf,
+	type SettleIfOptions,
 	allocateRequestId,
 	applyPolicy,
 	completeCancel,
@@ -27,6 +28,7 @@ import {
 	runExecute,
 	sameRequest,
 	settleSlot,
+	shouldSettle,
 } from "./internal"
 
 export type QueryConfig<Name extends string, A, AI, E, EI, R> = Readonly<{
@@ -70,6 +72,7 @@ export type QueryModel<A, AI, E, EI> = ReturnType<typeof makeQueryModel<A, AI, E
 
 /** Single-slot remote-data Submodel. Read its `AsyncData` with `read`. */
 export interface Query<Name extends string, A, AI, E, EI, R = never, Interrupt extends boolean = false> {
+	readonly name: Name
 	readonly Model: QueryModel<A, AI, E, EI>
 	readonly Message: QueryMessage<A, AI, E, EI>
 	readonly Fetch: Interrupt extends true
@@ -114,6 +117,18 @@ export interface Query<Name extends string, A, AI, E, EI, R = never, Interrupt e
 		QueryMessage<A, AI, E, EI>["Type"],
 		AsyncData.AsyncData<A, E>
 	>
+	/** Settles only when Success is fresher or Failure hits an empty non-pending slot. */
+	readonly settleIf: {
+		(
+			model: QueryModel<A, AI, E, EI>["Type"],
+			result: AsyncData.AsyncData<A, E>,
+			options: SettleIfOptions<A, E>
+		): Update.Return<QueryModel<A, AI, E, EI>["Type"], QueryMessage<A, AI, E, EI>["Type"]>
+		(
+			result: AsyncData.AsyncData<A, E>,
+			options: SettleIfOptions<A, E>
+		): Update.Step<QueryModel<A, AI, E, EI>["Type"], QueryMessage<A, AI, E, EI>["Type"]>
+	}
 	readonly lift: LiftQuery<QueryModel<A, AI, E, EI>["Type"], QueryMessage<A, AI, E, EI>["Type"], R, A, E>
 	readonly watchSubscription: <ParentModel, ParentMessage>(
 		entry: Subscription.EntryBuilder<ParentModel, ParentMessage, R>,
@@ -286,6 +301,17 @@ export function defineQuery<Name extends string, A, AI, E, EI, R>(config: QueryC
 		data: AsyncData.Idle(),
 	})
 	const read = (model: Model): AsyncData.AsyncData<A, E> => model.data
+	const settleIf = Function.dual(
+		3,
+		function (
+			model: Model,
+			result: AsyncData.AsyncData<A, E>,
+			options: SettleIfOptions<A, E>
+		): Update.Return<Model, Message> {
+			if (!shouldSettle(read(model), result, options)) return { model }
+			return settle(model, result)
+		}
+	)
 
 	const watchQuerySubscription = <ParentModel, ParentMessage>(
 		entry: Subscription.EntryBuilder<ParentModel, ParentMessage, R>,
@@ -305,29 +331,49 @@ export function defineQuery<Name extends string, A, AI, E, EI, R>(config: QueryC
 
 	const liftFromLens = <ParentModel, ParentMessage>(
 		foldConfig: FoldLens<ParentModel, ParentMessage, Model, Message>
-	) => ({
-		fold: Update.foldChild({ update, ...foldConfig }),
-		settle: foldChildFromPolicy(settle, foldConfig),
-		revalidate: Update.foldChildStep({
-			update: revalidate,
+	) => {
+		const foldSettleIf = Update.foldChild({
 			...foldConfig,
-		}),
-		revalidateOrLoad: Update.foldChildStep({
-			update: revalidateOrLoad,
-			...foldConfig,
-		}),
-		loadIfMissing: Update.foldChildStep({
-			update: loadIfMissing,
-			...foldConfig,
-		}),
-		replace: Update.foldChildStep({ update: replace, ...foldConfig }),
-		watch: Update.foldChildStep({ update: watch, ...foldConfig }),
-		forget: Update.foldChildStep({ update: forget, ...foldConfig }),
-		watchSubscription: (
-			entry: Subscription.EntryBuilder<ParentModel, ParentMessage, R>,
-			modelToIsWatching: (model: ParentModel) => boolean
-		) => watchQuerySubscription(entry, foldConfig.toParentMessage, modelToIsWatching),
-	})
+			update: function (
+				model: Model,
+				input: {
+					readonly result: AsyncData.AsyncData<A, E>
+					readonly options: SettleIfOptions<A, E>
+				}
+			) {
+				return settleIf(model, input.result, input.options)
+			},
+		})
+		return {
+			fold: Update.foldChild({ update, ...foldConfig }),
+			settle: foldChildFromPolicy(settle, foldConfig),
+			settleIf: Function.dual(
+				3,
+				function (model: ParentModel, result: AsyncData.AsyncData<A, E>, options: SettleIfOptions<A, E>) {
+					return foldSettleIf(model, { result, options })
+				}
+			),
+			revalidate: Update.foldChildStep({
+				update: revalidate,
+				...foldConfig,
+			}),
+			revalidateOrLoad: Update.foldChildStep({
+				update: revalidateOrLoad,
+				...foldConfig,
+			}),
+			loadIfMissing: Update.foldChildStep({
+				update: loadIfMissing,
+				...foldConfig,
+			}),
+			replace: Update.foldChildStep({ update: replace, ...foldConfig }),
+			watch: Update.foldChildStep({ update: watch, ...foldConfig }),
+			forget: Update.foldChildStep({ update: forget, ...foldConfig }),
+			watchSubscription: (
+				entry: Subscription.EntryBuilder<ParentModel, ParentMessage, R>,
+				modelToIsWatching: (model: ParentModel) => boolean
+			) => watchQuerySubscription(entry, foldConfig.toParentMessage, modelToIsWatching),
+		}
+	}
 
 	function lift<ParentModel, ParentMessage>(
 		config: ParentKeyFoldConfig<ParentModel, ParentMessage, Model, Message>
@@ -352,6 +398,7 @@ export function defineQuery<Name extends string, A, AI, E, EI, R>(config: QueryC
 	const run = runExecute(config.execute)
 
 	return {
+		name: config.name,
 		Model,
 		Message,
 		Fetch,
@@ -359,6 +406,7 @@ export function defineQuery<Name extends string, A, AI, E, EI, R>(config: QueryC
 		read,
 		update,
 		settle,
+		settleIf,
 		revalidate,
 		revalidateOrLoad,
 		loadIfMissing,

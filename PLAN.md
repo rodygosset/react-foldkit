@@ -12,7 +12,8 @@ Implemented:
 - Child view bindings through `defineSubmodel`, `useSubmodel`, and
   `useOptionalSubmodel`, plus `SubmodelProvider`.
 - `Query.settle`, lifted forms, and request-specific Fetch interruption.
-- Loader declarations, Message mapping, and the optional TanStack adapter.
+- Loader module (`define`, `defineFromQuery`, dual `load` / `loadQuery`, `mapMessages`),
+  `Query.settleIf`, protocol-only `CommitSource`, and the optional TanStack adapter.
 
 Earlier validation: 177 package tests, two Chromium tests, package/workspace
 typechecks, declaration build, and emitted API checks. See
