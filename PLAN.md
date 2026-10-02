@@ -1,56 +1,49 @@
-# Atom gaps: implementation plan
+# ReactFoldkit plan
 
-Goal: keep one app-wide Foldkit Model and Provider while allowing independently
-defined submodels and TanStack route loader data to appear on a page's first
-render. The agreed API sketches are in `REACT_SUBMODEL_API_SPEC.md` and
-`ROUTE_LOADER_API_SPEC.md`. Both are proposals; no implementation is present.
+One root Model holds application state. Child Providers read it through
+projections; external data arrives as Messages.
 
-## 1. Prove the route handoff first
+## Status
 
-Build a minimal integration fixture with the real TanStack Router and
-ReactFoldkit store. Record the Model read by the destination component on its
-**first render**, not just the final DOM. Verify a completed loader result is
-visible there after client navigation, including with a busy store queue.
-Verify preloads, canceled navigations, revalidation, and repeated matches do
-not commit the wrong result. In an SSR/hydration fixture, verify server HTML,
-the first client Model, and the first client render agree after loader data is
-serialized and restored. Use a fresh router and store per server request.
+Implemented:
 
-Test whether `onBeforeRouteMount` plus a synchronous Message transition
-actually supplies the required boundary. If it does not, revise the boundary
-before implementing public APIs. Do not use a page effect, render-time store
-mutation, or `<Seed />` for this handoff.
+- Synchronous `Store.commit`, `useCommit`, and generic `useCommitSource`.
+- Optional `Provider commitSource` for bootstrap and later deliveries.
+- Child view bindings through `defineSubmodel`, `useSubmodel`, and
+  `useOptionalSubmodel`, plus `SubmodelProvider`.
+- `Query.settle`, lifted forms, and request-specific Fetch interruption.
+- Loader declarations, Message mapping, and the optional TanStack adapter.
 
-## 2. Implement the ReactFoldkit and Query APIs
+Earlier validation: 177 package tests, two Chromium tests, package/workspace
+typechecks, declaration build, and emitted API checks. See
+[commit/source validation](COMMIT_SOURCE_VALIDATION.md) and
+[route validation](ROUTE_LOADER_VALIDATION.md).
 
-- Add child-first `ReactFoldkit.defineSubmodel`: an independent child definition
-  with typed `Scope`, `useModel`, and `useDispatch`. `Scope` is view context only;
-  the app's single Provider owns all state, update, and Commands. Preserve
-  ordinary `Update.foldChild` composition and handle optional/keyed children.
-- Add `query.settle(model, result)` and
-  `keyedQuery.settle(model, args, result)`, plus matching `query.lift(...).settle`
-  steps. They take the current public `AsyncData` type; Success/Failure settle
-  the slot, invalidate older Fetches, and optionally interrupt a pending Fetch.
-  Other states leave the slot unchanged. Reuse `query.Model.fields.data` as the
-  Message field Schema; do not add a duplicate schema.
-- Add only the host-level synchronous Message-delivery primitive proved by
-  step 1 (provisionally `useCommit`). Specify ordering against queued Messages
-  and preserve the normal `update`/Command path. Keep router-specific mapping
-  in app code. Initial loader data enters through `Provider init`; later route
-  data enters as an app Message. The app owns the route Message envelope.
+The [composition spec](COMMIT_SOURCE_COMPOSITION_SPEC.md) replaces the app-owned
+adapter design in [the route-loader spec](ROUTE_LOADER_API_SPEC.md).
 
-## 3. Backport the core-worthy pieces to Foldkit
+## Contracts to preserve
 
-Backport `Query.settle` and its lifted forms to the separate Foldkit repo if
-their general value is confirmed (for example, installing the authoritative
-value returned by a save Command while an older GET is in flight). Keep React
-view hooks, Provider/store delivery, and TanStack handoff in ReactFoldkit or
-the app; they are not Foldkit core APIs. Run the relevant type and behavior
-tests in both repos and keep the public contracts aligned.
+| Area    | Contract                                                                                                                          |
+| ------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Store   | Commit drains FIFO through its own queue entry. Commands stay asynchronous; later Messages keep normal scheduling.                |
+| Source  | Synchronous snapshots, scalar tokens, delivery records kept across reconnects, and scoped cleanup.                                |
+| Views   | One root store; child Providers project it without copying state or running update.                                               |
+| Queries | External settlement invalidates older Fetches and retains good data on failure. Delayed cancellation cannot stop a newer request. |
+| Routing | Accepted loader data reaches the Model before the page renders. Preloads and canceled destinations leave it unchanged.            |
+| SSR     | Per-request state; equivalent server/hydration Models and transported delivery tokens.                                            |
 
-## Done when
+Test each adapter's delivery timing with a real router and browser scheduler.
+The tested adapter reads published matches; mount events missed revalidation.
+Page effects run too late to guarantee the first render has the data.
 
-The two route guarantees pass with real router/store integration; the search
-example typechecks using one root Provider; submodel views work under any
-parent that embeds them; Query request identity survives externally settled
-results; and the Foldkit backport contains only host-independent APIs.
+Tokens prevent duplicate delivery. Update decides whether the data is fresh
+and relevant.
+
+## Deferred Foldkit backport
+
+Consider backporting `Query.settle` and its lifted forms to Foldkit, for example
+to install a save response while an older GET is pending.
+
+Keep React bindings, store delivery, and router integration in ReactFoldkit.
+Preserve public contracts and pass behavior/type tests in both repositories.

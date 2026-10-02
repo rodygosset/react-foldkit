@@ -6,11 +6,11 @@ import { Label } from "@workspace/ui/components/label"
 import { Separator } from "@workspace/ui/components/separator"
 import { Effect, Match, Option, Result, Schema } from "effect"
 import { Trash2Icon } from "lucide-react"
-import { ReactFoldkit } from "react-foldkit"
 import * as AsyncData from "react-foldkit/asyncData"
 import * as Command from "react-foldkit/command"
 import { defineMessageUnion } from "react-foldkit/message"
-import { evo } from "react-foldkit/struct"
+import { defineApplication, defineSubmodelProjection } from "react-foldkit/react"
+import { modifyFields } from "react-foldkit/struct"
 import * as Update from "react-foldkit/update"
 import { ExampleShell } from "../../components/example-shell"
 import { getRouter } from "../../router"
@@ -68,7 +68,7 @@ function nextIdFrom(items: ReadonlyArray<TodoItem>): number {
 
 function applySettledItems(model: Model, result: Result.Result<ReadonlyArray<TodoItem>, string>): Model {
 	const items = AsyncData.settle(model.items, result)
-	return evo(model, {
+	return modifyFields(model, {
 		items: () => items,
 		nextId: () =>
 			Option.match(AsyncData.getData(items), {
@@ -82,13 +82,13 @@ function applySettledItems(model: Model, result: Result.Result<ReadonlyArray<Tod
 const withRevalidate = (model: Model, command: Update.Commands<Message, TodoRepository>[number]): UpdateReturn =>
 	Option.match(AsyncData.revalidate(model.items), {
 		onNone: () => ({ model, commands: [command] }),
-		onSome: (next) => ({ model: evo(model, { items: () => next }), commands: [command] }),
+		onSome: (next) => ({ model: modifyFields(model, { items: () => next }), commands: [command] }),
 	})
 
 const startFetch = (model: Model): UpdateReturn =>
 	Option.match(AsyncData.revalidateOrLoad(model.items), {
 		onNone: () => ({ model }),
-		onSome: (next) => ({ model: evo(model, { items: () => next }), commands: [FetchTodos()] }),
+		onSome: (next) => ({ model: modifyFields(model, { items: () => next }), commands: [FetchTodos()] }),
 	})
 
 /** Programmatic URL writes — the only place that calls `router.navigate`. */
@@ -187,17 +187,22 @@ const init = (flags: Flags): UpdateReturn => ({
 	commands: [FetchTodos()],
 })
 
+const formProjection = defineSubmodelProjection({
+	read: (parent: Model) => parent.form,
+	toParentMessage: (message: TodoForm.Message) => Message.GotFormMessage({ message }),
+})
+
 const foldForm = Update.foldChild({
 	update: TodoForm.update,
-	read: (parent: Model) => Option.some(parent.form),
-	write: (parent, form) => evo(parent, { form: () => form }),
-	toParentMessage: (childMessage) => Message.GotFormMessage({ message: childMessage }),
+	read: (parent: Model) => Option.some(formProjection.read(parent)),
+	write: (parent, form) => modifyFields(parent, { form: () => form }),
+	toParentMessage: formProjection.toParentMessage,
 	foldOutMessage: (out) => (nextModel) =>
 		Match.value(out).pipe(
 			Match.withReturnType<UpdateReturn>(),
 			Match.tagsExhaustive({
-				Submitted: ({ text }) => {
-					const withNextId = evo(nextModel, {
+				Submitted({ text }) {
+					const withNextId = modifyFields(nextModel, {
 						nextId: (nextId) => nextId + 1,
 					})
 					return withRevalidate(withNextId, AddTodo({ id: nextModel.nextId, text }))
@@ -216,11 +221,11 @@ const update = (model: Model, message: Message): UpdateReturn =>
 		NavigationDone: () => Update.identity(model),
 		SettledFetchTodos: ({ result }) => ({ model: applySettledItems(model, result) }),
 		SettledWriteTodos: ({ result }) => ({ model: applySettledItems(model, result) }),
-		SettledClearCompleted: ({ result }) => {
+		SettledClearCompleted({ result }) {
 			const next = applySettledItems(model, result)
 			if (model.filter === "completed" && Result.isSuccess(result)) {
 				return {
-					model: evo(next, { filter: () => "all" as const }),
+					model: modifyFields(next, { filter: () => "all" as const }),
 					commands: [NavigateFilter({ filter: "all" })],
 				}
 			}
@@ -228,7 +233,7 @@ const update = (model: Model, message: Message): UpdateReturn =>
 		},
 	})
 
-const { Provider, useModel, useDispatch } = ReactFoldkit.make({
+const { Provider, useModel, useDispatch, useSubmodel } = defineApplication({
 	Model,
 	update,
 	layer: TodoRepository.layer,
@@ -254,6 +259,7 @@ const visibleItems = (items: ReadonlyArray<TodoItem>, filter: Filter): ReadonlyA
 function View() {
 	const model = useModel()
 	const dispatch = useDispatch()
+	const formSource = useSubmodel(formProjection)
 
 	return (
 		<ExampleShell
@@ -261,12 +267,9 @@ function View() {
 			description="List state is AsyncData: load/refresh via Commands, settle Results back into the Model."
 		>
 			<div className="mx-auto flex w-full max-w-lg flex-1 flex-col px-6 pt-10 pb-16">
-				<TodoForm.View
-					model={model.form}
-					dispatch={function (formMessage) {
-						dispatch(Message.GotFormMessage({ message: formMessage }))
-					}}
-				/>
+				<TodoForm.Provider source={formSource}>
+					<TodoForm.View />
+				</TodoForm.Provider>
 
 				<nav
 					className="mt-6 flex flex-wrap items-center gap-2"

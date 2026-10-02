@@ -1,21 +1,10 @@
-# Third-Party Notices
+# Third-party notices
 
-This package depends on [Foldkit](https://github.com/foldkit/foldkit) `0.158.2`
-and reexports selected public Foldkit surfaces through `react-foldkit/*`.
-Foldkit remains an external regular dependency rather than being copied into
-React Foldkit's published `dist/` output.
+ReactFoldkit reexports [Foldkit](https://github.com/foldkit/foldkit) `0.164.0`:
+`asyncData`, `command`, `message`, `schema`, `struct`, `subscription`
+(`make`/`entry`), and `update` through `react-foldkit/*`.
 
-Reexported Foldkit surfaces include:
-
-- `asyncData`
-- `command`
-- `message`
-- `schema`
-- `struct`
-- `subscription` (`make` / `entry`)
-- `update`
-
-The original Foldkit license follows.
+Foldkit is an external dependency, excluded from `dist/`. Its license follows.
 
 ## Foldkit
 

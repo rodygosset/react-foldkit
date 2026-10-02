@@ -1,226 +1,242 @@
-# Route loader data in a persistent Foldkit Model (proposal)
+# External data delivery
 
-## Goal and ownership
+Implemented: commit/source APIs, `Query.settle`, and child views.
+See [validation](COMMIT_SOURCE_VALIDATION.md). The Foldkit backport is deferred.
 
-RecolnAt keeps one ReactFoldkit Provider in TanStack Router's root route. A
-page loader's result must be in the root Model **before that page's first
-render**, on the server, during hydration, and after client navigation. A
-preload for a route that is never entered must not change the Model.
+This spec records the delivery contract and earlier app-owned adapter. The
+[composition spec](COMMIT_SOURCE_COMPOSITION_SPEC.md) replaces that adapter with
+public loader declarations and a TanStack entry point. The delivery contract still applies.
 
-The feature owns its Model, Message, update, and loading Effect. The app embeds
-the feature and wraps its Messages. A route file connects its loader to the app.
-The root applies Messages from active, resolved routes without knowing which
-features produced them. ReactFoldkit and Query have no TanStack-specific API.
+## Ownership and timing
 
-## Search feature
+Accepted route data must reach the root Model before the page's first server,
+hydration, or navigation render. Preloads leave the Model untouched.
 
-The shapes below follow `Query.define`, `defineMessageUnion`, and `query.lift`
-in `apps/web/src/examples/api-cache-query/index.tsx`. Imports of RecolnAt
-domain schemas and `fetchSpecimens` stand for the corresponding feature code.
+Features define Models, Messages, updates, and loading Effects. The app embeds
+them and checks relevance/freshness. ReactFoldkit delivers Messages synchronously;
+the adapter must publish accepted data before the page renders.
+
+## Query settlement
+
+- `query.settle(model, result)` and `keyedQuery.settle(model, args, result)`
+  return service-free `Update.Return`. Both support data-last steps.
+- Success/Failure use `AsyncData.settle`; Failure keeps known data as Stale.
+  Other variants are ignored: a pending state without a Fetch would never finish.
+- Settlement advances request identity, clears the pending ID, and may interrupt
+  the old Fetch. Its request ID prevents delayed cancellation from stopping a newer Fetch.
+- `query.lift(...).settle` updates the containing Model and lifts Commands.
+- Reuse `query.Model.fields.data` or
+  `keyedQuery.Model.fields.slots.value.fields.data` for result Schemas.
+  `Query.run` produces Success/Failure in the existing public AsyncData type.
+
+For example, Search can keep its active query alongside a Query Model.
+Supply the domain Schemas and `fetchSpecimens`:
 
 ```ts
 // features/specimen-search/model.ts
 import { Effect, Option, Schema } from "effect"
 import { defineMessageUnion } from "react-foldkit/message"
 import * as Query from "react-foldkit/query"
+import { modifyFields } from "react-foldkit/struct"
 import type * as Update from "react-foldkit/update"
 
 export const searchQuery = Query.define({
-  name: "SpecimenSearch",
-  args: { query: SearchListQuery },
-  data: SpecimenSearchResponse,
-  error: Schema.String,
-  execute: ({ query }) => fetchSpecimens(query),
+	name: "SpecimenSearch",
+	args: { query: SearchListQuery },
+	data: SpecimenSearchResponse,
+	error: Schema.String,
+	execute: ({ query }) => fetchSpecimens(query),
 })
 
 export const Model = Schema.Struct({
-  activeQuery: Schema.Option(SearchListQuery),
-  results: searchQuery.Model,
+	activeQuery: Schema.Option(SearchListQuery),
+	results: searchQuery.Model,
 })
 export type Model = typeof Model.Type
 
 export const Message = defineMessageUnion({
-  GotQueryMessage: { message: searchQuery.Message },
-  LoadedFromRoute: {
-    query: SearchListQuery,
-    result: searchQuery.Model.fields.data,
-  },
+	GotQueryMessage: { message: searchQuery.Message },
+	LoadedFromRoute: {
+		query: SearchListQuery,
+		result: searchQuery.Model.fields.slots.value.fields.data,
+	},
 })
 export type Message = typeof Message.Type
 
 const resultsChild = searchQuery.lift<Model, Message>({
-  field: "results",
-  toParentMessage: (message) => Message.GotQueryMessage({ message }),
+	field: "results",
+	toParentMessage: (message) => Message.GotQueryMessage({ message }),
 })
 
 export const init = (): Model => ({
-  activeQuery: Option.none(),
-  results: searchQuery.init("specimen-search"),
+	activeQuery: Option.none(),
+	results: searchQuery.init("specimen-search"),
 })
 
-export const update = (
-  model: Model,
-  message: Message,
-): Update.Return<Model, Message> =>
-  Message.match<Update.Return<Model, Message>>(message, {
-    GotQueryMessage: ({ message }) => resultsChild.fold(model, message),
-    LoadedFromRoute: ({ query, result }) => {
-      const settled = resultsChild.settle(model, { query }, result)
-      return {
-        ...settled,
-        model: {
-          ...settled.model,
-          activeQuery: Option.some(query),
-        },
-      }
-    },
-  })
+export type Requirements = Effect.Services<ReturnType<typeof searchQuery.run>>
+type UpdateReturn = Update.Return<Model, Message, Requirements>
+
+export const update = (model: Model, message: Message): UpdateReturn =>
+	Message.match<UpdateReturn>(message, {
+		GotQueryMessage: ({ message }) => resultsChild.fold(model, message),
+		LoadedFromRoute: ({ query, result }) => {
+			const settled = resultsChild.settle(model, { query }, result)
+			return {
+				...settled,
+				model: modifyFields(settled.model, { activeQuery: () => Option.some(query) }),
+			}
+		},
+	})
 
 export const load = (query: SearchListQuery) =>
-  Effect.map(searchQuery.run({ query }), (result) =>
-    Message.LoadedFromRoute({ query, result }),
-  )
+	Effect.map(searchQuery.run({ query }), (result) => Message.LoadedFromRoute({ query, result }))
 ```
 
-`searchQuery.Model.fields.data` reuses the existing `AsyncData` Schema in the
-Query Model. No extra public result Schema is needed. The field Schema admits
-all AsyncData states, though `Query.run` produces only Success or Failure.
-The loader and Message pass through the existing public `AsyncData` type
-without local narrowing or conversion.
+Check freshness before settlement. Request IDs protect Query completions, but do
+not order loader results. The composition example checks server revisions.
 
-**Proposed `query.settle`:** a pure, no-fetch update returning
-`Update.Return<QueryModel, QueryMessage>`. It takes the public `AsyncData`
-type, handles Success and Failure using the existing `AsyncData.settle` policy,
-and invalidates an older in-flight Fetch for the same slot. Other AsyncData
-states are ignored: installing a Loading or Refreshing value without an owned
-Fetch would create a permanently pending slot. When interruption is enabled
-the transition may return an interrupt Command. Keyed and single-slot Query
-should have symmetric forms. `query.lift(...).settle` folds that return into
-the immediate parent Model and lifts any Command, like the existing policies.
-
-## App composition and route file
-
-The app's `GotSearchMessage` case folds `Search.update` using the existing
-`Update.foldChild` pattern. It embeds `Search.Model` in the app Model. The
-feature never imports this parent.
+## Source protocol
 
 ```ts
-// app/model.ts — relevant members only
-export const Model = Schema.Struct({ search: Search.Model /* other fields */ })
-export const Message = defineMessageUnion({
-  GotSearchMessage: { message: Search.Message },
-  // Other app Messages...
-})
-
-const foldSearch = Update.foldChild({
-  update: Search.update,
-  read: (model: Model) => Option.some(model.search),
-  write: (model: Model, search: Search.Model) => ({ ...model, search }),
-  toParentMessage: (message: Search.Message) =>
-    Message.GotSearchMessage({ message }),
-})
-
-// In the exhaustive App Message.match:
-GotSearchMessage: ({ message }) => foldSearch(model, message),
-```
-
-The TanStack route is app composition code, so it may wrap a feature Message
-in an app Message. Its loader returns data; it never mutates a store:
-
-```tsx
-// routes/search/index.tsx
-export const Route = createFileRoute("/search/")({
-  validateSearch: RouteSearch.pipe(Schema.toStandardSchemaV1),
-  loaderDeps: ({ search }) => search,
-  loader: async ({ deps }) => {
-    const query = RouteSearch.make(deps).toSearchListQuery()
-    const message = await appRuntime.runPromise(Search.load(query))
-    return LoadedRoute.message(
-      App.Message.GotSearchMessage({ message }),
-    )
-  },
-  component: SearchPage,
-})
-```
-
-`LoadedRoute.message` is a small **app-owned typed envelope** with an
-`appMessage` field, not a ReactFoldkit API. It gives the root a uniform way
-to extract Messages from resolved route matches. The route may return other
-page data in the same envelope. The Effect runtime call is supplied by the
-app; `appRuntime` is illustrative.
-
-## Root bootstrap and navigation
-
-The root's generic `loadedMessages(matches)` reads only the app-owned
-`LoadedRoute` envelope from *active resolved matches*. It does not switch on
-route IDs or inspect feature result types. It folds those Messages, in match
-order, through the ordinary app `update` for initial `Provider init`.
-
-```tsx
-// routes/__root.tsx — relevant parts only
-const AppStore = ReactFoldkit.make({ Model: App.Model, update: App.update })
-
-function RootLayout() {
-  const matches = useMatches()
-  const init = Update.combine(
-    App.init(),
-    loadedMessages(matches).map((message) => (model: App.Model) =>
-      App.update(model, message),
-    ),
-  )
-
-  return (
-    <AppStore.Provider init={init}>
-      <AppLayout />
-    </AppStore.Provider>
-  )
+export interface CommitEntry<Message> {
+	readonly key: string
+	readonly version: string | number
+	readonly message: Message
 }
 
-function AppLayout() {
-  useCommitNavigations()
-  return <><Header /><Outlet /><Footer /></>
+export interface CommitSource<Message> {
+	readonly getSnapshot: () => ReadonlyArray<CommitEntry<Message>>
+	readonly subscribe: (notify: () => void) => () => void
 }
 
-function useCommitNavigations() {
-  const router = useRouter()
-  const commit = AppStore.useCommit() // proposed; not currently implemented
-
-  React.useEffect(() =>
-    router.subscribe("onBeforeRouteMount", () => {
-      for (const message of loadedMessages(router.state.matches)) {
-        commit(message)
-      }
-    }),
-  [router, commit])
+export interface CommitSourceOptions<Message> {
+	readonly source: CommitSource<Message>
+	readonly initialSnapshot: ReadonlyArray<CommitEntry<Message>>
 }
 ```
 
-The root Provider persists across navigation, so later `init` props do not
-replace its Model. Initial SSR and hydration instead derive the same Model
-from TanStack's resolved, hydrated loader data. Later navigations use ordinary
-Messages. `<Seed />` is not needed for this route-loader path.
+`defineApplication` exposes `useCommitSource(options)`, typed from update's Messages.
 
-**Proposed `useCommit`:** delivers one Message through the same `update` and
-Command machinery as `useDispatch`, but guarantees that its Model transition
-has completed before returning, including when the normal drain would defer
-work. It is a host-boundary primitive, not a router API and not a Model setter.
-Commands still execute asynchronously. Its ordering against already queued
-Messages, and whether the drain budget can be bypassed at this boundary, need
-an explicit design and proof before the API is accepted.
+| Field             | Contract                                                                                      |
+| ----------------- | --------------------------------------------------------------------------------------------- |
+| `key`             | Unique within the snapshot; duplicate keys fail validation. Snapshot order is delivery order. |
+| `version`         | String/number compared with `Object.is`. Identifies a delivery, not authoritative freshness.  |
+| `message`         | Typed root Message processed through normal update/Command handling.                          |
+| `initialSnapshot` | Exact snapshot already folded into Provider init; consumed once as the delivery baseline.     |
 
-## Verification gates before implementation
+A snapshot contains active, accepted entries. Unchanged key/version pairs are
+skipped even if the Message changed. Observed removal clears the delivery record;
+cached re-entry delivers again.
 
-- Prove that TanStack's `onBeforeRouteMount` callback and a completed commit
-  make the new Model visible to the route's **first** render. If that hook
-  cannot guarantee it, choose a real pre-render router boundary; do not patch
-  over the gap with a page effect or render-time store mutation.
-- Confirm the same initial Model on server and hydrating client. Decode any
-  schema-bearing loader payload across that boundary as required.
-- Confirm preloading and canceled navigations do not commit Messages; repeated
-  matches and loader revalidation commit only according to an explicit app
-  identity/revision policy.
-- Confirm an older Query Fetch cannot overwrite settled loader data, and
-  define how pending Fetch interruption works.
+Reconnects compare the latest snapshot with delivery records. Missed values and
+identical removal/re-entry while disconnected are unobservable; change the token
+to make them visible. Keep the root connection live during navigation.
 
-The earlier `REACT_SUBMODEL_API_SPEC.md` describes the complementary
-child-owned React view hooks; this spec concerns loader-to-Model delivery.
+Keep the source and hook stable beneath the persistent Provider. Connections
+start after activation, subscribe before rereading, and keep delivery records
+across Strict Mode. Deliver changes since bootstrap. A child effect can run before
+activation and lose those Messages.
+
+Notifications expose the accepted snapshot synchronously; the callback commits
+its Messages. Reconnecting later cannot fix an earlier render. Cleanup disables
+callbacks; SSR does not subscribe.
+
+## Tested TanStack adapter
+
+The earlier fixture adapter read successful published matches and decoded an
+app-owned envelope:
+
+```ts
+// app/router/commit-source.ts
+import type { AnyRouter } from "@tanstack/react-router"
+import type { CommitSource } from "react-foldkit/react"
+
+export function makeTanStackSource(router: AnyRouter): CommitSource<App.Message> {
+	return {
+		getSnapshot: () =>
+			router.stores.matches.get().flatMap((match) => {
+				if (match.status !== "success") return []
+				const envelope = LoadedRoute.read(match.loaderData)
+				return Option.match(envelope, {
+					onNone: () => [],
+					onSome: ({ version, appMessage }) => [
+						{
+							key: match.id,
+							version,
+							message: appMessage,
+						},
+					],
+				})
+			}),
+		subscribe: (notify) => {
+			const subscription = router.stores.matches.subscribe(() => notify())
+			return () => subscription.unsubscribe()
+		},
+	}
+}
+```
+
+`LoadedRoute.read` ignores unrelated data and rejects malformed recognized envelopes.
+The loader allocates one serializable token, preserved through caching and SSR.
+Reads/renders reuse it; preloads create envelopes without delivering them.
+
+The tested client store had `subscribe` but needed this local type augmentation:
+
+```ts
+// app/router/tanstack-store-types.d.ts
+import type { Readable } from "@tanstack/react-store"
+import type {} from "@tanstack/router-core"
+
+declare module "@tanstack/router-core" {
+	interface RouterReadableStore<TValue> extends Readable<TValue> {}
+}
+```
+
+The server store is nonreactive. The public adapter now owns router compatibility.
+Mount events missed revalidation; test other adapters' timing with real routers.
+
+## Bootstrap
+
+Prefer `Provider commitSource`. It validates and folds the initial snapshot through
+update, preserves Commands, supplies the populated Model to SSR/hydration, and
+connects after activation.
+
+For manual connections, capture the snapshot once, fold it into init with its
+Commands, and pass it to `useCommitSource({ source, initialSnapshot })`.
+Do not connect the same source through both prop and hook.
+
+Server/client sources need equivalent initial data and tokens. Keep the Provider
+mounted across navigation and the source stable. Feature views read through a
+projected child Provider.
+
+## Synchronous commit
+
+`store.commit(message)` and `useCommit()` return `Result<void, CommitError>`.
+`Store.commit(store, message)` is the lazy `Effect<void, CommitError>` adapter.
+
+- Success means update and store notifications completed. Rendering/Commands may follow.
+- Commit drains FIFO through its own entry, bypassing the budget for that prefix.
+  Later Messages keep normal scheduling; obsolete callbacks cannot replay work.
+- Inactive, crashed, disposed, and reentrant commits fail. Calls during update or
+  synchronous notification never enqueue; a crash before completion cannot report success.
+- Validation returns Result. Delivery failures use the Effect error channel;
+  callback exceptions are defects. Acquisition/release use connection scopes.
+- Setup notification failures wait until cleanup is acquired. The Cause keeps
+  setup/cleanup failures. At React/source callbacks, `runSync` throws the first
+  failure; `runSyncExit` keeps the full Cause. Render contract checks also throw.
+
+Commands stay asynchronous. Use dispatch for UI events; use commit when the host
+needs the updated Model before proceeding.
+
+## Coverage
+
+Source tests cover bootstrap, tokens, duplicates, ordering, removal/re-entry,
+reconnects, retries, and cleanup. Store tests cover queued work, reentrancy,
+terminal states, obsolete callbacks, and Commands.
+
+Router tests cover first renders, preloads, cancellation, cached return, Strict
+Mode, and hydration. Chromium checks native scheduling. Query tests cover old
+completions, cancellation races, sibling/optional isolation, types, and failed refresh.
+
+See [route validation](ROUTE_LOADER_VALIDATION.md) for recorded versions and limits,
+and [submodel views](REACT_SUBMODEL_API_SPEC.md) for projection composition.

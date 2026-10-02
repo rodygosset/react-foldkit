@@ -1,98 +1,183 @@
-# React Submodel View API (proposal)
+# React submodel views
 
-## Goal
+Implemented in `src/react.tsx`; TodoForm and the router fixture use this API.
 
-Let a reusable Submodel define a React view with its own `useModel` and
-`useDispatch` hooks. The Submodel must not know which parent embeds it. Each
-parent owns the child Model, wraps child Messages, and folds the child's update,
-as it does with Foldkit's `h.submodel`.
+A child defines its Model, Messages, update, and views. Parents embed it through
+Foldkit composition. Child Providers read the root store; the root runs update,
+Commands, and Subscriptions.
 
-This API is proposed, not implemented.
-
-## Example
-
-The child module defines its Model, Message, update, and view without importing
-the parent:
+## Define a child
 
 ```tsx
 // settings.tsx
-export const Settings = ReactFoldkit.defineSubmodel({
-  Model: SettingsModel,
-  Message: SettingsMessage,
-  update: updateSettings,
-})
+import { Schema } from "effect"
+import { defineMessageUnion } from "react-foldkit/message"
+import { defineSubmodel } from "react-foldkit/react"
+import { modifyFields } from "react-foldkit/struct"
+import type * as Update from "react-foldkit/update"
 
-export function SettingsView() {
-  const model = Settings.useModel()
-  const dispatch = Settings.useDispatch()
+export const Model = Schema.Struct({ draft: Schema.String })
+export type Model = typeof Model.Type
+export const Message = defineMessageUnion({ ChangedDraft: { text: Schema.String } })
+export type Message = typeof Message.Type
+export const init = (): Model => ({ draft: "" })
+export const update = (model: Model, message: Message): Update.Return<Model, Message> =>
+	Message.match(message, {
+		ChangedDraft: ({ text }) => ({ model: modifyFields(model, { draft: () => text }) }),
+	})
 
-  return (
-    <button onClick={() => dispatch(SettingsMessage.ClickedSave())}>
-      {model.label}
-    </button>
-  )
+const { useModel, useDispatch, Provider } = defineSubmodel<Model, Message>()
+export { Provider }
+
+export function View() {
+	const draft = useModel((model) => model.draft)
+	const dispatch = useDispatch()
+	return (
+		<input
+			value={draft}
+			onChange={(event) => dispatch(Message.ChangedDraft({ text: event.target.value }))}
+		/>
+	)
 }
 ```
 
-The parent embeds that child and chooses how its Messages enter the parent
-update:
+The factory takes Model and Message types. This example exports only
+`Settings.Provider`; nested children use the same projection hooks. The
+[composition example](COMMIT_SOURCE_COMPOSITION_SPEC.md) exports all standard bindings.
+
+## Connect it to a parent
 
 ```tsx
-// parent.tsx
-const foldSettings = Update.foldChild({
-  update: Settings.update,
-  read: (model: Model) => Option.some(model.settings),
-  write: (model, settings) => ({ ...model, settings }),
-  toParentMessage: (message) => Message.GotSettingsMessage({ message }),
+import { Option, Schema } from "effect"
+import { defineMessageUnion } from "react-foldkit/message"
+import { defineApplication, defineSubmodelProjection } from "react-foldkit/react"
+import * as Update from "react-foldkit/update"
+import { modifyFields } from "react-foldkit/struct"
+import * as Settings from "./settings"
+
+const Model = Schema.Struct({ settings: Settings.Model })
+type Model = typeof Model.Type
+const Message = defineMessageUnion({ GotSettingsMessage: { message: Settings.Message } })
+type Message = typeof Message.Type
+
+const settingsProjection = defineSubmodelProjection({
+	read: (model: Model) => model.settings,
+	toParentMessage: (message: Settings.Message) => Message.GotSettingsMessage({ message }),
 })
 
-const update = (model: Model, message: Message) =>
-  Message.match(message, {
-    GotSettingsMessage: ({ message }) => foldSettings(model, message),
-    // Other parent Messages are handled here.
-  })
+const foldSettings = Update.foldChild({
+	update: Settings.update,
+	read: (model: Model) => Option.some(settingsProjection.read(model)),
+	write: (model, settings) => modifyFields(model, { settings: () => settings }),
+	toParentMessage: settingsProjection.toParentMessage,
+})
+const App = defineApplication({
+	Model,
+	update: (model: Model, message: Message) =>
+		Message.match(message, {
+			GotSettingsMessage: ({ message }) => foldSettings(model, message),
+		}),
+})
 
-function ParentView() {
-  const model = Parent.useModel()
-  const dispatch = Parent.useDispatch()
-
-  return (
-    <Settings.Scope
-      model={model.settings}
-      dispatch={(message) => dispatch(Message.GotSettingsMessage({ message }))}
-    >
-      <SettingsView />
-    </Settings.Scope>
-  )
+function AppView() {
+	const source = App.useSubmodel(settingsProjection)
+	return (
+		<Settings.Provider source={source}>
+			<Settings.View />
+		</Settings.Provider>
+	)
+}
+export function Application() {
+	return (
+		<App.Provider init={{ model: { settings: Settings.init() } }}>
+			<AppView />
+		</App.Provider>
+	)
 }
 ```
 
-Another parent can render the same `SettingsView` with a different Model field
-and a different Message wrapper. A child can also embed another Submodel by
-using its own hooks as the parent hooks at the next level.
+Root and child definitions expose `useSubmodel`. It reads the store handle without
+subscribing the parent view. Keep projection functions outside components, or
+memoize them per instance. Changing a function or parent source replaces the projection.
 
-## Contract
+## Source and selectors
 
-- `defineSubmodel` creates a typed view context and exposes `Scope`, `useModel`,
-  `useDispatch`, and the child `update`. It does not create a separate store.
-- `Scope` supplies the current child Model and a child Message dispatcher to
-  descendants. It does not call update, run Commands, or change the Model.
-- `useModel` and `useDispatch` work only beneath the matching `Scope`. A clear
-  error is raised if they are used outside it.
-- The parent remains responsible for storing the child Model and using
-  `Update.foldChild` to process child Messages and lift child Commands.
-- Repeated or optional children use an identity in the parent wrapper Message.
-  The parent's `read` returns `Option.none` after removal, so late child Messages
-  do not revive a removed instance. The view mounts `Scope` only while that
-  child exists.
-- Query remains an ordinary child Submodel within this structure. Mounting a
-  `Scope` does not implicitly fetch; query demand is expressed through Model
-  transitions and Subscriptions.
+```ts
+interface ModelReader<Model> {
+	readonly getSnapshot: () => Model
+	readonly getServerSnapshot: () => Model
+	readonly subscribe: (notify: () => void) => () => void
+}
+interface ModelSource<Model, Message> extends ModelReader<Model> {
+	readonly dispatch: (message: Message) => void
+}
+```
 
-## Deferred design decisions
+| API                                      | Behavior                                                                 |
+| ---------------------------------------- | ------------------------------------------------------------------------ |
+| `useSubmodel({ read, toParentMessage })` | Infers child types; returns a source compatible with the child Provider. |
+| `Provider({ source, children? })`        | Keeps context stable while the source is unchanged.                      |
+| `useModel()`                             | Reads the whole Model using snapshot identity.                           |
+| `useModel(selector, isEqual?)`           | Infers the selection; defaults to `Equal.equals`. `undefined` is valid.  |
+| `useDispatch()`                          | Does not subscribe to Model changes.                                     |
 
-Before implementing the repeated-child form, specify how a keyed `Scope`
-reacts when its child disappears, including stale event handlers and pending
-Command results. A parent-side convenience that shares configuration between
-`Scope` and `Update.foldChild` may follow, but the child definition must remain
-independent of every parent.
+Equal selections keep their reference and skip source-driven renders. Parent,
+prop, state, and context changes can still render the component. React's selector
+helper protects committed selections from abandoned renders. New selectors and
+comparators apply on the next render.
+
+Reads must be pure. Results cache by parent snapshot identity, separately for
+live and server reads. SSR/hydration uses the initial Model; live reads use the current Model.
+
+Hooks outside their matching child Provider throw the Schema.Error
+`SubmodelProviderError`. Other Providers cannot supply that context.
+
+## Optional and keyed children
+
+`useOptionalSubmodel` takes an Option-returning read and returns
+`Option<ModelSource<ChildModel, ChildMessage>>`. Only presence changes rerender
+the connection; value changes update child consumers. Render a Provider for `Some`.
+
+```tsx
+function SettingsConnection({ instanceId }: { instanceId: string }) {
+	const projection = React.useMemo(
+		() => ({
+			read: (model: Model) =>
+				model.settings.pipe(
+					Option.filter((instance) => instance.id === instanceId),
+					Option.map((instance) => instance.model)
+				),
+			toParentMessage: (message: Settings.Message) => Message.GotSettingsMessage({ instanceId, message }),
+		}),
+		[instanceId]
+	)
+	const source = App.useOptionalSubmodel(projection)
+	return Option.match(source, {
+		onNone: () => null,
+		onSome: (source) => (
+			<Settings.Provider source={source}>
+				<Settings.View />
+			</Settings.Provider>
+		),
+	})
+}
+```
+
+Reuse the guarded read and Message lift in the parent fold. Give each recreated
+instance a fresh parent-owned ID, even for the same business key. Use it as the
+React key and to route sibling Messages.
+
+A removed child's source keeps its last Model until unmount. The parent fold
+rejects handlers and Command results carrying the old ID. Update handles
+cancellation; unmounting alone does not cancel Commands.
+
+## Coverage
+
+- `src/react.submodel.test.tsx`: real-store tests for selectors, equality,
+  allocating reads, abandoned renders, nesting/siblings, optional instances,
+  Strict Mode/Activity, Commands, OutMessages, and stale work.
+- `src/internal/model-source.test.ts`: independent live/server retention.
+- `test/types/react.submodel.test.ts`: emitted API checks with `expectTypeOf`
+  and compile-only invalid calls.
+- Router integration, SSR/hydration, and Chromium tests read through production
+  child Providers beneath one persistent root Provider.

@@ -1,6 +1,7 @@
 import { describe, it } from "@effect/vitest"
 import { Array, Effect, Fiber, Schema } from "effect"
 import { expect, vi } from "vitest"
+import { modifyFields } from "./struct"
 import * as Command from "./command"
 import {
 	CurrentInterruptRegistry as __CurrentRegistry,
@@ -268,13 +269,18 @@ describe("store interrupt registry wiring", function () {
 
 		const update = (model: Model, message: WiringMessage): UpdateReturn =>
 			WiringMessage.match<UpdateReturn>(message, {
-				Start: () => ({ model: { status: "running", outcome: null }, commands: [RunForever()] }),
+				Start: () => ({
+					model: modifyFields(model, { status: () => "running", outcome: () => null }),
+					commands: [RunForever()],
+				}),
 				Cancel: () => ({
 					model,
 					commands: [RunForever.Interrupt((outcome) => WiringMessage.GotOutcome({ tag: outcome._tag }))],
 				}),
-				Completed: () => ({ model: { status: "done", outcome: null } }),
-				GotOutcome: ({ tag }) => ({ model: { status: "cancelled", outcome: tag } }),
+				Completed: () => ({ model: modifyFields(model, { status: () => "done", outcome: () => null }) }),
+				GotOutcome: ({ tag }) => ({
+					model: modifyFields(model, { status: () => "cancelled", outcome: () => tag }),
+				}),
 			})
 
 		const store = Store.boot({ update }, { model: { status: "idle", outcome: null } })

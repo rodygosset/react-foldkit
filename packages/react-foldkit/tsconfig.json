@@ -14,11 +14,15 @@
 	"include": [
 		"src/**/*.ts",
 		"src/**/*.tsx",
+		"test/**/*.ts",
+		"test/**/*.tsx",
 		"eslint/src/**/*.ts",
 		"vitest.config.ts",
+		"vitest.browser.config.ts",
+		"vitest.package.config.ts",
 		"vitest.setup.ts",
 		"tsup.config.ts",
 		"tsup.eslint.config.ts"
 	],
-	"exclude": ["node_modules", "dist", "eslint/dist"]
+	"exclude": ["node_modules", "dist", "eslint/dist", "test/types"]
 }

@@ -2,34 +2,66 @@
 
 ## Unreleased
 
-- Backport the latest Foldkit Query lifecycle: Model instance and request IDs, stale completion rejection, direct policy functions, full-set watch reconciliation, and opt-in Fetch interruption. `init` now takes an instance ID and `read` accesses the wrapped `AsyncData`. Parent `Got*` cases use `{ message: query.Message }` with `toParentMessage` in `lift`.
-- Backport the latest `Query.HttpApi.Service.query` endpoint derivation and serializable HTTP client errors.
+### Added
 
+- Optional `Provider commitSource` applies initial Messages and connects later
+  deliveries, preserving Commands and delivery records. Manual `useCommitSource`
+  remains available.
+- `defineSubmodel<Model, Message>()`, child Providers, selectors, dispatch, and
+  root/child projections. Optional projections track presence and keep departing
+  snapshots; equal selections skip source-driven renders.
+- Synchronous `store.commit` and `useCommit` returning `Result<void, CommitError>`;
+  lazy `Store.commit(store, message)` returning `Effect<void, CommitError>`.
+  FIFO delivery, asynchronous Commands, and no enqueueing on rejection.
+- Router-independent `useCommitSource`, source/entry/options types, and
+  `CommitSourceError`. Scoped connections keep successful tokens and full
+  setup/cleanup Causes.
+- `query.settle(model, result)`, keyed/lifted forms, and data-last steps. Settlement
+  keeps good data on failure, invalidates old Fetches, and can interrupt pending
+  work without fetch services. Only Success and Failure settle the Model.
+- `Query.run` and keyed `run(args)` loading Effects. `Query.HttpApi.Service.query`
+  derives endpoint Queries and serializable HTTP errors.
+- `Store.takeWhen`, `Store.Disposed`, and the API Cache (Query) example.
 
-- Add `Query.run` (Query: settled `Effect`; KeyedQuery: `run(args) => Effect`). Remove `Query.ensure` and `lift.ensure`.
-- `ReactFoldkit.make` takes a flat `Store.Config` plus `Model: Schema.Codec`. Add `Seed` for pre-activate Model writes (`Schema.toEquivalence` skips equivalent Models). `Provider` is init-only (remove `store` / `fromLive`). `layer` is `NoInfer`'d from `update`, so `Layer.empty` is not accepted when Commands require services.
-- Add `Store.takeWhen` and `Store.Disposed`.
-- `Query.HttpApi.Service.query` returns `Query.Query` or `Query.KeyedQuery`.
-- Add the `API Cache (Query)` example next to the hand-rolled API Cache screen.
+### Changed
 
-Breaking alignment with Foldkit `0.158.2` and Effect `4.0.0-rc.112`.
+- Foldkit `0.164.0`, Effect `4.0.0-rc.117`, and Vitest 5.
+- Foldkit Query lifecycles: instance/request IDs, stale completion rejection,
+  direct policies, full-set watch, and opt-in interruption.
+- Query interrupt keys include `requestId`; delayed cancellation cannot interrupt
+  a newer Fetch. Add `CancelIntent.Settle`.
+- Root/child selectors share React's external-store helper. Child Providers take
+  projections; missing context raises `SubmodelProviderError`. The root owns state and effects.
 
-- `Update.Return` is `{ model, commands?, outMessage? }`. Empty commands are omitted; `Command.none` is gone.
-- Messages are declared with `defineMessageUnion` from `react-foldkit/message`. The `m` helper is gone.
-- Interruptible command outcomes are `Interruptible.Outcome.Interrupted()` / `NotFound()`.
-- Nested child updates use `Update.foldChild`. The `react-foldkit/submodel` export is gone.
-- Node engines are `>=20.19.0`.
+### Breaking changes
+
+- `ReactFoldkit.make` becomes `defineApplication`, also exported from
+  `react-foldkit/react`.
+- `defineApplication` takes flat `Store.Config` plus a Model Codec. Provider creates
+  the store from init; `store`/`fromLive` are removed. `NoInfer` pins Layer services
+  to update's requirements.
+- Query init requires an instance ID; read returns wrapped AsyncData. Parent
+  `Got*` cases carry `{ message: query.Message }`; lift uses `toParentMessage`.
+- Direct `Fetch.Interrupt` calls require `requestId`.
+- Remove `Query.ensure` and `lift.ensure`. HttpApi endpoint derivation returns
+  `Query.Query` or `Query.KeyedQuery`.
+- `Update.Return` is `{ model, commands?, outMessage? }`; omit empty Commands.
+  Remove `Command.none`.
+- Declare Messages with `defineMessageUnion`; remove `m`.
+- Rename `evo`/`makeConstrainedEvo` to `modifyFields`/`makeModifyFieldsFor`.
+  Use Foldkit's helpers for Model transitions and child writes.
+- Use `Update.foldChild` for nested updates; remove `react-foldkit/submodel`.
+- Interruptible outcomes use `Interruptible.Outcome.Interrupted()`/`NotFound()`.
+- Require Node `>=20.19.0`.
 
 ## 0.1.0
 
-First publishable cut of `react-foldkit`.
+First release:
 
-- React `Provider` / `useModel` / `useDispatch` over a Foldkit-style store
-  (boot barrier, drain budget, crash terminality, interrupt registry, Scope teardown)
-- Reexported Foldkit TEA surfaces: Command, Message, Update, Struct, Schema, AsyncData,
-  Subscription (`make` / `entry`)
-- ESLint presets: `react-foldkit/eslint` (`recommended` + `strict`)
-- Examples in the monorepo `apps/web`: Todo (AsyncData) and Stopwatch (Subscription)
+- React Provider, selectors, and dispatch with Foldkit boot ordering, drain budgets,
+  crash handling, interruption, and Scope teardown.
+- Foldkit Command, Message, Update, Struct, Schema, AsyncData, and Subscription exports.
+- Recommended/strict ESLint presets and Todo/Stopwatch examples.
 
-Foldkit is a regular dependency behind the `react-foldkit/*` facade; apps must
-not import it directly. See `THIRD-PARTY-NOTICES.md`.
+Import through `react-foldkit/*`. Foldkit is a regular dependency;
+see [third-party notices](./THIRD-PARTY-NOTICES.md).

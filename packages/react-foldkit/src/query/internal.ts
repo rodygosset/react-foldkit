@@ -1,24 +1,13 @@
-import { Effect, Match, Option, Predicate, Schema, pipe } from "effect"
+import { Effect, Match, Option, Predicate, Record as EffectRecord, Result, Schema, pipe } from "effect"
 
-import * as AsyncData from "../asyncData"
-import * as Command from "../command"
-import { Interruptible } from "../command"
+import * as AsyncData from "foldkit/asyncData"
+import type * as Command from "foldkit/command"
+import { Interruptible } from "foldkit/command"
 import { defineMessageUnion } from "../message"
-import { defineTaggedUnion } from "../schema"
+import { defineTaggedUnion } from "foldkit/schema"
+import { makeModifyFieldsFor } from "foldkit/struct"
 import * as Subscription from "../subscription"
 import * as Update from "../update"
-
-export function modifyFields<Model extends object>(
-	model: Model,
-	transforms: { readonly [Key in keyof Model]?: (value: Model[Key]) => Model[Key] }
-): Model {
-	const next = { ...model }
-	for (const key of Object.keys(transforms) as Array<keyof Model>) {
-		const transform = transforms[key]
-		if (transform !== undefined) next[key] = transform(model[key])
-	}
-	return next
-}
 
 export type Policy = "loadIfMissing" | "revalidate" | "revalidateOrLoad"
 
@@ -43,32 +32,28 @@ export type LiftConfig<ParentModel, ParentMessage, ChildModel, ChildMessage> =
 	| ParentKeyFoldConfig<ParentModel, ParentMessage, ChildModel, ChildMessage>
 	| FoldLens<ParentModel, ParentMessage, ChildModel, ChildMessage>
 
-export type LiftQuery<ChildModel, ChildMessage, R> = {
+export type LiftQuery<ChildModel, ChildMessage, R, A, E> = {
 	<ParentModel, ParentMessage>(
 		config: ParentKeyFoldConfig<ParentModel, ParentMessage, ChildModel, ChildMessage>
-	): Lifted.Query<ParentModel, ParentMessage, ChildMessage, R>
+	): Lifted.Query<ParentModel, ParentMessage, ChildMessage, R, A, E>
 	<ParentModel, ParentMessage>(
 		config: FoldLens<ParentModel, ParentMessage, ChildModel, ChildMessage>
-	): Lifted.Query<ParentModel, ParentMessage, ChildMessage, R>
+	): Lifted.Query<ParentModel, ParentMessage, ChildMessage, R, A, E>
 }
 
-export type LiftKeyedQuery<ChildModel, ChildMessage, Args, R> = {
+export type LiftKeyedQuery<ChildModel, ChildMessage, Args, R, A, E> = {
 	<ParentModel, ParentMessage>(
 		config: ParentKeyFoldConfig<ParentModel, ParentMessage, ChildModel, ChildMessage>
-	): Lifted.KeyedQuery<ParentModel, ParentMessage, ChildMessage, Args, R>
+	): Lifted.KeyedQuery<ParentModel, ParentMessage, ChildMessage, Args, R, A, E>
 	<ParentModel, ParentMessage>(
 		config: FoldLens<ParentModel, ParentMessage, ChildModel, ChildMessage>
-	): Lifted.KeyedQuery<ParentModel, ParentMessage, ChildMessage, Args, R>
+	): Lifted.KeyedQuery<ParentModel, ParentMessage, ChildMessage, Args, R, A, E>
 }
 
 export const isParentKeyFoldConfig = <ParentModel, ParentMessage, ChildModel, ChildMessage>(
 	config: LiftConfig<ParentModel, ParentMessage, ChildModel, ChildMessage>
 ): config is Extract<LiftConfig<ParentModel, ParentMessage, ChildModel, ChildMessage>, { readonly field: string }> =>
 	Predicate.hasProperty(config, "field")
-
-function setField<O extends Record<K, V>, K extends string, V>(model: O, key: K, value: V): O {
-	return { ...model, [key]: value }
-}
 
 export function parentKeyToLens<
 	ParentModel extends Record<FieldOf<ParentModel, ChildModel>, ChildModel>,
@@ -78,12 +63,16 @@ export function parentKeyToLens<
 >(
 	config: ParentKeyFoldConfig<ParentModel, ParentMessage, ChildModel, ChildMessage>
 ): FoldLens<ParentModel, ParentMessage, ChildModel, ChildMessage> {
+	const modifyParentFields = makeModifyFieldsFor<Record<FieldOf<ParentModel, ChildModel>, ChildModel>>()
 	return {
 		read: function (model: ParentModel) {
 			return Option.some(model[config.field])
 		},
 		write: function (model: ParentModel, nextChild: ChildModel) {
-			return setField(model, config.field, nextChild)
+			return modifyParentFields(
+				model,
+				EffectRecord.singleton(config.field, () => nextChild)
+			)
 		},
 		toParentMessage: config.toParentMessage,
 	}
@@ -107,6 +96,7 @@ export const FetchInterruptOutcome = defineMessageUnion({
 export const CancelIntent = defineTaggedUnion({
 	Replace: {},
 	Forget: {},
+	Settle: {},
 })
 
 /** Reason carried by a completed Query Fetch cancellation. */
@@ -156,11 +146,38 @@ export type CacheStore<Model, Args, A, E, Message, R> = Readonly<{
 		data: AsyncData.AsyncData<A, E>
 	) => Readonly<{ model: Model; request: RequestIdentity }>
 	isCurrent: (model: Model, args: Args, request: RequestIdentity) => boolean
+	settle: (model: Model, args: Args, data: AsyncData.AsyncData<A, E>) => Model
 	load: (args: Args, request: RequestIdentity) => Command.Command<Message, never, R>
 	interrupt:
-		| ((model: Model, args: Args, intent: CancelIntent) => Option.Option<Command.Command<Message, never, R>>)
-		| undefined
+		((model: Model, args: Args, intent: CancelIntent) => Option.Option<Command.Command<Message, never>>) | undefined
 }>
+
+/** Installs an external outcome without fetching; all other AsyncData states are inert. */
+export function settleSlot<Model, Args, A, E, Message, R>(
+	store: CacheStore<Model, Args, A, E, Message, R>,
+	model: Model,
+	args: Args,
+	data: AsyncData.AsyncData<A, E>
+): Update.Return<Model, Message> {
+	const settle = (result: Result.Result<A, E>): Update.Return<Model, Message> => {
+		const settled = store.settle(model, args, AsyncData.settle(store.read(model, args), result))
+		return Option.match(store.interrupt?.(model, args, CancelIntent.Settle()) ?? Option.none(), {
+			onNone: () => ({ model: settled }),
+			onSome: (command) => ({ model: settled, commands: [command] }),
+		})
+	}
+	return Match.value(data).pipe(
+		Match.tag("Success", ({ data }) => settle(Result.succeed(data))),
+		Match.tag("Failure", ({ error }) => settle(Result.fail(error))),
+		Match.orElse(() => ({ model }))
+	)
+}
+
+/** A keyed settlement can also be used as a data-last Update step. */
+export interface KeyedSettle<Model, Message, Args, A, E> {
+	(model: Model, args: Args, result: AsyncData.AsyncData<A, E>): Update.Return<Model, Message>
+	(args: Args, result: AsyncData.AsyncData<A, E>): Update.Step<Model, Message>
+}
 
 export const applyPolicy = <Model, Args, A, E, Message, R>(
 	store: CacheStore<Model, Args, A, E, Message, R>,
@@ -220,6 +237,7 @@ export const completeCancel = <Model, Args, A, E, Message, R>(
 					}
 				},
 				Forget: () => ({ model }),
+				Settle: () => ({ model }),
 			}),
 		NotFound: () => ({ model }),
 	})
@@ -237,9 +255,24 @@ export type SettledFetchOf<Message extends Schema.Top> = Extract<Message["Type"]
 
 export type KeyedArgs<Fields extends Schema.Struct.Fields> = Schema.Schema.Type<Schema.Struct<Fields>>
 
+type FetchResult<Message> = Message extends {
+	readonly _tag: "SettledFetch"
+	readonly result: infer Outcome extends Result.Result<unknown, unknown>
+}
+	? Outcome
+	: never
+
 export namespace Lifted {
-	export type Query<ParentModel, ParentMessage, ChildMessage, R = never> = Readonly<{
+	export type Query<
+		ParentModel,
+		ParentMessage,
+		ChildMessage,
+		R = never,
+		A = Result.Result.Success<FetchResult<ChildMessage>>,
+		E = Result.Result.Failure<FetchResult<ChildMessage>>,
+	> = Readonly<{
 		fold: Update.Fold<ParentModel, ParentMessage, ChildMessage, R>
+		settle: Update.Fold<ParentModel, ParentMessage, AsyncData.AsyncData<A, E>>
 		revalidate: Update.Step<ParentModel, ParentMessage, R>
 		revalidateOrLoad: Update.Step<ParentModel, ParentMessage, R>
 		loadIfMissing: Update.Step<ParentModel, ParentMessage, R>
@@ -252,8 +285,17 @@ export namespace Lifted {
 		) => Subscription.EntryWithoutKeepAlive<ParentModel, ParentMessage, { readonly isWatching: boolean }, R>
 	}>
 
-	export type KeyedQuery<ParentModel, ParentMessage, ChildMessage, Args, R = never> = Readonly<{
+	export type KeyedQuery<
+		ParentModel,
+		ParentMessage,
+		ChildMessage,
+		Args,
+		R = never,
+		A = Result.Result.Success<FetchResult<ChildMessage>>,
+		E = Result.Result.Failure<FetchResult<ChildMessage>>,
+	> = Readonly<{
 		fold: Update.Fold<ParentModel, ParentMessage, ChildMessage, R>
+		settle: KeyedSettle<ParentModel, ParentMessage, Args, A, E>
 		revalidate: Update.Fold<ParentModel, ParentMessage, Args, R>
 		revalidateOrLoad: Update.Fold<ParentModel, ParentMessage, Args, R>
 		loadIfMissing: Update.Fold<ParentModel, ParentMessage, Args, R>

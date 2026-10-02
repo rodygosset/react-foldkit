@@ -1,9 +1,10 @@
-import { Array, Effect, Function, HashMap, HashSet, Option, Order, Record, Schema, Stream, pipe } from "effect"
+import { Array, Effect, Function, HashMap, HashSet, Number, Option, Order, Record, Schema, Stream, pipe } from "effect"
 
-import * as AsyncData from "../asyncData"
-import type { Interruptible } from "../command"
-import * as Command from "../command"
+import * as AsyncData from "foldkit/asyncData"
+import type { Interruptible } from "foldkit/command"
+import * as Command from "foldkit/command"
 import { defineMessageUnion } from "../message"
+import { modifyFields } from "foldkit/struct"
 import * as Subscription from "../subscription"
 import * as Update from "../update"
 import {
@@ -12,8 +13,10 @@ import {
 	FetchInterruptOutcome,
 	type FoldLens,
 	type KeyedArgs,
+	type KeyedSettle,
 	type LiftConfig,
 	type LiftKeyedQuery,
+	type Lifted,
 	type ParentKeyFoldConfig,
 	type Policy,
 	type SettledFetchOf,
@@ -22,20 +25,16 @@ import {
 	completeCancel,
 	foldChildFromPolicy,
 	isParentKeyFoldConfig,
-	modifyFields,
 	parentKeyToLens,
 	replaceSlot,
 	runExecute,
 	sameRequest,
+	settleSlot,
 } from "./internal"
 
 export type SyncFields = {
 	readonly [x: PropertyKey]: Schema.Codec<unknown, unknown, never, never>
 }
-
-const isArgKeyFields = <Args extends object>(
-	keys: ReadonlyArray<string>
-): keys is Array.NonEmptyReadonlyArray<keyof Args & string> => Array.isReadonlyArrayNonEmpty(keys)
 
 export const encodeKey = <S extends Schema.Codec<unknown, unknown>>(schema: S) =>
 	schema.pipe(Schema.toCodecJson, Schema.fromJsonString, Schema.encodeUnknownSync)
@@ -122,7 +121,7 @@ export interface KeyedQuery<
 					requestId: typeof Schema.Number
 					queryArgs: Schema.Struct<Fields>
 				},
-				{ readonly instanceId: string; readonly queryArgs: KeyedArgs<Fields> },
+				{ readonly instanceId: string; readonly requestId: number; readonly queryArgs: KeyedArgs<Fields> },
 				Effect.Effect<SettledFetchOf<KeyedQueryMessage<A, AI, E, EI, Fields>>, never, R>
 			>
 		: Command.CommandDefinitionWithArgs<
@@ -183,11 +182,21 @@ export interface KeyedQuery<
 		KeyedArgs<Fields>,
 		R
 	>
+	/** Installs Success/Failure for one slot without fetching or changing siblings. */
+	readonly settle: KeyedSettle<
+		KeyedQueryModel<A, AI, E, EI, Fields>["Type"],
+		KeyedQueryMessage<A, AI, E, EI, Fields>["Type"],
+		KeyedArgs<Fields>,
+		A,
+		E
+	>
 	readonly lift: LiftKeyedQuery<
 		KeyedQueryModel<A, AI, E, EI, Fields>["Type"],
 		KeyedQueryMessage<A, AI, E, EI, Fields>["Type"],
 		KeyedArgs<Fields>,
-		R
+		R,
+		A,
+		E
 	>
 	readonly watchSubscription: <ParentModel, ParentMessage>(
 		entry: Subscription.EntryBuilder<ParentModel, ParentMessage, R>,
@@ -232,13 +241,12 @@ export function defineKeyedQuery<Name extends string, A, AI, E, EI, Fields exten
 	type SlotState = typeof states.schema.Type
 	const Args = Schema.Struct(config.args)
 	type Args = typeof Args.Type
-	const keys = Record.keys(config.args)
-	if (!isArgKeyFields<Args>(keys)) {
+	if (Record.isEmptyReadonlyRecord(config.args)) {
 		throw new Error(`Query.define("${config.name}"): keyed args must include at least one field`)
 	}
 
-	const toKey = (args: Args): string => (config.toKey !== undefined ? config.toKey(args) : encodeKey(Args)(args))
-	const encodeInterruptKey = encodeKey(Schema.Tuple([Schema.String, Schema.String]))
+	const toKey = config.toKey ?? encodeKey(Args)
+	const encodeInterruptKey = encodeKey(Schema.Tuple([Schema.String, Schema.String, Schema.Number]))
 
 	const Message = makeKeyedQueryMessage(config.data, config.error, Args)
 	type Message = KeyedQueryMessage<A, AI, E, EI, Fields>["Type"]
@@ -272,9 +280,9 @@ export function defineKeyedQuery<Name extends string, A, AI, E, EI, Fields exten
 		args: FetchArgs,
 		messages: [Message.SettledFetch, Message.CompletedCancelFetch],
 		interrupt: {
-			keyFields: ["instanceId", "queryArgs"],
-			toKey: (keyArgs: { readonly instanceId: string; readonly queryArgs: Args }) =>
-				encodeInterruptKey([keyArgs.instanceId, toKey(keyArgs.queryArgs)]),
+			keyFields: ["instanceId", "queryArgs", "requestId"],
+			toKey: (keyArgs: { readonly instanceId: string; readonly requestId: number; readonly queryArgs: Args }) =>
+				encodeInterruptKey([keyArgs.instanceId, toKey(keyArgs.queryArgs), keyArgs.requestId]),
 		},
 		execute: executeFetch,
 	})
@@ -310,6 +318,11 @@ export function defineKeyedQuery<Name extends string, A, AI, E, EI, Fields exten
 				onNone: () => false,
 				onSome: (slot) => sameRequest(model.instanceId, slot.maybePendingRequestId, request),
 			}),
+		settle: (model, args, data) =>
+			modifyFields(model, {
+				nextRequestId: Number.increment,
+				slots: HashMap.set(toKey(args), { args, data, maybePendingRequestId: Option.none() }),
+			}),
 		load: (args, request) => Fetch({ ...request, queryArgs: args }),
 		interrupt:
 			config.interrupt === true
@@ -317,7 +330,7 @@ export function defineKeyedQuery<Name extends string, A, AI, E, EI, Fields exten
 						Option.flatMap(HashMap.get(model.slots, toKey(args)), (slot) =>
 							Option.map(slot.maybePendingRequestId, (requestId) =>
 								InterruptibleFetch.Interrupt(
-									{ instanceId: model.instanceId, queryArgs: args },
+									{ instanceId: model.instanceId, queryArgs: args, requestId },
 									(outcome) => ({
 										_tag: "CompletedCancelFetch",
 										args,
@@ -372,6 +385,12 @@ export function defineKeyedQuery<Name extends string, A, AI, E, EI, Fields exten
 	const policy = (name: Policy): Update.Fold<Model, Message, Args, R> =>
 		Function.dual(2, (model: Model, args: Args): UpdateReturn => applyPolicy(store, model, args, name))
 
+	const settle: KeyedSettle<Model, Message, Args, A, E> = Function.dual(
+		3,
+		(model: Model, args: Args, data: AsyncData.AsyncData<A, E>): Update.Return<Model, Message> =>
+			settleSlot(store, model, args, data)
+	)
+
 	const revalidate = policy("revalidate")
 	const revalidateOrLoad = policy("revalidateOrLoad")
 	const loadIfMissing = policy("loadIfMissing")
@@ -401,11 +420,13 @@ export function defineKeyedQuery<Name extends string, A, AI, E, EI, Fields exten
 					}),
 					onSome: (slot) => ({
 						model: modifyFields(model, {
-							slots: HashMap.set(key, {
-								...slot,
-								data: AsyncData.settle(slot.data, result),
-								maybePendingRequestId: Option.none(),
-							}),
+							slots: HashMap.set(
+								key,
+								modifyFields(slot, {
+									data: (data) => AsyncData.settle(data, result),
+									maybePendingRequestId: () => Option.none(),
+								})
+							),
 						}),
 					}),
 				})
@@ -431,10 +452,24 @@ export function defineKeyedQuery<Name extends string, A, AI, E, EI, Fields exten
 	})
 	const read = (model: Model, args: Args): SlotState => store.read(model, args)
 
+	function liftSettle<ParentModel, ParentMessage>(
+		lens: FoldLens<ParentModel, ParentMessage, Model, Message>
+	): KeyedSettle<ParentModel, ParentMessage, Args, A, E> {
+		const fold = Update.foldChild({
+			...lens,
+			update: (model: Model, input: { readonly args: Args; readonly result: AsyncData.AsyncData<A, E> }) =>
+				settle(model, input.args, input.result),
+		})
+		return Function.dual(3, (model: ParentModel, args: Args, result: AsyncData.AsyncData<A, E>) =>
+			fold(model, { args, result })
+		)
+	}
+
 	const liftFromLens = <ParentModel, ParentMessage>(
 		foldConfig: FoldLens<ParentModel, ParentMessage, Model, Message>
 	) => ({
 		fold: Update.foldChild({ update, ...foldConfig }),
+		settle: liftSettle(foldConfig),
 		revalidate: foldChildFromPolicy(revalidate, foldConfig),
 		revalidateOrLoad: foldChildFromPolicy(revalidateOrLoad, foldConfig),
 		loadIfMissing: foldChildFromPolicy(loadIfMissing, foldConfig),
@@ -449,10 +484,10 @@ export function defineKeyedQuery<Name extends string, A, AI, E, EI, Fields exten
 
 	function lift<ParentModel, ParentMessage>(
 		config: ParentKeyFoldConfig<ParentModel, ParentMessage, Model, Message>
-	): ReturnType<LiftKeyedQuery<Model, Message, Args, R>>
+	): Lifted.KeyedQuery<ParentModel, ParentMessage, Message, Args, R, A, E>
 	function lift<ParentModel, ParentMessage>(
 		config: FoldLens<ParentModel, ParentMessage, Model, Message>
-	): ReturnType<LiftKeyedQuery<Model, Message, Args, R>>
+	): Lifted.KeyedQuery<ParentModel, ParentMessage, Message, Args, R, A, E>
 	function lift<ParentModel, ParentMessage>(config: LiftConfig<ParentModel, ParentMessage, Model, Message>) {
 		if (isParentKeyFoldConfig(config)) {
 			return liftFromLens(parentKeyToLens(config))
@@ -498,6 +533,7 @@ export function defineKeyedQuery<Name extends string, A, AI, E, EI, Fields exten
 		init,
 		read,
 		update,
+		settle,
 		revalidate,
 		revalidateOrLoad,
 		loadIfMissing,

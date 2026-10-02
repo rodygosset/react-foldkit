@@ -24,15 +24,15 @@ const noteById = Query.define({
 })
 
 describe('interruptible Query Fetch', () => {
-  it('keys a single-slot Fetch by Model instance', () => {
+  it('keys a single-slot Fetch by Model instance and request', () => {
     const home = notes.loadIfMissing(notes.init('home'))
     const sidebar = notes.loadIfMissing(notes.init('sidebar'))
 
     expect(home.commands?.map(command => command.key)).toEqual([
-      'FetchInterruptNotes:home',
+      'FetchInterruptNotes:["home",0]',
     ])
     expect(sidebar.commands?.map(command => command.key)).toEqual([
-      'FetchInterruptNotes:sidebar',
+      'FetchInterruptNotes:["sidebar",0]',
     ])
   })
 
@@ -48,7 +48,7 @@ describe('interruptible Query Fetch', () => {
       replacing.commands?.map(command =>
         'interruptsKey' in command ? command.interruptsKey : undefined,
       ),
-    ).toEqual(['FetchInterruptNotes:home'])
+    ).toEqual(['FetchInterruptNotes:["home",0]'])
 
     const cancelled = notes.update(
       replacing.model,

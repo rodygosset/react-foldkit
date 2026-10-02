@@ -1,11 +1,11 @@
 // @vitest-environment node
-
 import { Effect, Layer, Schema, Stream } from "effect"
 import { renderToString } from "react-dom/server"
 import { describe, expect, it } from "vitest"
 import type * as Command from "./command"
 import { defineMessageUnion } from "./message"
-import { make } from "./react"
+import { defineApplication } from "./react"
+import { modifyFields } from "./struct"
 import * as Subscription from "./subscription"
 import type * as Update from "./update"
 
@@ -19,9 +19,9 @@ type Model = typeof Model.Type
 
 type UpdateReturn = Update.Return<Model, Message>
 
-const update = (_model: Model, message: Message): UpdateReturn =>
+const update = (model: Model, message: Message): UpdateReturn =>
 	Message.match<UpdateReturn>(message, {
-		CompletedLoad: ({ value }) => ({ model: { status: "Success", value } }),
+		CompletedLoad: ({ value }) => ({ model: modifyFields(model, { status: () => "Success", value: () => value }) }),
 	})
 
 describe("React server rendering", function () {
@@ -58,7 +58,7 @@ describe("React server rendering", function () {
 				layerBuilds += 1
 			})
 		)
-		const { Provider, useModel } = make({ Model, update, subscriptions, layer })
+		const { Provider, useModel } = defineApplication({ Model, update, subscriptions, layer })
 
 		function View() {
 			const status = useModel((model) => model.status)
@@ -77,41 +77,19 @@ describe("React server rendering", function () {
 		expect(layerBuilds).toBe(0)
 	})
 
-	it("supports whole-Model and structurally selected server snapshots", function () {
-		const { Provider, useModel } = make({ Model, update })
-
-		function View() {
-			const model = useModel()
-			const selected = useModel((current) => ({ value: current.value }))
-			return <span>{`${model.status}:${selected.value}`}</span>
-		}
-
-		const html = renderToString(
-			<Provider init={{ model: { status: "Loading", value: "server" } }}>
-				<View />
-			</Provider>
-		)
-
-		expect(html).toBe("<span>Loading:server</span>")
-	})
-
-	it("Seed writes the Model into the server snapshot before paint", function () {
-		const { Provider, Seed, useModel } = make({ Model, update })
-		const seeded = { status: "Success", value: "preloaded" }
-
+	it("isolates preloaded Models across server renders of the same app definition", () => {
+		const { Provider, useModel } = defineApplication({ Model, update })
 		function View() {
 			const model = useModel()
 			return <span>{`${model.status}:${model.value}`}</span>
 		}
-
-		const html = renderToString(
-			<Provider init={{ model: { status: "Loading", value: "" } }}>
-				<Seed model={seeded}>
+		const responses = ["first request", "second request"].map((value) =>
+			renderToString(
+				<Provider init={{ model: { status: "Success", value } }}>
 					<View />
-				</Seed>
-			</Provider>
+				</Provider>
+			)
 		)
-
-		expect(html).toBe("<span>Success:preloaded</span>")
+		expect(responses).toEqual(["<span>Success:first request</span>", "<span>Success:second request</span>"])
 	})
 })

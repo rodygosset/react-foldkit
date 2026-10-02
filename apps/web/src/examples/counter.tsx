@@ -1,9 +1,9 @@
 import { Button } from "@workspace/ui/components/button"
 import { Schema } from "effect"
 import { MinusIcon, PlusIcon, RotateCcwIcon } from "lucide-react"
-import { ReactFoldkit } from "react-foldkit"
 import { defineMessageUnion } from "react-foldkit/message"
-import { evo } from "react-foldkit/struct"
+import { defineApplication } from "react-foldkit/react"
+import { modifyFields } from "react-foldkit/struct"
 import type * as Update from "react-foldkit/update"
 import { ExampleShell } from "../components/example-shell"
 
@@ -26,12 +26,12 @@ const init = (): UpdateReturn => ({ model: { count: 0 } })
 
 const update = (model: Model, message: Message): UpdateReturn =>
 	Message.match<UpdateReturn>(message, {
-		ClickedDecrement: () => ({ model: evo(model, { count: (count) => count - 1 }) }),
-		ClickedIncrement: () => ({ model: evo(model, { count: (count) => count + 1 }) }),
-		ClickedReset: () => ({ model: evo(model, { count: () => 0 }) }),
+		ClickedDecrement: () => ({ model: modifyFields(model, { count: (count) => count - 1 }) }),
+		ClickedIncrement: () => ({ model: modifyFields(model, { count: (count) => count + 1 }) }),
+		ClickedReset: () => ({ model: modifyFields(model, { count: () => 0 }) }),
 	})
 
-const { Provider, useModel, useDispatch } = ReactFoldkit.make({ Model, update })
+const { Provider, useModel, useDispatch } = defineApplication({ Model, update })
 
 function View() {
 	const count = useModel((model) => model.count)

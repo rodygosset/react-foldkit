@@ -1,5 +1,6 @@
-import { Effect, Queue, Schema, Stream } from "effect"
+import { Array, Effect, Queue, Schema, Stream } from "effect"
 import { afterEach, describe, expect, it, vi } from "vitest"
+import { modifyFields } from "./struct"
 import { defineMessageUnion } from "./message"
 import * as Store from "./store"
 import * as Subscription from "./subscription"
@@ -70,11 +71,13 @@ function makeTrackedSubscriptions(
 
 const update = (model: Model, message: Message): UpdateReturn =>
 	Message.match<UpdateReturn>(message, {
-			Enabled: () => ({ model: { ...model, enabled: true } }),
-			Disabled: () => ({ model: { ...model, enabled: false } }),
-			BumpedUnrelated: () => ({ model: { ...model, unrelated: model.unrelated + 1 } }),
-			Emitted: ({ seq }) => ({ model: { ...model, emissions: [...model.emissions, seq] } }),
-		})
+		Enabled: () => ({ model: modifyFields(model, { enabled: () => true }) }),
+		Disabled: () => ({ model: modifyFields(model, { enabled: () => false }) }),
+		BumpedUnrelated: () => ({ model: modifyFields(model, { unrelated: (unrelated) => unrelated + 1 }) }),
+		Emitted: ({ seq }) => ({
+			model: modifyFields(model, { emissions: (emissions) => Array.append(emissions, seq) }),
+		}),
+	})
 
 describe("subscriptions", function () {
 	it("starts from init deps with zero dispatches", async function () {

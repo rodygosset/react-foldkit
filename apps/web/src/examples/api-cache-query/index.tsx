@@ -2,11 +2,11 @@ import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import { Separator } from "@workspace/ui/components/separator"
 import { Array, Clock, Duration, Effect, Match, Option, pipe, Schema, Stream } from "effect"
-import { ReactFoldkit } from "react-foldkit"
 import * as AsyncData from "react-foldkit/asyncData"
 import { defineMessageUnion } from "react-foldkit/message"
 import * as Query from "react-foldkit/query"
-import { evo } from "react-foldkit/struct"
+import { defineApplication } from "react-foldkit/react"
+import { modifyFields } from "react-foldkit/struct"
 import * as Subscription from "react-foldkit/subscription"
 import * as Update from "react-foldkit/update"
 import { ExampleShell } from "../../components/example-shell"
@@ -104,7 +104,7 @@ const postDetailChild = postDetailQuery.lift<Model, Message>({
 })
 
 function activateTab(model: Model, tab: Tab): UpdateReturn {
-	const modelWithActiveTab = evo(model, { activeTab: () => tab })
+	const modelWithActiveTab = modifyFields(model, { activeTab: () => tab })
 
 	return Match.value(tab).pipe(
 		Match.withReturnType<UpdateReturn>(),
@@ -122,11 +122,11 @@ const update = (model: Model, message: Message): UpdateReturn =>
 		ClickedTab: ({ tab }) => activateTab(model, tab),
 		ClickedPost: ({ postId }) =>
 			Update.identity(
-				evo(model, {
+				modifyFields(model, {
 					maybeSelectedPostId: () => Option.some(postId),
 				})
 			),
-		ClickedBackToPosts: () => Update.identity(evo(model, { maybeSelectedPostId: () => Option.none() })),
+		ClickedBackToPosts: () => Update.identity(modifyFields(model, { maybeSelectedPostId: () => Option.none() })),
 		ClickedInvalidatePosts: () => postsChild.revalidateOrLoad(model),
 		ClickedRetryPosts: () => postsChild.revalidateOrLoad(model),
 		ClickedRetryPostDetail: ({ postId }) => postDetailChild.revalidateOrLoad(model, { postId }),
@@ -168,7 +168,7 @@ const subscriptions = Subscription.make<Model, Message>()((entry) => ({
 	),
 }))
 
-const { Provider, useModel, useDispatch } = ReactFoldkit.make({
+const { Provider, useModel, useDispatch } = defineApplication({
 	Model,
 	update,
 	subscriptions,

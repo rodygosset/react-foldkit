@@ -2,11 +2,11 @@ import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import { Separator } from "@workspace/ui/components/separator"
 import { Array, Clock, Duration, Effect, HashMap, Match, Option, Schema, Stream, pipe } from "effect"
-import { ReactFoldkit } from "react-foldkit"
 import * as AsyncData from "react-foldkit/asyncData"
 import * as Command from "react-foldkit/command"
 import { defineMessageUnion } from "react-foldkit/message"
-import { evo } from "react-foldkit/struct"
+import { defineApplication } from "react-foldkit/react"
+import { modifyFields } from "react-foldkit/struct"
 import * as Subscription from "react-foldkit/subscription"
 import type * as Update from "react-foldkit/update"
 import { ExampleShell } from "../../components/example-shell"
@@ -79,14 +79,14 @@ type UpdateReturn = Update.Return<Model, Message>
 function applyPostsTransition(model: Model, maybeNextPosts: Option.Option<PostsData>): UpdateReturn {
 	return Option.match(maybeNextPosts, {
 		onNone: () => ({ model }),
-		onSome: (nextPosts) => ({ model: evo(model, { posts: () => nextPosts }), commands: [FetchPosts()] }),
+		onSome: (nextPosts) => ({ model: modifyFields(model, { posts: () => nextPosts }), commands: [FetchPosts()] }),
 	})
 }
 
 function applyStatsTransition(model: Model, maybeNextStats: Option.Option<StatsData>): UpdateReturn {
 	return Option.match(maybeNextStats, {
 		onNone: () => ({ model }),
-		onSome: (nextStats) => ({ model: evo(model, { stats: () => nextStats }), commands: [FetchStats()] }),
+		onSome: (nextStats) => ({ model: modifyFields(model, { stats: () => nextStats }), commands: [FetchStats()] }),
 	})
 }
 
@@ -95,7 +95,7 @@ function setPostDetail(postId: string, postDetail: PostDetailData) {
 }
 
 function activateTab(model: Model, tab: Tab): UpdateReturn {
-	const modelWithActiveTab = evo(model, { activeTab: () => tab })
+	const modelWithActiveTab = modifyFields(model, { activeTab: () => tab })
 
 	return Match.value(tab).pipe(
 		Match.withReturnType<UpdateReturn>(),
@@ -113,12 +113,12 @@ const update = (model: Model, message: Message): UpdateReturn =>
 	Message.match<UpdateReturn>(message, {
 		ClickedTab: ({ tab }) => activateTab(model, tab),
 		ClickedPost: ({ postId }) => {
-			const selectedModel = evo(model, {
+			const selectedModel = modifyFields(model, {
 				maybeSelectedPostId: () => Option.some(postId),
 			})
 			return Option.match(HashMap.get(model.postDetailById, postId), {
 				onNone: () => ({
-					model: evo(selectedModel, {
+					model: modifyFields(selectedModel, {
 						postDetailById: setPostDetail(postId, PostDetailData.Loading()),
 					}),
 					commands: [FetchPostDetail({ postId })],
@@ -127,12 +127,12 @@ const update = (model: Model, message: Message): UpdateReturn =>
 			})
 		},
 		ClickedBackToPosts: () => ({
-			model: evo(model, { maybeSelectedPostId: () => Option.none() }),
+			model: modifyFields(model, { maybeSelectedPostId: () => Option.none() }),
 		}),
 		ClickedInvalidatePosts: () => applyPostsTransition(model, AsyncData.revalidateOrLoad(model.posts)),
 		ClickedRetryPosts: () => applyPostsTransition(model, AsyncData.revalidateOrLoad(model.posts)),
 		ClickedRetryPostDetail: ({ postId }) => ({
-			model: evo(model, {
+			model: modifyFields(model, {
 				postDetailById: setPostDetail(postId, PostDetailData.Loading()),
 			}),
 			commands: [FetchPostDetail({ postId })],
@@ -141,15 +141,15 @@ const update = (model: Model, message: Message): UpdateReturn =>
 		ClickedRetryStats: () => applyStatsTransition(model, AsyncData.revalidateOrLoad(model.stats)),
 		TickedRevalidateStats: () => applyStatsTransition(model, AsyncData.revalidate(model.stats)),
 		SettledFetchPosts: ({ result }) => ({
-			model: evo(model, { posts: AsyncData.settle(result) }),
+			model: modifyFields(model, { posts: AsyncData.settle(result) }),
 		}),
 		SettledFetchPostDetail: ({ postId, result }) => ({
-			model: evo(model, {
+			model: modifyFields(model, {
 				postDetailById: HashMap.modify(postId, AsyncData.settle(result)),
 			}),
 		}),
 		SettledFetchStats: ({ result }) => ({
-			model: evo(model, { stats: AsyncData.settle(result) }),
+			model: modifyFields(model, { stats: AsyncData.settle(result) }),
 		}),
 	})
 
@@ -245,7 +245,7 @@ const subscriptions = Subscription.make<Model, Message>()(function (entry) {
 	}
 })
 
-const { Provider, useModel, useDispatch } = ReactFoldkit.make({
+const { Provider, useModel, useDispatch } = defineApplication({
 	Model,
 	update,
 	subscriptions,

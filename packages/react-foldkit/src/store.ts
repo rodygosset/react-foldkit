@@ -4,10 +4,13 @@ import {
 	Effect,
 	Exit,
 	Layer,
+	Match,
+	MutableList,
 	Option,
 	PubSub,
 	Record,
 	Ref,
+	Result,
 	Scheduler,
 	Schema,
 	Scope,
@@ -56,6 +59,8 @@ export type Store<Model, Message> = Readonly<{
 	getModel: () => Model
 	subscribe: (listener: () => void) => () => void
 	dispatch: (message: Message) => void
+	/** Processes through this Message synchronously, preserving FIFO and asynchronous Commands. */
+	commit: (message: Message) => Result.Result<void, CommitError>
 	dispose: () => void
 	isDisposed: () => boolean
 }>
@@ -64,6 +69,23 @@ export type Store<Model, Message> = Readonly<{
 export class Disposed extends Schema.Error<Disposed>("react-foldkit/Store/Disposed")({
 	_tag: Schema.tag("Disposed"),
 }) {}
+
+/** A synchronous commit could not complete. A crashed store preserves its Cause. */
+export class CommitError extends Schema.Error<CommitError>("react-foldkit/Store/CommitError")({
+	_tag: Schema.tag("CommitError"),
+	reason: Schema.Literals(["Inactive", "Reentrant", "Crashed", "Disposed"]),
+	cause: Schema.optional(Schema.Cause(Schema.Unknown, Schema.Unknown)),
+}) {
+	get message(): string {
+		return "Cannot commit: store is " + this.reason.toLowerCase()
+	}
+}
+
+/** Lazily commits through the synchronous queue, exposing delivery failure in the Effect error channel. */
+export const commit = <Model, Message>(
+	store: Store<Model, Message>,
+	message: NoInfer<Message>
+): Effect.Effect<void, CommitError> => Effect.suspend(() => Effect.fromResult(store.commit(message)))
 
 /**
  * Succeeds with the first Model for which `pick` returns `Option.some`.
@@ -126,7 +148,7 @@ const DRAIN_BUDGET_MS = 5
 type Phase =
 	| { readonly _tag: "Booting" }
 	| { readonly _tag: "Live"; readonly drain: "Idle" | "Sync" | "Deferred" }
-	| { readonly _tag: "Crashed" }
+	| { readonly _tag: "Crashed"; readonly cause: Cause.Cause<unknown> }
 	| { readonly _tag: "Disposed" }
 
 const isTerminal = (phase: Phase): boolean => phase._tag === "Crashed" || phase._tag === "Disposed"
@@ -268,7 +290,7 @@ export function boot<Model, Message, R = never>(
 	init: Update.Return<Model, Message, R>
 ): Store<Model, Message> {
 	const listeners = new Set<() => void>()
-	let pendingMessages: Array<Message> = []
+	const pendingMessages = MutableList.make<{ readonly message: Message }>()
 	let phase: Phase = { _tag: "Booting" }
 	let syncWorkMsSinceYield = 0
 	let lastDrainEndedAt = 0
@@ -297,14 +319,15 @@ export function boot<Model, Message, R = never>(
 
 	function crashWith(cause: Cause.Cause<unknown>, triggeringMessage: Option.Option<Message>): void {
 		if (isTerminal(phase)) return
-		phase = { _tag: "Crashed" }
+		phase = { _tag: "Crashed", cause }
+		MutableList.clear(pendingMessages)
 		if (config.onCrash !== undefined) config.onCrash(cause, triggeringMessage)
 		else console.error("[react-foldkit] Store crashed:", Cause.pretty(cause))
 	}
 
 	function enqueueMessage(message: Message): boolean {
 		if (isTerminal(phase)) return false
-		pendingMessages.push(message)
+		MutableList.append(pendingMessages, { message })
 		if (phase._tag === "Booting") return true
 		drainPendingMessages()
 		return true
@@ -314,20 +337,27 @@ export function boot<Model, Message, R = never>(
 		PubSub.publishUnsafe(modelPubSub, nextModel)
 	}
 
+	function cancelDeferredDrain(): void {
+		if (deferredDrainChannel === null) return
+		deferredDrainChannel.port1.close()
+		deferredDrainChannel.port2.close()
+		deferredDrainChannel = null
+	}
+
 	function scheduleDeferredDrain(): void {
-		if (isTerminal(phase)) return
+		if (phase._tag !== "Live" || phase.drain === "Deferred") return
 		if (deferredDrainChannel === null) {
 			const channel = new MessageChannel()
 			deferredDrainChannel = channel
 			channel.port2.onmessage = function onDeferredDrain() {
-				if (phase._tag === "Live" && phase.drain === "Deferred") {
-					phase = { _tag: "Live", drain: "Idle" }
-				}
+				// A commit can overtake this task and replace its channel.
+				if (deferredDrainChannel !== channel || phase._tag !== "Live" || phase.drain !== "Deferred") return
+				phase = { _tag: "Live", drain: "Idle" }
 				syncWorkMsSinceYield = 0
 				drainPendingMessages()
 			}
 		}
-		if (phase._tag === "Live") phase = { _tag: "Live", drain: "Deferred" }
+		phase = { _tag: "Live", drain: "Deferred" }
 		deferredDrainChannel.port1.postMessage(null)
 	}
 
@@ -375,13 +405,13 @@ export function boot<Model, Message, R = never>(
 		}
 	}
 
-	function drainPendingMessages(): void {
+	function drainPendingMessages(until?: { readonly message: Message }): void {
 		if (!canEnterDrain(phase)) return
 
 		const drainStartedAt = performance.now()
 		if (drainStartedAt - lastDrainEndedAt > DRAIN_BUDGET_MS) syncWorkMsSinceYield = 0
 
-		if (syncWorkMsSinceYield > DRAIN_BUDGET_MS) {
+		if (until === undefined && syncWorkMsSinceYield > DRAIN_BUDGET_MS) {
 			scheduleDeferredDrain()
 			return
 		}
@@ -389,26 +419,23 @@ export function boot<Model, Message, R = never>(
 		phase = { _tag: "Live", drain: "Sync" }
 		let currentMessage: Option.Option<Message> = Option.none()
 		try {
-			while (pendingMessages.length > 0) {
-				const batch = pendingMessages
-				pendingMessages = []
-				let index = 0
-				for (const message of batch) {
-					if (isTerminal(phase)) return
+			while (!isTerminal(phase)) {
+				const entry = MutableList.take(pendingMessages)
+				if (entry === MutableList.Empty) return
+				currentMessage = Option.some(entry.message)
+				processMessage(entry.message)
 
-					currentMessage = Option.some(message)
-					processMessage(message)
-
-					const hasRemainingWork = index + 1 < batch.length || pendingMessages.length > 0
-					if (
-						hasRemainingWork &&
-						syncWorkMsSinceYield + (performance.now() - drainStartedAt) > DRAIN_BUDGET_MS
-					) {
-						pendingMessages = batch.slice(index + 1).concat(pendingMessages)
-						scheduleDeferredDrain()
-						return
-					}
-					index += 1
+				if (entry === until) {
+					if (pendingMessages.length > 0) scheduleDeferredDrain()
+					return
+				}
+				if (
+					until === undefined &&
+					pendingMessages.length > 0 &&
+					syncWorkMsSinceYield + (performance.now() - drainStartedAt) > DRAIN_BUDGET_MS
+				) {
+					scheduleDeferredDrain()
+					return
 				}
 			}
 		} catch (error) {
@@ -423,6 +450,32 @@ export function boot<Model, Message, R = never>(
 		}
 	}
 
+	function canCommit(): Result.Result<void, CommitError> {
+		return Match.value(phase).pipe(
+			Match.withReturnType<Result.Result<void, CommitError>>(),
+			Match.tagsExhaustive({
+				Booting: () => Result.fail(new CommitError({ reason: "Inactive" })),
+				Crashed: ({ cause }) => Result.fail(new CommitError({ reason: "Crashed", cause })),
+				Disposed: () => Result.fail(new CommitError({ reason: "Disposed" })),
+				Live: ({ drain }) =>
+					drain === "Sync"
+						? Result.fail(new CommitError({ reason: "Reentrant" }))
+						: Result.succeed(undefined),
+			})
+		)
+	}
+
+	function commit(message: Message): Result.Result<void, CommitError> {
+		return Result.flatMap(canCommit(), () => {
+			const entry = { message }
+			MutableList.append(pendingMessages, entry)
+			cancelDeferredDrain()
+			phase = { _tag: "Live", drain: "Idle" }
+			drainPendingMessages(entry)
+			return canCommit()
+		})
+	}
+
 	function subscribe(listener: () => void): () => void {
 		listeners.add(listener)
 		return function unsubscribe() {
@@ -433,16 +486,12 @@ export function boot<Model, Message, R = never>(
 	function dispose(): void {
 		if (phase._tag === "Disposed") return
 		phase = { _tag: "Disposed" }
-		pendingMessages = []
+		MutableList.clear(pendingMessages)
 		for (const listener of listeners) {
 			listener()
 		}
 		listeners.clear()
-		if (deferredDrainChannel !== null) {
-			deferredDrainChannel.port1.close()
-			deferredDrainChannel.port2.close()
-			deferredDrainChannel = null
-		}
+		cancelDeferredDrain()
 		Effect.runFork(Scope.close(storeScope, Exit.void))
 	}
 
@@ -472,6 +521,7 @@ export function boot<Model, Message, R = never>(
 		getModel: () => model,
 		subscribe,
 		dispatch: enqueueMessage,
+		commit,
 		dispose,
 		isDisposed: () => phase._tag === "Disposed",
 	}

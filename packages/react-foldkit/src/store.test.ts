@@ -1,6 +1,7 @@
 import { describe, it } from "@effect/vitest"
-import { Cause, Context, Effect, Fiber, Layer, Option, Schema } from "effect"
+import { Array, Cause, Context, Effect, Fiber, Layer, Option, Schema } from "effect"
 import { afterEach, expect, vi } from "vitest"
+import { modifyFields } from "./struct"
 import * as Command from "./command"
 import { defineMessageUnion } from "./message"
 import * as Store from "./store"
@@ -63,7 +64,7 @@ describe("message processing", function () {
 
 		function update(model: Model, message: Message): UpdateReturn {
 			processedLog.push(message._tag)
-			const nextModel = { log: [...model.log, message._tag] }
+			const nextModel = modifyFields(model, { log: (log) => Array.append(log, message._tag) })
 			return Message.match(message, {
 				AppendedFirst: () => ({ model: nextModel, commands: [produceCommandResult] }),
 				AppendedSecond: () => ({ model: nextModel }),
@@ -105,7 +106,7 @@ describe("message processing", function () {
 			if (message._tag === "BurnedBudget") {
 				fakeNow += BURN_MS
 			}
-			return { model: { log: [...model.log, message._tag] } }
+			return { model: modifyFields(model, { log: (log) => Array.append(log, message._tag) }) }
 		}
 
 		const store = Store.boot({ update }, { model: { log: [] } })
@@ -143,7 +144,7 @@ describe("message processing", function () {
 			if (message._tag === "BurnedBudget") {
 				fakeNow += BURN_MS
 			}
-			return { model: { log: [...model.log, message._tag] } }
+			return { model: modifyFields(model, { log: (log) => Array.append(log, message._tag) }) }
 		}
 
 		const store = Store.boot({ update }, { model: { log: [] } })
@@ -180,7 +181,7 @@ describe("message processing", function () {
 
 		function update(model: Model, message: Message): UpdateReturn {
 			processedLog.push(message._tag)
-			const nextModel = { log: [...model.log, message._tag] }
+			const nextModel = modifyFields(model, { log: (log) => Array.append(log, message._tag) })
 			if (message._tag === "AppendedInitResult") {
 				return { model: nextModel, commands: [chainedCommand] }
 			}
@@ -224,7 +225,7 @@ describe("message processing", function () {
 			if (message._tag === "ThrewInUpdate") {
 				throw new Error("boom in update")
 			}
-			const nextModel = { log: [...model.log, message._tag] }
+			const nextModel = modifyFields(model, { log: (log) => Array.append(log, message._tag) })
 			if (message._tag === "AppendedAfterCrash") {
 				return { model: nextModel, commands: [spiedCommand] }
 			}
@@ -275,7 +276,7 @@ describe("message processing", function () {
 			if (message._tag === "ThrewInUpdate") {
 				throw new Error("boom in update")
 			}
-			const nextModel = { log: [...model.log, message._tag] }
+			const nextModel = modifyFields(model, { log: (log) => Array.append(log, message._tag) })
 			if (message._tag === "AppendedFirst") {
 				return { model: nextModel, commands: [spiedCommand] }
 			}
@@ -337,8 +338,13 @@ describe("resources", function () {
 
 	const resourceUpdate = (model: ResourceModel, message: ResourceMessage): ResourceUpdateReturn =>
 		ResourceMessage.match<ResourceUpdateReturn>(message, {
-			ClickedReadValue: () => ({ model: { label: "reading" }, commands: [ReadValue()] }),
-			SucceededReadValue: ({ value }) => ({ model: { label: `${model.label} ${value}` } }),
+			ClickedReadValue: () => ({
+				model: modifyFields(model, { label: () => "reading" }),
+				commands: [ReadValue()],
+			}),
+			SucceededReadValue: ({ value }) => ({
+				model: modifyFields(model, { label: (label) => `${label} ${value}` }),
+			}),
 		})
 
 	it("builds the Layer once, shares it across Commands, and releases it at teardown", async function () {
@@ -434,7 +440,7 @@ describe("dispose", function () {
 
 		function update(model: Model, message: Message): UpdateReturn {
 			processedLog.push(message._tag)
-			return { model: { log: [...model.log, message._tag] } }
+			return { model: modifyFields(model, { log: (log) => Array.append(log, message._tag) }) }
 		}
 
 		const store = Store.boot({ update }, { model: { log: [] } })
@@ -469,8 +475,8 @@ describe("dispose", function () {
 
 		function update(_model: LongModel, message: LongMessage): LongUpdateReturn {
 			return LongMessage.match<LongUpdateReturn>(message, {
-				Start: () => ({ model: { status: "running" }, commands: [LongRunning()] }),
-				Completed: () => ({ model: { status: "done" } }),
+				Start: () => ({ model: modifyFields(_model, { status: () => "running" }), commands: [LongRunning()] }),
+				Completed: () => ({ model: modifyFields(_model, { status: () => "done" }) }),
 			})
 		}
 
@@ -513,7 +519,7 @@ describe("command message mappers", function () {
 			return ParentMessage.match<ParentUpdateReturn>(message, {
 				GotChildMessage: ({ message: childMessage }) =>
 					ChildMessage.match<ParentUpdateReturn>(childMessage, {
-						CompletedDoChildWork: () => ({ model: { label: "child done" } }),
+						CompletedDoChildWork: () => ({ model: modifyFields(_model, { label: () => "child done" }) }),
 					}),
 			})
 		}
@@ -548,7 +554,7 @@ describe("command message mappers", function () {
 					Store.boot(
 						{
 							update: (model: { count: number }, _message: CountMessage) => ({
-								model: { count: model.count + 1 },
+								model: modifyFields(model, { count: (count) => count + 1 }),
 							}),
 						},
 						{ model: { count: 0 } }
@@ -574,7 +580,7 @@ describe("command message mappers", function () {
 					Store.boot(
 						{
 							update: (model: { count: number }, _message: CountMessage) => ({
-								model: { count: model.count + 1 },
+								model: modifyFields(model, { count: (count) => count + 1 }),
 							}),
 						},
 						{ model: { count: 0 } }
@@ -603,7 +609,7 @@ describe("command message mappers", function () {
 					Store.boot(
 						{
 							update: (model: { count: number }, _message: CountMessage) => ({
-								model: { count: model.count + 1 },
+								model: modifyFields(model, { count: (count) => count + 1 }),
 							}),
 						},
 						{ model: { count: 0 } }
