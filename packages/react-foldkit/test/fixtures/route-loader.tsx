@@ -142,7 +142,7 @@ export function createFixture(
 				return child(model, message)
 			},
 			CompletedLoadSearch: function ({ load }) {
-				const settled = Loader.settleIfLoadKeyed(resultsChild, model.search, load, {
+				const settled = Loader.settleIfLoad(resultsChild, model.search, load, {
 					fresher: function (incoming, current) {
 						return incoming.revision > current.revision
 					},

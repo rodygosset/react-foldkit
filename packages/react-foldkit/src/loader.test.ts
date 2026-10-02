@@ -96,7 +96,7 @@ describe("Loader.fromQuery", () => {
 		expect(ProjectLoader.Load.fields.result).toBe(keyed.AsyncData.schema)
 		expect(ProjectLoader.decode(envelope)).toEqual({ projectId: "p1", result })
 		expect(
-			Loader.settleIfLoadKeyed(keyed, keyed.init("home"), { projectId: "p1", result }, {
+			Loader.settleIfLoad(keyed, keyed.init("home"), { projectId: "p1", result }, {
 				fresher: function () {
 					return true
 				},

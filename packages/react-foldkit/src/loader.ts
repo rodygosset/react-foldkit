@@ -2,6 +2,7 @@ import { Effect, Function, Pipeable, Predicate, Schema } from "effect"
 import type * as AsyncData from "./asyncData"
 import { Envelope, EnvelopeHeader, Receipt } from "./internal/loader-envelope"
 import type { KeyedArgs, KeyedSettleIf, SettleIfOptions } from "./query/internal"
+import { isKeyedSettleIf } from "./query/internal"
 import type { KeyedQuery, SyncFields } from "./query/keyedQuery"
 import type { Query } from "./query/query"
 import type * as Update from "./update"
@@ -367,29 +368,35 @@ export function fromQuery(query: any, options?: { readonly key?: (load: any) => 
  */
 export type MappedLoader<A, I, Message = A> = Loader<A, I, Message>
 
-function settleIfLoadUnkeyed(
-	target: SettleIfTarget<any, any, any, any>,
-	model: any,
-	load: LoadPayload<{}, any, any>,
-	options: SettleIfOptions<any, any>
-): Update.Return<any, any> {
-	return target.settleIf(model, load.result, options)
-}
-
-function settleIfLoadKeyedInto(
-	target: KeyedSettleIfTarget<any, any, any, any, any>,
+function settleIfLoadInto(
+	target: KeyedSettleIfTarget<any, any, any, any, any> | SettleIfTarget<any, any, any, any>,
 	model: any,
 	load: LoadPayload<Record<string, unknown>, any, any>,
 	options: SettleIfOptions<any, any>
 ): Update.Return<any, any> {
 	const { result, ...args } = load
-	return target.settleIf(model, args, result, options)
+	if (isKeyedSettleIf(target.settleIf)) {
+		return (target as KeyedSettleIfTarget<any, any, any, any, any>).settleIf(model, args, result, options)
+	}
+	return (target as SettleIfTarget<any, any, any, any>).settleIf(model, result, options)
 }
 
 /**
- * Settles an unkeyed Loader payload (`{ result }`) through a Query or lifted `settleIf`.
- * Use `settleIfLoadKeyed` when the settle target is keyed.
+ * Settles a Loader-shaped payload through a Query or lifted `settleIf`.
+ * Lives on Loader (react-foldkit), not on Foldkit Query.
+ * Keyed vs unkeyed dispatch uses a brand on keyed `settleIf`, not load key count.
  */
+export function settleIfLoad<Model, Message, Args extends Record<string, unknown>, A, E>(
+	target: KeyedSettleIfTarget<Model, Message, Args, A, E>,
+	model: Model,
+	load: LoadPayload<Args, A, E>,
+	options: SettleIfOptions<A, E>
+): Update.Return<Model, Message>
+export function settleIfLoad<Model, Message, Args extends Record<string, unknown>, A, E>(
+	target: KeyedSettleIfTarget<Model, Message, Args, A, E>,
+	load: LoadPayload<Args, A, E>,
+	options: SettleIfOptions<A, E>
+): Update.Step<Model, Message>
 export function settleIfLoad<Model, Message, A, E>(
 	target: SettleIfTarget<Model, Message, A, E>,
 	model: Model,
@@ -402,45 +409,16 @@ export function settleIfLoad<Model, Message, A, E>(
 	options: SettleIfOptions<A, E>
 ): Update.Step<Model, Message>
 export function settleIfLoad(
-	target: SettleIfTarget<any, any, any, any>,
+	target: KeyedSettleIfTarget<any, any, any, any, any> | SettleIfTarget<any, any, any, any>,
 	modelOrLoad: any,
 	loadOrOptions: any,
 	maybeOptions?: SettleIfOptions<any, any>
 ): Update.Return<any, any> | Update.Step<any, any> {
 	if (maybeOptions !== undefined) {
-		return settleIfLoadUnkeyed(target, modelOrLoad, loadOrOptions, maybeOptions)
+		return settleIfLoadInto(target, modelOrLoad, loadOrOptions, maybeOptions)
 	}
 	return function (model: any) {
-		return settleIfLoadUnkeyed(target, model, modelOrLoad, loadOrOptions)
-	}
-}
-
-/**
- * Settles a keyed Loader payload (`{ ...args, result }`) through a keyed Query or lift.
- * Peels `result` and remaining fields as args; no key-count heuristic.
- */
-export function settleIfLoadKeyed<Model, Message, Args extends Record<string, unknown>, A, E>(
-	target: KeyedSettleIfTarget<Model, Message, Args, A, E>,
-	model: Model,
-	load: LoadPayload<Args, A, E>,
-	options: SettleIfOptions<A, E>
-): Update.Return<Model, Message>
-export function settleIfLoadKeyed<Model, Message, Args extends Record<string, unknown>, A, E>(
-	target: KeyedSettleIfTarget<Model, Message, Args, A, E>,
-	load: LoadPayload<Args, A, E>,
-	options: SettleIfOptions<A, E>
-): Update.Step<Model, Message>
-export function settleIfLoadKeyed(
-	target: KeyedSettleIfTarget<any, any, any, any, any>,
-	modelOrLoad: any,
-	loadOrOptions: any,
-	maybeOptions?: SettleIfOptions<any, any>
-): Update.Return<any, any> | Update.Step<any, any> {
-	if (maybeOptions !== undefined) {
-		return settleIfLoadKeyedInto(target, modelOrLoad, loadOrOptions, maybeOptions)
-	}
-	return function (model: any) {
-		return settleIfLoadKeyedInto(target, model, modelOrLoad, loadOrOptions)
+		return settleIfLoadInto(target, model, modelOrLoad, loadOrOptions)
 	}
 }
 

@@ -183,10 +183,10 @@ cancellation. Direct `Fetch.Interrupt` calls need `requestId`, instance ID, and
 keyed args where applicable.
 
 Reuse `query.AsyncData` for Foldkit AsyncData Schemas. Loader payloads live on
-`Loader.fromQuery(...).Load`. Prefer `Loader.settleIfLoad` (unkeyed) or
-`Loader.settleIfLoadKeyed` (keyed) for Loader-shaped settlement. Update checks
-freshness via `fresher`. Delivery tokens, resource keys, and app revisions are
-separate layers; see the identity table in
+`Loader.fromQuery(...).Load`. Prefer `Loader.settleIfLoad(queryOrLift, …)` for
+Loader-shaped settlement (one overloaded API for keyed and unkeyed). Update
+checks freshness via `fresher`. Delivery tokens, resource keys, and app
+revisions are separate layers; see the identity table in
 [COMMIT_SOURCE_COMPOSITION_SPEC.md](../../COMMIT_SOURCE_COMPOSITION_SPEC.md).
 That composition spec is the contract of record for Loader wiring and Provider
 `commitSource`.

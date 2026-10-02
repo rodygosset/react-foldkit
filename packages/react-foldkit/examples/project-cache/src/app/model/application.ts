@@ -28,7 +28,7 @@ export const update = (model: Model, message: Message) =>
 	Message.match<Update.Return<Model, Message>>(message, {
 		GotProjectMessage: ({ message }) => projects.fold(model, message),
 		CompletedLoadProject: ({ load }) =>
-			Loader.settleIfLoadKeyed(projects, model, load, {
+			Loader.settleIfLoad(projects, model, load, {
 				fresher: function (incoming, current) {
 					return incoming.revision > current.revision
 				},

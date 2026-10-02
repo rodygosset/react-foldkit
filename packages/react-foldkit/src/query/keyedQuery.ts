@@ -27,6 +27,7 @@ import {
 	completeCancel,
 	foldChildFromPolicy,
 	isParentKeyFoldConfig,
+	markKeyedSettleIf,
 	parentKeyToLens,
 	replaceSlot,
 	runExecute,
@@ -465,17 +466,19 @@ export function defineKeyedQuery<Name extends string, A, AI, E, EI, Fields exten
 		slots: HashMap.empty(),
 	})
 	const read = (model: Model, args: Args): SlotState => store.read(model, args)
-	const settleIf: KeyedSettleIf<Model, Message, Args, A, E> = Function.dual(
-		4,
-		function (
-			model: Model,
-			args: Args,
-			result: AsyncData.AsyncData<A, E>,
-			options: SettleIfOptions<A, E>
-		): Update.Return<Model, Message> {
-			if (!shouldSettle(read(model, args), result, options)) return { model }
-			return settle(model, args, result)
-		}
+	const settleIf: KeyedSettleIf<Model, Message, Args, A, E> = markKeyedSettleIf(
+		Function.dual(
+			4,
+			function (
+				model: Model,
+				args: Args,
+				result: AsyncData.AsyncData<A, E>,
+				options: SettleIfOptions<A, E>
+			): Update.Return<Model, Message> {
+				if (!shouldSettle(read(model, args), result, options)) return { model }
+				return settle(model, args, result)
+			}
+		)
 	)
 	function liftSettle<ParentModel, ParentMessage>(
 		lens: FoldLens<ParentModel, ParentMessage, Model, Message>
@@ -506,16 +509,18 @@ export function defineKeyedQuery<Name extends string, A, AI, E, EI, Fields exten
 				return settleIf(model, input.args, input.result, input.options)
 			},
 		})
-		return Function.dual(
-			4,
-			function (
-				model: ParentModel,
-				args: Args,
-				result: AsyncData.AsyncData<A, E>,
-				options: SettleIfOptions<A, E>
-			) {
-				return fold(model, { args, result, options })
-			}
+		return markKeyedSettleIf(
+			Function.dual(
+				4,
+				function (
+					model: ParentModel,
+					args: Args,
+					result: AsyncData.AsyncData<A, E>,
+					options: SettleIfOptions<A, E>
+				) {
+					return fold(model, { args, result, options })
+				}
+			)
 		)
 	}
 

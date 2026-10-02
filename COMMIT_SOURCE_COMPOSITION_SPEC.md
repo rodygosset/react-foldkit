@@ -10,7 +10,7 @@ This replaces the app-owned envelopes/adapter in
 - `Loader.mapMessages` for root Message composition at the parent wire.
 - `Loader.load` (dual) and `Loader.loadQuery` for envelope programs.
 - `Query.settleIf` for freshness-gated external settlement; `Loader.settleIfLoad`
-  / `Loader.settleIfLoadKeyed` for Loader-shaped payloads.
+  for Loader-shaped payloads.
 - `TanStackSource.make` for accepted router results.
 - `SubmodelProvider` for inline child Provider composition.
 - `CommitSource` remains the sync delivery protocol only.
@@ -23,11 +23,11 @@ Delivery, cache slots, and app freshness are separate. Do not conflate them.
 | ----- | ---------- | ----------- |
 | Resource key | Stable identity of the domain resource (from `Loader.key` / Query args) | Declaration / Query |
 | Delivery version (UUID) | One serializable token per accepted envelope; compared with `Object.is` | Loader encode + CommitSource |
-| App fresher | Payload revision or domain rule in `settleIf` / `settleIfLoad*` | Application update |
+| App fresher | Payload revision or domain rule in `settleIf` / `settleIfLoad` | Application update |
 
 TanStack entry keys are `[matchId, name, resourceKey]`. Matches can share a
 resource without colliding; update chooses which delivery to keep. Delivery
-UUIDs do not order data. `settleIfLoad*` installs outcomes; it does not decide
+UUIDs do not order data. `settleIfLoad` installs outcomes; it does not decide
 which revision wins beyond the `fresher` you pass.
 
 ## Two-value pattern
@@ -78,10 +78,10 @@ revisions, still complete rejected requests so they do not stay pending.
 - Views use these bindings and ReactFoldkit hooks. Keep route hooks in app glue
   and lifecycle hooks in Providers.
 - Use `Project.Loader` and the application namespace `Application`.
-- Query-backed example: `examples/project-cache` (`fromQuery`, `settleIfLoadKeyed`,
+- Query-backed example: `examples/project-cache` (`fromQuery`, `settleIfLoad`,
   revision `fresher`).
 - Define-only example: `examples/site-notice` (`Loader.define`, no Query, flat
-  `CompletedLoadNotice`, Option Model write — no `settleIfLoad*`).
+  `CompletedLoadNotice`, Option Model write — no `settleIfLoad`).
 - Keep page `api/load.ts` thin in both examples.
 
 ## CommitSource protocol
@@ -483,7 +483,7 @@ export const update = (model: Model, message: Message) =>
 	Message.match<Update.Return<Model, Message>>(message, {
 		GotProjectMessage: ({ message }) => projects.fold(model, message),
 		CompletedLoadProject: ({ load }) =>
-			Loader.settleIfLoadKeyed(projects, model, load, {
+			Loader.settleIfLoad(projects, model, load, {
 				fresher: (incoming, current) => incoming.revision > current.revision,
 			}),
 		ClickedRefreshProject: ({ projectId }) => projects.revalidateOrLoad(model, { projectId }),
