@@ -7,13 +7,14 @@ projections; external data arrives as Messages.
 
 Implemented:
 
-- Synchronous `Store.commit`, `useCommit`, and generic `useCommitSource`.
+- Synchronous `Store.commit` and `useCommit`.
 - Optional `Provider commitSource` for bootstrap and later deliveries.
 - Child view bindings through `defineSubmodel`, `useSubmodel`, and
   `useOptionalSubmodel`, plus `SubmodelProvider`.
-- `Query.settle`, lifted forms, and request-specific Fetch interruption.
+- `Query.settle` / `settleIf` / `settleIfLoad`, lifted forms, and request-specific Fetch interruption.
+- Public `Query.Result` / `Query.Load` Schemas for Loader composition.
 - Loader module (`define`, overloaded `fromQuery`, dual `load` / `loadQuery`, `mapMessages`),
-  `Query.settleIf`, protocol-only `CommitSource`, and the optional TanStack adapter.
+  protocol-only `CommitSource`, and the optional TanStack adapter (pipe `mapMessages` registry).
 
 Earlier validation: 177 package tests, two Chromium tests, package/workspace
 typechecks, declaration build, and emitted API checks. See

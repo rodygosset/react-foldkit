@@ -132,7 +132,7 @@ export interface KeyedQueryLoader<
 	) => Effect.Effect<Envelope<Schema.Codec.Encoded<LoadSchema>>, Schema.SchemaError, R>
 }
 
-/** Loader derived from a Query (no args). Matches Foldkit's Query vs KeyedQuery naming. */
+/** Loader derived from a Query (no args). */
 export interface QueryLoader<
 	Name extends string,
 	A,
@@ -199,7 +199,7 @@ function attachKeyedQueryLoader<
 		}
 	>,
 >(
-	loader: Loader<KeyedLoadType<Fields, A, E>, Schema.Codec.Encoded<LoadSchema>>,
+	loader: Loader<KeyedLoadType<Fields, A, E>, any>,
 	Load: LoadSchema,
 	query: KeyedQueryForLoader<Name, A, AI, E, EI, Fields, R>
 ): KeyedQueryLoader<Name, A, AI, E, EI, Fields, R, LoadSchema> {
@@ -224,7 +224,7 @@ function attachQueryLoader<
 		readonly result: Schema.Codec<AsyncData.AsyncData<A, E>, AsyncData.AsyncData<AI, EI>, never, never>
 	}>,
 >(
-	loader: Loader<LoadType<A, E>, Schema.Codec.Encoded<LoadSchema>>,
+	loader: Loader<LoadType<A, E>, any>,
 	Load: LoadSchema,
 	query: QueryForLoader<Name, A, AI, E, EI, R>
 ): QueryLoader<Name, A, AI, E, EI, R, LoadSchema> {
@@ -234,7 +234,15 @@ function attachQueryLoader<
 		}),
 		loader.load
 	)
-	return Object.assign(loader, { Load, query, loadQuery })
+	return Object.assign(loader, { Load, query, loadQuery }) as QueryLoader<
+		Name,
+		A,
+		AI,
+		E,
+		EI,
+		R,
+		LoadSchema
+	>
 }
 
 /** Derives a Loader Schema and resource key from a Query. */
@@ -275,11 +283,7 @@ export function fromQuery<Name extends string, A, AI, E, EI, R>(
 >
 export function fromQuery(query: any, options?: { readonly key?: (load: any) => string }): any {
 	if (isKeyedQueryForLoader(query)) {
-		const resultSchema = query.Model.fields.slots.value.fields.data
-		const Load = Schema.Struct({
-			...query.Args.fields,
-			result: resultSchema,
-		})
+		const Load = query.Load
 		const key =
 			options?.key ??
 			function (load: KeyedLoadType<SyncFields, any, any>) {
@@ -287,29 +291,38 @@ export function fromQuery(query: any, options?: { readonly key?: (load: any) => 
 				delete args.result
 				return query.toKey(args as KeyedArgs<SyncFields>)
 			}
-		const loader = define({
-			name: query.name,
-			data: Load as unknown as Schema.Codec<KeyedLoadType<SyncFields, any, any>, typeof Load.Encoded>,
-			key,
-		})
-		return attachKeyedQueryLoader(loader, Load, query)
+		return attachKeyedQueryLoader(
+			define({
+				name: query.name,
+				data: Load,
+				key,
+			}) as Loader<KeyedLoadType<SyncFields, any, any>, any>,
+			Load,
+			query
+		)
 	}
 
-	const resultSchema = query.Model.fields.data
-	const Load = Schema.Struct({ result: resultSchema })
+	const Load = query.Load
 	const key = options?.key
 	if (key === undefined) {
 		throw new Error(`Loader.fromQuery("${query.name}"): Queries require options.key`)
 	}
-	const loader = define({
-		name: query.name,
-		data: Load as unknown as Schema.Codec<LoadType<any, any>, typeof Load.Encoded>,
-		key,
-	})
-	return attachQueryLoader(loader, Load, query)
+	return attachQueryLoader(
+		define({
+			name: query.name,
+			data: Load,
+			key,
+		}) as Loader<LoadType<any, any>, any>,
+		Load,
+		query
+	)
 }
 
-/** Maps accepted deliveries while preserving loading, encoding, and receipt identity. */
+/**
+ * Maps accepted deliveries while preserving loading, encoding, and receipt identity.
+ * Returns a plain Loader/Declaration: QueryLoader attachments (`Load`, `query`, `loadQuery`)
+ * are stripped. Keep the `fromQuery` value for `loadQuery` / `Load`; pipe a mapped copy into the registry.
+ */
 export const mapMessages: {
 	<Message, Next>(
 		f: (message: Message, receipt: Receipt) => Next

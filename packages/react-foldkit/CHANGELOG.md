@@ -5,17 +5,17 @@
 ### Added
 
 - Optional `Provider commitSource` applies initial Messages and connects later
-  deliveries, preserving Commands and delivery records. Manual `useCommitSource`
-  remains available.
+  deliveries, preserving Commands and delivery records.
+- Public `Query.Result` / `Query.Load` and keyed forms for Loader payloads.
+- `settleIfLoad` on Query and KeyedQuery (and lifted forms) for Loader-shaped settlement.
 - `defineSubmodel<Model, Message>()`, child Providers, selectors, dispatch, and
   root/child projections. Optional projections track presence and keep departing
   snapshots; equal selections skip source-driven renders.
 - Synchronous `store.commit` and `useCommit` returning `Result<void, CommitError>`;
   lazy `Store.commit(store, message)` returning `Effect<void, CommitError>`.
   FIFO delivery, asynchronous Commands, and no enqueueing on rejection.
-- Router-independent `useCommitSource`, source/entry/options types, and
-  `CommitSourceError`. Scoped connections keep successful tokens and full
-  setup/cleanup Causes.
+- Router-independent CommitSource types and `CommitSourceError`. Scoped
+  connections keep successful tokens and full setup/cleanup Causes.
 - `query.settle(model, result)`, keyed/lifted forms, and data-last steps. Settlement
   keeps good data on failure, invalidates old Fetches, and can interrupt pending
   work without fetch services. Only Success and Failure settle the Model.
@@ -35,6 +35,10 @@
 
 ### Breaking changes
 
+- Loader envelope `_tag` is `react-foldkit/Loader` (was `react-foldkit/CommitSource`).
+- `defineApplication` no longer returns `useCommitSource`. Use Provider `commitSource`.
+- `TanStackSource.make` accepts only piped Declarations (no `[declaration, map]` tuples).
+- Prefer `query.Result` / `query.Load` over digging into `Model.fields` for result Schemas.
 - `ReactFoldkit.make` becomes `defineApplication`, also exported from
   `react-foldkit/react`.
 - `defineApplication` takes flat `Store.Config` plus a Model Codec. Provider creates

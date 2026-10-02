@@ -5,7 +5,7 @@ export const Receipt = Schema.Struct({ name: Schema.String, key: Schema.String, 
 export type Receipt = typeof Receipt.Type
 
 export const EnvelopeHeader = Schema.Struct({
-	_tag: Schema.Literal("react-foldkit/CommitSource"),
+	_tag: Schema.Literal("react-foldkit/Loader"),
 	format: Schema.Literal(1),
 	...Receipt.fields,
 })

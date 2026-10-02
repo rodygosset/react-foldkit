@@ -14,23 +14,6 @@ function routerWith(rootData: unknown, childData: unknown) {
 }
 
 describe("TanStack CommitSource adapter", () => {
-	it("accepts [declaration, mapMessages] registry entries", async () => {
-		const project = Effect.runSync(Project.load(Effect.succeed("a")))
-		const router = routerWith(JSON.parse(JSON.stringify(project)), undefined)
-		const source = TanStackSource.make(router, [
-			[
-				Project,
-				function (project, receipt) {
-					return { _tag: "Project" as const, project, receipt }
-				},
-			],
-		])
-		await router.load()
-		expect(source.getSnapshot().map(function ({ message }) { return message })).toEqual([
-			{ _tag: "Project", project: "a", receipt: { name: "Project", key: "a", version: project.version } },
-		])
-	})
-
 	it("composes heterogeneous declarations in match order and preserves transported receipts", async () => {
 		const project = Effect.runSync(Project.load(Effect.succeed("a")))
 		const count = Effect.runSync(Count.load(Effect.succeed(2)))

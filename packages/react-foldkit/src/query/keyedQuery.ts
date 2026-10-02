@@ -13,10 +13,10 @@ import {
 	FetchInterruptOutcome,
 	type FoldLens,
 	type KeyedArgs,
-	type KeyedLoadPayload,
+	type LoadPayload,
 	type KeyedSettle,
 	type KeyedSettleIf,
-	type KeyedSettleIfLoad,
+	type SettleIfLoad,
 	type LiftConfig,
 	type LiftKeyedQuery,
 	type Lifted,
@@ -83,11 +83,9 @@ export type KeyedQueryMessage<A, AI, E, EI, Fields extends SyncFields> = ReturnT
 
 /** Schema for a KeyedQuery's retained slots and request identity. */
 export function makeKeyedQueryModel<A, AI, E, EI, Fields extends SyncFields>(
-	data: Schema.Codec<A, AI>,
-	error: Schema.Codec<E, EI>,
+	result: Schema.Codec<AsyncData.AsyncData<A, E>, AsyncData.AsyncData<AI, EI>, never, never>,
 	Args: Schema.Struct<Fields>
 ) {
-	const states = AsyncData.Schema(data, error)
 	return Schema.Struct({
 		instanceId: Schema.String,
 		nextRequestId: Schema.Number,
@@ -95,7 +93,7 @@ export function makeKeyedQueryModel<A, AI, E, EI, Fields extends SyncFields>(
 			Schema.String,
 			Schema.Struct({
 				args: Args,
-				data: states.schema,
+				data: result,
 				maybePendingRequestId: Schema.Option(Schema.Number),
 			})
 		),
@@ -120,6 +118,12 @@ export interface KeyedQuery<
 	readonly name: Name
 	readonly Args: Schema.Struct<Fields>
 	readonly toKey: (args: KeyedArgs<Fields>) => string
+	readonly Result: Schema.Codec<AsyncData.AsyncData<A, E>, AsyncData.AsyncData<AI, EI>, never, never>
+	readonly Load: Schema.Struct<
+		Fields & {
+			readonly result: Schema.Codec<AsyncData.AsyncData<A, E>, AsyncData.AsyncData<AI, EI>, never, never>
+		}
+	>
 	readonly Model: KeyedQueryModel<A, AI, E, EI, Fields>
 	readonly Message: KeyedQueryMessage<A, AI, E, EI, Fields>
 	readonly Fetch: Interrupt extends true
@@ -207,7 +211,7 @@ export interface KeyedQuery<
 		A,
 		E
 	>
-	readonly settleIfLoad: KeyedSettleIfLoad<
+	readonly settleIfLoad: SettleIfLoad<
 		KeyedQueryModel<A, AI, E, EI, Fields>["Type"],
 		KeyedQueryMessage<A, AI, E, EI, Fields>["Type"],
 		KeyedArgs<Fields>,
@@ -312,7 +316,12 @@ export function defineKeyedQuery<Name extends string, A, AI, E, EI, Fields exten
 	})
 	const Fetch = config.interrupt === true ? InterruptibleFetch : PlainFetch
 
-	const Model = makeKeyedQueryModel(config.data, config.error, Args)
+	const Result = states.schema
+	const Load = Schema.Struct({
+		...Args.fields,
+		result: Result,
+	})
+	const Model = makeKeyedQueryModel(Result, Args)
 	type Model = typeof Model.Type
 	type UpdateReturn = Update.Return<Model, Message, R>
 	type UpdateStep = Update.Step<Model, Message, R>
@@ -487,11 +496,11 @@ export function defineKeyedQuery<Name extends string, A, AI, E, EI, Fields exten
 			return settle(model, args, result)
 		}
 	)
-	const settleIfLoad: KeyedSettleIfLoad<Model, Message, Args, A, E> = Function.dual(
+	const settleIfLoad: SettleIfLoad<Model, Message, Args, A, E> = Function.dual(
 		3,
 		function (
 			model: Model,
-			load: KeyedLoadPayload<Args, A, E>,
+			load: LoadPayload<Args, A, E>,
 			options: SettleIfOptions<A, E>
 		): Update.Return<Model, Message> {
 			const args = loadArgsFromPayload(load)
@@ -543,13 +552,13 @@ export function defineKeyedQuery<Name extends string, A, AI, E, EI, Fields exten
 
 	function liftSettleIfLoad<ParentModel, ParentMessage>(
 		lens: FoldLens<ParentModel, ParentMessage, Model, Message>
-	): KeyedSettleIfLoad<ParentModel, ParentMessage, Args, A, E> {
+	): SettleIfLoad<ParentModel, ParentMessage, Args, A, E> {
 		const fold = Update.foldChild({
 			...lens,
 			update: function (
 				model: Model,
 				input: {
-					readonly load: KeyedLoadPayload<Args, A, E>
+					readonly load: LoadPayload<Args, A, E>
 					readonly options: SettleIfOptions<A, E>
 				}
 			) {
@@ -557,7 +566,7 @@ export function defineKeyedQuery<Name extends string, A, AI, E, EI, Fields exten
 				return settleIf(model, args, input.load.result, input.options)
 			},
 		})
-		return Function.dual(3, function (model: ParentModel, load: KeyedLoadPayload<Args, A, E>, options: SettleIfOptions<A, E>) {
+		return Function.dual(3, function (model: ParentModel, load: LoadPayload<Args, A, E>, options: SettleIfOptions<A, E>) {
 			return fold(model, { load, options })
 		})
 	}
@@ -629,6 +638,8 @@ export function defineKeyedQuery<Name extends string, A, AI, E, EI, Fields exten
 		name: config.name,
 		Args,
 		toKey,
+		Result,
+		Load,
 		Model,
 		Message,
 		Fetch,

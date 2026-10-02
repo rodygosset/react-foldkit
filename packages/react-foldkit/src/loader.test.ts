@@ -92,6 +92,9 @@ describe("Loader.fromQuery", () => {
 		expect(dual.payload).toEqual(envelope.payload)
 		expect(envelope.name).toBe("Project")
 		expect(envelope.key).toBe("p1")
+		expect(envelope._tag).toBe("react-foldkit/Loader")
+		expect(ProjectLoader.Load).toBe(keyed.Load)
+		expect(ProjectLoader.Load.fields.result).toBe(keyed.Result)
 		expect(ProjectLoader.decode(envelope)).toEqual({ projectId: "p1", result })
 		expect(Schema.decodeUnknownSync(ProjectLoader.Load)({ projectId: "p1", result })).toEqual({
 			projectId: "p1",
