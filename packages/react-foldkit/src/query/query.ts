@@ -1,9 +1,10 @@
-import { Effect, Option, Schema, Stream, pipe } from "effect"
+import { Effect, Function, Number, Option, Schema, Stream, pipe } from "effect"
 
-import * as AsyncData from "../asyncData"
-import type { Interruptible } from "../command"
-import * as Command from "../command"
+import * as AsyncData from "foldkit/asyncData"
+import type { Interruptible } from "foldkit/command"
+import * as Command from "foldkit/command"
 import { defineMessageUnion } from "../message"
+import { modifyFields } from "foldkit/struct"
 import * as Subscription from "../subscription"
 import * as Update from "../update"
 import {
@@ -13,17 +14,19 @@ import {
 	type FoldLens,
 	type LiftConfig,
 	type LiftQuery,
+	type Lifted,
 	type ParentKeyFoldConfig,
 	type SettledFetchOf,
 	allocateRequestId,
 	applyPolicy,
 	completeCancel,
+	foldChildFromPolicy,
 	isParentKeyFoldConfig,
-	modifyFields,
 	parentKeyToLens,
 	replaceSlot,
 	runExecute,
 	sameRequest,
+	settleSlot,
 } from "./internal"
 
 export type QueryConfig<Name extends string, A, AI, E, EI, R> = Readonly<{
@@ -73,7 +76,7 @@ export interface Query<Name extends string, A, AI, E, EI, R = never, Interrupt e
 		? Interruptible.DefinitionWithArgs<
 				`Fetch${Name}`,
 				{ instanceId: typeof Schema.String; requestId: typeof Schema.Number },
-				{ readonly instanceId: string },
+				{ readonly instanceId: string; readonly requestId: number },
 				Effect.Effect<SettledFetchOf<QueryMessage<A, AI, E, EI>>, never, R>
 			>
 		: Command.CommandDefinitionWithArgs<
@@ -105,7 +108,13 @@ export interface Query<Name extends string, A, AI, E, EI, R = never, Interrupt e
 	readonly forget: (
 		model: QueryModel<A, AI, E, EI>["Type"]
 	) => Update.Return<QueryModel<A, AI, E, EI>["Type"], QueryMessage<A, AI, E, EI>["Type"], R>
-	readonly lift: LiftQuery<QueryModel<A, AI, E, EI>["Type"], QueryMessage<A, AI, E, EI>["Type"], R>
+	/** Installs Success/Failure, retaining previous good data on failure and invalidating older Fetches. */
+	readonly settle: Update.Fold<
+		QueryModel<A, AI, E, EI>["Type"],
+		QueryMessage<A, AI, E, EI>["Type"],
+		AsyncData.AsyncData<A, E>
+	>
+	readonly lift: LiftQuery<QueryModel<A, AI, E, EI>["Type"], QueryMessage<A, AI, E, EI>["Type"], R, A, E>
 	readonly watchSubscription: <ParentModel, ParentMessage>(
 		entry: Subscription.EntryBuilder<ParentModel, ParentMessage, R>,
 		config: {
@@ -155,12 +164,17 @@ export function defineQuery<Name extends string, A, AI, E, EI, R>(config: QueryC
 		messages: [Message.SettledFetch],
 		execute: executeFetch,
 	})
+	const encodeInterruptKey = Schema.Tuple([Schema.String, Schema.Number]).pipe(
+		Schema.fromJsonString,
+		Schema.encodeSync
+	)
 	const InterruptibleFetch = Command.define(`Fetch${config.name}`, {
 		args: FetchArgs,
 		messages: [Message.SettledFetch, Message.CompletedCancelFetch],
 		interrupt: {
-			keyFields: ["instanceId"],
-			toKey: (keyArgs: { readonly instanceId: string }) => keyArgs.instanceId,
+			keyFields: ["instanceId", "requestId"],
+			toKey: (keyArgs: { readonly instanceId: string; readonly requestId: number }) =>
+				encodeInterruptKey([keyArgs.instanceId, keyArgs.requestId]),
 		},
 		execute: executeFetch,
 	})
@@ -186,12 +200,18 @@ export function defineQuery<Name extends string, A, AI, E, EI, R>(config: QueryC
 			}
 		},
 		isCurrent: (model, _args, request) => sameRequest(model.instanceId, model.maybePendingRequestId, request),
+		settle: (model, _args, data) =>
+			modifyFields(model, {
+				data: () => data,
+				nextRequestId: Number.increment,
+				maybePendingRequestId: () => Option.none(),
+			}),
 		load: (_args, request) => Fetch(request),
 		interrupt:
 			config.interrupt === true
 				? (model, _args, intent) =>
 						Option.map(model.maybePendingRequestId, (requestId) =>
-							InterruptibleFetch.Interrupt({ instanceId: model.instanceId }, (outcome) =>
+							InterruptibleFetch.Interrupt({ instanceId: model.instanceId, requestId }, (outcome) =>
 								Message.CompletedCancelFetch({
 									instanceId: model.instanceId,
 									requestId,
@@ -221,6 +241,12 @@ export function defineQuery<Name extends string, A, AI, E, EI, R>(config: QueryC
 
 		return { model: forgotten }
 	}
+
+	const settle: Update.Fold<Model, Message, AsyncData.AsyncData<A, E>> = Function.dual(
+		2,
+		(model: Model, data: AsyncData.AsyncData<A, E>): Update.Return<Model, Message> =>
+			settleSlot(store, model, undefined, data)
+	)
 
 	const revalidate = (model: Model): UpdateReturn => applyPolicy(store, model, undefined, "revalidate")
 	const revalidateOrLoad = (model: Model): UpdateReturn => applyPolicy(store, model, undefined, "revalidateOrLoad")
@@ -281,6 +307,7 @@ export function defineQuery<Name extends string, A, AI, E, EI, R>(config: QueryC
 		foldConfig: FoldLens<ParentModel, ParentMessage, Model, Message>
 	) => ({
 		fold: Update.foldChild({ update, ...foldConfig }),
+		settle: foldChildFromPolicy(settle, foldConfig),
 		revalidate: Update.foldChildStep({
 			update: revalidate,
 			...foldConfig,
@@ -304,10 +331,10 @@ export function defineQuery<Name extends string, A, AI, E, EI, R>(config: QueryC
 
 	function lift<ParentModel, ParentMessage>(
 		config: ParentKeyFoldConfig<ParentModel, ParentMessage, Model, Message>
-	): ReturnType<LiftQuery<Model, Message, R>>
+	): Lifted.Query<ParentModel, ParentMessage, Message, R, A, E>
 	function lift<ParentModel, ParentMessage>(
 		config: FoldLens<ParentModel, ParentMessage, Model, Message>
-	): ReturnType<LiftQuery<Model, Message, R>>
+	): Lifted.Query<ParentModel, ParentMessage, Message, R, A, E>
 	function lift<ParentModel, ParentMessage>(config: LiftConfig<ParentModel, ParentMessage, Model, Message>) {
 		if (isParentKeyFoldConfig(config)) return liftFromLens(parentKeyToLens(config))
 
@@ -331,6 +358,7 @@ export function defineQuery<Name extends string, A, AI, E, EI, R>(config: QueryC
 		init,
 		read,
 		update,
+		settle,
 		revalidate,
 		revalidateOrLoad,
 		loadIfMissing,

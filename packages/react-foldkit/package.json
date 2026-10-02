@@ -20,8 +20,12 @@
 		"typecheck": "tsc --noEmit",
 		"test": "vitest run",
 		"test:watch": "vitest",
+		"test:browser": "vitest run --config vitest.browser.config.ts",
+		"test:package": "bun run build && vitest run --config vitest.package.config.ts",
+		"test:types:package": "tsc --project test/types/tsconfig.json",
 		"coverage": "vitest run --coverage",
-		"pack:dry": "bun run build && npm pack --dry-run"
+		"pack:dry": "bun run build && npm pack --dry-run",
+		"test:types:example": "tsc --project examples/project-cache/tsconfig.json"
 	},
 	"exports": {
 		".": {
@@ -72,6 +76,14 @@
 			"types": "./eslint/dist/index.d.ts",
 			"import": "./eslint/dist/index.js",
 			"default": "./eslint/dist/index.js"
+		},
+		"./commitSource": {
+			"types": "./dist/commitSource.d.ts",
+			"import": "./dist/commitSource.js"
+		},
+		"./tanstack": {
+			"types": "./dist/tanstack.d.ts",
+			"import": "./dist/tanstack.js"
 		}
 	},
 	"main": "./dist/index.js",
@@ -86,34 +98,54 @@
 		"THIRD-PARTY-NOTICES.md"
 	],
 	"peerDependencies": {
-		"effect": "4.0.0-rc.112",
+		"effect": "4.0.0-rc.117",
 		"eslint": "^9",
-		"react": "^19.2.6"
+		"react": "^19.2.6",
+		"@tanstack/react-router": "^1.170.33",
+		"@tanstack/router-core": "^1.171.28",
+		"@tanstack/react-store": "^0.9.3"
 	},
 	"peerDependenciesMeta": {
 		"eslint": {
 			"optional": true
+		},
+		"@tanstack/react-router": {
+			"optional": true
+		},
+		"@tanstack/router-core": {
+			"optional": true
+		},
+		"@tanstack/react-store": {
+			"optional": true
 		}
 	},
 	"dependencies": {
-		"foldkit": "0.158.2",
-		"picomatch": "^4.0.5"
+		"foldkit": "0.164.0",
+		"picomatch": "^4.0.5",
+		"use-sync-external-store": "1.6.0"
 	},
 	"devDependencies": {
-		"@effect/vitest": "4.0.0-rc.112",
+		"@effect/vitest": "4.0.0-rc.117",
+		"@tanstack/react-router": "1.170.33",
+		"@tanstack/react-store": "0.9.3",
+		"@tanstack/router-core": "1.171.28",
 		"@testing-library/react": "^16.3.2",
 		"@types/estree": "^1.0.8",
 		"@types/picomatch": "^4.0.3",
 		"@types/react": "^19",
 		"@types/react-dom": "^19.2.4",
-		"@vitest/coverage-v8": "^4.1.9",
-		"effect": "4.0.0-rc.112",
+		"@types/use-sync-external-store": "1.5.0",
+		"@vitest/browser-playwright": "5.0.3",
+		"@vitest/coverage-v8": "5.0.3",
+		"effect": "4.0.0-rc.117",
 		"eslint": "^9",
 		"happy-dom": "^20.10.4",
+		"playwright": "^1.61.0",
 		"react": "^19.2.6",
 		"react-dom": "^19.2.6",
 		"tsup": "^8.5.0",
 		"typescript": "^6",
-		"vitest": "^4.1.9"
+		"vite": "8.2.0",
+		"vitest": "5.0.3"
 	}
 }

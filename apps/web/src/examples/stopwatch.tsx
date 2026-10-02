@@ -1,9 +1,9 @@
 import { Button } from "@workspace/ui/components/button"
 import { Clock, Duration, Effect, Schema, Stream } from "effect"
-import { ReactFoldkit } from "react-foldkit"
 import * as Command from "react-foldkit/command"
 import { defineMessageUnion } from "react-foldkit/message"
-import { evo } from "react-foldkit/struct"
+import { defineApplication } from "react-foldkit/react"
+import { modifyFields } from "react-foldkit/struct"
 import * as Subscription from "react-foldkit/subscription"
 import type * as Update from "react-foldkit/update"
 import { ExampleShell } from "../components/example-shell"
@@ -68,18 +68,18 @@ const update = (model: Model, message: Message): UpdateReturn =>
 			commands: [DetermineStartTime({ elapsedMs: model.elapsedMs })],
 		}),
 		CompletedDetermineStartTime: ({ startTime }) => ({
-			model: evo(model, {
+			model: modifyFields(model, {
 				isRunning: () => true,
 				startTime: () => startTime,
 			}),
 		}),
 		ClickedStop: () => ({
-			model: evo(model, {
+			model: modifyFields(model, {
 				isRunning: () => false,
 			}),
 		}),
 		ClickedReset: () => ({
-			model: evo(model, {
+			model: modifyFields(model, {
 				elapsedMs: () => 0,
 				isRunning: () => false,
 				startTime: () => 0,
@@ -92,7 +92,7 @@ const update = (model: Model, message: Message): UpdateReturn =>
 		CompletedDetermineTickTime({ elapsedMs }) {
 			if (!model.isRunning) return { model }
 			return {
-				model: evo(model, {
+				model: modifyFields(model, {
 					elapsedMs: () => elapsedMs,
 				}),
 			}
@@ -124,7 +124,7 @@ const subscriptions = Subscription.make<Model, Message>()((entry) => ({
 	),
 }))
 
-const { Provider, useModel, useDispatch } = ReactFoldkit.make({
+const { Provider, useModel, useDispatch } = defineApplication({
 	Model,
 	update,
 	subscriptions,

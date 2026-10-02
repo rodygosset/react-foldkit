@@ -4,7 +4,8 @@ import { Label } from "@workspace/ui/components/label"
 import { Schema } from "effect"
 import { PlusIcon } from "lucide-react"
 import { defineMessageUnion } from "react-foldkit/message"
-import { evo } from "react-foldkit/struct"
+import { defineSubmodel } from "react-foldkit/react"
+import { modifyFields } from "react-foldkit/struct"
 import type * as Update from "react-foldkit/update"
 
 export const Model = Schema.Struct({
@@ -29,27 +30,33 @@ export type UpdateReturn = Update.ReturnWithOutMessage<Model, Message, OutMessag
 
 export const init = (): Model => ({ draft: "" })
 
-const submit = (model: Model): UpdateReturn => {
+function submit(model: Model): UpdateReturn {
 	const text = model.draft.trim()
 	if (text.length === 0) return { model }
 
 	return {
-		model: evo(model, { draft: () => "" }),
+		model: modifyFields(model, { draft: () => "" }),
 		outMessage: OutMessage.Submitted({ text }),
 	}
 }
 
 export const update = (model: Model, message: Message): UpdateReturn =>
 	Message.match<UpdateReturn>(message, {
-		ChangedDraft: ({ text }) => ({ model: evo(model, { draft: () => text }) }),
+		ChangedDraft: ({ text }) => ({ model: modifyFields(model, { draft: () => text }) }),
 		ClickedSubmit: () => submit(model),
 	})
 
-/** Props-only view: no Store, no parent Messages. */
-export function View(props: { model: Model; dispatch: (message: Message) => void }) {
+const { useModel, useDispatch, Provider } = defineSubmodel<Model, Message>()
+
+export { Provider }
+
+/** Reads the child view context supplied by the parent. */
+export function View() {
+	const draft = useModel((model) => model.draft)
+	const dispatch = useDispatch()
 	const onSubmit = (event: React.SubmitEvent<HTMLFormElement>) => {
 		event.preventDefault()
-		props.dispatch(Message.ClickedSubmit())
+		dispatch(Message.ClickedSubmit())
 	}
 
 	return (
@@ -66,17 +73,17 @@ export function View(props: { model: Model; dispatch: (message: Message) => void
 				</Label>
 				<Input
 					id="todo-draft"
-					value={props.model.draft}
+					value={draft}
 					placeholder="What needs doing?"
 					autoComplete="off"
-					onChange={(event) => props.dispatch(Message.ChangedDraft({ text: event.target.value }))}
+					onChange={(event) => dispatch(Message.ChangedDraft({ text: event.target.value }))}
 				/>
 			</div>
 			<Button
 				type="submit"
 				size="icon-lg"
 				aria-label="Add todo"
-				disabled={props.model.draft.trim().length === 0}
+				disabled={draft.trim().length === 0}
 			>
 				<PlusIcon />
 			</Button>

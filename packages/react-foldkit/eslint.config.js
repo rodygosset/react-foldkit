@@ -9,6 +9,8 @@ export default [
 			"dist/**",
 			"eslint/**",
 			"vitest.config.ts",
+			"vitest.browser.config.ts",
+			"vitest.package.config.ts",
 			"vitest.setup.ts",
 			"tsup.config.ts",
 			"tsup.eslint.config.ts",

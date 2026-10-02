@@ -7,7 +7,7 @@ import { Story } from "foldkit/test"
 import * as AsyncData from "./asyncData"
 import { defineMessageUnion } from "./message"
 import * as Query from "./query/index"
-import { modifyFields } from "./query/internal"
+import { modifyFields } from "./struct"
 import type { SyncFields } from "./query/keyedQuery"
 import type * as Update from "./update"
 
@@ -81,12 +81,11 @@ function pendingNotes(
 	data: AsyncData.AsyncData<ReadonlyArray<Note>, string>,
 	requestId: number
 ): ReturnType<typeof notes.init> {
-	return {
-		...notes.init("notes"),
-		data,
-		maybePendingRequestId: Option.some(requestId),
-		nextRequestId: requestId + 1,
-	}
+	return modifyFields(notes.init("notes"), {
+		data: () => data,
+		maybePendingRequestId: () => Option.some(requestId),
+		nextRequestId: () => requestId + 1,
+	})
 }
 
 function notesFetch(requestId: number) {
@@ -102,10 +101,7 @@ function withNoteSlot(
 	noteId: string,
 	data: AsyncData.AsyncData<Note, string>
 ): ReturnType<typeof noteById.init> {
-	return {
-		...model,
-		slots: HashMap.set(model.slots, slotKey({ noteId }), noteSlot(noteId, data)),
-	}
+	return modifyFields(model, { slots: (slots) => HashMap.set(slots, slotKey({ noteId }), noteSlot(noteId, data)) })
 }
 
 function noteFetch(noteId: string, requestId: number) {
