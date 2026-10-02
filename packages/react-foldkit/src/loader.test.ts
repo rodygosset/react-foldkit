@@ -99,7 +99,7 @@ describe("Loader.fromQuery", () => {
 		})
 	})
 
-	it("requires a resource key for an unkeyed Query", () => {
+	it("requires a resource key for a Query", () => {
 		const query = Query.define({
 			name: "Home",
 			data: Schema.String,

@@ -71,7 +71,7 @@ encoding, and Message mapping live here.
 import { fromQuery } from "react-foldkit/loader"
 
 export const Loader = fromQuery(query)
-// unkeyed: fromQuery(query, { key: () => "home" })
+// Query: fromQuery(query, { key: () => "home" })
 // or define({ name, data, key }) for non-Query payloads
 ```
 
@@ -79,7 +79,7 @@ export const Loader = fromQuery(query)
 | ------ | ------------------------------------------------------------------------------------------------- |
 | `name` | Stable name, unique in the adapter registry. Taken from `query.name` when using `fromQuery`. |
 | `data` | Schema Codec. Loading, keys, and mapping use decoded values; the envelope carries encoded values. |
-| `key`  | Resource key from decoded data. Optional for keyed Queries (defaults to `query.toKey`); required for unkeyed Queries. |
+| `key`  | Resource key from decoded data. Optional for KeyedQueries (defaults to `query.toKey`); required for Queries. |
 
 Map to root Messages with `Loader.mapMessages` at the app registry. Prefer that
 over embedding app Message types in the entity declaration.
@@ -462,6 +462,7 @@ export const { Provider, useModel, useDispatch, SubmodelProvider } = defineAppli
 // app/providers/provider.tsx
 import * as React from "react"
 import { useRouter } from "@tanstack/react-router"
+import * as Loader from "react-foldkit/loader"
 import * as TanStackSource from "react-foldkit/tanstack"
 import * as Project from "@/entities/project"
 import * as Application from "../model/application"
