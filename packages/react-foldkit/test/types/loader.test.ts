@@ -59,17 +59,31 @@ describe("Loader public types", () => {
 		// @ts-expect-error Message mapping receives the declaration's payload, not arbitrary values.
 		Loader.mapMessages(RecordLoader, function (data: number) { return data })
 
-		const query = Query.define({
+		const keyed = Query.define({
 			name: "Typed",
 			args: { id: Schema.String },
 			data: Schema.String,
 			error: Schema.String,
 			execute: function () { return Effect.succeed("ok") },
 		})
-		const fromQuery = Loader.defineFromQuery(query)
-		expectTypeOf(fromQuery.Load.Type).toExtend<{ readonly id: string; readonly result: unknown }>()
-		expectTypeOf(Loader.loadQuery(fromQuery, query, { id: "a" })).toExtend<
+		const keyedLoader = Loader.fromQuery(keyed)
+		expectTypeOf(keyedLoader.Load.Type).toExtend<{ readonly id: string; readonly result: unknown }>()
+		expectTypeOf(Loader.loadQuery(keyedLoader, keyed, { id: "a" })).toExtend<
 			Effect.Effect<Loader.Envelope<unknown>, Schema.SchemaError, never>
 		>()
+
+		const query = Query.define({
+			name: "Home",
+			data: Schema.String,
+			error: Schema.String,
+			execute: Effect.succeed("home"),
+		})
+		const homeLoader = Loader.fromQuery(query, {
+			key: function () { return "home" },
+		})
+		expectTypeOf(homeLoader.Load.Type).toExtend<{ readonly result: unknown }>()
+		expectTypeOf(homeLoader.Load.Type).not.toExtend<{ readonly id: string }>()
+		// @ts-expect-error Unkeyed Queries require options.key.
+		Loader.fromQuery(query)
 	}
 })

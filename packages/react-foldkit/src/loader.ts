@@ -1,4 +1,4 @@
-import { Effect, Function, Pipeable, Schema } from "effect"
+import { Effect, Function, Pipeable, Predicate, Schema } from "effect"
 import type * as AsyncData from "./asyncData"
 import { Envelope, EnvelopeHeader, Receipt } from "./internal/loader-envelope"
 import type { KeyedArgs } from "./query/internal"
@@ -100,7 +100,15 @@ type KeyedQueryForLoader<Name extends string, A, AI, E, EI, Fields extends SyncF
 	readonly toKey: (args: KeyedArgs<Fields>) => string
 }
 
+type QueryForLoader<Name extends string, A, AI, E, EI, R> = Query<Name, A, AI, E, EI, R, boolean> & {
+	readonly name: Name
+}
+
 type KeyedLoadType<Fields extends SyncFields, A, E> = KeyedArgs<Fields> & {
+	readonly result: AsyncData.AsyncData<A, E>
+}
+
+type LoadType<A, E> = {
 	readonly result: AsyncData.AsyncData<A, E>
 }
 
@@ -108,54 +116,94 @@ export interface QueryLoader<A, I, LoadSchema extends Schema.Top> extends Loader
 	readonly Load: LoadSchema
 }
 
-/** Derives a Loader Schema and resource key from a keyed Query. */
-export function defineFromQuery<Name extends string, A, AI, E, EI, Fields extends SyncFields, R>(
+function isKeyedQueryForLoader(
+	query: KeyedQueryForLoader<string, any, any, any, any, SyncFields, any> | QueryForLoader<string, any, any, any, any, any>
+): query is KeyedQueryForLoader<string, any, any, any, any, SyncFields, any> {
+	return Predicate.hasProperty(query, "Args")
+}
+
+function attachLoadSchema<A, I, LoadSchema extends Schema.Top>(
+	loader: Loader<A, I>,
+	Load: LoadSchema
+): QueryLoader<A, I, LoadSchema> {
+	return Object.assign(loader, { Load })
+}
+
+/** Derives a Loader Schema and resource key from a Query. */
+export function fromQuery<Name extends string, A, AI, E, EI, Fields extends SyncFields, R>(
 	query: KeyedQueryForLoader<Name, A, AI, E, EI, Fields, R>,
 	options?: {
 		readonly key?: (load: KeyedLoadType<Fields, A, E>) => string
 	}
-) {
-	const resultSchema = query.Model.fields.slots.value.fields.data
-	const Load = Schema.Struct({
-		...query.Args.fields,
-		result: resultSchema,
-	})
-	const key =
-		options?.key ??
-		function (load: KeyedLoadType<Fields, A, E>) {
-			const args = { ...load } as Record<string, unknown>
-			delete args.result
-			return query.toKey(args as KeyedArgs<Fields>)
+): QueryLoader<
+	KeyedLoadType<Fields, A, E>,
+	Schema.Codec.Encoded<
+		Schema.Struct<
+			Fields & {
+				readonly result: Schema.Codec<AsyncData.AsyncData<A, E>, AsyncData.AsyncData<AI, EI>, never, never>
+			}
+		>
+	>,
+	Schema.Struct<
+		Fields & {
+			readonly result: Schema.Codec<AsyncData.AsyncData<A, E>, AsyncData.AsyncData<AI, EI>, never, never>
 		}
-	const loader = define({
-		name: query.name,
-		data: Load as Schema.Codec<KeyedLoadType<Fields, A, E>, typeof Load.Encoded>,
-		key,
-	})
-	return Object.assign(loader, { Load })
-}
-
-type SingleQueryForLoader<Name extends string, A, AI, E, EI, R> = Query<Name, A, AI, E, EI, R, boolean> & {
-	readonly name: Name
-}
-
-type SingleLoadType<A, E> = { readonly result: AsyncData.AsyncData<A, E> }
-
-/** Derives a Loader Schema from a single-slot Query. `key` names the delivery resource. */
-export function defineFromQuerySingle<Name extends string, A, AI, E, EI, R>(
-	query: SingleQueryForLoader<Name, A, AI, E, EI, R>,
+	>
+>
+export function fromQuery<Name extends string, A, AI, E, EI, R>(
+	query: QueryForLoader<Name, A, AI, E, EI, R>,
 	options: {
-		readonly key: (load: SingleLoadType<A, E>) => string
+		readonly key: (load: LoadType<A, E>) => string
 	}
-) {
+): QueryLoader<
+	LoadType<A, E>,
+	Schema.Codec.Encoded<
+		Schema.Struct<{
+			readonly result: Schema.Codec<AsyncData.AsyncData<A, E>, AsyncData.AsyncData<AI, EI>, never, never>
+		}>
+	>,
+	Schema.Struct<{
+		readonly result: Schema.Codec<AsyncData.AsyncData<A, E>, AsyncData.AsyncData<AI, EI>, never, never>
+	}>
+>
+export function fromQuery(query: any, options?: { readonly key?: (load: any) => string }): any {
+	if (isKeyedQueryForLoader(query)) {
+		const resultSchema = query.Model.fields.slots.value.fields.data
+		const Load = Schema.Struct({
+			...query.Args.fields,
+			result: resultSchema,
+		})
+		const key =
+			options?.key ??
+			function (load: KeyedLoadType<SyncFields, any, any>) {
+				const args = { ...load } as Record<string, unknown>
+				delete args.result
+				return query.toKey(args as KeyedArgs<SyncFields>)
+			}
+		return attachLoadSchema(
+			define({
+				name: query.name,
+				data: Load as unknown as Schema.Codec<KeyedLoadType<SyncFields, any, any>, typeof Load.Encoded>,
+				key,
+			}),
+			Load
+		)
+	}
+
 	const resultSchema = query.Model.fields.data
 	const Load = Schema.Struct({ result: resultSchema })
-	const loader = define({
-		name: query.name,
-		data: Load as Schema.Codec<SingleLoadType<A, E>, typeof Load.Encoded>,
-		key: options.key,
-	})
-	return Object.assign(loader, { Load })
+	const key = options?.key
+	if (key === undefined) {
+		throw new Error(`Loader.fromQuery("${query.name}"): unkeyed Queries require options.key`)
+	}
+	return attachLoadSchema(
+		define({
+			name: query.name,
+			data: Load as unknown as Schema.Codec<LoadType<any, any>, typeof Load.Encoded>,
+			key,
+		}),
+		Load
+	)
 }
 
 /** Maps accepted deliveries while preserving loading, encoding, and receipt identity. */

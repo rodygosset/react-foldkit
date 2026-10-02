@@ -68,8 +68,8 @@ describe("Loader declarations", () => {
 	})
 })
 
-describe("Loader.defineFromQuery", () => {
-	const query = Query.define({
+describe("Loader.fromQuery", () => {
+	const keyed = Query.define({
 		name: "Project",
 		args: { projectId: Schema.String },
 		toKey: function ({ projectId }) {
@@ -81,11 +81,11 @@ describe("Loader.defineFromQuery", () => {
 			return Effect.succeed({ id: projectId, revision: 1 })
 		},
 	})
-	const ProjectLoader = Loader.defineFromQuery(query)
+	const ProjectLoader = Loader.fromQuery(keyed)
 
-	it("derives Load schema and key from the Query", () => {
+	it("derives Load schema and key from a keyed Query", () => {
 		const result = AsyncData.Success({ data: { id: "p1", revision: 1 } })
-		const envelope = Effect.runSync(Loader.loadQuery(ProjectLoader, query, { projectId: "p1" }))
+		const envelope = Effect.runSync(Loader.loadQuery(ProjectLoader, keyed, { projectId: "p1" }))
 		expect(envelope.name).toBe("Project")
 		expect(envelope.key).toBe("p1")
 		expect(ProjectLoader.decode(envelope)).toEqual({ projectId: "p1", result })
@@ -93,6 +93,28 @@ describe("Loader.defineFromQuery", () => {
 			projectId: "p1",
 			result,
 		})
+	})
+
+	it("requires a resource key for an unkeyed Query", () => {
+		const query = Query.define({
+			name: "Home",
+			data: Schema.String,
+			error: Schema.String,
+			execute: Effect.succeed("home"),
+		})
+		const HomeLoader = Loader.fromQuery(query, {
+			key: function () {
+				return "home"
+			},
+		})
+		const result = AsyncData.Success({ data: "home" })
+		const envelope = Effect.runSync(HomeLoader.load(Effect.succeed({ result })))
+		expect(envelope.name).toBe("Home")
+		expect(envelope.key).toBe("home")
+		expect(HomeLoader.decode(envelope)).toEqual({ result })
+		expect(function () {
+			return Loader.fromQuery(query as never)
+		}).toThrow(/require options\.key/)
 	})
 })
 

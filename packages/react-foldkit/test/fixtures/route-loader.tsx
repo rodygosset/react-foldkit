@@ -50,7 +50,7 @@ const query = Query.define({
 	execute: ({ query }) => Effect.flatMap(LoaderApi, (api) => api.load(query)),
 })
 
-const SearchLoader = Loader.defineFromQuery(query)
+const SearchLoader = Loader.fromQuery(query)
 const SearchModel = Schema.Struct({
 	activeQuery: Schema.String,
 	results: query.Model,

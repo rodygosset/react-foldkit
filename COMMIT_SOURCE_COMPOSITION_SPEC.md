@@ -6,7 +6,7 @@ existing Provider, commit, Query, and projection APIs.
 This replaces the app-owned envelopes/adapter in
 [the route-loader spec](ROUTE_LOADER_API_SPEC.md):
 
-- `Loader.define` / `Loader.defineFromQuery` for typed loader envelopes.
+- `Loader.define` / `Loader.fromQuery` for typed loader envelopes.
 - `Loader.mapMessages` for root Message composition at the parent wire.
 - `Loader.load` (dual) and `Loader.loadQuery` for envelope programs.
 - `Query.settleIf` for freshness-gated external settlement.
@@ -65,18 +65,19 @@ Internal `commit-source.make` delivers snapshots through root commit.
 Export `react-foldkit/loader` and the root `Loader` namespace. Declarations,
 encoding, and Message mapping live here.
 
-### define / defineFromQuery
+### define / fromQuery
 
 ```ts
-const ProjectLoader = Loader.defineFromQuery(query)
+const ProjectLoader = Loader.fromQuery(query)
+// unkeyed: Loader.fromQuery(query, { key: () => "home" })
 // or Loader.define({ name, data, key }) for non-Query payloads
 ```
 
 | Option | Contract                                                                                          |
 | ------ | ------------------------------------------------------------------------------------------------- |
-| `name` | Stable name, unique in the adapter registry. Taken from `query.name` when using `defineFromQuery`. |
+| `name` | Stable name, unique in the adapter registry. Taken from `query.name` when using `fromQuery`. |
 | `data` | Schema Codec. Loading, keys, and mapping use decoded values; the envelope carries encoded values. |
-| `key`  | Resource key from decoded data. Defaults to `query.toKey` on the args fields for keyed Queries.   |
+| `key`  | Resource key from decoded data. Optional for keyed Queries (defaults to `query.toKey`); required for unkeyed Queries. |
 
 Map to root Messages with `Loader.mapMessages` at the app registry. Prefer that
 over embedding app Message types in the entity declaration.
@@ -326,7 +327,7 @@ export const { useModel, useDispatch, Provider } = defineSubmodel<Model, Message
 import * as Loader from "react-foldkit/loader"
 import { query } from "../model/query"
 
-export const ProjectLoader = Loader.defineFromQuery(query)
+export const ProjectLoader = Loader.fromQuery(query)
 export const Load = ProjectLoader.Load
 export type Load = typeof Load.Type
 ```
