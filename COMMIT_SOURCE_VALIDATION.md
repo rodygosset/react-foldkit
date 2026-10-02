@@ -1,7 +1,7 @@
 # Commit and source validation
 
-Validated `Store.commit`, `useCommit`, and `useCommitSource` with production APIs,
-scalar tokens, and one persistent root Provider.
+Validated `Store.commit`, `useCommit`, and Provider `commitSource` with production
+APIs, scalar tokens, and one persistent root Provider.
 
 ## Recorded results
 
