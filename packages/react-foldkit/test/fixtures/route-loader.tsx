@@ -80,7 +80,7 @@ function searchUpdate(
 		GotQueryMessage: ({ message }) => resultsChild.fold(model, message),
 		Revalidated: ({ query }) => resultsChild.revalidateOrLoad(model, { query }),
 		LoadedFromRoute({ query: q, result }) {
-			const settled = resultsChild.settleIf(model, { query: q }, result, {
+			const settled = resultsChild.settleIfLoad(model, { query: q, result }, {
 				fresher: function (incoming, current) {
 					return incoming.revision > current.revision
 				},
@@ -247,15 +247,13 @@ export function createFixture(
 		path: "/search/$query",
 		loader: ({ params, abortController }) =>
 			Effect.runPromise(
-				query.run({ query: params.query }).pipe(
+				SearchLoader.loadQuery({ query: params.query }).pipe(
 					Effect.provideService(LoaderApi, {
 						load: (query) => Effect.suspend(() => {
 							loaderCalls.push(query)
 							return options.load?.(query) ?? Effect.succeed(response(query))
 						}),
 					}),
-					Effect.map(result => ({ query: params.query, result })),
-					SearchLoader.load,
 				),
 				{ signal: abortController.signal },
 			),

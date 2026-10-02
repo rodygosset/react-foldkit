@@ -9,7 +9,7 @@ export type Model = typeof Model.Type
 
 export const Message = defineMessageUnion({
 	GotProjectMessage: { message: Project.Message },
-	CompletedLoadProject: { load: Project.Load },
+	CompletedLoadProject: { load: Project.Loader.Load },
 	ClickedRefreshProject: { projectId: Schema.String },
 })
 export type Message = typeof Message.Type
@@ -27,7 +27,7 @@ export const update = (model: Model, message: Message) =>
 	Message.match<Update.Return<Model, Message>>(message, {
 		GotProjectMessage: ({ message }) => projects.fold(model, message),
 		CompletedLoadProject: ({ load }) =>
-			projects.settleIf(model, { projectId: load.projectId }, load.result, {
+			projects.settleIfLoad(model, load, {
 				fresher: function (incoming, current) {
 					return incoming.revision > current.revision
 				},

@@ -116,17 +116,124 @@ export interface QueryLoader<A, I, LoadSchema extends Schema.Top> extends Loader
 	readonly Load: LoadSchema
 }
 
+export interface KeyedQueryLoader<
+	Name extends string,
+	A,
+	AI,
+	E,
+	EI,
+	Fields extends SyncFields,
+	R,
+	LoadSchema extends Schema.Top,
+> extends QueryLoader<KeyedLoadType<Fields, A, E>, Schema.Codec.Encoded<LoadSchema>, LoadSchema> {
+	readonly query: KeyedQueryForLoader<Name, A, AI, E, EI, Fields, R>
+	readonly loadQuery: (
+		args: KeyedArgs<Fields>
+	) => Effect.Effect<Envelope<Schema.Codec.Encoded<LoadSchema>>, Schema.SchemaError, R>
+}
+
+export interface UnkeyedQueryLoader<
+	Name extends string,
+	A,
+	AI,
+	E,
+	EI,
+	R,
+	LoadSchema extends Schema.Top,
+> extends QueryLoader<LoadType<A, E>, Schema.Codec.Encoded<LoadSchema>, LoadSchema> {
+	readonly query: QueryForLoader<Name, A, AI, E, EI, R>
+	readonly loadQuery: Effect.Effect<Envelope<Schema.Codec.Encoded<LoadSchema>>, Schema.SchemaError, R>
+}
+
 function isKeyedQueryForLoader(
 	query: KeyedQueryForLoader<string, any, any, any, any, SyncFields, any> | QueryForLoader<string, any, any, any, any, any>
 ): query is KeyedQueryForLoader<string, any, any, any, any, SyncFields, any> {
 	return Predicate.hasProperty(query, "Args")
 }
 
-function attachLoadSchema<A, I, LoadSchema extends Schema.Top>(
-	loader: Loader<A, I>,
-	Load: LoadSchema
-): QueryLoader<A, I, LoadSchema> {
-	return Object.assign(loader, { Load })
+type KeyedQueryLoaderLike = {
+	readonly query: { run: (args: any) => Effect.Effect<AsyncData.AsyncData<unknown, unknown>, never, unknown> }
+	readonly load: Loader<any, unknown>["load"]
+}
+
+type QueryRunRequirements<Q> = Q extends {
+	run: (...args: Array<any>) => Effect.Effect<AsyncData.AsyncData<unknown, unknown>, never, infer R>
+}
+	? R
+	: never
+
+function runKeyedLoadQuery(self: KeyedQueryLoaderLike, args: any) {
+	return self.query.run(args).pipe(
+		Effect.map(function (result) {
+			return { ...args, result }
+		}),
+		self.load as Loader<any, unknown>["load"]
+	)
+}
+
+/** Runs the Query bound to a keyed QueryLoader. Data-first or data-last. */
+export const loadQuery: {
+	<Args>(
+		args: Args
+	): <Self extends KeyedQueryLoaderLike & { readonly query: { run: (args: Args) => Effect.Effect<AsyncData.AsyncData<unknown, unknown>, never, unknown> } }>(
+		self: Self
+	) => Effect.Effect<Envelope<unknown>, Schema.SchemaError, QueryRunRequirements<Self["query"]>>
+	<Self extends KeyedQueryLoaderLike, Args extends Parameters<Self["query"]["run"]>[0]>(
+		self: Self,
+		args: Args
+	): Effect.Effect<Envelope<unknown>, Schema.SchemaError, QueryRunRequirements<Self["query"]>>
+} = Function.dual(2, runKeyedLoadQuery)
+
+function attachKeyedQueryLoader<
+	Name extends string,
+	A,
+	AI,
+	E,
+	EI,
+	Fields extends SyncFields,
+	R,
+	LoadSchema extends Schema.Struct<
+		Fields & {
+			readonly result: Schema.Codec<AsyncData.AsyncData<A, E>, AsyncData.AsyncData<AI, EI>, never, never>
+		}
+	>,
+>(
+	loader: Loader<KeyedLoadType<Fields, A, E>, Schema.Codec.Encoded<LoadSchema>>,
+	Load: LoadSchema,
+	query: KeyedQueryForLoader<Name, A, AI, E, EI, Fields, R>
+): KeyedQueryLoader<Name, A, AI, E, EI, Fields, R, LoadSchema> {
+	const bound = Object.assign(loader, {
+		Load,
+		query,
+		loadQuery(args: KeyedArgs<Fields>) {
+			return runKeyedLoadQuery(bound, args)
+		},
+	}) as KeyedQueryLoader<Name, A, AI, E, EI, Fields, R, LoadSchema>
+	return bound
+}
+
+function attachUnkeyedQueryLoader<
+	Name extends string,
+	A,
+	AI,
+	E,
+	EI,
+	R,
+	LoadSchema extends Schema.Struct<{
+		readonly result: Schema.Codec<AsyncData.AsyncData<A, E>, AsyncData.AsyncData<AI, EI>, never, never>
+	}>,
+>(
+	loader: Loader<LoadType<A, E>, Schema.Codec.Encoded<LoadSchema>>,
+	Load: LoadSchema,
+	query: QueryForLoader<Name, A, AI, E, EI, R>
+): UnkeyedQueryLoader<Name, A, AI, E, EI, R, LoadSchema> {
+	const loadQuery = query.run.pipe(
+		Effect.map(function (result) {
+			return { result } as LoadType<A, E>
+		}),
+		loader.load
+	)
+	return Object.assign(loader, { Load, query, loadQuery })
 }
 
 /** Derives a Loader Schema and resource key from a Query. */
@@ -135,15 +242,14 @@ export function fromQuery<Name extends string, A, AI, E, EI, Fields extends Sync
 	options?: {
 		readonly key?: (load: KeyedLoadType<Fields, A, E>) => string
 	}
-): QueryLoader<
-	KeyedLoadType<Fields, A, E>,
-	Schema.Codec.Encoded<
-		Schema.Struct<
-			Fields & {
-				readonly result: Schema.Codec<AsyncData.AsyncData<A, E>, AsyncData.AsyncData<AI, EI>, never, never>
-			}
-		>
-	>,
+): KeyedQueryLoader<
+	Name,
+	A,
+	AI,
+	E,
+	EI,
+	Fields,
+	R,
 	Schema.Struct<
 		Fields & {
 			readonly result: Schema.Codec<AsyncData.AsyncData<A, E>, AsyncData.AsyncData<AI, EI>, never, never>
@@ -155,13 +261,13 @@ export function fromQuery<Name extends string, A, AI, E, EI, R>(
 	options: {
 		readonly key: (load: LoadType<A, E>) => string
 	}
-): QueryLoader<
-	LoadType<A, E>,
-	Schema.Codec.Encoded<
-		Schema.Struct<{
-			readonly result: Schema.Codec<AsyncData.AsyncData<A, E>, AsyncData.AsyncData<AI, EI>, never, never>
-		}>
-	>,
+): UnkeyedQueryLoader<
+	Name,
+	A,
+	AI,
+	E,
+	EI,
+	R,
 	Schema.Struct<{
 		readonly result: Schema.Codec<AsyncData.AsyncData<A, E>, AsyncData.AsyncData<AI, EI>, never, never>
 	}>
@@ -180,14 +286,12 @@ export function fromQuery(query: any, options?: { readonly key?: (load: any) => 
 				delete args.result
 				return query.toKey(args as KeyedArgs<SyncFields>)
 			}
-		return attachLoadSchema(
-			define({
-				name: query.name,
-				data: Load as unknown as Schema.Codec<KeyedLoadType<SyncFields, any, any>, typeof Load.Encoded>,
-				key,
-			}),
-			Load
-		)
+		const loader = define({
+			name: query.name,
+			data: Load as unknown as Schema.Codec<KeyedLoadType<SyncFields, any, any>, typeof Load.Encoded>,
+			key,
+		})
+		return attachKeyedQueryLoader(loader, Load, query)
 	}
 
 	const resultSchema = query.Model.fields.data
@@ -196,14 +300,12 @@ export function fromQuery(query: any, options?: { readonly key?: (load: any) => 
 	if (key === undefined) {
 		throw new Error(`Loader.fromQuery("${query.name}"): unkeyed Queries require options.key`)
 	}
-	return attachLoadSchema(
-		define({
-			name: query.name,
-			data: Load as unknown as Schema.Codec<LoadType<any, any>, typeof Load.Encoded>,
-			key,
-		}),
-		Load
-	)
+	const loader = define({
+		name: query.name,
+		data: Load as unknown as Schema.Codec<LoadType<any, any>, typeof Load.Encoded>,
+		key,
+	})
+	return attachUnkeyedQueryLoader(loader, Load, query)
 }
 
 /** Maps accepted deliveries while preserving loading, encoding, and receipt identity. */
@@ -245,30 +347,4 @@ export const load: {
 	effect: Effect.Effect<A, E, R>
 ): Effect.Effect<Envelope<I>, E | Schema.SchemaError, R> {
 	return self.load(effect)
-})
-
-/** Runs a keyed Query and encodes the `{ ...args, result }` payload. */
-export const loadQuery: {
-	<Name extends string, A, AI, E, EI, Fields extends SyncFields, R, Message>(
-		query: KeyedQueryForLoader<Name, A, AI, E, EI, Fields, R>,
-		args: KeyedArgs<Fields>
-	): (
-		self: Loader<KeyedLoadType<Fields, A, E>, unknown, Message>
-	) => Effect.Effect<Envelope<unknown>, Schema.SchemaError, R>
-	<Name extends string, A, AI, E, EI, Fields extends SyncFields, R, I, Message>(
-		self: Loader<KeyedLoadType<Fields, A, E>, I, Message>,
-		query: KeyedQueryForLoader<Name, A, AI, E, EI, Fields, R>,
-		args: KeyedArgs<Fields>
-	): Effect.Effect<Envelope<I>, Schema.SchemaError, R>
-} = Function.dual(3, function <Name extends string, A, AI, E, EI, Fields extends SyncFields, R, I, Message>(
-	self: Loader<KeyedLoadType<Fields, A, E>, I, Message>,
-	query: KeyedQueryForLoader<Name, A, AI, E, EI, Fields, R>,
-	args: KeyedArgs<Fields>
-): Effect.Effect<Envelope<I>, Schema.SchemaError, R> {
-	return query.run(args).pipe(
-		Effect.map(function (result) {
-			return { ...args, result }
-		}),
-		self.load
-	)
 })

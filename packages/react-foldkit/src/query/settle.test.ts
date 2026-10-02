@@ -91,6 +91,17 @@ describe("Query.settle", () => {
 		}
 	})
 
+	it("settleIfLoad mirrors settleIf for Loader-shaped payloads", () => {
+		const differs = function (incoming: string, current: string) {
+			return incoming !== current
+		}
+		const empty = keyed.init("home")
+		const load = { ...a, result: external }
+		expect(keyed.settleIfLoad(empty, load, { fresher: differs }).model).toEqual(
+			keyed.settleIf(empty, a, external, { fresher: differs }).model
+		)
+	})
+
 	it("settles only the addressed key, preserving siblings and the supplied args", () => {
 		const first = keyed.loadIfMissing(keyed.init("home"), a).model
 		const pending = keyed.loadIfMissing(first, b).model

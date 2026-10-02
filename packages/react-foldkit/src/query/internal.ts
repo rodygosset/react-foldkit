@@ -308,6 +308,29 @@ export interface KeyedSettleIf<Model, Message, Args, A, E> {
 	): Update.Step<Model, Message>
 }
 
+/** Loader-shaped payload: query args plus an external AsyncData outcome. */
+export type KeyedLoadPayload<Args, A, E> = Args & {
+	readonly result: AsyncData.AsyncData<A, E>
+}
+
+/** A keyed settleIfLoad accepts the combined Loader payload. */
+export interface KeyedSettleIfLoad<Model, Message, Args, A, E> {
+	(
+		model: Model,
+		load: KeyedLoadPayload<Args, A, E>,
+		options: SettleIfOptions<A, E>
+	): Update.Return<Model, Message>
+	(load: KeyedLoadPayload<Args, A, E>, options: SettleIfOptions<A, E>): Update.Step<Model, Message>
+}
+
+/** Strips the AsyncData result field from a Loader payload. */
+export function loadArgsFromPayload<Args extends Record<string, unknown>, A, E>(
+	load: KeyedLoadPayload<Args, A, E>
+): Args {
+	const { result: _result, ...args } = load
+	return args as unknown as Args
+}
+
 export namespace Lifted {
 	export type Query<
 		ParentModel,
@@ -354,6 +377,7 @@ export namespace Lifted {
 		fold: Update.Fold<ParentModel, ParentMessage, ChildMessage, R>
 		settle: KeyedSettle<ParentModel, ParentMessage, Args, A, E>
 		settleIf: KeyedSettleIf<ParentModel, ParentMessage, Args, A, E>
+		settleIfLoad: KeyedSettleIfLoad<ParentModel, ParentMessage, Args, A, E>
 		revalidate: Update.Fold<ParentModel, ParentMessage, Args, R>
 		revalidateOrLoad: Update.Fold<ParentModel, ParentMessage, Args, R>
 		loadIfMissing: Update.Fold<ParentModel, ParentMessage, Args, R>

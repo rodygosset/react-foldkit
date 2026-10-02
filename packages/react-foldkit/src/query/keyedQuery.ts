@@ -13,8 +13,10 @@ import {
 	FetchInterruptOutcome,
 	type FoldLens,
 	type KeyedArgs,
+	type KeyedLoadPayload,
 	type KeyedSettle,
 	type KeyedSettleIf,
+	type KeyedSettleIfLoad,
 	type LiftConfig,
 	type LiftKeyedQuery,
 	type Lifted,
@@ -33,6 +35,7 @@ import {
 	sameRequest,
 	settleSlot,
 	shouldSettle,
+	loadArgsFromPayload,
 } from "./internal"
 
 export type SyncFields = {
@@ -198,6 +201,13 @@ export interface KeyedQuery<
 	>
 	/** Settles only when Success is fresher or Failure hits an empty non-pending slot. */
 	readonly settleIf: KeyedSettleIf<
+		KeyedQueryModel<A, AI, E, EI, Fields>["Type"],
+		KeyedQueryMessage<A, AI, E, EI, Fields>["Type"],
+		KeyedArgs<Fields>,
+		A,
+		E
+	>
+	readonly settleIfLoad: KeyedSettleIfLoad<
 		KeyedQueryModel<A, AI, E, EI, Fields>["Type"],
 		KeyedQueryMessage<A, AI, E, EI, Fields>["Type"],
 		KeyedArgs<Fields>,
@@ -477,6 +487,17 @@ export function defineKeyedQuery<Name extends string, A, AI, E, EI, Fields exten
 			return settle(model, args, result)
 		}
 	)
+	const settleIfLoad: KeyedSettleIfLoad<Model, Message, Args, A, E> = Function.dual(
+		3,
+		function (
+			model: Model,
+			load: KeyedLoadPayload<Args, A, E>,
+			options: SettleIfOptions<A, E>
+		): Update.Return<Model, Message> {
+			const args = loadArgsFromPayload(load)
+			return settleIf(model, args, load.result, options)
+		}
+	)
 
 	function liftSettle<ParentModel, ParentMessage>(
 		lens: FoldLens<ParentModel, ParentMessage, Model, Message>
@@ -520,12 +541,34 @@ export function defineKeyedQuery<Name extends string, A, AI, E, EI, Fields exten
 		)
 	}
 
+	function liftSettleIfLoad<ParentModel, ParentMessage>(
+		lens: FoldLens<ParentModel, ParentMessage, Model, Message>
+	): KeyedSettleIfLoad<ParentModel, ParentMessage, Args, A, E> {
+		const fold = Update.foldChild({
+			...lens,
+			update: function (
+				model: Model,
+				input: {
+					readonly load: KeyedLoadPayload<Args, A, E>
+					readonly options: SettleIfOptions<A, E>
+				}
+			) {
+				const args = loadArgsFromPayload(input.load)
+				return settleIf(model, args, input.load.result, input.options)
+			},
+		})
+		return Function.dual(3, function (model: ParentModel, load: KeyedLoadPayload<Args, A, E>, options: SettleIfOptions<A, E>) {
+			return fold(model, { load, options })
+		})
+	}
+
 	const liftFromLens = <ParentModel, ParentMessage>(
 		foldConfig: FoldLens<ParentModel, ParentMessage, Model, Message>
 	) => ({
 		fold: Update.foldChild({ update, ...foldConfig }),
 		settle: liftSettle(foldConfig),
 		settleIf: liftSettleIf(foldConfig),
+		settleIfLoad: liftSettleIfLoad(foldConfig),
 		revalidate: foldChildFromPolicy(revalidate, foldConfig),
 		revalidateOrLoad: foldChildFromPolicy(revalidateOrLoad, foldConfig),
 		loadIfMissing: foldChildFromPolicy(loadIfMissing, foldConfig),
@@ -594,6 +637,7 @@ export function defineKeyedQuery<Name extends string, A, AI, E, EI, Fields exten
 		update,
 		settle,
 		settleIf,
+		settleIfLoad,
 		revalidate,
 		revalidateOrLoad,
 		loadIfMissing,

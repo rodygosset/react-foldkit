@@ -68,7 +68,10 @@ describe("Loader public types", () => {
 		})
 		const keyedLoader = Loader.fromQuery(keyed)
 		expectTypeOf(keyedLoader.Load.Type).toExtend<{ readonly id: string; readonly result: unknown }>()
-		expectTypeOf(Loader.loadQuery(keyedLoader, keyed, { id: "a" })).toExtend<
+		expectTypeOf(keyedLoader.loadQuery({ id: "a" })).toExtend<
+			Effect.Effect<Loader.Envelope<unknown>, Schema.SchemaError, never>
+		>()
+		expectTypeOf(Loader.loadQuery(keyedLoader, { id: "a" })).toExtend<
 			Effect.Effect<Loader.Envelope<unknown>, Schema.SchemaError, never>
 		>()
 
