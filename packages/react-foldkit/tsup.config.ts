@@ -12,6 +12,7 @@ export default defineConfig({
 		asyncData: "src/asyncData.ts",
 		command: "src/command.ts",
 		commitSource: "src/commitSource.ts",
+		loader: "src/loader.ts",
 		message: "src/message.ts",
 		query: "src/query/index.ts",
 		schema: "src/schema.ts",

@@ -6,10 +6,13 @@ existing Provider, commit, Query, and projection APIs.
 This replaces the app-owned envelopes/adapter in
 [the route-loader spec](ROUTE_LOADER_API_SPEC.md):
 
-- `CommitSource.define` for typed loader envelopes.
-- `CommitSource.mapMessages` for root Message composition.
+- `Loader.define` / `Loader.defineFromQuery` for typed loader envelopes.
+- `Loader.mapMessages` for root Message composition at the parent wire.
+- `Loader.load` (dual) and `Loader.loadQuery` for envelope programs.
+- `Query.settleIf` for freshness-gated external settlement.
 - `TanStackSource.make` for accepted router results.
 - `SubmodelProvider` for inline child Provider composition.
+- `CommitSource` remains the sync delivery protocol only.
 
 ## State ownership
 
@@ -46,34 +49,37 @@ revisions, still complete rejected requests so they do not stay pending.
   Callers use `Project.Provider`.
 - Views use these bindings and ReactFoldkit hooks. Keep route hooks in app glue
   and lifecycle hooks in Providers.
-- Use `Project.Loader` and the application namespace `Application`.
+- Use `Project.ProjectLoader` and the application namespace `Application`.
 - Use one project Query with static `Effect.succeed` data. Run Promises at route
   boundaries; omit server functions and custom async fetching.
 
-## CommitSource module
+## CommitSource protocol
 
-Export `react-foldkit/commitSource` and the root `CommitSource` namespace.
-Keep source/entry/options types and `CommitSourceError` in `react-foldkit/react`.
+Export `react-foldkit/commitSource` and the root `CommitSource` namespace for the
+sync snapshot protocol (`CommitEntry`, `CommitSource`, `CommitSourceOptions`,
+`CommitSourceError`). Keep those types re-exported from `react-foldkit/react`.
+Internal `commit-source.make` delivers snapshots through root commit.
 
-Public `define` declares loader data; internal `commit-source.make` delivers
-snapshots through root commit.
+## Loader module
 
-### define
+Export `react-foldkit/loader` and the root `Loader` namespace. Declarations,
+encoding, and Message mapping live here.
+
+### define / defineFromQuery
 
 ```ts
-const Loader = CommitSource.define({
-	name: "Project",
-	data: Load,
-	key: ({ projectId }) => projectId,
-})
+const ProjectLoader = Loader.defineFromQuery(query)
+// or Loader.define({ name, data, key }) for non-Query payloads
 ```
 
-| Option       | Contract                                                                                          |
-| ------------ | ------------------------------------------------------------------------------------------------- |
-| `name`       | Stable name, unique in the adapter registry.                                                      |
-| `data`       | Schema Codec. Loading, keys, and mapping use decoded values; the envelope carries encoded values. |
-| `key`        | Resource key computed from decoded data.                                                          |
-| `toMessage?` | Local mapping; defaults to the decoded payload. The example maps to root Messages in the app.     |
+| Option | Contract                                                                                          |
+| ------ | ------------------------------------------------------------------------------------------------- |
+| `name` | Stable name, unique in the adapter registry. Taken from `query.name` when using `defineFromQuery`. |
+| `data` | Schema Codec. Loading, keys, and mapping use decoded values; the envelope carries encoded values. |
+| `key`  | Resource key from decoded data. Defaults to `query.toKey` on the args fields for keyed Queries.   |
+
+Map to root Messages with `Loader.mapMessages` at the app registry. Prefer that
+over embedding app Message types in the entity declaration.
 
 Codecs need no services and must decode synchronously, including during SSR.
 The host handles native Schema defects. Loading Effects can require services;
@@ -81,22 +87,20 @@ The host handles native Schema defects. Loading Effects can require services;
 
 Declarations are Pipeable. Methods work in pipelines without a JavaScript receiver.
 
-### load
+### load / loadQuery
 
 ```ts
-const program = Project.query.run({ projectId }).pipe(
-	Effect.map((result) => ({ projectId, result })),
-	Project.Loader.load
-)
+const program = Loader.loadQuery(Project.ProjectLoader, Project.query, { projectId })
+// dual: Project.ProjectLoader.pipe(Loader.loadQuery(Project.query, { projectId }))
 ```
 
-`Loader.load` lazily produces an envelope:
+`Loader.load` (dual) lazily produces an envelope:
 
 ```text
 Effect<Payload, E, R> → Effect<Envelope, E | EncodingError, R>
 ```
 
-Use the same unary method directly or in pipelines. It accepts no Layer or
+Use the unary method, the dual, or `loadQuery`. It accepts no Layer or
 ManagedRuntime and preserves input errors, services, and defects.
 
 Each execution runs the input, encodes its payload, computes the key, and allocates
@@ -143,21 +147,22 @@ between Provider Command Layers and loader runtimes when needed.
 ### mapMessages
 
 ```ts
-Project.Loader.pipe(CommitSource.mapMessages((load) => Application.Message.CompletedLoadProject({ load })))
+Project.ProjectLoader.pipe(Loader.mapMessages((load) => Application.Message.CompletedLoadProject({ load })))
 ```
 
 Mappings compose in order when the adapter decodes accepted data. They preserve
 the Schema, name, key, encoding, and token, without fetching or changing the Model.
+Lift Messages at the parent wire (app registry), not in the entity module.
 
 The optional second argument is the delivery receipt:
 
 ```ts
-CommitSource.mapMessages((load, receipt) => Message.CompletedLoadProject({ load, receipt }))
+Loader.mapMessages((load, receipt) => Message.CompletedLoadProject({ load, receipt }))
 ```
 
 A receipt contains the declaration name, resource key, and string token. Export
 its Schema for Message fields and preserve it through mappings. Update still
-checks freshness; the example needs only the payload.
+checks freshness via `settleIf`; the example needs only the payload.
 
 ## TanStack adapter
 
@@ -165,7 +170,7 @@ Add the optional `react-foldkit/tanstack` entry point:
 
 ```ts
 const source = TanStackSource.make(router, [
-	Project.Loader.pipe(CommitSource.mapMessages((load) => Application.Message.CompletedLoadProject({ load }))),
+	Project.ProjectLoader.pipe(Loader.mapMessages((load) => Application.Message.CompletedLoadProject({ load }))),
 ])
 ```
 
@@ -318,27 +323,19 @@ export const { useModel, useDispatch, Provider } = defineSubmodel<Model, Message
 
 ```ts
 // entities/project/api/loader.ts
-import { Schema } from "effect"
-import * as CommitSource from "react-foldkit/commitSource"
+import * as Loader from "react-foldkit/loader"
 import { query } from "../model/query"
 
-export const Load = Schema.Struct({
-	projectId: Schema.String,
-	result: query.Model.fields.slots.value.fields.data,
-})
-
-export const Loader = CommitSource.define({
-	name: "Project",
-	data: Load,
-	key: ({ projectId }) => projectId,
-})
+export const ProjectLoader = Loader.defineFromQuery(query)
+export const Load = ProjectLoader.Load
+export type Load = typeof Load.Type
 ```
 
 ```ts
 // entities/project/index.ts
 export { Project } from "./model/project"
 export { query, Model, Message } from "./model/query"
-export { Loader, Load } from "./api/loader"
+export { ProjectLoader, Load } from "./api/loader"
 export { Provider, useModel, useDispatch } from "./ui/provider"
 ```
 
@@ -369,14 +366,11 @@ export { View } from "./ui/view"
 
 ```ts
 // pages/project-details/api/load.ts
-import { Effect } from "effect"
+import * as Loader from "react-foldkit/loader"
 import * as Project from "@/entities/project"
 
 export const load = (projectId: string) =>
-	Project.query.run({ projectId }).pipe(
-		Effect.map((result) => ({ projectId, result })),
-		Project.Loader.load
-	)
+	Loader.loadQuery(Project.ProjectLoader, Project.query, { projectId })
 ```
 
 ```tsx
@@ -418,8 +412,7 @@ export { View } from "./ui/view"
 
 ```ts
 // app/model/application.ts
-import { Option, Schema } from "effect"
-import * as AsyncData from "react-foldkit/asyncData"
+import { Schema } from "effect"
 import { defineMessageUnion } from "react-foldkit/message"
 import { defineApplication, defineSubmodelProjection } from "react-foldkit/react"
 import type * as Update from "react-foldkit/update"
@@ -434,37 +427,20 @@ export const Message = defineMessageUnion({
 })
 export type Message = typeof Message.Type
 
+const toProjectMessage = (message: Project.Message) => Message.GotProjectMessage({ message })
+
 const projects = Project.query.lift<Model, Message>({
 	field: "projects",
-	toParentMessage: (message) => Message.GotProjectMessage({ message }),
+	toParentMessage: toProjectMessage,
 })
-
-const acceptProjectLoad = (model: Model, load: typeof Project.Load.Type): Update.Return<Model, Message> => {
-	const current = Project.query.read(model.projects, {
-		projectId: load.projectId,
-	})
-
-	if (AsyncData.isFailure(load.result)) {
-		if (AsyncData.hasData(current) || AsyncData.isPending(current)) {
-			return { model }
-		}
-		return projects.settle(model, { projectId: load.projectId }, load.result)
-	}
-
-	if (!AsyncData.isSuccess(load.result)) return { model }
-
-	const maybeCurrent = AsyncData.getData(current)
-	if (Option.isSome(maybeCurrent) && load.result.data.revision <= maybeCurrent.value.revision) {
-		return { model }
-	}
-
-	return projects.settle(model, { projectId: load.projectId }, load.result)
-}
 
 export const update = (model: Model, message: Message) =>
 	Message.match<Update.Return<Model, Message>>(message, {
 		GotProjectMessage: ({ message }) => projects.fold(model, message),
-		CompletedLoadProject: ({ load }) => acceptProjectLoad(model, load),
+		CompletedLoadProject: ({ load }) =>
+			projects.settleIf(model, { projectId: load.projectId }, load.result, {
+				fresher: (incoming, current) => incoming.revision > current.revision,
+			}),
 		ClickedRefreshProject: ({ projectId }) => projects.revalidateOrLoad(model, { projectId }),
 	})
 
@@ -474,7 +450,7 @@ export const init = (): Update.Return<Model, Message> => ({
 
 export const projectsProjection = defineSubmodelProjection({
 	read: (model: Model) => model.projects,
-	toParentMessage: (message: Project.Message) => Message.GotProjectMessage({ message }),
+	toParentMessage: toProjectMessage,
 })
 
 export const { Provider, useModel, useDispatch, SubmodelProvider } = defineApplication({ Model, update })
@@ -484,7 +460,7 @@ export const { Provider, useModel, useDispatch, SubmodelProvider } = defineAppli
 // app/providers/provider.tsx
 import * as React from "react"
 import { useRouter } from "@tanstack/react-router"
-import * as CommitSource from "react-foldkit/commitSource"
+import * as Loader from "react-foldkit/loader"
 import * as TanStackSource from "react-foldkit/tanstack"
 import * as Project from "@/entities/project"
 import * as Application from "../model/application"
@@ -493,7 +469,9 @@ export function Provider({ children }: { children: React.ReactNode }) {
 	const router = useRouter()
 	const [source] = React.useState(() =>
 		TanStackSource.make(router, [
-			Project.Loader.pipe(CommitSource.mapMessages((load) => Application.Message.CompletedLoadProject({ load }))),
+			Project.ProjectLoader.pipe(
+				Loader.mapMessages((load) => Application.Message.CompletedLoadProject({ load }))
+			),
 		])
 	)
 

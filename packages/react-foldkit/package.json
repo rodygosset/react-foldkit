@@ -81,6 +81,10 @@
 			"types": "./dist/commitSource.d.ts",
 			"import": "./dist/commitSource.js"
 		},
+		"./loader": {
+			"types": "./dist/loader.d.ts",
+			"import": "./dist/loader.js"
+		},
 		"./tanstack": {
 			"types": "./dist/tanstack.d.ts",
 			"import": "./dist/tanstack.js"

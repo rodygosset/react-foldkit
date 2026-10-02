@@ -262,6 +262,52 @@ type FetchResult<Message> = Message extends {
 	? Outcome
 	: never
 
+/** Policy for installing an external Success/Failure before settle. */
+export interface SettleIfOptions<A, E> {
+	readonly fresher: (incoming: A, current: A) => boolean
+	readonly acceptFailure?: (current: AsyncData.AsyncData<A, E>) => boolean
+}
+
+/** True when a Failure may replace an empty, non-pending slot. */
+export function acceptEmptyFailure<A, E>(current: AsyncData.AsyncData<A, E>): boolean {
+	return !AsyncData.hasData(current) && !AsyncData.isPending(current)
+}
+
+/** Whether an external AsyncData outcome should be settled into the current slot. */
+export function shouldSettle<A, E>(
+	current: AsyncData.AsyncData<A, E>,
+	result: AsyncData.AsyncData<A, E>,
+	options: SettleIfOptions<A, E>
+): boolean {
+	if (AsyncData.isFailure(result)) {
+		return (options.acceptFailure ?? acceptEmptyFailure)(current)
+	}
+	if (!AsyncData.isSuccess(result)) return false
+	return Option.match(AsyncData.getData(current), {
+		onNone: function () {
+			return true
+		},
+		onSome: function (currentData) {
+			return options.fresher(result.data, currentData)
+		},
+	})
+}
+
+/** A keyed settleIf can also be used as a data-last Update step. */
+export interface KeyedSettleIf<Model, Message, Args, A, E> {
+	(
+		model: Model,
+		args: Args,
+		result: AsyncData.AsyncData<A, E>,
+		options: SettleIfOptions<A, E>
+	): Update.Return<Model, Message>
+	(
+		args: Args,
+		result: AsyncData.AsyncData<A, E>,
+		options: SettleIfOptions<A, E>
+	): Update.Step<Model, Message>
+}
+
 export namespace Lifted {
 	export type Query<
 		ParentModel,
@@ -273,6 +319,17 @@ export namespace Lifted {
 	> = Readonly<{
 		fold: Update.Fold<ParentModel, ParentMessage, ChildMessage, R>
 		settle: Update.Fold<ParentModel, ParentMessage, AsyncData.AsyncData<A, E>>
+		settleIf: {
+			(
+				model: ParentModel,
+				result: AsyncData.AsyncData<A, E>,
+				options: SettleIfOptions<A, E>
+			): Update.Return<ParentModel, ParentMessage>
+			(
+				result: AsyncData.AsyncData<A, E>,
+				options: SettleIfOptions<A, E>
+			): Update.Step<ParentModel, ParentMessage>
+		}
 		revalidate: Update.Step<ParentModel, ParentMessage, R>
 		revalidateOrLoad: Update.Step<ParentModel, ParentMessage, R>
 		loadIfMissing: Update.Step<ParentModel, ParentMessage, R>
@@ -296,6 +353,7 @@ export namespace Lifted {
 	> = Readonly<{
 		fold: Update.Fold<ParentModel, ParentMessage, ChildMessage, R>
 		settle: KeyedSettle<ParentModel, ParentMessage, Args, A, E>
+		settleIf: KeyedSettleIf<ParentModel, ParentMessage, Args, A, E>
 		revalidate: Update.Fold<ParentModel, ParentMessage, Args, R>
 		revalidateOrLoad: Update.Fold<ParentModel, ParentMessage, Args, R>
 		loadIfMissing: Update.Fold<ParentModel, ParentMessage, Args, R>

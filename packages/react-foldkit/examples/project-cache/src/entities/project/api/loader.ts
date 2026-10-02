@@ -1,14 +1,6 @@
-import { Schema } from "effect"
-import * as CommitSource from "react-foldkit/commitSource"
+import * as Loader from "react-foldkit/loader"
 import { query } from "../model/query"
 
-export const Load = Schema.Struct({
-  projectId: Schema.String,
-  result: query.Model.fields.slots.value.fields.data,
-})
-
-export const Loader = CommitSource.define({
-  name: "Project",
-  data: Load,
-  key: ({ projectId }) => projectId,
-})
+export const ProjectLoader = Loader.defineFromQuery(query)
+export const Load = ProjectLoader.Load
+export type Load = typeof Load.Type

@@ -1,4 +1,4 @@
-/** Real router fixture using the public CommitSource and TanStack APIs. */
+/** Real router fixture using the public Loader and TanStack APIs. */
 import {
 	createMemoryHistory,
 	createRootRoute,
@@ -11,7 +11,7 @@ import {
 import { Context, Effect, Layer, Option, Schema } from "effect"
 import React from "react"
 import * as AsyncData from "../../src/asyncData"
-import * as CommitSource from "../../src/commitSource"
+import * as Loader from "../../src/loader"
 import * as TanStackSource from "../../src/tanstack"
 import { defineMessageUnion } from "../../src/message"
 import * as Query from "../../src/query"
@@ -50,13 +50,7 @@ const query = Query.define({
 	execute: ({ query }) => Effect.flatMap(LoaderApi, (api) => api.load(query)),
 })
 
-const SearchData = query.Model.fields.slots.value.fields.data
-const SearchLoad = Schema.Struct({ query: Schema.String, result: SearchData })
-const Loader = CommitSource.define({
-	name: "Search",
-	data: SearchLoad,
-	key: ({ query }) => query,
-})
+const SearchLoader = Loader.defineFromQuery(query)
 const SearchModel = Schema.Struct({
 	activeQuery: Schema.String,
 	results: query.Model,
@@ -66,7 +60,7 @@ const SearchMessage = defineMessageUnion({
 	Revalidated: { query: Schema.String },
 	LoadedFromRoute: {
 		query: Schema.String,
-		result: SearchData,
+		result: SearchLoader.Load.fields.result,
 	},
 })
 type SearchModel = typeof SearchModel.Type
@@ -86,12 +80,11 @@ function searchUpdate(
 		GotQueryMessage: ({ message }) => resultsChild.fold(model, message),
 		Revalidated: ({ query }) => resultsChild.revalidateOrLoad(model, { query }),
 		LoadedFromRoute({ query: q, result }) {
-			const current = query.read(model.results, { query: q })
-			const previous = AsyncData.getData(current)
-			const accepted = AsyncData.isSuccess(result)
-				? Option.isNone(previous) || result.data.revision > previous.value.revision
-				: AsyncData.isFailure(result) && !AsyncData.hasData(current) && !AsyncData.isPending(current)
-			const settled = accepted ? resultsChild.settle(model, { query: q }, result) : { model }
+			const settled = resultsChild.settleIf(model, { query: q }, result, {
+				fresher: function (incoming, current) {
+					return incoming.revision > current.revision
+				},
+			})
 			return { ...settled, model: modifyFields(settled.model, { activeQuery: () => q }) }
 		},
 	})
@@ -107,10 +100,12 @@ const AppMessage = defineMessageUnion({
 })
 export type AppMessage = typeof AppMessage.Type
 
-const routeLoader = Loader.pipe(
-	CommitSource.mapMessages(({ query, result }) => AppMessage.GotSearchMessage({
-		message: SearchMessage.LoadedFromRoute({ query, result }),
-	})),
+const routeLoader = SearchLoader.pipe(
+	Loader.mapMessages(function ({ query, result }) {
+		return AppMessage.GotSearchMessage({
+			message: SearchMessage.LoadedFromRoute({ query, result }),
+		})
+	}),
 )
 
 export interface Observation {
@@ -260,7 +255,7 @@ export function createFixture(
 						}),
 					}),
 					Effect.map(result => ({ query: params.query, result })),
-					Loader.load,
+					SearchLoader.load,
 				),
 				{ signal: abortController.signal },
 			),
@@ -268,7 +263,7 @@ export function createFixture(
 	})
 	function SearchView() {
 		const { query: routeQuery } = search.useParams()
-		const loaded = Loader.decode(search.useLoaderData()).result
+		const loaded = SearchLoader.decode(search.useLoaderData()).result
 		const loaderRevision = AsyncData.isSuccess(loaded) ? loaded.data.revision : undefined
 		const model = App.useModel()
 		const searchModel = useModel()
