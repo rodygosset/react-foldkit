@@ -77,7 +77,7 @@ revisions, still complete rejected requests so they do not stay pending.
   Callers use `Project.Provider`.
 - Views use these bindings and ReactFoldkit hooks. Keep route hooks in app glue
   and lifecycle hooks in Providers.
-- Use `Project.Loader` and the application namespace `Application`.
+- Use `Project.loader` and the application namespace `Application`.
 - Query-backed example: `examples/project-cache` (`fromQuery`, peel + `settleIf`,
   revision `fresher`).
 - Define-only example: `examples/site-notice` (`Loader.define`, no Query, flat
@@ -100,9 +100,9 @@ encoding, and Message mapping live here.
 ### define / fromQuery
 
 ```ts
-import { fromQuery } from "react-foldkit/loader"
+import * as Loader from "react-foldkit/loader"
 
-export const Loader = fromQuery(query)
+export const loader = Loader.fromQuery(query)
 // Query: fromQuery(query, { key: () => "home" })
 // or define({ name, data, key }) for non-Query payloads
 ```
@@ -125,8 +125,8 @@ Declarations are Pipeable. Methods work in pipelines without a JavaScript receiv
 ### load / loadQuery
 
 ```ts
-const program = Project.Loader.loadQuery({ projectId })
-// dual: Loader.loadQuery({ projectId })(Project.Loader)
+const program = Project.loader.loadQuery({ projectId })
+// dual: Loader.loadQuery({ projectId })(Project.loader)
 ```
 
 `Loader.load` (dual) lazily produces an envelope:
@@ -182,7 +182,7 @@ between Provider Command Layers and loader runtimes when needed.
 ### mapMessages
 
 ```ts
-Project.Loader.pipe(Loader.mapMessages((load) => Application.Message.CompletedLoadProject({ load })))
+Project.loader.pipe(Loader.mapMessages((load) => Application.Message.CompletedLoadProject({ load })))
 ```
 
 Mappings compose in order when the adapter decodes accepted data. They preserve
@@ -209,7 +209,7 @@ Add the optional `react-foldkit/tanstack` entry point:
 
 ```ts
 const source = TanStackSource.make(router, [
-	Project.Loader.pipe(
+	Project.loader.pipe(
 		Loader.mapMessages((load) => Application.Message.CompletedLoadProject({ load }))
 	),
 ])
@@ -364,10 +364,10 @@ export const { useModel, useDispatch, Provider } = defineSubmodel<Model, Message
 
 ```ts
 // entities/project/api/loader.ts
-import { fromQuery } from "react-foldkit/loader"
+import * as Loader from "react-foldkit/loader"
 import { query } from "../model/query"
 
-export const Loader = fromQuery(query)
+export const loader = Loader.fromQuery(query)
 export const Load = Loader.Load
 export type Load = typeof Load.Type
 ```
@@ -415,7 +415,7 @@ export { View } from "./ui/view"
 import * as Project from "@/entities/project"
 
 // Thin: one Effect export. No Model, Message, or settlement here.
-export const load = (projectId: string) => Project.Loader.loadQuery({ projectId })
+export const load = (projectId: string) => Project.loader.loadQuery({ projectId })
 ```
 
 ```tsx
@@ -467,7 +467,7 @@ export const Model = Schema.Struct({ projects: Project.Model })
 export type Model = typeof Model.Type
 export const Message = defineMessageUnion({
 	GotProjectMessage: { message: Project.Message },
-	CompletedLoadProject: { load: Project.Loader.Load },
+	CompletedLoadProject: { load: Project.loader.Load },
 	ClickedRefreshProject: { projectId: Schema.String },
 })
 export type Message = typeof Message.Type
@@ -516,7 +516,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
 	const router = useRouter()
 	const [source] = React.useState(() =>
 		TanStackSource.make(router, [
-			Project.Loader.pipe(
+			Project.loader.pipe(
 				Loader.mapMessages((load) => Application.Message.CompletedLoadProject({ load }))
 			),
 		])
