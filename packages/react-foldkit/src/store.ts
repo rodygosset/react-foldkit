@@ -120,7 +120,7 @@ export const takeWhen = <Model, Message, A>(
 
 		if (tryPick()) return
 
-		const unsubscribe = store.subscribe(function onStoreChange() {
+		const unsubscribe = store.subscribe(function () {
 			if (tryPick()) {
 				unsubscribe()
 			}
@@ -128,13 +128,13 @@ export const takeWhen = <Model, Message, A>(
 
 		signal.addEventListener(
 			"abort",
-			function onTakeWhenAbort() {
+			function () {
 				unsubscribe()
 			},
 			{ once: true }
 		)
 
-		return Effect.sync(function unsubscribeTakeWhen() {
+		return Effect.sync(function () {
 			unsubscribe()
 		})
 	})
@@ -170,7 +170,7 @@ function microtaskSetImmediate(callback: () => void): () => void {
 	queueMicrotask(function () {
 		if (!cancelled) callback()
 	})
-	return function cancel() {
+	return function () {
 		cancelled = true
 	}
 }
@@ -246,33 +246,31 @@ function forkSubscriptionFibers<Model, Message, R>(
 			const latestDependenciesRef = yield* Ref.make(initDependencies)
 
 			const modelChangesStream = Stream.fromPubSub(modelPubSub).pipe(
-				Stream.mapEffect(function (nextModel) {
-					return Effect.gen(function* () {
+				Stream.mapEffect((nextModel) =>
+					Effect.gen(function* () {
 						const dependencies = modelToDependencies(nextModel)
 						yield* Ref.set(latestDependenciesRef, dependencies)
 						return dependencies
 					})
-				})
+				)
 			)
 
 			yield* Stream.concat(Stream.make(initDependencies), modelChangesStream).pipe(
 				Stream.changesWith(equivalence),
-				Stream.switchMap(function (dependencies) {
-					return dependenciesToStream(dependencies, function () {
-						return Ref.getUnsafe(latestDependenciesRef)
-					})
-				}),
-				Stream.runForEach(function (message) {
-					return Effect.sync(function () {
+				Stream.switchMap((dependencies) =>
+					dependenciesToStream(dependencies, () => Ref.getUnsafe(latestDependenciesRef))
+				),
+				Stream.runForEach((message) =>
+					Effect.sync(function () {
 						enqueueMessage(message)
 					})
-				}),
+				),
 				provideAllResources,
-				Effect.catchCause(function (cause) {
-					return Effect.sync(function () {
+				Effect.catchCause((cause) =>
+					Effect.sync(function () {
 						crashWith(cause, Option.none())
 					})
-				})
+				)
 			)
 		})
 
@@ -349,7 +347,7 @@ export function boot<Model, Message, R = never>(
 		if (deferredDrainChannel === null) {
 			const channel = new MessageChannel()
 			deferredDrainChannel = channel
-			channel.port2.onmessage = function onDeferredDrain() {
+			channel.port2.onmessage = function () {
 				// A commit can overtake this task and replace its channel.
 				if (deferredDrainChannel !== channel || phase._tag !== "Live" || phase.drain !== "Deferred") return
 				phase = { _tag: "Live", drain: "Idle" }
@@ -365,7 +363,7 @@ export function boot<Model, Message, R = never>(
 		command: Update.Commands<Message, R>[number],
 		triggeringMessage: Option.Option<Message>
 	): void {
-		queueMicrotask(function startCommandFiber() {
+		queueMicrotask(function () {
 			if (isTerminal(phase)) return
 
 			// `command.effect` is typed loosely upstream; cast is required at this boundary.
@@ -374,16 +372,16 @@ export function boot<Model, Message, R = never>(
 					attributes: command.args ?? {},
 				}),
 				provideAllResources,
-				Effect.flatMap(function (message) {
-					return Effect.sync(function () {
+				Effect.flatMap((message) =>
+					Effect.sync(function () {
 						if (enqueueMessage(message)) InitCommand.complete(command)
 					})
-				}),
-				Effect.catchCause(function (cause) {
-					return Effect.sync(function () {
+				),
+				Effect.catchCause((cause) =>
+					Effect.sync(function () {
 						crashWith(cause, triggeringMessage)
 					})
-				})
+				)
 			)
 
 			Effect.runForkWith(runtimeContextForCommands)(Effect.forkIn(effect, storeScope))
@@ -450,8 +448,8 @@ export function boot<Model, Message, R = never>(
 		}
 	}
 
-	function canCommit(): Result.Result<void, CommitError> {
-		return Match.value(phase).pipe(
+	const canCommit = (): Result.Result<void, CommitError> =>
+		Match.value(phase).pipe(
 			Match.withReturnType<Result.Result<void, CommitError>>(),
 			Match.tagsExhaustive({
 				Booting: () => Result.fail(new CommitError({ reason: "Inactive" })),
@@ -463,10 +461,9 @@ export function boot<Model, Message, R = never>(
 						: Result.succeed(undefined),
 			})
 		)
-	}
 
-	function commit(message: Message): Result.Result<void, CommitError> {
-		return Result.flatMap(canCommit(), () => {
+	const commit = (message: Message): Result.Result<void, CommitError> =>
+		Result.flatMap(canCommit(), function () {
 			const entry = { message }
 			MutableList.append(pendingMessages, entry)
 			cancelDeferredDrain()
@@ -474,11 +471,10 @@ export function boot<Model, Message, R = never>(
 			drainPendingMessages(entry)
 			return canCommit()
 		})
-	}
 
 	function subscribe(listener: () => void): () => void {
 		listeners.add(listener)
-		return function unsubscribe() {
+		return function () {
 			listeners.delete(listener)
 		}
 	}

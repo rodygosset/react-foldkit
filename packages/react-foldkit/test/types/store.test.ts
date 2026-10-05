@@ -6,8 +6,8 @@ type Model = { readonly count: number }
 type Message = { readonly _tag: "Increment" }
 declare const store: Store.Store<Model, Message>
 
-describe("Store public types", () => {
-	it("commit preserves the Message and typed failure", () => {
+describe("Store public types", function () {
+	it("commit preserves the Message and typed failure", function () {
 		expectTypeOf<Store.Store<Model, Message>["commit"]>().toEqualTypeOf<
 			(message: Message) => Result.Result<void, Store.CommitError>
 		>()

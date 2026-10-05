@@ -64,8 +64,8 @@ function View(props: { name: string }) {
 	)
 }
 
-describe("defineSubmodel", () => {
-	it("composes inline root, sibling, and nested Providers without parent subscriptions", () => {
+describe("defineSubmodel", function () {
+	it("composes inline root, sibling, and nested Providers without parent subscriptions", function () {
 		const fixture = createSubmodelFixture()
 		const NumberView = defineSubmodel<number, string>()
 		const nestedProjection = defineSubmodelProjection({
@@ -103,7 +103,7 @@ describe("defineSubmodel", () => {
 				<Capture />
 				<fixture.App.SubmodelProvider
 					projection={fixture.projection}
-					render={({ source }) => {
+					render={function ({ source }) {
 						sources.push(source)
 						return (
 							<fixture.Child.Provider source={source}>
@@ -114,7 +114,7 @@ describe("defineSubmodel", () => {
 				/>
 				<fixture.App.SubmodelProvider
 					projection={fixture.projection}
-					render={({ source }) => {
+					render={function ({ source }) {
 						sources.push(source)
 						return (
 							<fixture.Child.Provider source={source}>
@@ -125,13 +125,13 @@ describe("defineSubmodel", () => {
 				/>
 			</fixture.App.Provider>
 		)
-		act(() => {
+		act(function () {
 			Result.getOrThrow(commit!({ _tag: "Other" }))
 		})
 		expect(sources).toHaveLength(2)
 		fireEvent.click(screen.getByRole("button"))
 		// Dispatch is queued; commit flushes it without subscribing the helpers.
-		act(() => {
+		act(function () {
 			Result.getOrThrow(commit!({ _tag: "Other" }))
 		})
 		expect(screen.getByRole("button").textContent).toBe("2")
@@ -139,7 +139,7 @@ describe("defineSubmodel", () => {
 		expect(sources).toHaveLength(2)
 	})
 
-	it("suppresses equal selections and dispatch-only renders without subscribing the parent view", async () => {
+	it("suppresses equal selections and dispatch-only renders without subscribing the parent view", async function () {
 		const fixture = createSubmodelFixture()
 		const selected: Array<{ value: number }> = []
 		let fullRenders = 0
@@ -184,7 +184,7 @@ describe("defineSubmodel", () => {
 		await waitFor(() => expect(screen.getByTestId("selected").textContent).toBe("2"))
 	})
 
-	it("uses changed selectors and comparators, including undefined selections", () => {
+	it("uses changed selectors and comparators, including undefined selections", function () {
 		const fixture = createSubmodelFixture()
 		const selected: Array<{ value: number }> = []
 		let undefinedRenders = 0
@@ -223,7 +223,7 @@ describe("defineSubmodel", () => {
 		expect(selected.at(-1)).toEqual({ value: 9 })
 	})
 
-	it("composes nested projections and isolates sibling dispatchers under one root", async () => {
+	it("composes nested projections and isolates sibling dispatchers under one root", async function () {
 		const fixture = createSubmodelFixture()
 		const NumberView = defineSubmodel<number, ChildMessage>()
 		const left = {
@@ -274,7 +274,7 @@ describe("defineSubmodel", () => {
 		expect(renders).toHaveLength(1)
 	})
 
-	it("replaces both the snapshot and dispatcher when a projection changes", async () => {
+	it("replaces both the snapshot and dispatcher when a projection changes", async function () {
 		const fixture = createSubmodelFixture()
 		const alternate = {
 			...fixture.projection,
@@ -332,20 +332,20 @@ describe("defineSubmodel", () => {
 		await waitFor(() => expect(screen.getByText("2")).toBeDefined())
 	})
 
-	it("keeps committed selections when a selector render is abandoned by Suspense", async () => {
+	it("keeps committed selections when a selector render is abandoned by Suspense", async function () {
 		const fixture = createSubmodelFixture()
 		const selections: Array<{ value: number }> = []
 		const committed: Array<{ value: number }> = []
 		const sameParity = (a: { value: number }, b: { value: number }) => a.value % 2 === b.value % 2
 		// A native Promise is the React Suspense protocol, not an Effect service API.
-		const pending = new Promise<void>(() => {})
+		const pending = new Promise<void>(function () {})
 		function Selected(props: { suspend: boolean }) {
 			const value = fixture.Child.useModel(
 				(model) => ({ value: props.suspend ? model.unrelated : model.count }),
 				sameParity
 			)
 			selections.push(value)
-			React.useLayoutEffect(() => {
+			React.useLayoutEffect(function recordCommittedSelection() {
 				committed.push(value)
 			})
 			if (props.suspend) throw pending
@@ -378,7 +378,7 @@ describe("defineSubmodel", () => {
 		expect(committed.at(-1)).toBe(initial)
 	})
 
-	it("releases subscriptions through Strict Mode, Activity, and unmount, then catches up on reconnect", () => {
+	it("releases subscriptions through Strict Mode, Activity, and unmount, then catches up on reconnect", function () {
 		const fixture = createSubmodelFixture()
 		function Selected() {
 			return <output>{fixture.Child.useModel((model) => model.count)}</output>
@@ -403,7 +403,7 @@ describe("defineSubmodel", () => {
 		expect(fixture.listeners).toBe(0)
 	})
 
-	it.each(["useModel", "useDispatch"] as const)("%s requires its matching child Provider", (hook) => {
+	it.each(["useModel", "useDispatch"] as const)("%s requires its matching child Provider", function (hook) {
 		const fixture = createSubmodelFixture()
 		function Missing() {
 			Submodel[hook]()
@@ -418,7 +418,7 @@ describe("defineSubmodel", () => {
 		).toThrow(SubmodelProviderError)
 	})
 
-	it("reuses one child under different parents while the root runs Commands and folds OutMessages", async () => {
+	it("reuses one child under different parents while the root runs Commands and folds OutMessages", async function () {
 		const layer = Layer.succeed(Reader, { read: Effect.succeed(7) })
 		const ParentMessage = defineMessageUnion({ GotChild: { message: Message } })
 		type ParentMessage = typeof ParentMessage.Type
@@ -497,7 +497,7 @@ describe("defineSubmodel", () => {
 		expect(screen.getByTestId("first").textContent).toBe("7")
 	})
 
-	it("subscribes optional composition only to presence and supports initial absence and re-entry", () => {
+	it("subscribes optional composition only to presence and supports initial absence and re-entry", function () {
 		const ParentModel = Schema.Struct({ child: Schema.Option(Model) })
 		type ParentModel = typeof ParentModel.Type
 		const ParentMessage = defineMessageUnion({ Set: { child: Schema.Option(Model) } })
@@ -547,7 +547,7 @@ describe("defineSubmodel", () => {
 		expect(screen.getByTestId("optional").textContent).toBe("9")
 	})
 
-	it("lets the parent reject stale handlers and Command results after an optional child is replaced", async () => {
+	it("lets the parent reject stale handlers and Command results after an optional child is replaced", async function () {
 		const result = Deferred.makeUnsafe<number>()
 		let starts = 0
 		const layer = Layer.succeed(Reader, {
@@ -585,7 +585,7 @@ describe("defineSubmodel", () => {
 		const App = defineApplication({
 			Model: ParentModel,
 			layer,
-			update: (model: ParentModel, message: ParentMessage): Update.Return<ParentModel, ParentMessage, Reader> => {
+			update(model: ParentModel, message: ParentMessage): Update.Return<ParentModel, ParentMessage, Reader> {
 				seen(message)
 				return ParentMessage.match(message, {
 					GotChild: ({ instanceId, message }) => foldChild(instanceId)(model, message),
@@ -600,9 +600,12 @@ describe("defineSubmodel", () => {
 		let staleDispatch: Option.Option<(message: Message) => void> = Option.none()
 		function Capture(props: { instanceId: string }) {
 			const dispatch = Submodel.useDispatch()
-			React.useLayoutEffect(() => {
-				if (props.instanceId === "original") staleDispatch = Option.some(dispatch)
-			}, [dispatch, props.instanceId])
+			React.useLayoutEffect(
+				function captureOriginalDispatch() {
+					if (props.instanceId === "original") staleDispatch = Option.some(dispatch)
+				},
+				[dispatch, props.instanceId]
+			)
 			return <View name="child" />
 		}
 		function ChildConnection(props: { instanceId: string }) {
@@ -635,7 +638,7 @@ describe("defineSubmodel", () => {
 			return (
 				<>
 					<button
-						onClick={() => {
+						onClick={function () {
 							expect(Option.getOrThrow(departing).getServerSnapshot()).toEqual({ count: 0 })
 							Result.getOrThrow(commit(ParentMessage.Remove()))
 							// Read after root removal, before React has flushed the unmount.
@@ -684,7 +687,7 @@ describe("defineSubmodel", () => {
 		expect(screen.queryByTestId("child")).toBeNull()
 		fireEvent.click(screen.getByText("recreate"))
 		act(() => Option.getOrThrow(staleDispatch)(Message.Increment()))
-		act(() => {
+		act(function () {
 			Effect.runSync(Deferred.succeed(result, 9))
 		})
 		await waitFor(() =>

@@ -72,13 +72,9 @@ const articles: ReadonlyArray<Article> = [
 	},
 ]
 
-const posts = Array.map(articles, function ({ id, title, excerpt }) {
-	return { id, title, excerpt }
-})
+const posts = Array.map(articles, ({ id, title, excerpt }) => ({ id, title, excerpt }))
 
-const postDetails = Array.map(articles, function ({ id, title, author, body }) {
-	return { id, title, author, body }
-})
+const postDetails = Array.map(articles, ({ id, title, author, body }) => ({ id, title, author, body }))
 
 export const fetchPosts = Effect.gen(function* () {
 	yield* Effect.sleep(SERVER_LATENCY)
@@ -90,8 +86,8 @@ export const fetchPosts = Effect.gen(function* () {
 // retry path is reachable from the UI. The Foldkit app itself never mutates.
 const flakyAttempts = { count: 0 }
 
-export function fetchPostDetail(postId: string): Effect.Effect<PostDetail, string> {
-	return Effect.gen(function* () {
+export const fetchPostDetail = (postId: string): Effect.Effect<PostDetail, string> =>
+	Effect.gen(function* () {
 		yield* Effect.sleep(SERVER_LATENCY)
 
 		if (postId === FLAKY_POST_ID) {
@@ -102,14 +98,14 @@ export function fetchPostDetail(postId: string): Effect.Effect<PostDetail, strin
 			}
 		}
 
-		return yield* Option.match(Array.findFirst(postDetails, function ({ id }) {
-			return id === postId
-		}), {
-			onNone: () => Effect.fail(`No post found with id ${postId}`),
-			onSome: Effect.succeed,
-		})
+		return yield* Option.match(
+			Array.findFirst(postDetails, ({ id }) => id === postId),
+			{
+				onNone: () => Effect.fail(`No post found with id ${postId}`),
+				onSome: Effect.succeed,
+			}
+		)
 	})
-}
 
 export const fetchStats = Effect.gen(function* () {
 	yield* Effect.sleep(SERVER_LATENCY)

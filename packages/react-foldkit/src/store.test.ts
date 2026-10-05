@@ -135,9 +135,7 @@ describe("message processing", function () {
 	it("resets the drain budget when the browser had control between dispatches", async function () {
 		const processedLog: Array<string> = []
 		let fakeNow = 0
-		const nowSpy = vi.spyOn(performance, "now").mockImplementation(function () {
-			return fakeNow
-		})
+		const nowSpy = vi.spyOn(performance, "now").mockImplementation(() => fakeNow)
 
 		function update(model: Model, message: Message): UpdateReturn {
 			processedLog.push(message._tag === "BurnedBudget" ? message.label : message._tag)
@@ -286,7 +284,7 @@ describe("message processing", function () {
 		const store = Store.boot(
 			{
 				update,
-				onCrash: function () {},
+				onCrash() {},
 			},
 			{ model: { log: [] } }
 		)
@@ -473,12 +471,11 @@ describe("dispose", function () {
 
 		type LongUpdateReturn = Update.Return<LongModel, LongMessage>
 
-		function update(_model: LongModel, message: LongMessage): LongUpdateReturn {
-			return LongMessage.match<LongUpdateReturn>(message, {
+		const update = (_model: LongModel, message: LongMessage): LongUpdateReturn =>
+			LongMessage.match<LongUpdateReturn>(message, {
 				Start: () => ({ model: modifyFields(_model, { status: () => "running" }), commands: [LongRunning()] }),
 				Completed: () => ({ model: modifyFields(_model, { status: () => "done" }) }),
 			})
-		}
 
 		const store = Store.boot({ update }, { model: { status: "idle" } })
 
@@ -515,14 +512,13 @@ describe("command message mappers", function () {
 
 		type ParentUpdateReturn = Update.Return<ParentModel, ParentMessage>
 
-		function update(_model: ParentModel, message: ParentMessage): ParentUpdateReturn {
-			return ParentMessage.match<ParentUpdateReturn>(message, {
+		const update = (_model: ParentModel, message: ParentMessage): ParentUpdateReturn =>
+			ParentMessage.match<ParentUpdateReturn>(message, {
 				GotChildMessage: ({ message: childMessage }) =>
 					ChildMessage.match<ParentUpdateReturn>(childMessage, {
 						CompletedDoChildWork: () => ({ model: modifyFields(_model, { label: () => "child done" }) }),
 					}),
 			})
-		}
 
 		const store = Store.boot(
 			{ update },

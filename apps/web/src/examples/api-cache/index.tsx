@@ -76,23 +76,19 @@ type Message = typeof Message.Type
 
 type UpdateReturn = Update.Return<Model, Message>
 
-function applyPostsTransition(model: Model, maybeNextPosts: Option.Option<PostsData>): UpdateReturn {
-	return Option.match(maybeNextPosts, {
+const applyPostsTransition = (model: Model, maybeNextPosts: Option.Option<PostsData>): UpdateReturn =>
+	Option.match(maybeNextPosts, {
 		onNone: () => ({ model }),
 		onSome: (nextPosts) => ({ model: modifyFields(model, { posts: () => nextPosts }), commands: [FetchPosts()] }),
 	})
-}
 
-function applyStatsTransition(model: Model, maybeNextStats: Option.Option<StatsData>): UpdateReturn {
-	return Option.match(maybeNextStats, {
+const applyStatsTransition = (model: Model, maybeNextStats: Option.Option<StatsData>): UpdateReturn =>
+	Option.match(maybeNextStats, {
 		onNone: () => ({ model }),
 		onSome: (nextStats) => ({ model: modifyFields(model, { stats: () => nextStats }), commands: [FetchStats()] }),
 	})
-}
 
-function setPostDetail(postId: string, postDetail: PostDetailData) {
-	return HashMap.set(postId, postDetail)
-}
+const setPostDetail = (postId: string, postDetail: PostDetailData) => HashMap.set(postId, postDetail)
 
 function activateTab(model: Model, tab: Tab): UpdateReturn {
 	const modelWithActiveTab = modifyFields(model, { activeTab: () => tab })
@@ -112,7 +108,7 @@ function activateTab(model: Model, tab: Tab): UpdateReturn {
 const update = (model: Model, message: Message): UpdateReturn =>
 	Message.match<UpdateReturn>(message, {
 		ClickedTab: ({ tab }) => activateTab(model, tab),
-		ClickedPost: ({ postId }) => {
+		ClickedPost({ postId }) {
 			const selectedModel = modifyFields(model, {
 				maybeSelectedPostId: () => Option.some(postId),
 			})
@@ -155,18 +151,16 @@ const update = (model: Model, message: Message): UpdateReturn =>
 
 // INIT
 
-function init(): UpdateReturn {
-	return {
-		model: {
-			activeTab: "Posts",
-			posts: PostsData.Loading(),
-			postDetailById: HashMap.empty(),
-			maybeSelectedPostId: Option.none(),
-			stats: StatsData.Idle(),
-		},
-		commands: [FetchPosts()],
-	}
-}
+const init = (): UpdateReturn => ({
+	model: {
+		activeTab: "Posts",
+		posts: PostsData.Loading(),
+		postDetailById: HashMap.empty(),
+		maybeSelectedPostId: Option.none(),
+		stats: StatsData.Idle(),
+	},
+	commands: [FetchPosts()],
+})
 
 // COMMAND
 
@@ -179,9 +173,7 @@ const FetchPosts = Command.define("FetchPosts", {
 			return { posts, fetchedAt }
 		}),
 		Effect.result,
-		Effect.map(function (result) {
-			return Message.SettledFetchPosts({ result })
-		})
+		Effect.map((result) => Message.SettledFetchPosts({ result }))
 	),
 })
 
@@ -196,9 +188,7 @@ const FetchPostDetail = Command.define("FetchPostDetail", {
 				return { detail, fetchedAt }
 			}),
 			Effect.result,
-			Effect.map(function (result) {
-				return Message.SettledFetchPostDetail({ postId, result })
-			})
+			Effect.map((result) => Message.SettledFetchPostDetail({ postId, result }))
 		),
 })
 
@@ -211,39 +201,29 @@ const FetchStats = Command.define("FetchStats", {
 			return { stats, fetchedAt }
 		}),
 		Effect.result,
-		Effect.map(function (result) {
-			return Message.SettledFetchStats({ result })
-		})
+		Effect.map((result) => Message.SettledFetchStats({ result }))
 	),
 })
 
 // SUBSCRIPTION
 
-const subscriptions = Subscription.make<Model, Message>()(function (entry) {
-	return {
-		revalidateStats: entry(
-			{ isObservingStats: Schema.Boolean },
-			{
-				modelToDependencies: function (model) {
-					return {
-						isObservingStats: model.activeTab === "Stats" && AsyncData.hasData(model.stats),
-					}
-				},
-				dependenciesToStream: function ({ isObservingStats }) {
-					return Stream.when(
-						// NOTE: Stream.tick emits once immediately. Drop that first
-						// emission so freshly loaded stats are not refetched instantly.
-						Stream.tick(STATS_REFETCH_INTERVAL).pipe(
-							Stream.drop(1),
-							Stream.map(Message.TickedRevalidateStats)
-						),
-						Effect.sync(() => isObservingStats)
-					)
-				},
-			}
-		),
-	}
-})
+const subscriptions = Subscription.make<Model, Message>()((entry) => ({
+	revalidateStats: entry(
+		{ isObservingStats: Schema.Boolean },
+		{
+			modelToDependencies: (model) => ({
+				isObservingStats: model.activeTab === "Stats" && AsyncData.hasData(model.stats),
+			}),
+			dependenciesToStream: ({ isObservingStats }) =>
+				Stream.when(
+					// NOTE: Stream.tick emits once immediately. Drop that first
+					// emission so freshly loaded stats are not refetched instantly.
+					Stream.tick(STATS_REFETCH_INTERVAL).pipe(Stream.drop(1), Stream.map(Message.TickedRevalidateStats)),
+					Effect.sync(() => isObservingStats)
+				),
+		}
+	),
+}))
 
 const { Provider, useModel, useDispatch } = defineApplication({
 	Model,
@@ -253,13 +233,10 @@ const { Provider, useModel, useDispatch } = defineApplication({
 
 // VIEW
 
-function formatFetchedAt(fetchedAt: number): string {
-	return new Date(fetchedAt).toLocaleTimeString()
-}
+const formatFetchedAt = (fetchedAt: number): string => new Date(fetchedAt).toLocaleTimeString()
 
-function isPostDetailCached(postDetailById: HashMap.HashMap<string, PostDetailData>, postId: string): boolean {
-	return Option.exists(HashMap.get(postDetailById, postId), AsyncData.hasData)
-}
+const isPostDetailCached = (postDetailById: HashMap.HashMap<string, PostDetailData>, postId: string): boolean =>
+	Option.exists(HashMap.get(postDetailById, postId), AsyncData.hasData)
 
 function ErrorPanel(props: { error: string; onRetry: () => void }) {
 	return (
@@ -298,27 +275,25 @@ function PostListItems(props: {
 }) {
 	return (
 		<ul className="flex flex-col gap-2">
-			{Array.map(props.posts, function (post) {
-				return (
-					<li key={post.id}>
-						<button
-							type="button"
-							className="flex w-full items-center justify-between gap-4 rounded-2xl px-4 py-3 text-left transition-colors hover:bg-muted/60"
-							onClick={function () {
-								props.onSelect(post.id)
-							}}
-						>
-							<div className="min-w-0">
-								<p className="font-medium tracking-tight">{post.title}</p>
-								<p className="text-sm text-muted-foreground">{post.excerpt}</p>
-							</div>
-							{isPostDetailCached(props.postDetailById, post.id) ? (
-								<Badge variant="secondary">Cached</Badge>
-							) : null}
-						</button>
-					</li>
-				)
-			})}
+			{Array.map(props.posts, (post) => (
+				<li key={post.id}>
+					<button
+						type="button"
+						className="flex w-full items-center justify-between gap-4 rounded-2xl px-4 py-3 text-left transition-colors hover:bg-muted/60"
+						onClick={function () {
+							props.onSelect(post.id)
+						}}
+					>
+						<div className="min-w-0">
+							<p className="font-medium tracking-tight">{post.title}</p>
+							<p className="text-sm text-muted-foreground">{post.excerpt}</p>
+						</div>
+						{isPostDetailCached(props.postDetailById, post.id) ? (
+							<Badge variant="secondary">Cached</Badge>
+						) : null}
+					</button>
+				</li>
+			))}
 		</ul>
 	)
 }

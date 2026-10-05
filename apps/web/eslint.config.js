@@ -2,10 +2,12 @@
 
 import { tanstackConfig } from "@tanstack/eslint-config"
 import { recommendedConfig } from "react-foldkit/eslint"
+import functionStyleConfig from "../../eslint/function-style.config.mjs"
 
 export default [
 	...tanstackConfig,
 	...recommendedConfig,
+	...functionStyleConfig,
 	{
 		settings: {
 			"react-foldkit": {

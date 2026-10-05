@@ -65,15 +65,12 @@ export function parentKeyToLens<
 ): FoldLens<ParentModel, ParentMessage, ChildModel, ChildMessage> {
 	const modifyParentFields = makeModifyFieldsFor<Record<FieldOf<ParentModel, ChildModel>, ChildModel>>()
 	return {
-		read: function (model: ParentModel) {
-			return Option.some(model[config.field])
-		},
-		write: function (model: ParentModel, nextChild: ChildModel) {
-			return modifyParentFields(
+		read: (model: ParentModel) => Option.some(model[config.field]),
+		write: (model: ParentModel, nextChild: ChildModel) =>
+			modifyParentFields(
 				model,
 				EffectRecord.singleton(config.field, () => nextChild)
-			)
-		},
+			),
 		toParentMessage: config.toParentMessage,
 	}
 }
@@ -159,7 +156,7 @@ export function settleSlot<Model, Args, A, E, Message, R>(
 	args: Args,
 	data: AsyncData.AsyncData<A, E>
 ): Update.Return<Model, Message> {
-	const settle = (result: Result.Result<A, E>): Update.Return<Model, Message> => {
+	function settle(result: Result.Result<A, E>): Update.Return<Model, Message> {
 		const settled = store.settle(model, args, AsyncData.settle(store.read(model, args), result))
 		return Option.match(store.interrupt?.(model, args, CancelIntent.Settle()) ?? Option.none(), {
 			onNone: () => ({ model: settled }),
@@ -269,9 +266,8 @@ export interface SettleIfOptions<A, E> {
 }
 
 /** True when a Failure may replace an empty, non-pending slot. */
-export function acceptEmptyFailure<A, E>(current: AsyncData.AsyncData<A, E>): boolean {
-	return !AsyncData.hasData(current) && !AsyncData.isPending(current)
-}
+export const acceptEmptyFailure = <A, E>(current: AsyncData.AsyncData<A, E>): boolean =>
+	!AsyncData.hasData(current) && !AsyncData.isPending(current)
 
 /** Whether an external AsyncData outcome should be settled into the current slot. */
 export function shouldSettle<A, E>(
@@ -284,12 +280,8 @@ export function shouldSettle<A, E>(
 	}
 	if (!AsyncData.isSuccess(result)) return false
 	return Option.match(AsyncData.getData(current), {
-		onNone: function () {
-			return true
-		},
-		onSome: function (currentData) {
-			return options.fresher(result.data, currentData)
-		},
+		onNone: () => true,
+		onSome: (currentData) => options.fresher(result.data, currentData),
 	})
 }
 
@@ -300,11 +292,7 @@ export interface KeyedSettleIf<Model, Message, Args, A, E> {
 		result: AsyncData.AsyncData<A, E>,
 		options: SettleIfOptions<A, E>
 	): Update.Return<Model, Message>
-	(
-		args: Args,
-		result: AsyncData.AsyncData<A, E>,
-		options: SettleIfOptions<A, E>
-	): Update.Step<Model, Message>
+	(args: Args, result: AsyncData.AsyncData<A, E>, options: SettleIfOptions<A, E>): Update.Step<Model, Message>
 }
 
 export namespace Lifted {
@@ -324,10 +312,7 @@ export namespace Lifted {
 				result: AsyncData.AsyncData<A, E>,
 				options: SettleIfOptions<A, E>
 			): Update.Return<ParentModel, ParentMessage>
-			(
-				result: AsyncData.AsyncData<A, E>,
-				options: SettleIfOptions<A, E>
-			): Update.Step<ParentModel, ParentMessage>
+			(result: AsyncData.AsyncData<A, E>, options: SettleIfOptions<A, E>): Update.Step<ParentModel, ParentMessage>
 		}
 		revalidate: Update.Step<ParentModel, ParentMessage, R>
 		revalidateOrLoad: Update.Step<ParentModel, ParentMessage, R>

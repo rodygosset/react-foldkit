@@ -42,14 +42,9 @@ class LoaderImpl<A, I, Message> extends Pipeable.Class implements Loader<A, I, M
 			Envelope(data)
 				.pipe(Schema.fieldsAssign({ name: Schema.Literal(name) }))
 				.check(
-					Schema.makeFilter(
-						function (envelope) {
-							return key(envelope.payload) === envelope.key
-						},
-						{
-							message: "Loader resource key does not match its payload",
-						}
-					)
+					Schema.makeFilter((envelope) => key(envelope.payload) === envelope.key, {
+						message: "Loader resource key does not match its payload",
+					})
 				)
 		)
 		this.decode = function (input) {
@@ -59,25 +54,19 @@ class LoaderImpl<A, I, Message> extends Pipeable.Class implements Loader<A, I, M
 	}
 }
 
-function encodeLoad<A, I>(
-	config: Config<A, I>,
-	encode: (data: A) => Effect.Effect<I, Schema.SchemaError>
-): Loader<A, I>["load"] {
-	return function (effect) {
-		return Effect.flatMap(effect, function (data) {
-			return Effect.map(encode(data), function (payload) {
-				return {
-					_tag: EnvelopeHeader.fields._tag.literal,
-					format: EnvelopeHeader.fields.format.literal,
-					name: config.name,
-					key: config.key(data),
-					version: crypto.randomUUID(),
-					payload,
-				}
-			})
-		})
-	}
-}
+const encodeLoad =
+	<A, I>(config: Config<A, I>, encode: (data: A) => Effect.Effect<I, Schema.SchemaError>): Loader<A, I>["load"] =>
+	(effect) =>
+		Effect.flatMap(effect, (data) =>
+			Effect.map(encode(data), (payload) => ({
+				_tag: EnvelopeHeader.fields._tag.literal,
+				format: EnvelopeHeader.fields.format.literal,
+				name: config.name,
+				key: config.key(data),
+				version: crypto.randomUUID(),
+				payload,
+			}))
+		)
 
 /** Declares a serializable payload without running its loading Effect. */
 export function define<A, I>(config: Config<A, I>): Loader<A, I> {
@@ -147,11 +136,11 @@ export interface QueryLoader<
 	readonly loadQuery: Effect.Effect<Envelope<Schema.Codec.Encoded<LoadSchema>>, Schema.SchemaError, R>
 }
 
-function isKeyedQueryForLoader(
-	query: KeyedQueryForLoader<string, any, any, any, any, SyncFields, any> | QueryForLoader<string, any, any, any, any, any>
-): query is KeyedQueryForLoader<string, any, any, any, any, SyncFields, any> {
-	return Predicate.hasProperty(query, "Args")
-}
+const isKeyedQueryForLoader = (
+	query:
+		| KeyedQueryForLoader<string, any, any, any, any, SyncFields, any>
+		| QueryForLoader<string, any, any, any, any, any>
+): query is KeyedQueryForLoader<string, any, any, any, any, SyncFields, any> => Predicate.hasProperty(query, "Args")
 
 type KeyedQueryLoaderLike = {
 	readonly query: { run: (args: any) => Effect.Effect<AsyncData.AsyncData<unknown, unknown>, never, unknown> }
@@ -164,20 +153,21 @@ type QueryRunRequirements<Q> = Q extends {
 	? R
 	: never
 
-function runKeyedLoadQuery(self: KeyedQueryLoaderLike, args: any) {
-	return self.query.run(args).pipe(
-		Effect.map(function (result) {
-			return { ...args, result }
-		}),
+const runKeyedLoadQuery = (self: KeyedQueryLoaderLike, args: any) =>
+	self.query.run(args).pipe(
+		Effect.map((result) => ({ ...args, result })),
 		self.load as Loader<any, unknown>["load"]
 	)
-}
 
 /** Runs the Query bound to a keyed QueryLoader. Data-first or data-last. */
 export const loadQuery: {
-	<Args>(
-		args: Args
-	): <Self extends KeyedQueryLoaderLike & { readonly query: { run: (args: Args) => Effect.Effect<AsyncData.AsyncData<unknown, unknown>, never, unknown> } }>(
+	<Args>(args: Args): <
+		Self extends KeyedQueryLoaderLike & {
+			readonly query: {
+				run: (args: Args) => Effect.Effect<AsyncData.AsyncData<unknown, unknown>, never, unknown>
+			}
+		},
+	>(
 		self: Self
 	) => Effect.Effect<Envelope<unknown>, Schema.SchemaError, QueryRunRequirements<Self["query"]>>
 	<Self extends KeyedQueryLoaderLike, Args extends Parameters<Self["query"]["run"]>[0]>(
@@ -207,9 +197,7 @@ function attachKeyedQueryLoader<
 	const bound = Object.assign(loader, {
 		Load,
 		query,
-		loadQuery(args: KeyedArgs<Fields>) {
-			return runKeyedLoadQuery(bound, args)
-		},
+		loadQuery: (args: KeyedArgs<Fields>) => runKeyedLoadQuery(bound, args),
 	}) as KeyedQueryLoader<Name, A, AI, E, EI, Fields, R, LoadSchema>
 	return bound
 }
@@ -230,20 +218,10 @@ function attachQueryLoader<
 	query: QueryForLoader<Name, A, AI, E, EI, R>
 ): QueryLoader<Name, A, AI, E, EI, R, LoadSchema> {
 	const loadQuery = query.run.pipe(
-		Effect.map(function (result) {
-			return { result } as LoadType<A, E>
-		}),
+		Effect.map((result) => ({ result }) as LoadType<A, E>),
 		loader.load
 	)
-	return Object.assign(loader, { Load, query, loadQuery }) as QueryLoader<
-		Name,
-		A,
-		AI,
-		E,
-		EI,
-		R,
-		LoadSchema
-	>
+	return Object.assign(loader, { Load, query, loadQuery }) as QueryLoader<Name, A, AI, E, EI, R, LoadSchema>
 }
 
 type LoadResultCodec = Schema.Codec<
@@ -298,9 +276,8 @@ export function fromQuery(query: any, options?: { readonly key?: (load: any) => 
 		})
 		const key =
 			options?.key ??
-			function (load: KeyedLoadType<SyncFields, any, any>) {
-				return query.toKey(Struct.omit(load, ["result"]) as KeyedArgs<SyncFields>)
-			}
+			((load: KeyedLoadType<SyncFields, any, any>) =>
+				query.toKey(Struct.omit(load, ["result"]) as KeyedArgs<SyncFields>))
 		return attachKeyedQueryLoader(
 			define({
 				name: query.name,
@@ -341,18 +318,18 @@ export const mapMessages: {
 		self: Loader<A, I, Message>,
 		f: (message: Message, receipt: Receipt) => Next
 	): Loader<A, I, Next>
-} = Function.dual(2, function <A, I, Message, Next>(
-	self: Loader<A, I, Message>,
-	f: (message: Message, receipt: Receipt) => Next
-): Loader<A, I, Next> {
+} = Function.dual(2, function <
+	A,
+	I,
+	Message,
+	Next,
+>(self: Loader<A, I, Message>, f: (message: Message, receipt: Receipt) => Next): Loader<A, I, Next> {
 	const mapped = self as LoaderImpl<A, I, Message>
 	return new LoaderImpl(
 		self.name,
 		self.data,
 		self.key,
-		function (data, receipt) {
-			return f(mapped.toMessage(data, receipt), receipt)
-		},
+		(data, receipt) => f(mapped.toMessage(data, receipt), receipt),
 		self.load
 	)
 })
@@ -366,9 +343,10 @@ export const load: {
 		self: Loader<A, I, Message>,
 		effect: Effect.Effect<A, E, R>
 	): Effect.Effect<Envelope<I>, E | Schema.SchemaError, R>
-} = Function.dual(2, function <A, I, Message, E, R>(
-	self: Loader<A, I, Message>,
-	effect: Effect.Effect<A, E, R>
-): Effect.Effect<Envelope<I>, E | Schema.SchemaError, R> {
-	return self.load(effect)
-})
+} = Function.dual(
+	2,
+	<A, I, Message, E, R>(
+		self: Loader<A, I, Message>,
+		effect: Effect.Effect<A, E, R>
+	): Effect.Effect<Envelope<I>, E | Schema.SchemaError, R> => self.load(effect)
+)

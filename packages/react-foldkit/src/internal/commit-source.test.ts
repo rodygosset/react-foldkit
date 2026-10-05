@@ -18,8 +18,8 @@ function connect(connection: CommitSource.Connection<Message>, commit: Parameter
 }
 const succeed = () => Result.void
 
-describe("commit source reconciliation and failures", () => {
-	it("deduplicates cloned entries, changed Messages, and reordered snapshots with the same tokens", () => {
+describe("commit source reconciliation and failures", function () {
+	it("deduplicates cloned entries, changed Messages, and reordered snapshots with the same tokens", function () {
 		const initial = [entry("a", 1), entry("b", "v1")]
 		const source = fakeSource(initial)
 		const connection = Result.getOrThrow(CommitSource.make({ source: source.source, initialSnapshot: initial }))
@@ -34,7 +34,7 @@ describe("commit source reconciliation and failures", () => {
 		}
 	})
 
-	it("delivers changed scalar tokens once, without coercion or monotonicity requirements", () => {
+	it("delivers changed scalar tokens once, without coercion or monotonicity requirements", function () {
 		const initial = [entry("a", 10)]
 		const source = fakeSource(initial)
 		const connection = Result.getOrThrow(CommitSource.make({ source: source.source, initialSnapshot: initial }))
@@ -55,7 +55,7 @@ describe("commit source reconciliation and failures", () => {
 		}
 	})
 
-	it("forgets only removed entries and delivers a cached version again on re-entry", () => {
+	it("forgets only removed entries and delivers a cached version again on re-entry", function () {
 		const initial = [entry("a", 1), entry("b", 1)]
 		const source = fakeSource(initial)
 		const connection = Result.getOrThrow(CommitSource.make({ source: source.source, initialSnapshot: initial }))
@@ -71,7 +71,7 @@ describe("commit source reconciliation and failures", () => {
 		}
 	})
 
-	it("validates all keys before delivering any part of a malformed snapshot", () => {
+	it("validates all keys before delivering any part of a malformed snapshot", function () {
 		const source = fakeSource<Message>()
 		const connection = Result.getOrThrow(CommitSource.make({ source: source.source, initialSnapshot: [] }))
 		const committed = vi.fn(succeed)
@@ -88,13 +88,13 @@ describe("commit source reconciliation and failures", () => {
 		}
 	})
 
-	it("preserves the receiver of a consumer's snapshot method", () => {
+	it("preserves the receiver of a consumer's snapshot method", function () {
 		const source = {
 			entries: [entry("a", 1)],
 			getSnapshot() {
 				return this.entries
 			},
-			subscribe: () => () => {},
+			subscribe: () => function () {},
 		}
 		const connection = Result.getOrThrow(CommitSource.make({ source, initialSnapshot: [] }))
 		const committed = vi.fn(succeed)
@@ -102,14 +102,14 @@ describe("commit source reconciliation and failures", () => {
 		expect(committed).toHaveBeenCalledWith(Message.Received({ value: "a" }))
 		stop()
 	})
-	it("returns a typed baseline validation failure before subscribing", () => {
+	it("returns a typed baseline validation failure before subscribing", function () {
 		const source = fakeSource<Message>()
 		const result = CommitSource.make({ source: source.source, initialSnapshot: [entry("a", 1), entry("a", 2)] })
 		expect(result).toEqual(Result.fail(new CommitSource.CommitSourceError({ reason: "DuplicateKey", key: "a" })))
 		expect(source.subscriptions).toBe(0)
 	})
 
-	it("retains successful prefix delivery but retries a typed failed commit after reconnection", () => {
+	it("retains successful prefix delivery but retries a typed failed commit after reconnection", function () {
 		const source = fakeSource<Message>()
 		const connection = Result.getOrThrow(CommitSource.make({ source: source.source, initialSnapshot: [] }))
 		source.set([entry("a", 1), entry("b", 1)])
@@ -117,7 +117,7 @@ describe("commit source reconciliation and failures", () => {
 		const error = new CommitError({ reason: "Disposed" })
 		const exit = Effect.runSyncExit(
 			Effect.scoped(
-				connection.connect((message) => {
+				connection.connect(function (message) {
 					if (message._tag === "Received") attempted.push(message.value)
 					return message._tag === "Received" && message.value === "b"
 						? Result.fail(error)
@@ -132,7 +132,7 @@ describe("commit source reconciliation and failures", () => {
 		}
 		expect(attempted).toEqual(["a", "b"])
 		expect(source.listeners).toBe(0)
-		const stop = connect(connection, (message) => {
+		const stop = connect(connection, function (message) {
 			if (message._tag === "Received") attempted.push(message.value)
 			return Result.succeed(undefined)
 		})
@@ -140,10 +140,10 @@ describe("commit source reconciliation and failures", () => {
 		stop()
 	})
 
-	it("rejects reentrant notifications and retries an undelivered token", () => {
+	it("rejects reentrant notifications and retries an undelivered token", function () {
 		const source = fakeSource<Message>()
 		const connection = Result.getOrThrow(CommitSource.make({ source: source.source, initialSnapshot: [] }))
-		const stop = connect(connection, () => {
+		const stop = connect(connection, function () {
 			source.notify()
 			return Result.succeed(undefined)
 		})
@@ -155,14 +155,14 @@ describe("commit source reconciliation and failures", () => {
 		again()
 	})
 
-	it("cleans up and ignores late notifications when catch-up snapshot reading fails", () => {
+	it("cleans up and ignores late notifications when catch-up snapshot reading fails", function () {
 		const source = fakeSource<Message>()
 		let fail = true
 		const connection = Result.getOrThrow(
 			CommitSource.make({
 				source: {
 					...source.source,
-					getSnapshot: () => {
+					getSnapshot() {
 						if (fail) throw new Error("read failed")
 						return source.source.getSnapshot()
 					},
@@ -184,13 +184,13 @@ describe("commit source reconciliation and failures", () => {
 		expect(source.unsubscriptions).toBe(2)
 	})
 
-	it("retries a failed live delivery without reconnecting or replaying its successful prefix", () => {
+	it("retries a failed live delivery without reconnecting or replaying its successful prefix", function () {
 		const source = fakeSource<Message>()
 		const connection = Result.getOrThrow(CommitSource.make({ source: source.source, initialSnapshot: [] }))
 		const attempted: string[] = []
 		let fail = true
 		const error = new CommitError({ reason: "Reentrant" })
-		const stop = connect(connection, (message) => {
+		const stop = connect(connection, function (message) {
 			if (message._tag === "Received") attempted.push(message.value)
 			return fail && message._tag === "Received" && message.value === "b"
 				? Result.fail(error)
@@ -206,14 +206,14 @@ describe("commit source reconciliation and failures", () => {
 		stop()
 	})
 
-	it("preserves setup failure and release defect in one Cause, even with immediate notification", () => {
+	it("preserves setup failure and release defect in one Cause, even with immediate notification", function () {
 		const source = fakeSource<Message>()
 		const connection = Result.getOrThrow(CommitSource.make({ source: source.source, initialSnapshot: [] }))
 		const failure = new CommitError({ reason: "Disposed" })
 		const release = new Error("release failed")
 		source.set([entry("a", 1)])
 		source.onSubscribe(() => source.notify())
-		source.onUnsubscribe(() => {
+		source.onUnsubscribe(function () {
 			throw release
 		})
 		const exit = Effect.runSyncExit(Effect.scoped(connection.connect(() => Result.fail(failure))))

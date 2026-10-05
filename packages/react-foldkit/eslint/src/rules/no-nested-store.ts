@@ -1,12 +1,6 @@
 import type { Rule } from "eslint"
 import type { CallExpression } from "estree"
-import {
-	getEnclosingFunctionName,
-	getFilename,
-	isViewFilename,
-	isViewFunctionName,
-	type AstNode,
-} from "../utils.js"
+import { getEnclosingFunctionName, getFilename, isViewFilename, isViewFunctionName, type AstNode } from "../utils.js"
 
 const meta: Rule.RuleMetaData = {
 	type: "problem",
@@ -23,9 +17,7 @@ const meta: Rule.RuleMetaData = {
 	},
 }
 
-function isInsideView(node: AstNode): boolean {
-	return isViewFunctionName(getEnclosingFunctionName(node))
-}
+const isInsideView = (node: AstNode): boolean => isViewFunctionName(getEnclosingFunctionName(node))
 
 function isStoreBootCall(node: CallExpression): boolean {
 	const callee = node.callee

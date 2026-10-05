@@ -29,8 +29,8 @@ const lifted = keyed.lift<Parent, Message>({
 declare const result: AsyncData.AsyncData<Date, string>
 declare const parent: Parent
 
-describe("Query settlement public types", () => {
-	it("accepts Query.run's existing type and exposes service-free Update steps", () => {
+describe("Query settlement public types", function () {
+	it("accepts Query.run's existing type and exposes service-free Update steps", function () {
 		expectTypeOf(single.run).toEqualTypeOf<Effect.Effect<AsyncData.AsyncData<Date, string>, never, Api>>()
 		expectTypeOf(single.settle).toEqualTypeOf<
 			Update.Fold<typeof single.Model.Type, typeof single.Message.Type, AsyncData.AsyncData<Date, string>>
@@ -51,16 +51,12 @@ describe("Query settlement public types", () => {
 		}>()
 		expectTypeOf(
 			lifted.settleIf(parent, { id: 1 }, result, {
-				fresher: function () {
-					return true
-				},
+				fresher: () => true,
 			})
 		).toExtend<Update.Return<Parent, Message>>()
 		expectTypeOf(
 			single.settleIf(single.init("a"), result, {
-				fresher: function () {
-					return true
-				},
+				fresher: () => true,
 			})
 		).toExtend<Update.Return<typeof single.Model.Type, typeof single.Message.Type>>()
 	})

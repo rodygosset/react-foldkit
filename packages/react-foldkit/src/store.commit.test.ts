@@ -10,13 +10,13 @@ const stores: Array<Store.Store<Model, Message>> = []
 let clock = 0
 let drains: ReturnType<typeof controlledDrains>
 
-beforeEach(() => {
+beforeEach(function () {
 	clock = 0
 	drains = controlledDrains()
 	vi.stubGlobal("MessageChannel", drains.Channel)
 	vi.spyOn(performance, "now").mockImplementation(() => clock)
 })
-afterEach(() => {
+afterEach(function () {
 	for (const store of stores.splice(0)) store.dispose()
 	vi.restoreAllMocks()
 	vi.unstubAllGlobals()
@@ -26,7 +26,7 @@ function boot(extra?: (model: Model, message: Message) => Update.Return<Model, M
 	const onCrash = vi.fn()
 	const store = Store.boot(
 		{
-			update: (model: Model, message: Message) => {
+			update(model: Model, message: Message) {
 				// Advancing this clock past the 5 ms budget defers subsequent dispatches.
 				clock += message.burn ?? 0
 				return extra?.(model, message) ?? { model: Array.append(model, message.label) }
@@ -46,8 +46,8 @@ function failReason(action: () => Result.Result<void, Store.CommitError>, reason
 	return result.failure
 }
 
-describe("synchronous commit", () => {
-	it("the Effect adapter is lazy, repeatable, and exposes commit errors as typed failures", () => {
+describe("synchronous commit", function () {
+	it("the Effect adapter is lazy, repeatable, and exposes commit errors as typed failures", function () {
 		const { store } = boot()
 		const commit = Store.commit(store, { label: "effect" })
 		expect(store.getModel()).toEqual([])
@@ -65,7 +65,7 @@ describe("synchronous commit", () => {
 		}
 	})
 
-	it("publishes its resulting Model and notifies synchronously before returning", () => {
+	it("publishes its resulting Model and notifies synchronously before returning", function () {
 		const { store } = boot()
 		const observed: Model[] = []
 		store.subscribe(() => observed.push(store.getModel()))
@@ -74,9 +74,9 @@ describe("synchronous commit", () => {
 		expect(observed).toEqual([["committed"]])
 	})
 
-	it("stops at its own queue entry and schedules listener-enqueued work normally", () => {
+	it("stops at its own queue entry and schedules listener-enqueued work normally", function () {
 		const { store } = boot()
-		store.subscribe(() => {
+		store.subscribe(function () {
 			if (store.getModel().at(-1) === "earlier") store.dispatch({ label: "later" })
 		})
 		store.dispatch({ label: "burn", burn: 10 })
@@ -92,7 +92,7 @@ describe("synchronous commit", () => {
 		expect(store.getModel()).toEqual(["burn", "earlier", "target", "later"])
 	})
 
-	it("does not confuse repeated Message references with the commit boundary", () => {
+	it("does not confuse repeated Message references with the commit boundary", function () {
 		const { store } = boot()
 		const repeated = { label: "same" }
 		store.dispatch({ label: "burn", burn: 10 })
@@ -104,7 +104,7 @@ describe("synchronous commit", () => {
 		expect(store.getModel()).toEqual(["burn", "same", "same", "same"])
 	})
 
-	it("an obsolete callback cannot reset the budget or prematurely drain a new queue", () => {
+	it("an obsolete callback cannot reset the budget or prematurely drain a new queue", function () {
 		const { store } = boot()
 		store.dispatch({ label: "burn", burn: 10 })
 		store.dispatch({ label: "queued" })
@@ -119,10 +119,10 @@ describe("synchronous commit", () => {
 		expect(store.getModel()).toEqual(["burn", "queued", "target", "after"])
 	})
 
-	it("rejects a reentrant commit in update before enqueueing it", () => {
+	it("rejects a reentrant commit in update before enqueueing it", function () {
 		let store: Store.Store<Model, Message>
 		let nestedResult: Result.Result<void, Store.CommitError> | undefined
-		const made = boot((model, message) => {
+		const made = boot(function (model, message) {
 			if (message.label === "outer") nestedResult = store.commit({ label: "nested" })
 			return { model: Array.append(model, message.label) }
 		})
@@ -135,10 +135,10 @@ describe("synchronous commit", () => {
 		expect(made.onCrash).not.toHaveBeenCalled()
 	})
 
-	it("rejects a reentrant commit in a synchronous notification before enqueueing it", () => {
+	it("rejects a reentrant commit in a synchronous notification before enqueueing it", function () {
 		const { store, onCrash } = boot()
 		let nestedResult: Result.Result<void, Store.CommitError> | undefined
-		store.subscribe(() => {
+		store.subscribe(function () {
 			if (store.getModel().at(-1) === "outer") nestedResult = store.commit({ label: "nested" })
 		})
 		const outerResult = store.commit({ label: "outer" })
@@ -149,9 +149,9 @@ describe("synchronous commit", () => {
 		expect(onCrash).not.toHaveBeenCalled()
 	})
 
-	it("reports a prior queued crash, preserves its Cause, and never processes the target", () => {
+	it("reports a prior queued crash, preserves its Cause, and never processes the target", function () {
 		const defect = new Error("prior update failed")
-		const { store, onCrash } = boot((model, message) => {
+		const { store, onCrash } = boot(function (model, message) {
 			if (message.label === "fail") throw defect
 			return { model: Array.append(model, message.label) }
 		})
@@ -168,8 +168,8 @@ describe("synchronous commit", () => {
 		expect(store.getModel()).toEqual(["burn"])
 	})
 
-	it("fails when the target update crashes rather than returning success", () => {
-		const { store, onCrash } = boot(() => {
+	it("fails when the target update crashes rather than returning success", function () {
+		const { store, onCrash } = boot(function () {
 			throw new Error("target failed")
 		})
 		failReason(() => store.commit({ label: "target" }), "Crashed")
@@ -177,10 +177,10 @@ describe("synchronous commit", () => {
 		expect(store.getModel()).toEqual([])
 	})
 
-	it("reports notification defects even after the target Model was installed", () => {
+	it("reports notification defects even after the target Model was installed", function () {
 		const { store, onCrash } = boot()
 		const defect = new Error("notification failed")
-		const unsubscribe = store.subscribe(() => {
+		const unsubscribe = store.subscribe(function () {
 			throw defect
 		})
 		const error = failReason(() => store.commit({ label: "target" }), "Crashed")
@@ -190,9 +190,9 @@ describe("synchronous commit", () => {
 		unsubscribe()
 	})
 
-	it("fails when an earlier queued Message's listener disposes the store", () => {
+	it("fails when an earlier queued Message's listener disposes the store", function () {
 		const { store } = boot()
-		store.subscribe(() => {
+		store.subscribe(function () {
 			if (store.getModel().at(-1) === "dispose") store.dispose()
 		})
 		store.dispatch({ label: "burn", burn: 10 })
@@ -203,7 +203,7 @@ describe("synchronous commit", () => {
 		expect(store.getModel()).toEqual(["burn", "dispose"])
 	})
 
-	it("runs Commands asynchronously once through the ordinary Effect runtime", async () => {
+	it("runs Commands asynchronously once through the ordinary Effect runtime", async function () {
 		let executions = 0
 		const { store } = boot((model, message) => ({
 			model: Array.append(model, message.label),
@@ -212,7 +212,7 @@ describe("synchronous commit", () => {
 					? [
 							{
 								name: "Complete",
-								effect: Effect.sync(() => {
+								effect: Effect.sync(function () {
 									executions += 1
 									return { label: "result" }
 								}),

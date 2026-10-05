@@ -35,6 +35,10 @@ bun run lint
 bun run build --filter=web
 ```
 
+Function syntax is enforced across source, tests, examples, shared UI, and tooling.
+See [the function syntax rules](eslint/README.md) for the conventions copied from
+Recolnat. Run their regression tests separately with `bun run test:lint`.
+
 ## Repository layout
 
 - `packages/react-foldkit` — the library, its ESLint plugin, tests, and package documentation.

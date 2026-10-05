@@ -17,12 +17,12 @@ declare const commit: ReturnType<typeof App.useCommit>
 declare const source: CommitSource<Message>
 declare const foreign: CommitSource<{ readonly _tag: "Other" }>
 
-describe("React public types", () => {
-	it("useCommit preserves the Message and typed failure", () => {
+describe("React public types", function () {
+	it("useCommit preserves the Message and typed failure", function () {
 		expectTypeOf(App.useCommit).returns.toEqualTypeOf<(message: Message) => Result.Result<void, CommitError>>()
 	})
 
-	it("Provider commitSource binds to the app Message", () => {
+	it("Provider commitSource binds to the app Message", function () {
 		expectTypeOf<CommitEntry<Message>["version"]>().toEqualTypeOf<string | number>()
 	})
 
@@ -45,7 +45,7 @@ describe("React public types", () => {
 			// @ts-expect-error Snapshots must be synchronously readable.
 			getSnapshot: async () => [],
 			// @ts-expect-error Subscription setup must synchronously return cleanup.
-			subscribe: async () => () => {},
+			subscribe: async () => function () {},
 		}
 		const entry: CommitEntry<Message> = {
 			key: "count",

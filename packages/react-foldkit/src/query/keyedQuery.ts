@@ -79,11 +79,11 @@ export type KeyedQueryMessage<A, AI, E, EI, Fields extends SyncFields> = ReturnT
 >
 
 /** Schema for a KeyedQuery's retained slots and request identity. */
-export function makeKeyedQueryModel<A, AI, E, EI, Fields extends SyncFields>(
+export const makeKeyedQueryModel = <A, AI, E, EI, Fields extends SyncFields>(
 	result: Schema.Codec<AsyncData.AsyncData<A, E>, AsyncData.AsyncData<AI, EI>, never, never>,
 	Args: Schema.Struct<Fields>
-) {
-	return Schema.Struct({
+) =>
+	Schema.Struct({
 		instanceId: Schema.String,
 		nextRequestId: Schema.Number,
 		slots: Schema.HashMap(
@@ -95,7 +95,6 @@ export function makeKeyedQueryModel<A, AI, E, EI, Fields extends SyncFields>(
 			})
 		),
 	})
-}
 
 export type KeyedQueryModel<A, AI, E, EI, Fields extends SyncFields> = ReturnType<
 	typeof makeKeyedQueryModel<A, AI, E, EI, Fields>
@@ -275,15 +274,13 @@ export function defineKeyedQuery<Name extends string, A, AI, E, EI, Fields exten
 		pipe(
 			config.execute(args.queryArgs),
 			Effect.result,
-			Effect.map(function (result): typeof Message.SettledFetch.Type {
-				return {
-					_tag: "SettledFetch",
-					args: args.queryArgs,
-					instanceId: args.instanceId,
-					requestId: args.requestId,
-					result,
-				}
-			})
+			Effect.map((result): typeof Message.SettledFetch.Type => ({
+				_tag: "SettledFetch",
+				args: args.queryArgs,
+				instanceId: args.instanceId,
+				requestId: args.requestId,
+				result,
+			}))
 		)
 	const PlainFetch = Command.define(`Fetch${config.name}`, {
 		args: FetchArgs,
@@ -495,27 +492,19 @@ export function defineKeyedQuery<Name extends string, A, AI, E, EI, Fields exten
 	): KeyedSettleIf<ParentModel, ParentMessage, Args, A, E> {
 		const fold = Update.foldChild({
 			...lens,
-			update: function (
+			update: (
 				model: Model,
 				input: {
 					readonly args: Args
 					readonly result: AsyncData.AsyncData<A, E>
 					readonly options: SettleIfOptions<A, E>
 				}
-			) {
-				return settleIf(model, input.args, input.result, input.options)
-			},
+			) => settleIf(model, input.args, input.result, input.options),
 		})
 		return Function.dual(
 			4,
-			function (
-				model: ParentModel,
-				args: Args,
-				result: AsyncData.AsyncData<A, E>,
-				options: SettleIfOptions<A, E>
-			) {
-				return fold(model, { args, result, options })
-			}
+			(model: ParentModel, args: Args, result: AsyncData.AsyncData<A, E>, options: SettleIfOptions<A, E>) =>
+				fold(model, { args, result, options })
 		)
 	}
 

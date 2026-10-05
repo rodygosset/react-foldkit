@@ -14,9 +14,7 @@ export const Message = defineMessageUnion({
 })
 export type Message = typeof Message.Type
 
-const toProjectMessage = function (message: Project.Message) {
-	return Message.GotProjectMessage({ message })
-}
+const toProjectMessage = (message: Project.Message) => Message.GotProjectMessage({ message })
 
 const projects = Project.query.lift<Model, Message>({
 	field: "projects",
@@ -26,12 +24,10 @@ const projects = Project.query.lift<Model, Message>({
 export const update = (model: Model, message: Message) =>
 	Message.match<Update.Return<Model, Message>>(message, {
 		GotProjectMessage: ({ message }) => projects.fold(model, message),
-		CompletedLoadProject: function ({ load }) {
+		CompletedLoadProject({ load }) {
 			const { result, ...args } = load
 			return projects.settleIf(model, args, result, {
-				fresher: function (incoming, current) {
-					return incoming.revision > current.revision
-				},
+				fresher: (incoming, current) => incoming.revision > current.revision,
 			})
 		},
 		ClickedRefreshProject: ({ projectId }) => projects.revalidateOrLoad(model, { projectId }),

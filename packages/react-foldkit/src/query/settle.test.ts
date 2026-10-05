@@ -32,8 +32,8 @@ const unsettled: ReadonlyArray<AsyncData.AsyncData<string, string>> = [
 	AsyncData.Stale({ data: "known", error: "old" }),
 ]
 
-describe("Query.settle", () => {
-	it("installs an external outcome without fetching and invalidates older completions", () => {
+describe("Query.settle", function () {
+	it("installs an external outcome without fetching and invalidates older completions", function () {
 		const pending = single.loadIfMissing(single.init("home"))
 		const settled = single.settle(pending.model, external)
 		expect(settled.commands).toBeUndefined()
@@ -57,26 +57,22 @@ describe("Query.settle", () => {
 		expect(single.read(current.model)).toEqual(AsyncData.Success({ data: "new" }))
 	})
 
-	it("settleIf installs fresher Success and empty Failure only", () => {
-		const always = function () {
-			return true
-		}
-		const differs = function (incoming: string, current: string) {
-			return incoming !== current
-		}
+	it("settleIf installs fresher Success and empty Failure only", function () {
+		const always = () => true
+		const differs = (incoming: string, current: string) => incoming !== current
 		const empty = single.init("home")
 		expect(single.settleIf(empty, failure, { fresher: always }).model.data).toEqual(failure)
 		const known = single.settle(empty, external).model
 		expect(single.settleIf(known, failure, { fresher: always }).model).toBe(known)
-		expect(
-			single.settleIf(known, AsyncData.Success({ data: "newer" }), { fresher: differs }).model.data
-		).toEqual(AsyncData.Success({ data: "newer" }))
+		expect(single.settleIf(known, AsyncData.Success({ data: "newer" }), { fresher: differs }).model.data).toEqual(
+			AsyncData.Success({ data: "newer" })
+		)
 		expect(single.settleIf(known, AsyncData.Success({ data: "external" }), { fresher: differs }).model).toBe(known)
 		const pending = single.revalidate(known).model
 		expect(single.settleIf(pending, failure, { fresher: always }).model).toBe(pending)
 	})
 
-	it("uses AsyncData's last-good-data policy and leaves non-outcomes inert", () => {
+	it("uses AsyncData's last-good-data policy and leaves non-outcomes inert", function () {
 		const empty = single.init("home")
 		expect(single.read(single.settle(empty, failure).model)).toEqual(failure)
 		const known = single.settle(empty, external).model
@@ -91,7 +87,7 @@ describe("Query.settle", () => {
 		}
 	})
 
-	it("settles only the addressed key, preserving siblings and the supplied args", () => {
+	it("settles only the addressed key, preserving siblings and the supplied args", function () {
 		const first = keyed.loadIfMissing(keyed.init("home"), a).model
 		const pending = keyed.loadIfMissing(first, b).model
 		const replacementArgs = { ...a, label: "authoritative" }
@@ -127,7 +123,7 @@ describe("Query.settle", () => {
 		expect(keyed.read(keyed.settle(keyed.init("empty"), a, failure).model, a)).toEqual(failure)
 	})
 
-	it("lifts settlement and interruption through a field and an optional lens", () => {
+	it("lifts settlement and interruption through a field and an optional lens", function () {
 		const query = Query.define({
 			name: "LiftSettle",
 			data: Schema.String,

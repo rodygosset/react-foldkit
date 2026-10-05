@@ -156,9 +156,7 @@ describe("interruptible Command.define", function () {
 				messages: [Message.SucceededTask],
 				interrupt: {
 					keyFields: ["taskId"],
-					toKey: function ({ taskId }) {
-						return String(taskId)
-					},
+					toKey: ({ taskId }) => String(taskId),
 				},
 				execute: ({ taskId }) =>
 					Effect.onInterrupt(Effect.as(Effect.never, Message.SucceededTask({ taskId })), () =>

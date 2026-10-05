@@ -31,10 +31,7 @@ export function make<const D extends ReadonlyArray<Declaration<unknown>>>(
 	router: AnyRouter,
 	declarations: D
 ): CommitSource<MessageOfDeclaration<D[number]>>
-export function make(
-	router: AnyRouter,
-	declarations: ReadonlyArray<Declaration<unknown>>
-): CommitSource<unknown> {
+export function make(router: AnyRouter, declarations: ReadonlyArray<Declaration<unknown>>): CommitSource<unknown> {
 	const registry = Result.gen(function* () {
 		let registry = HashMap.empty<string, Declaration<unknown>>()
 		for (const declaration of declarations) {
@@ -48,7 +45,7 @@ export function make(
 	const decodeHeader = Schema.decodeUnknownSync(EnvelopeHeader)
 	const decodeName = Schema.decodeUnknownSync(Schema.String)
 	return {
-		getSnapshot: () => {
+		getSnapshot() {
 			const entries: Array<CommitEntry<unknown>> = []
 			for (const match of router.stores.matches.get()) {
 				const input: unknown = match.loaderData
@@ -70,7 +67,7 @@ export function make(
 			}
 			return entries
 		},
-		subscribe: (notify) => {
+		subscribe(notify) {
 			const subscription = router.stores.matches.subscribe(() => notify())
 			return () => subscription.unsubscribe()
 		},

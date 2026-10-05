@@ -14,7 +14,7 @@ export function createSourceFixture(
 ) {
 	const handled: Message[] = []
 	const renders: Model[] = []
-	const update = (model: Model, message: Message): Update.Return<Model, Message> => {
+	function update(model: Model, message: Message): Update.Return<Model, Message> {
 		handled.push(message)
 		return Message.match(message, {
 			Received: ({ value }) => ({
@@ -32,11 +32,7 @@ export function createSourceFixture(
 		dispatch = Option.some(App.useDispatch())
 		return <span>{model.values.join(",")}</span>
 	}
-	function Tree({
-		visible = true,
-	}: {
-		readonly visible?: boolean
-	}) {
+	function Tree({ visible = true }: { readonly visible?: boolean }) {
 		return (
 			<React.Activity mode={visible ? "visible" : "hidden"}>
 				<App.Provider

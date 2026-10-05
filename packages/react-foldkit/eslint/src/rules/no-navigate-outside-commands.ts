@@ -13,8 +13,7 @@ const DEFAULT_URL_BRIDGE_PATHS: string[] = []
 const meta: Rule.RuleMetaData = {
 	type: "problem",
 	docs: {
-		description:
-			"Disallow navigation APIs outside Command execute bodies (and configured URL bridge paths).",
+		description: "Disallow navigation APIs outside Command execute bodies (and configured URL bridge paths).",
 	},
 	schema: [],
 	messages: {
@@ -33,9 +32,8 @@ function getUrlBridgePaths(context: Rule.RuleContext): string[] {
 	return DEFAULT_URL_BRIDGE_PATHS
 }
 
-function isAllowedFile(context: Rule.RuleContext): boolean {
-	return matchesGlob(getFilename(context), getUrlBridgePaths(context))
-}
+const isAllowedFile = (context: Rule.RuleContext): boolean =>
+	matchesGlob(getFilename(context), getUrlBridgePaths(context))
 
 const rule: Rule.RuleModule = {
 	meta,

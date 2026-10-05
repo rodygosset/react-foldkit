@@ -282,7 +282,7 @@ function clientRequestFields(endpoint: HttpApiEndpoint.Top): SyncFields | undefi
 const makeQuery = <Self, ApiId extends string, Groups extends HttpApiGroup.Constraint>(
 	tag: QueryTag<Self, ApiId, Groups>
 ): QueryFrom<Self, Groups> =>
-	function query<
+	function <
 		GroupId extends HttpApiGroup.Identifier<Groups>,
 		EndpointId extends HttpApiEndpoint.Identifier<
 			HttpApiGroup.Endpoints<HttpApiGroup.WithIdentifier<Groups, GroupId>>

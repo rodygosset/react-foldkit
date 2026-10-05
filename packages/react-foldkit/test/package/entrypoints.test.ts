@@ -10,8 +10,8 @@ import * as Store from "react-foldkit/store"
 import * as Struct from "react-foldkit/struct"
 import { describe, expect, it } from "vitest"
 
-describe("built package entry points", () => {
-	it("preserves Foldkit reexports and executes Query settlement through the built entry points", () => {
+describe("built package entry points", function () {
+	it("preserves Foldkit reexports and executes Query settlement through the built entry points", function () {
 		expect(Foldkit.AsyncData.Success).toBe(AsyncData.Success)
 		expect(Foldkit.Command.define).toBe(Command.define)
 		expect(Foldkit.Struct.modifyFields).toBe(Struct.modifyFields)
@@ -27,7 +27,7 @@ describe("built package entry points", () => {
 		expect(query.read(settled.model)).toEqual(Foldkit.AsyncData.Success({ data: "external" }))
 	})
 
-	it("shares public error constructors across the root and subpath exports", () => {
+	it("shares public error constructors across the root and subpath exports", function () {
 		expect(Foldkit.CommitSource.CommitSourceError).toBe(CommitSource.CommitSourceError)
 		expect(ReactFoldkit.CommitSourceError).toBe(CommitSource.CommitSourceError)
 		expect(Foldkit.Loader.define).toBe(Loader.define)
@@ -39,7 +39,7 @@ describe("built package entry points", () => {
 		expect(error).toBeInstanceOf(Foldkit.CommitSource.CommitSourceError)
 	})
 
-	it("returns a CommitError recognized through every Store export", () => {
+	it("returns a CommitError recognized through every Store export", function () {
 		const store = Foldkit.Store.boot(
 			{ update: (model: number, message: number) => ({ model: model + message }) },
 			{ model: 0 }

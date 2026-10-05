@@ -53,7 +53,7 @@ export function createSubmodelFixture() {
 				subscribe(notify) {
 					listeners += 1
 					const unsubscribe = projected.subscribe(notify)
-					return () => {
+					return function () {
 						listeners -= 1
 						unsubscribe()
 					}

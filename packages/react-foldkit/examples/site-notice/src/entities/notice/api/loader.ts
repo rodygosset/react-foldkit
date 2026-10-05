@@ -4,7 +4,5 @@ import { Notice } from "../model/notice"
 export const loader = Loader.define({
 	name: "SiteNotice",
 	data: Notice,
-	key: function (notice) {
-		return notice.id
-	},
+	key: (notice) => notice.id,
 })

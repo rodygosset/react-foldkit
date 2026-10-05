@@ -132,7 +132,7 @@ const { Provider, useModel, useDispatch } = defineApplication({
 
 const floorAndPad = (value: number): string => Math.floor(value).toString().padStart(2, "0")
 
-const formatTime = (ms: number): string => {
+function formatTime(ms: number): string {
 	const minutes = floorAndPad(Duration.toMinutes(Duration.millis(ms)))
 	const seconds = floorAndPad(Duration.toSeconds(Duration.millis(ms % 60_000)))
 	const centiseconds = floorAndPad(Duration.toMillis(Duration.millis(ms % 1000)) / 10)

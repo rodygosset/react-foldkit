@@ -32,7 +32,7 @@ function useCommitConnection<Model, Message>(
 	connection: CommitSource.Connection<Message> | undefined
 ) {
 	React.useEffect(
-		function () {
+		function syncCommitConnection() {
 			if (connection === undefined) return
 			const disconnect = Effect.runSync(store.onActivate(connection.connect(store.commit)))
 			return () => Effect.runSync(disconnect)
@@ -91,7 +91,9 @@ export function defineSubmodel<Model, Message>() {
 	): Model | Selected {
 		return ModelHooks.useModel(useSource(), selector, isEqual)
 	}
-	const useDispatch = () => useSource().dispatch
+	function useDispatch() {
+		return useSource().dispatch
+	}
 	return { Provider, useModel, useDispatch, ...projectionHooks(useSource) }
 }
 
@@ -202,10 +204,14 @@ export function defineApplication<ModelSchema extends ModelCodec, Message, R = n
 		return <StoreContext.Provider value={store}>{props.children}</StoreContext.Provider>
 	}
 
-	const useDispatch = () => useStore().dispatch
+	function useDispatch() {
+		return useStore().dispatch
+	}
 
 	/** Completes a Message's Model transition synchronously; Commands remain asynchronous. */
-	const useCommit = () => useStore().commit
+	function useCommit() {
+		return useStore().commit
+	}
 
 	function useSource(): ModelSource.ModelSource<Type<ModelSchema>, Message> {
 		const store = useStore()

@@ -31,7 +31,7 @@ export interface OptionalSubmodelProjection<ParentModel, ParentMessage, Model, M
 // React requires referentially stable snapshots, including when read allocates.
 function snapshot<Parent, Model>(getParent: () => Parent, read: (parent: Parent) => Model): () => Model {
 	let cached: Option.Option<{ readonly parent: Parent; readonly model: Model }> = Option.none()
-	return () => {
+	return function () {
 		const parent = getParent()
 		if (Option.isSome(cached) && Object.is(cached.value.parent, parent)) return cached.value.model
 		const model = read(parent)
