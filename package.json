@@ -5,12 +5,16 @@
 	"scripts": {
 		"build": "turbo build",
 		"dev": "turbo dev",
-		"lint": "turbo lint",
+		"lint": "bun run test:lint && eslint . && turbo lint",
+		"test:lint": "node --test eslint/function-style.test.mjs",
 		"format": "turbo format",
 		"typecheck": "turbo typecheck",
 		"test": "turbo test"
 	},
 	"devDependencies": {
+		"@typescript-eslint/parser": "8.66.0",
+		"eslint": "9.39.5",
+		"eslint-plugin-react": "^7.37.5",
 		"prettier": "^3.9.6",
 		"prettier-plugin-tailwindcss": "^0.8.1",
 		"turbo": "^2.9.18",

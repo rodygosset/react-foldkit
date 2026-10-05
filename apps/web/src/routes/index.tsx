@@ -64,29 +64,23 @@ function Landing() {
 						Examples
 					</p>
 					<ul className="flex flex-col gap-3">
-						{examples.map(function (example) {
-							return (
-								<li key={example.options.to}>
-									<Button
-										variant="outline"
-										size="lg"
-										className="h-auto w-full flex-col items-stretch gap-1 px-5 py-4 text-left whitespace-normal"
-										nativeButton={false}
-										render={<Link {...example.options} />}
-									>
-										<span className="flex items-center justify-between gap-3">
-											<span className="text-xl font-semibold tracking-tight">
-												{example.title}
-											</span>
-											<ArrowRightIcon className="size-4 shrink-0 opacity-60 transition-transform group-hover/button:translate-x-0.5" />
-										</span>
-										<span className="text-sm font-normal text-muted-foreground">
-											{example.blurb}
-										</span>
-									</Button>
-								</li>
-							)
-						})}
+						{examples.map((example) => (
+							<li key={example.options.to}>
+								<Button
+									variant="outline"
+									size="lg"
+									className="h-auto w-full flex-col items-stretch gap-1 px-5 py-4 text-left whitespace-normal"
+									nativeButton={false}
+									render={<Link {...example.options} />}
+								>
+									<span className="flex items-center justify-between gap-3">
+										<span className="text-xl font-semibold tracking-tight">{example.title}</span>
+										<ArrowRightIcon className="size-4 shrink-0 opacity-60 transition-transform group-hover/button:translate-x-0.5" />
+									</span>
+									<span className="text-sm font-normal text-muted-foreground">{example.blurb}</span>
+								</Button>
+							</li>
+						))}
 					</ul>
 				</section>
 			</div>

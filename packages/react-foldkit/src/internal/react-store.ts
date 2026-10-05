@@ -25,7 +25,7 @@ export type ReactStore<Model, Message> = Readonly<{
 }>
 
 const trackCompletion = <Message, R>(state: InitCommandState<Message, R>): InitCommand<Message, R> =>
-	InitCommand.track(state.command, function markComplete() {
+	InitCommand.track(state.command, function () {
 		state.isComplete = true
 	})
 
@@ -45,9 +45,7 @@ export function make<Model, Message, R = never>(
 ): ReactStore<Model, Message> {
 	const listeners = new Set<() => void>()
 	const initCommands = init.commands ?? []
-	const initCommandStates = initCommands.map(function (command) {
-		return { command, isComplete: false }
-	})
+	const initCommandStates = initCommands.map((command) => ({ command, isComplete: false }))
 	let inactiveModel = init.model
 	const serverModel = inactiveModel
 	let maybeActive: Option.Option<Activation<Model, Message>> = Option.none()
@@ -69,7 +67,7 @@ export function make<Model, Message, R = never>(
 			connection.maybeScope = Option.some(scope)
 			yield* Scope.addFinalizer(
 				scope,
-				Effect.sync(() => {
+				Effect.sync(function () {
 					if (Option.isSome(connection.maybeScope) && connection.maybeScope.value === scope) {
 						connection.maybeScope = Option.none()
 					}
@@ -136,7 +134,7 @@ export function make<Model, Message, R = never>(
 		getServerModel: () => serverModel,
 		subscribe(listener) {
 			listeners.add(listener)
-			return function unsubscribe() {
+			return function () {
 				listeners.delete(listener)
 			}
 		},

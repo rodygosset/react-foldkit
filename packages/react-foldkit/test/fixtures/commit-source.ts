@@ -20,12 +20,12 @@ export function fakeSource<Message>(initial: ReadonlyArray<CommitEntry<Message>>
 	const notifications: Array<() => void> = []
 	const source: CommitSource<Message> = {
 		getSnapshot: () => snapshot,
-		subscribe: (notify) => {
+		subscribe(notify) {
 			subscriptions += 1
 			listeners.add(notify)
 			notifications.push(notify)
 			onSubscribe?.(subscriptions)
-			return () => {
+			return function () {
 				unsubscriptions += 1
 				listeners.delete(notify)
 				onUnsubscribe?.(unsubscriptions)

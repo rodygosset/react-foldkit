@@ -8,7 +8,8 @@
 			"outputs": [".output/**", "dist/**", "eslint/dist/**"]
 		},
 		"lint": {
-			"dependsOn": ["^build"]
+			"dependsOn": ["^build"],
+			"inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/eslint.config.mjs", "$TURBO_ROOT$/eslint/**"]
 		},
 		"format": {
 			"dependsOn": ["^format"]

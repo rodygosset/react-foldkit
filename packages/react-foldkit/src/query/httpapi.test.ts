@@ -126,9 +126,7 @@ const createNote = NotesClient.query("CreateNote", "notes", "create")
 const guarded = NotesClient.query("Guarded", "notes", "guarded")
 const ping = NotesClient.query("Ping", "notes", "ping")
 
-const NotesAuthLive = HttpApiMiddleware.layerClient(NotesAuth, function ({ next, request }) {
-	return next(request)
-})
+const NotesAuthLive = HttpApiMiddleware.layerClient(NotesAuth, ({ next, request }) => next(request))
 
 const jsonResponse = (status: number, body: unknown): Response =>
 	new Response(JSON.stringify(body), {
@@ -159,9 +157,7 @@ const defaultNotesHandler: NotesHandler = function (request, url) {
 	const maybeNoncePath = Option.fromNullishOr(url.pathname.match(/^\/notes\/([^/]+)\/nonce$/))
 	if (Option.isSome(maybeNoncePath)) {
 		const nonce = url.searchParams.get("nonce") ?? ""
-		const id = Option.getOrElse(Array.get(maybeNoncePath.value, 1), function () {
-			return ""
-		})
+		const id = Option.getOrElse(Array.get(maybeNoncePath.value, 1), () => "")
 		if (nonce === "1") {
 			return Effect.never
 		}
@@ -170,9 +166,7 @@ const defaultNotesHandler: NotesHandler = function (request, url) {
 
 	const maybeNotePath = Option.fromNullishOr(url.pathname.match(/^\/notes\/([^/]+)$/))
 	if (request.method === "GET" && Option.isSome(maybeNotePath)) {
-		const id = Option.getOrElse(Array.get(maybeNotePath.value, 1), function () {
-			return ""
-		})
+		const id = Option.getOrElse(Array.get(maybeNotePath.value, 1), () => "")
 		if (id === "missing") {
 			return Effect.succeed(HttpClientResponse.fromWeb(request, jsonResponse(404, "not found")))
 		}
@@ -214,9 +208,7 @@ const notesClientLayer = (handle: NotesHandler): Layer.Layer<NotesClient> =>
 		NotesClient,
 		HttpApiClient.makeWith(Api, {
 			baseUrl: "http://test",
-			httpClient: HttpClient.make(function (request, url) {
-				return handle(request, url)
-			}),
+			httpClient: HttpClient.make((request, url) => handle(request, url)),
 		})
 	).pipe(Layer.provide(NotesAuthLive))
 
@@ -241,14 +233,12 @@ const TopLevelNotesClientLive = Layer.effect(
 	TopLevelNotesClient,
 	HttpApiClient.makeWith(TopLevelApi, {
 		baseUrl: "http://test",
-		httpClient: HttpClient.make(function (request, url) {
-			return defaultNotesHandler(request, url)
-		}),
+		httpClient: HttpClient.make((request, url) => defaultNotesHandler(request, url)),
 	})
 )
 
-describe("Query.HttpApi.Service.query", () => {
-	it("is a Query whose run depends on the client tag", () => {
+describe("Query.HttpApi.Service.query", function () {
+	it("is a Query whose run depends on the client tag", function () {
 		expectTypeOf(notes).toExtend<Query.Query.Any>()
 		expectTypeOf(notes.run).toEqualTypeOf<
 			Effect.Effect<
@@ -274,8 +264,8 @@ describe("Query.HttpApi.Service.query", () => {
 	)
 })
 
-describe("Query.HttpApi.Service.query KeyedQuery", () => {
-	it("is a KeyedQuery Submodel over the client request", () => {
+describe("Query.HttpApi.Service.query KeyedQuery", function () {
+	it("is a KeyedQuery Submodel over the client request", function () {
 		expectTypeOf(noteById).toMatchTypeOf<Query.KeyedQuery.Any>()
 		expectTypeOf(noteById.run).parameter(0).toEqualTypeOf<{
 			readonly params: { readonly id: string }
@@ -332,7 +322,7 @@ describe("Query.HttpApi.Service.query KeyedQuery", () => {
 		})
 	)
 
-	it("distinct params keep distinct slots", () => {
+	it("distinct params keep distinct slots", function () {
 		const first = noteById.loadIfMissing(noteById.init("note-by-id"), {
 			params: { id: "a" },
 		})
@@ -344,8 +334,8 @@ describe("Query.HttpApi.Service.query KeyedQuery", () => {
 	})
 })
 
-describe("Query.HttpApi.Service.query extra args", () => {
-	it("distinct extra args keep distinct slots and Fetch keys", () => {
+describe("Query.HttpApi.Service.query extra args", function () {
+	it("distinct extra args keep distinct slots and Fetch keys", function () {
 		const first = noteByIdNonce.loadIfMissing(noteByIdNonce.init("note-by-id-nonce"), {
 			params: { id: "a" },
 			query: { nonce: "1" },
@@ -369,7 +359,7 @@ describe("Query.HttpApi.Service.query extra args", () => {
 		).toEqual(AsyncData.Loading())
 	})
 
-	it("interrupt: true keys Fetch by instance id and slot", () => {
+	it("interrupt: true keys Fetch by instance id and slot", function () {
 		const interruptible = NotesClient.query("NoteNonceInterrupt", "notes", "getByIdNonce", { interrupt: true })
 		expectTypeOf(interruptible.init).parameter(0).toEqualTypeOf<string>()
 		expectTypeOf(noteByIdNonce.init).parameter(0).toEqualTypeOf<string>()
@@ -393,7 +383,7 @@ describe("Query.HttpApi.Service.query extra args", () => {
 	})
 })
 
-describe("Query.HttpApi.Service.query empty success", () => {
+describe("Query.HttpApi.Service.query empty success", function () {
 	it.effect("run succeeds with no content", () =>
 		Effect.gen(function* () {
 			const data = yield* Effect.provide(ping.run, NotesClientLive)
@@ -402,8 +392,8 @@ describe("Query.HttpApi.Service.query empty success", () => {
 	)
 })
 
-describe("Query.HttpApi.Service.query middleware", () => {
-	it("includes middleware errors in the Query error type", () => {
+describe("Query.HttpApi.Service.query middleware", function () {
+	it("includes middleware errors in the Query error type", function () {
 		expectTypeOf(guarded.run).toEqualTypeOf<
 			Effect.Effect<
 				AsyncData.AsyncData<Note, string | NotesAuthError | Query.HttpApi.HttpApiClientError>,
@@ -414,23 +404,23 @@ describe("Query.HttpApi.Service.query middleware", () => {
 	})
 })
 
-describe("Query.HttpApi.Service.query construction", () => {
+describe("Query.HttpApi.Service.query construction", function () {
 	type QueryEndpointId = Parameters<typeof NotesClient.query>[2]
 
-	it("rejects an endpoint whose success codec requires encoding services", () => {
+	it("rejects an endpoint whose success codec requires encoding services", function () {
 		expectTypeOf<"list">().toExtend<QueryEndpointId>()
 		expectTypeOf<"secret">().not.toExtend<QueryEndpointId>()
 	})
 
-	it("rejects an endpoint whose request codec requires encoding services", () => {
+	it("rejects an endpoint whose request codec requires encoding services", function () {
 		expectTypeOf<"locked">().not.toExtend<QueryEndpointId>()
 	})
 
-	it("rejects an endpoint whose success codec requires decoding services", () => {
+	it("rejects an endpoint whose success codec requires decoding services", function () {
 		expectTypeOf<"decoded">().not.toExtend<QueryEndpointId>()
 	})
 
-	it("rejects stream success endpoints", () => {
+	it("rejects stream success endpoints", function () {
 		expectTypeOf<"events">().not.toExtend<QueryEndpointId>()
 		expectTypeOf<"bytes">().not.toExtend<QueryEndpointId>()
 		expectTypeOf<"headerEvents">().not.toExtend<QueryEndpointId>()

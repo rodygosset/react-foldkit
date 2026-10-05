@@ -28,9 +28,11 @@ const SearchResponse = Schema.Struct({
 })
 export type SearchResponse = typeof SearchResponse.Type
 
-export function response(query: string, revision = 1): SearchResponse {
-	return { query, revision, fetchedAt: new Date("2026-09-30T10:00:00.000Z") }
-}
+export const response = (query: string, revision = 1): SearchResponse => ({
+	query,
+	revision,
+	fetchedAt: new Date("2026-09-30T10:00:00.000Z"),
+})
 
 type Load = (query: string) => Effect.Effect<SearchResponse, string>
 
@@ -69,11 +71,11 @@ const resultsChild = query.lift<SearchModel, SearchMessage>({
 })
 
 // The feature folds ordinary Query Messages and external loader outcomes alike.
-function searchUpdate(
+const searchUpdate = (
 	model: SearchModel,
 	message: SearchMessage
-): Update.Return<SearchModel, SearchMessage, LoaderApi> {
-	return SearchMessage.match(message, {
+): Update.Return<SearchModel, SearchMessage, LoaderApi> =>
+	SearchMessage.match(message, {
 		GotQueryMessage: function ({ message }) {
 			return resultsChild.fold(model, message)
 		},
@@ -81,7 +83,6 @@ function searchUpdate(
 			return resultsChild.revalidateOrLoad(model, { query })
 		},
 	})
-}
 const { Provider, useModel } = defineSubmodel<SearchModel, SearchMessage>()
 
 export const AppModel = Schema.Struct({ search: SearchModel, edits: Schema.Number, loads: Schema.Number })
@@ -94,11 +95,7 @@ const AppMessage = defineMessageUnion({
 })
 export type AppMessage = typeof AppMessage.Type
 
-const routeLoader = SearchLoader.pipe(
-	Loader.mapMessages(function (load) {
-		return AppMessage.CompletedLoadSearch({ load })
-	}),
-)
+const routeLoader = SearchLoader.pipe(Loader.mapMessages((load) => AppMessage.CompletedLoadSearch({ load })))
 
 export interface Observation {
 	readonly routeQuery: string
@@ -136,60 +133,50 @@ export function createFixture(
 		write: (model: AppModel, search: SearchModel) => modifyFields(model, { search: () => search }),
 		toParentMessage: (message: SearchMessage) => AppMessage.GotSearchMessage({ message }),
 	})
-	function update(model: AppModel, message: AppMessage): Update.Return<AppModel, AppMessage, LoaderApi> {
-		return AppMessage.match(message, {
+	const update = (model: AppModel, message: AppMessage): Update.Return<AppModel, AppMessage, LoaderApi> =>
+		AppMessage.match(message, {
 			GotSearchMessage: function ({ message }) {
 				return child(model, message)
 			},
-			CompletedLoadSearch: function ({ load }) {
+			CompletedLoadSearch({ load }) {
 				const { result, ...args } = load
 				const settled = resultsChild.settleIf(model.search, args, result, {
-					fresher: function (incoming, current) {
-						return incoming.revision > current.revision
-					},
+					fresher: (incoming, current) => incoming.revision > current.revision,
 				})
 				const search = modifyFields(settled.model, {
-					activeQuery: function () {
-						return load.query
-					},
+					activeQuery: () => load.query,
 				})
-				const commands = Command.mapMessages(settled.commands, function (message) {
-					return AppMessage.GotSearchMessage({ message })
-				})
+				const commands = Command.mapMessages(settled.commands, (message) =>
+					AppMessage.GotSearchMessage({ message })
+				)
 				return {
 					model: modifyFields(model, {
-						search: function () {
-							return search
-						},
-						loads: function (loads) {
-							return loads + 1
-						},
+						search: () => search,
+						loads: (loads) => loads + 1,
 					}),
 					...(commands.length > 0 ? { commands } : {}),
 				}
 			},
 			Edited: function () {
-				return { model: modifyFields(model, { edits: function (edits) { return edits + 1 } }) }
+				return { model: modifyFields(model, { edits: (edits) => edits + 1 }) }
 			},
-			BurnedBudget: function () {
+			BurnedBudget() {
 				options.onBurn?.()
 				return { model }
 			},
 		})
-	}
 	const App = defineApplication({
 		Model: AppModel,
 		layer: Layer.succeed(LoaderApi, {
 			load: (query) =>
-				Effect.suspend(() => {
+				Effect.suspend(function () {
 					fetchCalls.push(query)
 					return options.fetch?.(query) ?? Effect.succeed(response(query))
 				}),
 		}),
-		update: (model: AppModel, message: AppMessage) => {
+		update(model: AppModel, message: AppMessage) {
 			updates.push(message)
-			if (isSourceConnected && message._tag === "CompletedLoadSearch")
-				liveRouteDeliveries.push(message)
+			if (isSourceConnected && message._tag === "CompletedLoadSearch") liveRouteDeliveries.push(message)
 			return update(model, message)
 		},
 	})
@@ -202,13 +189,17 @@ export function createFixture(
 		dispatch = parentDispatch
 		const model = App.useModel()
 		layoutModels.push(model)
-		React.useEffect(() => {
+		React.useEffect(function recordLayoutMount() {
 			layoutMounts += 1
 		}, [])
 		return (
 			<App.SubmodelProvider
 				projection={searchProjection}
-				render={({ source }) => <Provider source={source}><Outlet /></Provider>}
+				render={({ source }) => (
+					<Provider source={source}>
+						<Outlet />
+					</Provider>
+				)}
 			/>
 		)
 	}
@@ -217,13 +208,13 @@ export function createFixture(
 		const source = React.useMemo<ReactFoldkit.CommitSource<AppMessage>>(
 			() => ({
 				getSnapshot: () => adapter.getSnapshot(),
-				subscribe: (notify) => {
+				subscribe(notify) {
 					isSourceConnected = true
-					const unsubscribe = adapter.subscribe(() => {
+					const unsubscribe = adapter.subscribe(function () {
 						options.onPublish?.(adapter.getSnapshot())
 						notify()
 					})
-					return () => {
+					return function () {
 						isSourceConnected = false
 						unsubscribe()
 					}
@@ -264,13 +255,14 @@ export function createFixture(
 			Effect.runPromise(
 				SearchLoader.loadQuery({ query: params.query }).pipe(
 					Effect.provideService(LoaderApi, {
-						load: (query) => Effect.suspend(() => {
-							loaderCalls.push(query)
-							return options.load?.(query) ?? Effect.succeed(response(query))
-						}),
-					}),
+						load: (query) =>
+							Effect.suspend(function () {
+								loaderCalls.push(query)
+								return options.load?.(query) ?? Effect.succeed(response(query))
+							}),
+					})
 				),
-				{ signal: abortController.signal },
+				{ signal: abortController.signal }
 			),
 		component: SearchView,
 	})

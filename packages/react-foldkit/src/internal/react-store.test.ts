@@ -63,7 +63,7 @@ describe("React store lifecycle", function () {
 		deactivateSecond()
 	})
 
-	it("ignores stale and repeated cleanup calls without deactivating a newer lifetime", () => {
+	it("ignores stale and repeated cleanup calls without deactivating a newer lifetime", function () {
 		const store = ReactStore.make({ update }, { model: { value: "initial" } })
 		const deactivateFirst = activate(store)
 		deactivateFirst()
@@ -197,8 +197,8 @@ describe("React store lifecycle", function () {
 	})
 })
 
-describe("external connection lifecycle", () => {
-	it("rolls back a failed late registration without stopping the active store", () => {
+describe("external connection lifecycle", function () {
+	it("rolls back a failed late registration without stopping the active store", function () {
 		const store = ReactStore.make({ update }, { model: { value: "initial" } })
 		const released = vi.fn()
 		const failed = Effect.gen(function* () {
@@ -219,7 +219,7 @@ describe("external connection lifecycle", () => {
 		expect(released).toHaveBeenCalledTimes(1)
 	})
 
-	it("starts only after activation, reconnects once per lifetime, and cancels registrations", () => {
+	it("starts only after activation, reconnects once per lifetime, and cancels registrations", function () {
 		const store = ReactStore.make({ update }, { model: { value: "initial" } })
 		let starts = 0
 		let stops = 0
@@ -229,7 +229,7 @@ describe("external connection lifecycle", () => {
 				starts += 1
 				yield* Effect.fromResult(store.commit(Message.SetValue({ value: "source" })))
 				yield* Effect.addFinalizer(() =>
-					Effect.sync(() => {
+					Effect.sync(function () {
 						stops += 1
 					})
 				)
@@ -252,7 +252,7 @@ describe("external connection lifecycle", () => {
 		third()
 	})
 
-	it("rolls back an unsuccessful activation and releases previously acquired connections", () => {
+	it("rolls back an unsuccessful activation and releases previously acquired connections", function () {
 		const store = ReactStore.make({ update }, { model: { value: "initial" } })
 		const release = vi.fn()
 		register(
@@ -272,10 +272,10 @@ describe("external connection lifecycle", () => {
 		expect(release).toHaveBeenCalledTimes(2)
 	})
 
-	it("releases every scoped connection despite a cleanup defect and remains inactive", () => {
+	it("releases every scoped connection despite a cleanup defect and remains inactive", function () {
 		const store = ReactStore.make({ update }, { model: { value: "initial" } })
 		const good = vi.fn()
-		const bad = vi.fn(() => {
+		const bad = vi.fn(function () {
 			throw new Error("cleanup failed")
 		})
 		register(
@@ -301,7 +301,7 @@ describe("external connection lifecycle", () => {
 		expect(bad).toHaveBeenCalledTimes(1)
 	})
 
-	it("preserves activation failure and cleanup failure together in the Effect Cause", () => {
+	it("preserves activation failure and cleanup failure together in the Effect Cause", function () {
 		const store = ReactStore.make({ update }, { model: { value: "initial" } })
 		register(
 			store,

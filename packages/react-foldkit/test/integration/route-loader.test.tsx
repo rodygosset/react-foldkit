@@ -6,7 +6,7 @@ import * as AsyncData from "../../src/asyncData"
 import { controlledDrains } from "../fixtures/controlled-drains"
 import { createFixture, response, type SearchResponse } from "../fixtures/route-loader"
 
-afterEach(() => {
+afterEach(function () {
 	cleanup()
 	vi.restoreAllMocks()
 	vi.unstubAllGlobals()
@@ -18,10 +18,10 @@ async function mount(fixture: ReturnType<typeof createFixture>) {
 	await waitFor(() => expect(fixture.layoutMounts).toBe(1))
 }
 
-describe("TanStack route loader handoff", () => {
+describe("TanStack route loader handoff", function () {
 	it.each(["navigation", "revalidation"] as const)(
 		"%s publishes loader data before its first render despite queued edits",
-		async (operation) => {
+		async function (operation) {
 			const drains = controlledDrains()
 			vi.stubGlobal("MessageChannel", drains.Channel)
 			let clock = 0
@@ -32,10 +32,10 @@ describe("TanStack route loader handoff", () => {
 			const fixture = createFixture({
 				initial: operation === "revalidation" ? "/search/a" : "/",
 				load: (query) => Effect.sync(() => response(query, ++revision)),
-				onBurn: () => {
+				onBurn() {
 					clock += 10
 				},
-				onPublish: (snapshot) => {
+				onPublish(snapshot) {
 					if (
 						pressured ||
 						!snapshot.some(
@@ -56,7 +56,7 @@ describe("TanStack route loader handoff", () => {
 			})
 			await mount(fixture)
 			const before = fixture.renders.length
-			await act(async () => {
+			await act(async function () {
 				if (operation === "revalidation") await fixture.router.invalidate()
 				else await fixture.router.navigate({ to: "/search/$query", params: { query: "a" } })
 			})
@@ -77,16 +77,16 @@ describe("TanStack route loader handoff", () => {
 		}
 	)
 
-	it("preloading leaves the Model unchanged and cached entry does not refetch", async () => {
+	it("preloading leaves the Model unchanged and cached entry does not refetch", async function () {
 		const fixture = createFixture()
 		await mount(fixture)
-		await act(async () => {
+		await act(async function () {
 			await fixture.router.preloadRoute({ to: "/search/$query", params: { query: "a" } })
 		})
 		expect(fixture.loaderCalls).toEqual(["a"])
 		expect(fixture.liveRouteDeliveries).toEqual([])
 		expect(fixture.layoutModels.at(-1)!.search.activeQuery).toBe("")
-		await act(async () => {
+		await act(async function () {
 			await fixture.router.navigate({ to: "/search/$query", params: { query: "a" } })
 		})
 		expect(fixture.loaderCalls).toEqual(["a"])
@@ -96,12 +96,12 @@ describe("TanStack route loader handoff", () => {
 		})
 	})
 
-	it("interrupts a superseded loader without installing data for the canceled destination", async () => {
+	it("interrupts a superseded loader without installing data for the canceled destination", async function () {
 		const slow = Deferred.makeUnsafe<SearchResponse>()
 		let interruptions = 0
 		const pending = Deferred.await(slow).pipe(
 			Effect.onInterrupt(() =>
-				Effect.sync(() => {
+				Effect.sync(function () {
 					interruptions += 1
 				})
 			)
@@ -111,15 +111,15 @@ describe("TanStack route loader handoff", () => {
 		})
 		await mount(fixture)
 		let canceled!: Promise<void>
-		act(() => {
+		act(function () {
 			canceled = fixture.router.navigate({ to: "/search/$query", params: { query: "slow" } })
 		})
 		await waitFor(() => expect(fixture.loaderCalls).toContain("slow"))
-		await act(async () => {
+		await act(async function () {
 			await fixture.router.navigate({ to: "/search/$query", params: { query: "fast" } })
 		})
 		await waitFor(() => expect(interruptions).toBe(1))
-		await act(async () => {
+		await act(async function () {
 			Effect.runSync(Deferred.succeed(slow, response("slow")))
 			await canceled
 		})
@@ -128,15 +128,15 @@ describe("TanStack route loader handoff", () => {
 		expect(fixture.liveRouteDeliveries).toHaveLength(1)
 	})
 
-	it("cached return installs the corresponding result on first render and preserves app edits", async () => {
+	it("cached return installs the corresponding result on first render and preserves app edits", async function () {
 		const fixture = createFixture({ initial: "/search/a" })
 		await mount(fixture)
 		act(() => fixture.edit())
-		await act(async () => {
+		await act(async function () {
 			await fixture.router.navigate({ to: "/search/$query", params: { query: "b" } })
 		})
 		const before = fixture.renders.length
-		await act(async () => {
+		await act(async function () {
 			await fixture.router.navigate({ to: "/search/$query", params: { query: "a" } })
 		})
 		const firstReturn = fixture.renders.slice(before).find(({ routeQuery }) => routeQuery === "a")!
@@ -150,15 +150,15 @@ describe("TanStack route loader handoff", () => {
 		expect(fixture.fetchCalls).toEqual([])
 	})
 
-	it("a settled loader failure is visible on the destination's first render", async () => {
+	it("a settled loader failure is visible on the destination's first render", async function () {
 		const fixture = createFixture({ load: () => Effect.fail("unavailable") })
 		await mount(fixture)
-		await act(async () => {
+		await act(async function () {
 			await fixture.router.navigate({ to: "/search/$query", params: { query: "a" } })
 		})
 		expect(fixture.renders[0]!.result).toEqual(AsyncData.Failure({ error: "unavailable" }))
 	})
-	it("a published loader outcome cancels an older Query Fetch while keeping app edits", async () => {
+	it("a published loader outcome cancels an older Query Fetch while keeping app edits", async function () {
 		const pending = Deferred.makeUnsafe<SearchResponse>()
 		let interruptions = 0
 		let revision = 0
@@ -168,19 +168,19 @@ describe("TanStack route loader handoff", () => {
 			fetch: () =>
 				Deferred.await(pending).pipe(
 					Effect.onInterrupt(() =>
-						Effect.sync(() => {
+						Effect.sync(function () {
 							interruptions += 1
 						})
 					)
 				),
 		})
 		await mount(fixture)
-		act(() => {
+		act(function () {
 			fixture.refresh("a")
 			fixture.edit()
 		})
 		await waitFor(() => expect(fixture.fetchCalls).toEqual(["a"]))
-		await act(async () => {
+		await act(async function () {
 			await fixture.router.invalidate()
 		})
 		const first = fixture.renders.find(({ loaderRevision }) => loaderRevision === 2)!
@@ -194,7 +194,7 @@ describe("TanStack route loader handoff", () => {
 				)
 			).toBe(true)
 		)
-		await act(async () => {
+		await act(async function () {
 			Effect.runSync(Deferred.succeed(pending, response("a", 99)))
 		})
 		expect(fixture.renders.at(-1)!.result).toEqual(AsyncData.Success({ data: response("a", 2) }))
@@ -202,7 +202,7 @@ describe("TanStack route loader handoff", () => {
 		expect(fixture.liveRouteDeliveries).toHaveLength(1)
 	})
 
-	it("an unversioned loader failure leaves cached Query data unchanged", async () => {
+	it("an unversioned loader failure leaves cached Query data unchanged", async function () {
 		let succeed = true
 		const fixture = createFixture({
 			initial: "/search/a",
@@ -211,26 +211,30 @@ describe("TanStack route loader handoff", () => {
 		await mount(fixture)
 		const before = fixture.renders.length
 		succeed = false
-		await act(async () => {
+		await act(async function () {
 			await fixture.router.invalidate()
 		})
-		expect(fixture.renders.slice(before)[0]!.result).toEqual(
-			AsyncData.Success({ data: response("a") })
-		)
+		expect(fixture.renders.slice(before)[0]!.result).toEqual(AsyncData.Success({ data: response("a") }))
 		expect(fixture.fetchCalls).toEqual([])
 	})
 
-	it("cached loader re-entry cannot overwrite a newer Query refresh", async () => {
+	it("cached loader re-entry cannot overwrite a newer Query refresh", async function () {
 		const fixture = createFixture({
 			initial: "/search/a",
-			fetch: query => Effect.succeed(response(query, 2)),
+			fetch: (query) => Effect.succeed(response(query, 2)),
 		})
 		await mount(fixture)
 		act(() => fixture.refresh("a"))
-		await waitFor(() => expect(fixture.renders.at(-1)!.result).toEqual(AsyncData.Success({ data: response("a", 2) })))
-		await act(async () => { await fixture.router.navigate({ to: "/" }) })
+		await waitFor(() =>
+			expect(fixture.renders.at(-1)!.result).toEqual(AsyncData.Success({ data: response("a", 2) }))
+		)
+		await act(async function () {
+			await fixture.router.navigate({ to: "/" })
+		})
 		const before = fixture.renders.length
-		await act(async () => { await fixture.router.navigate({ to: "/search/$query", params: { query: "a" } }) })
+		await act(async function () {
+			await fixture.router.navigate({ to: "/search/$query", params: { query: "a" } })
+		})
 		expect(fixture.renders.slice(before)[0]).toMatchObject({
 			loaderRevision: 1,
 			result: AsyncData.Success({ data: response("a", 2) }),
@@ -238,32 +242,49 @@ describe("TanStack route loader handoff", () => {
 		expect(fixture.loaderCalls).toEqual(["a"])
 	})
 
-	it("rejecting cached data preserves a pending Query request and its completion", async () => {
+	it("rejecting cached data preserves a pending Query request and its completion", async function () {
 		const pending = Deferred.makeUnsafe<SearchResponse>()
 		let interruptions = 0
 		const fixture = createFixture({
 			initial: "/search/a",
-			fetch: () => Deferred.await(pending).pipe(Effect.onInterrupt(() => Effect.sync(() => { interruptions += 1 }))),
+			fetch: () =>
+				Deferred.await(pending).pipe(
+					Effect.onInterrupt(() =>
+						Effect.sync(function () {
+							interruptions += 1
+						})
+					)
+				),
 		})
 		await mount(fixture)
 		act(() => fixture.refresh("a"))
 		await waitFor(() => expect(fixture.fetchCalls).toEqual(["a"]))
-		await act(async () => { await fixture.router.navigate({ to: "/" }) })
+		await act(async function () {
+			await fixture.router.navigate({ to: "/" })
+		})
 		const before = fixture.renders.length
-		await act(async () => { await fixture.router.navigate({ to: "/search/$query", params: { query: "a" } }) })
+		await act(async function () {
+			await fixture.router.navigate({ to: "/search/$query", params: { query: "a" } })
+		})
 		expect(AsyncData.isPending(fixture.renders.slice(before)[0]!.result)).toBe(true)
 		expect(interruptions).toBe(0)
-		act(() => { Effect.runSync(Deferred.succeed(pending, response("a", 2))) })
-		await waitFor(() => expect(fixture.renders.at(-1)!.result).toEqual(AsyncData.Success({ data: response("a", 2) })))
+		act(function () {
+			Effect.runSync(Deferred.succeed(pending, response("a", 2)))
+		})
+		await waitFor(() =>
+			expect(fixture.renders.at(-1)!.result).toEqual(AsyncData.Success({ data: response("a", 2) }))
+		)
 		expect(interruptions).toBe(0)
 	})
 
-	it("Query refresh failure retains good data independently of loader policy", async () => {
+	it("Query refresh failure retains good data independently of loader policy", async function () {
 		const fixture = createFixture({ initial: "/search/a", fetch: () => Effect.fail("unavailable") })
 		await mount(fixture)
 		act(() => fixture.refresh("a"))
-		await waitFor(() => expect(fixture.renders.at(-1)!.result).toEqual(
-			AsyncData.Stale({ data: response("a"), error: "unavailable" }),
-		))
+		await waitFor(() =>
+			expect(fixture.renders.at(-1)!.result).toEqual(
+				AsyncData.Stale({ data: response("a"), error: "unavailable" })
+			)
+		)
 	})
 })

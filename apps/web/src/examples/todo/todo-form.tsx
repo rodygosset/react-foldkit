@@ -54,7 +54,7 @@ export { Provider }
 export function View() {
 	const draft = useModel((model) => model.draft)
 	const dispatch = useDispatch()
-	const onSubmit = (event: React.SubmitEvent<HTMLFormElement>) => {
+	function onSubmit(event: React.SubmitEvent<HTMLFormElement>) {
 		event.preventDefault()
 		dispatch(Message.ClickedSubmit())
 	}

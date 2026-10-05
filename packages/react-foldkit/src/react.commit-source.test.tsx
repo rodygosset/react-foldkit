@@ -8,18 +8,17 @@ import { createSourceFixture } from "../test/fixtures/react-commit-source"
 import { defineApplication, type CommitEntry, type CommitSource } from "./react"
 import type * as Command from "./command"
 import type * as Update from "./update"
-afterEach(() => {
+afterEach(function () {
 	cleanup()
 	vi.restoreAllMocks()
 	vi.unstubAllGlobals()
 })
 
-describe("Provider commitSource", () => {
-	function providerFixture(initial: ReadonlyArray<CommitEntry<Message>> = [], source = fakeSource(initial)) {
-		return createSourceFixture(initial, source)
-	}
+describe("Provider commitSource", function () {
+	const providerFixture = (initial: ReadonlyArray<CommitEntry<Message>> = [], source = fakeSource(initial)) =>
+		createSourceFixture(initial, source)
 
-	it("bootstraps in snapshot order and delivers subsequent values without replay or lost edits", () => {
+	it("bootstraps in snapshot order and delivers subsequent values without replay or lost edits", function () {
 		const f = providerFixture([entry("b", 1), entry("a", 1)])
 		const mounted = render(<f.Tree />)
 		expect(f.renders[0]!.values).toEqual(["b", "a"])
@@ -33,7 +32,7 @@ describe("Provider commitSource", () => {
 		expect(f.source.subscriptions).toBe(1)
 	})
 
-	it("catches an immediate change during connection setup", () => {
+	it("catches an immediate change during connection setup", function () {
 		const source = fakeSource([entry("a", 1)])
 		source.onSubscribe(() => source.publish([entry("a", 2, "new")]))
 		const f = providerFixture([], source)
@@ -43,16 +42,16 @@ describe("Provider commitSource", () => {
 		expect(f.handled).toHaveLength(2)
 	})
 
-	it("rejects duplicate bootstrap keys before invoking update", () => {
-		vi.spyOn(console, "error").mockImplementation(() => {})
+	it("rejects duplicate bootstrap keys before invoking update", function () {
+		vi.spyOn(console, "error").mockImplementation(function () {})
 		const f = providerFixture([entry("a", 1), entry("a", 2)])
 		expect(() => render(<f.Tree />)).toThrow("Duplicate source key: a")
 		expect(f.handled).toEqual([])
 		expect(f.source.subscriptions).toBe(0)
 	})
 
-	it.each(["replace", "remove", "add"])("rejects %s of the source on a mounted Provider", (change) => {
-		vi.spyOn(console, "error").mockImplementation(() => {})
+	it.each(["replace", "remove", "add"])("rejects %s of the source on a mounted Provider", function (change) {
+		vi.spyOn(console, "error").mockImplementation(function () {})
 		const f = providerFixture()
 		const replacement = fakeSource<Message>()
 		const tree = (source: CommitSource<Message> | undefined) => (
@@ -73,12 +72,12 @@ describe("Provider commitSource", () => {
 		expect(replacement.subscriptions).toBe(0)
 	})
 
-	it("retains successful tokens through Strict Mode reconnection", () => {
+	it("retains successful tokens through Strict Mode reconnection", function () {
 		const source = fakeSource<Message>()
-		source.onSubscribe((count) => {
+		source.onSubscribe(function (count) {
 			if (count === 1) source.publish([entry("a", 1)])
 		})
-		source.onUnsubscribe((count) => {
+		source.onUnsubscribe(function (count) {
 			if (count === 1) source.set([entry("a", 1), entry("b", 1)])
 		})
 		const f = providerFixture([], source)
@@ -94,7 +93,7 @@ describe("Provider commitSource", () => {
 		expect(f.handled).toHaveLength(2)
 	})
 
-	it("catches up after Activity reconnects and cleans up stale callbacks on unmount", () => {
+	it("catches up after Activity reconnects and cleans up stale callbacks on unmount", function () {
 		const f = providerFixture([entry("a", 1)])
 		const mounted = render(<f.Tree />)
 		act(() => f.source.publish([entry("a", 2, "new")]))
@@ -115,13 +114,13 @@ describe("Provider commitSource", () => {
 		expect(f.source.unsubscriptions).toBe(f.source.subscriptions)
 	})
 
-	it("preserves base init and bootstrap Commands, deferring both until client activation", async () => {
+	it("preserves base init and bootstrap Commands, deferring both until client activation", async function () {
 		const Model = Schema.Struct({ value: Schema.String, completions: Schema.Number })
 		type Model = typeof Model.Type
 		const runs: string[] = []
 		const command = (name: string): Command.Command<Message> => ({
 			name,
-			effect: Effect.sync(() => {
+			effect: Effect.sync(function () {
 				runs.push(name)
 				return Message.Edited()
 			}),
@@ -160,12 +159,11 @@ describe("Provider commitSource", () => {
 		expect(runs).toEqual(["init", "a", "b"])
 	})
 })
-function fixture(initial: ReadonlyArray<CommitEntry<Message>> = [], source = fakeSource(initial)) {
-	return createSourceFixture(initial, source)
-}
+const fixture = (initial: ReadonlyArray<CommitEntry<Message>> = [], source = fakeSource(initial)) =>
+	createSourceFixture(initial, source)
 
-describe("generic commit source contract", () => {
-	it("renders the bootstrap Model and does not replay the initial snapshot", () => {
+describe("generic commit source contract", function () {
+	it("renders the bootstrap Model and does not replay the initial snapshot", function () {
 		const f = fixture([entry("search", "load-1", "initial")])
 		render(<f.Tree />)
 		expect(f.renders[0]!.values).toEqual(["initial"])
@@ -174,12 +172,12 @@ describe("generic commit source contract", () => {
 		expect(f.handled).toHaveLength(1)
 		expect(f.source.listeners).toBe(1)
 	})
-	it("delivers added entries synchronously in snapshot order and retains unrelated edits", () => {
+	it("delivers added entries synchronously in snapshot order and retains unrelated edits", function () {
 		const f = fixture()
 		render(<f.Tree />)
 		act(() => f.dispatch(Message.Edited()))
 		let valuesBeforePublishReturns: ReadonlyArray<string> = []
-		act(() => {
+		act(function () {
 			f.source.publish([entry("b", 1), entry("a", "one")])
 			valuesBeforePublishReturns = f.handled
 				.filter((message) => message._tag === "Received")
@@ -189,7 +187,7 @@ describe("generic commit source contract", () => {
 		expect(f.model.values).toEqual(["b", "a"])
 		expect(f.model.edits).toBe(1)
 	})
-	it("subscribes before rereading, covering a silent change during subscription setup", () => {
+	it("subscribes before rereading, covering a silent change during subscription setup", function () {
 		const initial = [entry("a", 1)]
 		const source = fakeSource(initial)
 		source.onSubscribe(() => source.set([entry("a", 2, "during-subscribe")]))
@@ -197,7 +195,7 @@ describe("generic commit source contract", () => {
 		render(<f.Tree />)
 		expect(f.model.values).toEqual(["a", "during-subscribe"])
 	})
-	it("handles an immediate subscription notification without duplicate catch-up delivery", () => {
+	it("handles an immediate subscription notification without duplicate catch-up delivery", function () {
 		const source = fakeSource<Message>()
 		source.onSubscribe(() => source.publish([entry("a", 1)]))
 		const f = fixture([], source)
@@ -205,7 +203,7 @@ describe("generic commit source contract", () => {
 		expect(f.model.values).toEqual(["a"])
 		expect(f.handled).toHaveLength(1)
 	})
-	it("retains the first bootstrap baseline and connection across rerenders", () => {
+	it("retains the first bootstrap baseline and connection across rerenders", function () {
 		const f = fixture([entry("a", 1)])
 		const mounted = render(<f.Tree />)
 		act(() => f.source.publish([entry("a", 2, "new")]))
@@ -214,8 +212,8 @@ describe("generic commit source contract", () => {
 		expect(f.model.values).toEqual(["a", "new"])
 		expect(f.source.subscriptions).toBe(1)
 	})
-	it("releases the subscription when immediate notification fails validation", () => {
-		vi.spyOn(console, "error").mockImplementation(() => {})
+	it("releases the subscription when immediate notification fails validation", function () {
+		vi.spyOn(console, "error").mockImplementation(function () {})
 		const source = fakeSource<Message>()
 		source.onSubscribe(() => source.publish([entry("a", 1), entry("a", 2)]))
 		const f = fixture([], source)
@@ -225,11 +223,11 @@ describe("generic commit source contract", () => {
 		expect(source.listeners).toBe(0)
 		expect(f.handled).toEqual([])
 	})
-	it("Strict Mode retains successful tokens and catches changes during its cleanup/setup gap", () => {
+	it("Strict Mode retains successful tokens and catches changes during its cleanup/setup gap", function () {
 		const source = fakeSource([entry("a", 1)])
 		const retained = entry("stable", 1, "retained")
 		source.set([retained, entry("a", 2, "before-activation")])
-		source.onUnsubscribe((count) => {
+		source.onUnsubscribe(function (count) {
 			if (count === 1) source.set([retained, entry("a", 3, "gap")])
 		})
 		const f = fixture([], source)
@@ -246,7 +244,7 @@ describe("generic commit source contract", () => {
 		act(() => source.notify())
 		expect(f.handled).toHaveLength(5)
 	})
-	it("catches the latest value after Activity reconnects without resetting bookkeeping", () => {
+	it("catches the latest value after Activity reconnects without resetting bookkeeping", function () {
 		const f = fixture([entry("a", 1)])
 		const mounted = render(<f.Tree />)
 		const retained = entry("stable", 1, "retained")
@@ -263,7 +261,7 @@ describe("generic commit source contract", () => {
 		expect(f.handled).toHaveLength(4)
 		expect(f.source.listeners).toBe(1)
 	})
-	it("unsubscribes on unmount and ignores an already captured stale notification", () => {
+	it("unsubscribes on unmount and ignores an already captured stale notification", function () {
 		const f = fixture()
 		const mounted = render(<f.Tree />)
 		const stale = f.source.notifications[0]!
@@ -274,7 +272,7 @@ describe("generic commit source contract", () => {
 		stale()
 		expect(f.handled).toEqual([])
 	})
-	it("does not subscribe or replay Messages during server rendering", () => {
+	it("does not subscribe or replay Messages during server rendering", function () {
 		const f = fixture([entry("a", "transported")])
 		expect(renderToString(<f.Tree />)).toContain("a")
 		expect(f.renders[0]!.values).toEqual(["a"])

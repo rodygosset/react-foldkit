@@ -18,20 +18,18 @@ export type InterruptRegistry = Readonly<{
 	interrupt: (key: string) => Effect.Effect<InterruptOutcome>
 }>
 
-export const makeInterruptRegistry = (): InterruptRegistry => {
+export function makeInterruptRegistry(): InterruptRegistry {
 	const holders = new Map<string, Set<Fiber.Fiber<unknown, unknown>>>()
 
-	const lookup = (key: string): ReadonlyArray<Fiber.Fiber<unknown, unknown>> => [
-		...(holders.get(key) ?? []),
-	]
+	const lookup = (key: string): ReadonlyArray<Fiber.Fiber<unknown, unknown>> => [...(holders.get(key) ?? [])]
 
-	const register = (key: string, fiber: Fiber.Fiber<unknown, unknown>): void => {
+	function register(key: string, fiber: Fiber.Fiber<unknown, unknown>): void {
 		const fibers = holders.get(key)
 		if (fibers === undefined) holders.set(key, new Set([fiber]))
 		else fibers.add(fiber)
 	}
 
-	const release = (key: string, fiber: Fiber.Fiber<unknown, unknown>): void => {
+	function release(key: string, fiber: Fiber.Fiber<unknown, unknown>): void {
 		const fibers = holders.get(key)
 		if (fibers === undefined) return
 		fibers.delete(fiber)
@@ -39,13 +37,13 @@ export const makeInterruptRegistry = (): InterruptRegistry => {
 	}
 
 	const interrupt = (key: string): Effect.Effect<InterruptOutcome> =>
-		Effect.suspend(function (): Effect.Effect<InterruptOutcome> {
-			return Array.match(lookup(key), {
+		Effect.suspend((): Effect.Effect<InterruptOutcome> =>
+			Array.match(lookup(key), {
 				onEmpty: () => Effect.succeed<InterruptOutcome>(Interruptible.Outcome.NotFound()),
 				onNonEmpty: (fibers) =>
 					Effect.map(Fiber.interruptAll(fibers), (): InterruptOutcome => Interruptible.Outcome.Interrupted()),
 			})
-		})
+		)
 
 	return { lookup, register, release, interrupt }
 }

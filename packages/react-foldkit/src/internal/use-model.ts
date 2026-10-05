@@ -16,7 +16,7 @@ export function useModel<Model, Selected>(
 			model,
 			selected: selector === undefined ? Option.none<Selected>() : Option.some(selector(model)),
 		}),
-		(previous, next) => {
+		function (previous, next) {
 			if (Option.isSome(previous.selected) && Option.isSome(next.selected)) {
 				return (isEqual ?? Equal.equals)(previous.selected.value, next.selected.value)
 			}

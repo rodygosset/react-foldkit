@@ -6,17 +6,13 @@ export function View() {
 	return (
 		<main>
 			{Option.match(model.notice, {
-				onNone: function () {
-					return <p>No notice.</p>
-				},
-				onSome: function (notice) {
-					return (
-						<section>
-							<h1>{notice.headline}</h1>
-							<p>{notice.body}</p>
-						</section>
-					)
-				},
+				onNone: () => <p>No notice.</p>,
+				onSome: (notice) => (
+					<section>
+						<h1>{notice.headline}</h1>
+						<p>{notice.body}</p>
+					</section>
+				),
 			})}
 		</main>
 	)

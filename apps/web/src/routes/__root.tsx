@@ -32,22 +32,24 @@ export const Route = createRootRoute({
 			},
 			{
 				rel: "stylesheet",
-					href: "https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap",
+				href: "https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap",
 			},
 		],
 	}),
-	notFoundComponent: function NotFound() {
-		return (
-			<main className="site-atmosphere flex min-h-svh items-center justify-center p-6">
-				<div className="text-center">
-					<p className="text-5xl font-semibold tracking-tight">404</p>
-					<p className="mt-2 text-muted-foreground">Page not found.</p>
-				</div>
-			</main>
-		)
-	},
+	notFoundComponent: NotFound,
 	shellComponent: RootDocument,
 })
+
+function NotFound() {
+	return (
+		<main className="site-atmosphere flex min-h-svh items-center justify-center p-6">
+			<div className="text-center">
+				<p className="text-5xl font-semibold tracking-tight">404</p>
+				<p className="mt-2 text-muted-foreground">Page not found.</p>
+			</div>
+		</main>
+	)
+}
 
 function RootDocument({ children }: { children: React.ReactNode }) {
 	return (

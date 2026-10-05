@@ -3,12 +3,7 @@
  */
 
 import type { Rule } from "eslint"
-import type {
-	Identifier,
-	Node as ESTreeNode,
-	Pattern,
-	Program,
-} from "estree"
+import type { Identifier, Node as ESTreeNode, Pattern, Program } from "estree"
 import picomatch from "picomatch"
 
 export type AstNode = ESTreeNode & {
@@ -70,9 +65,7 @@ export function matchesGlob(filename: string, patterns: string | string[]): bool
 	return false
 }
 
-export function getFilename(context: Rule.RuleContext): string {
-	return context.filename || context.getFilename()
-}
+export const getFilename = (context: Rule.RuleContext): string => context.filename || context.getFilename()
 
 export function getReactFoldkitSettings(context: Rule.RuleContext): ReactFoldkitSettings {
 	const settings = context.settings["react-foldkit"]
@@ -112,10 +105,7 @@ export function getEnclosingFunctionName(node: AstNode): string | null {
 		if (current.type === "FunctionDeclaration" && current.id) {
 			return current.id.name
 		}
-		if (
-			(current.type === "FunctionExpression" || current.type === "ArrowFunctionExpression") &&
-			current.parent
-		) {
+		if ((current.type === "FunctionExpression" || current.type === "ArrowFunctionExpression") && current.parent) {
 			const parent = current.parent
 			if (parent.type === "VariableDeclarator" && parent.id.type === "Identifier") {
 				return parent.id.name
@@ -137,9 +127,7 @@ export function getEnclosingFunctionName(node: AstNode): string | null {
 
 const VIEW_FILENAME_GLOBS = ["**/View*.tsx", "**/*View.tsx", "**/*-view.tsx", "**/*_view.tsx"]
 
-export function isViewFilename(filename: string): boolean {
-	return matchesGlob(filename, VIEW_FILENAME_GLOBS)
-}
+export const isViewFilename = (filename: string): boolean => matchesGlob(filename, VIEW_FILENAME_GLOBS)
 
 /** `View`, `TodoView`, `ElapsedDisplayView`, etc. */
 export function isViewFunctionName(name: string | null): boolean {
@@ -215,17 +203,12 @@ function typeAnnotationHasDispatch(typeAnnotation: TsTypeAnnotation): boolean {
 	return tsTypeHasDispatchProp(typeNode)
 }
 
-function isTsTypeLiteral(typeNode: TsTypeNode): typeNode is TsTypeLiteral {
-	return typeNode.type === "TSTypeLiteral"
-}
+const isTsTypeLiteral = (typeNode: TsTypeNode): typeNode is TsTypeLiteral => typeNode.type === "TSTypeLiteral"
 
-function isTsTypeReference(typeNode: TsTypeNode): typeNode is TsTypeReference {
-	return typeNode.type === "TSTypeReference"
-}
+const isTsTypeReference = (typeNode: TsTypeNode): typeNode is TsTypeReference => typeNode.type === "TSTypeReference"
 
-function isTsIntersectionOrUnion(typeNode: TsTypeNode): typeNode is TsIntersectionOrUnion {
-	return typeNode.type === "TSIntersectionType" || typeNode.type === "TSUnionType"
-}
+const isTsIntersectionOrUnion = (typeNode: TsTypeNode): typeNode is TsIntersectionOrUnion =>
+	typeNode.type === "TSIntersectionType" || typeNode.type === "TSUnionType"
 
 function tsTypeHasDispatchProp(typeNode: TsTypeNode): boolean {
 	if (isTsTypeLiteral(typeNode)) {

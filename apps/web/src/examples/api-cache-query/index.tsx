@@ -179,69 +179,79 @@ const formatFetchedAt = (fetchedAt: number): string => new Date(fetchedAt).toLoc
 const isPostDetailCached = (postDetailById: Model["postDetailById"], postId: string): boolean =>
 	AsyncData.hasData(postDetailQuery.read(postDetailById, { postId }))
 
-const ErrorPanel = (props: { error: string; onRetry: () => void }) => (
-	<div className="flex items-center justify-between gap-4 rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-destructive">
-		<p className="text-sm">{props.error}</p>
-		<Button
-			variant="destructive"
-			size="sm"
-			onClick={props.onRetry}
-		>
-			Retry
-		</Button>
-	</div>
-)
+function ErrorPanel(props: { error: string; onRetry: () => void }) {
+	return (
+		<div className="flex items-center justify-between gap-4 rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-destructive">
+			<p className="text-sm">{props.error}</p>
+			<Button
+				variant="destructive"
+				size="sm"
+				onClick={props.onRetry}
+			>
+				Retry
+			</Button>
+		</div>
+	)
+}
 
-const LoadingPanel = (props: { text: string }) => (
-	<div className="rounded-2xl bg-muted/60 px-4 py-8 text-center text-sm text-muted-foreground">{props.text}</div>
-)
+function LoadingPanel(props: { text: string }) {
+	return (
+		<div className="rounded-2xl bg-muted/60 px-4 py-8 text-center text-sm text-muted-foreground">{props.text}</div>
+	)
+}
 
-const StatCard = (props: { label: string; value: string }) => (
-	<div className="flex flex-col gap-1 rounded-2xl bg-muted/60 px-4 py-3">
-		<p className="text-sm text-muted-foreground">{props.label}</p>
-		<p className="text-2xl font-semibold tracking-tight tabular-nums">{props.value}</p>
-	</div>
-)
+function StatCard(props: { label: string; value: string }) {
+	return (
+		<div className="flex flex-col gap-1 rounded-2xl bg-muted/60 px-4 py-3">
+			<p className="text-sm text-muted-foreground">{props.label}</p>
+			<p className="text-2xl font-semibold tracking-tight tabular-nums">{props.value}</p>
+		</div>
+	)
+}
 
-const PostListItems = (props: {
+function PostListItems(props: {
 	posts: ReadonlyArray<Post>
 	postDetailById: Model["postDetailById"]
 	onSelect: (postId: string) => void
-}) => (
-	<ul className="flex flex-col gap-2">
-		{Array.map(props.posts, (post) => (
-			<li key={post.id}>
-				<button
-					type="button"
-					className="flex w-full items-center justify-between gap-4 rounded-2xl px-4 py-3 text-left transition-colors hover:bg-muted/60"
-					onClick={() => {
-						props.onSelect(post.id)
-					}}
-				>
-					<div className="min-w-0">
-						<p className="font-medium tracking-tight">{post.title}</p>
-						<p className="text-sm text-muted-foreground">{post.excerpt}</p>
-					</div>
-					{isPostDetailCached(props.postDetailById, post.id) ? (
-						<Badge variant="secondary">Cached</Badge>
-					) : null}
-				</button>
-			</li>
-		))}
-	</ul>
-)
+}) {
+	return (
+		<ul className="flex flex-col gap-2">
+			{Array.map(props.posts, (post) => (
+				<li key={post.id}>
+					<button
+						type="button"
+						className="flex w-full items-center justify-between gap-4 rounded-2xl px-4 py-3 text-left transition-colors hover:bg-muted/60"
+						onClick={function () {
+							props.onSelect(post.id)
+						}}
+					>
+						<div className="min-w-0">
+							<p className="font-medium tracking-tight">{post.title}</p>
+							<p className="text-sm text-muted-foreground">{post.excerpt}</p>
+						</div>
+						{isPostDetailCached(props.postDetailById, post.id) ? (
+							<Badge variant="secondary">Cached</Badge>
+						) : null}
+					</button>
+				</li>
+			))}
+		</ul>
+	)
+}
 
-const PostDetailCard = (props: { detail: PostDetail; fetchedAt: number }) => (
-	<article className="flex flex-col gap-3 rounded-2xl bg-muted/60 px-5 py-5">
-		<h2 className="text-2xl font-semibold tracking-tight">{props.detail.title}</h2>
-		<p className="text-sm text-muted-foreground">By {props.detail.author}</p>
-		<p className="leading-relaxed text-foreground/90">{props.detail.body}</p>
-		<p className="text-xs text-muted-foreground">
-			Fetched at {formatFetchedAt(props.fetchedAt)}. Leaving this screen forgets the slot and Interrupts an
-			in-flight Fetch for that key.
-		</p>
-	</article>
-)
+function PostDetailCard(props: { detail: PostDetail; fetchedAt: number }) {
+	return (
+		<article className="flex flex-col gap-3 rounded-2xl bg-muted/60 px-5 py-5">
+			<h2 className="text-2xl font-semibold tracking-tight">{props.detail.title}</h2>
+			<p className="text-sm text-muted-foreground">By {props.detail.author}</p>
+			<p className="leading-relaxed text-foreground/90">{props.detail.body}</p>
+			<p className="text-xs text-muted-foreground">
+				Fetched at {formatFetchedAt(props.fetchedAt)}. Leaving this screen forgets the slot and Interrupts an
+				in-flight Fetch for that key.
+			</p>
+		</article>
+	)
+}
 
 function PostsListView() {
 	const model = useModel()
@@ -257,7 +267,7 @@ function PostsListView() {
 					variant="outline"
 					size="sm"
 					disabled={isPending}
-					onClick={() => {
+					onClick={function () {
 						dispatch(Message.ClickedInvalidatePosts())
 					}}
 				>
@@ -276,7 +286,7 @@ function PostsListView() {
 				onFailure: (error) => (
 					<ErrorPanel
 						error={error}
-						onRetry={() => {
+						onRetry={function () {
 							dispatch(Message.ClickedRetryPosts())
 						}}
 					/>
@@ -288,7 +298,7 @@ function PostsListView() {
 							onSome: (error) => (
 								<ErrorPanel
 									error={error}
-									onRetry={() => {
+									onRetry={function () {
 										dispatch(Message.ClickedRetryPosts())
 									}}
 								/>
@@ -297,7 +307,7 @@ function PostsListView() {
 						<PostListItems
 							posts={posts}
 							postDetailById={model.postDetailById}
-							onSelect={(postId) => {
+							onSelect={function (postId) {
 								dispatch(Message.ClickedPost({ postId }))
 							}}
 						/>
@@ -319,7 +329,7 @@ function PostDetailView(props: { postId: string }) {
 				variant="ghost"
 				size="sm"
 				className="self-start"
-				onClick={() => {
+				onClick={function () {
 					dispatch(Message.ClickedBackToPosts())
 				}}
 			>
@@ -331,7 +341,7 @@ function PostDetailView(props: { postId: string }) {
 				onFailure: (error) => (
 					<ErrorPanel
 						error={error}
-						onRetry={() => {
+						onRetry={function () {
 							dispatch(Message.ClickedRetryPostDetail({ postId: props.postId }))
 						}}
 					/>
@@ -343,7 +353,7 @@ function PostDetailView(props: { postId: string }) {
 							onSome: (error) => (
 								<ErrorPanel
 									error={error}
-									onRetry={() => {
+									onRetry={function () {
 										dispatch(Message.ClickedRetryPostDetail({ postId: props.postId }))
 									}}
 								/>
@@ -369,28 +379,30 @@ const PostsTabView = () =>
 		})
 	)
 
-const StatsCards = (props: { stats: Stats; fetchedAt: number; isRefreshing: boolean }) => (
-	<div className="flex flex-col gap-3">
-		<div className="grid grid-cols-3 gap-3">
-			<StatCard
-				label="Active users"
-				value={`${props.stats.activeUsers}`}
-			/>
-			<StatCard
-				label="Requests per second"
-				value={`${props.stats.requestsPerSecond}`}
-			/>
-			<StatCard
-				label="Cache hit rate"
-				value={`${props.stats.cacheHitRatePercent}%`}
-			/>
+function StatsCards(props: { stats: Stats; fetchedAt: number; isRefreshing: boolean }) {
+	return (
+		<div className="flex flex-col gap-3">
+			<div className="grid grid-cols-3 gap-3">
+				<StatCard
+					label="Active users"
+					value={`${props.stats.activeUsers}`}
+				/>
+				<StatCard
+					label="Requests per second"
+					value={`${props.stats.requestsPerSecond}`}
+				/>
+				<StatCard
+					label="Cache hit rate"
+					value={`${props.stats.cacheHitRatePercent}%`}
+				/>
+			</div>
+			<div className="flex items-center gap-3 text-sm text-muted-foreground">
+				<span>Updated at {formatFetchedAt(props.fetchedAt)}</span>
+				{props.isRefreshing ? <Badge variant="secondary">Refreshing</Badge> : null}
+			</div>
 		</div>
-		<div className="flex items-center gap-3 text-sm text-muted-foreground">
-			<span>Updated at {formatFetchedAt(props.fetchedAt)}</span>
-			{props.isRefreshing ? <Badge variant="secondary">Refreshing</Badge> : null}
-		</div>
-	</div>
-)
+	)
+}
 
 function StatsTabView() {
 	const model = useModel()
@@ -406,7 +418,7 @@ function StatsTabView() {
 					variant="outline"
 					size="sm"
 					disabled={isPending}
-					onClick={() => {
+					onClick={function () {
 						dispatch(Message.ClickedRefreshStats())
 					}}
 				>
@@ -423,7 +435,7 @@ function StatsTabView() {
 				onFailure: (error) => (
 					<ErrorPanel
 						error={error}
-						onRetry={() => {
+						onRetry={function () {
 							dispatch(Message.ClickedRetryStats())
 						}}
 					/>
@@ -435,7 +447,7 @@ function StatsTabView() {
 							onSome: (error) => (
 								<ErrorPanel
 									error={error}
-									onRetry={() => {
+									onRetry={function () {
 										dispatch(Message.ClickedRetryStats())
 									}}
 								/>
@@ -472,7 +484,7 @@ function TabList() {
 			className="flex gap-2"
 			aria-label="API cache sections"
 		>
-			{Array.map(tabValues, (tab) => {
+			{Array.map(tabValues, function (tab) {
 				const isActive = activeTab === tab
 				return (
 					<Button
@@ -480,7 +492,7 @@ function TabList() {
 						variant={isActive ? "default" : "ghost"}
 						size="sm"
 						aria-current={isActive ? "page" : undefined}
-						onClick={() => {
+						onClick={function () {
 							dispatch(Message.ClickedTab({ tab }))
 						}}
 					>
@@ -492,21 +504,25 @@ function TabList() {
 	)
 }
 
-const View = () => (
-	<ExampleShell
-		title="API Cache (Query)"
-		description="The same Model-as-cache TEA as API Cache. Query.define owns settle, retry, dedup, and keyed slots ({ args, data, maybePendingRequestId }). watchSubscription reconciles the live key set with Interrupt on drop. The parent only folds Got* and intent."
-	>
-		<div className="mx-auto flex w-full max-w-lg flex-1 flex-col gap-6 px-6 pt-8 pb-16">
-			<TabList />
-			<Separator />
-			<TabPanel />
-		</div>
-	</ExampleShell>
-)
+function View() {
+	return (
+		<ExampleShell
+			title="API Cache (Query)"
+			description="The same Model-as-cache TEA as API Cache. Query.define owns settle, retry, dedup, and keyed slots ({ args, data, maybePendingRequestId }). watchSubscription reconciles the live key set with Interrupt on drop. The parent only folds Got* and intent."
+		>
+			<div className="mx-auto flex w-full max-w-lg flex-1 flex-col gap-6 px-6 pt-8 pb-16">
+				<TabList />
+				<Separator />
+				<TabPanel />
+			</div>
+		</ExampleShell>
+	)
+}
 
-export const ApiCacheQuery = () => (
-	<Provider init={init()}>
-		<View />
-	</Provider>
-)
+export function ApiCacheQuery() {
+	return (
+		<Provider init={init()}>
+			<View />
+		</Provider>
+	)
+}

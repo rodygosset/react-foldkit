@@ -36,23 +36,21 @@ describe("React server rendering", function () {
 				return Message.CompletedLoad({ value: "loaded" })
 			}),
 		}
-		const subscriptions = Subscription.make<Model, Message>()(function (entry) {
-			return {
-				observe: entry(
-					{ status: Schema.String },
-					{
-						modelToDependencies: (model) => ({ status: model.status }),
-						dependenciesToStream: () =>
-							Stream.fromEffect(
-								Effect.sync(function () {
-									subscriptionRuns += 1
-									return Message.CompletedLoad({ value: "subscription" })
-								})
-							),
-					}
-				),
-			}
-		})
+		const subscriptions = Subscription.make<Model, Message>()((entry) => ({
+			observe: entry(
+				{ status: Schema.String },
+				{
+					modelToDependencies: (model) => ({ status: model.status }),
+					dependenciesToStream: () =>
+						Stream.fromEffect(
+							Effect.sync(function () {
+								subscriptionRuns += 1
+								return Message.CompletedLoad({ value: "subscription" })
+							})
+						),
+				}
+			),
+		}))
 		const layer = Layer.effectDiscard(
 			Effect.sync(function () {
 				layerBuilds += 1
@@ -77,7 +75,7 @@ describe("React server rendering", function () {
 		expect(layerBuilds).toBe(0)
 	})
 
-	it("isolates preloaded Models across server renders of the same app definition", () => {
+	it("isolates preloaded Models across server renders of the same app definition", function () {
 		const { Provider, useModel } = defineApplication({ Model, update })
 		function View() {
 			const model = useModel()

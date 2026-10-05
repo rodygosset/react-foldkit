@@ -58,16 +58,15 @@ const makeQueryMessage = <A, AI, E, EI>(data: Schema.Codec<A, AI>, error: Schema
 export type QueryMessage<A, AI, E, EI> = ReturnType<typeof makeQueryMessage<A, AI, E, EI>>
 
 /** Schema for a single Query's remote data and request identity. */
-export function makeQueryModel<A, AI, E, EI>(
+export const makeQueryModel = <A, AI, E, EI>(
 	result: Schema.Codec<AsyncData.AsyncData<A, E>, AsyncData.AsyncData<AI, EI>, never, never>
-) {
-	return Schema.Struct({
+) =>
+	Schema.Struct({
 		instanceId: Schema.String,
 		nextRequestId: Schema.Number,
 		maybePendingRequestId: Schema.Option(Schema.Number),
 		data: result,
 	})
-}
 
 export type QueryModel<A, AI, E, EI> = ReturnType<typeof makeQueryModel<A, AI, E, EI>>
 
@@ -332,29 +331,26 @@ export function defineQuery<Name extends string, A, AI, E, EI, R>(config: QueryC
 			}
 		)
 
-	const liftFromLens = <ParentModel, ParentMessage>(
+	function liftFromLens<ParentModel, ParentMessage>(
 		foldConfig: FoldLens<ParentModel, ParentMessage, Model, Message>
-	) => {
+	) {
 		const foldSettleIf = Update.foldChild({
 			...foldConfig,
-			update: function (
+			update: (
 				model: Model,
 				input: {
 					readonly result: AsyncData.AsyncData<A, E>
 					readonly options: SettleIfOptions<A, E>
 				}
-			) {
-				return settleIf(model, input.result, input.options)
-			},
+			) => settleIf(model, input.result, input.options),
 		})
 		return {
 			fold: Update.foldChild({ update, ...foldConfig }),
 			settle: foldChildFromPolicy(settle, foldConfig),
 			settleIf: Function.dual(
 				3,
-				function (model: ParentModel, result: AsyncData.AsyncData<A, E>, options: SettleIfOptions<A, E>) {
-					return foldSettleIf(model, { result, options })
-				}
+				(model: ParentModel, result: AsyncData.AsyncData<A, E>, options: SettleIfOptions<A, E>) =>
+					foldSettleIf(model, { result, options })
 			),
 			revalidate: Update.foldChildStep({
 				update: revalidate,

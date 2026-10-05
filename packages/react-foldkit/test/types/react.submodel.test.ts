@@ -16,8 +16,8 @@ const Root = defineApplication({ Model, update: (model: Model, _message: Message
 declare const dispatch: ReturnType<typeof Submodel.useDispatch>
 declare const foreignDispatch: (message: ForeignMessage) => void
 
-describe("defineSubmodel public types", () => {
-	it("binds the hooks and Provider props to Model and Message through both exports", () => {
+describe("defineSubmodel public types", function () {
+	it("binds the hooks and Provider props to Model and Message through both exports", function () {
 		expectTypeOf<keyof typeof Submodel>().toEqualTypeOf<
 			"Provider" | "useModel" | "useDispatch" | "useSubmodel" | "useOptionalSubmodel" | "SubmodelProvider"
 		>()
@@ -52,21 +52,21 @@ describe("defineSubmodel public types", () => {
 		expectTypeOf(source).toEqualTypeOf<ModelSource<Model, Message>>()
 		Submodel.Provider({ source })
 		Root.SubmodelProvider({
-			projection: { read: model => model, toParentMessage: (message: Message) => message },
-			render: ({ source }) => {
+			projection: { read: (model) => model, toParentMessage: (message: Message) => message },
+			render({ source }) {
 				expectTypeOf(source).toEqualTypeOf<ModelSource<Model, Message>>()
 				return Submodel.Provider({ source })
 			},
 		})
 		Submodel.SubmodelProvider({
-			projection: { read: model => model.count, toParentMessage: (_message: string) => Message.Load() },
-			render: ({ source }) => {
+			projection: { read: (model) => model.count, toParentMessage: (_message: string) => Message.Load() },
+			render({ source }) {
 				expectTypeOf(source).toEqualTypeOf<ModelSource<number, string>>()
 				return null
 			},
 		})
 		Root.SubmodelProvider({
-			projection: { read: model => model, toParentMessage: (message: Message) => message },
+			projection: { read: (model) => model, toParentMessage: (message: Message) => message },
 			// @ts-expect-error Render receives only source; children are closed over.
 			render: ({ children }) => children,
 		})

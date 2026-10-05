@@ -116,7 +116,7 @@ describe("React Provider", function () {
 		try {
 			await act(async function () {
 				root = hydrateRoot(container, <App />, {
-					onRecoverableError: function (error) {
+					onRecoverableError(error) {
 						recoverableErrors.push(error)
 					},
 				})
@@ -180,11 +180,11 @@ describe("React Provider", function () {
 				yield* latch.await
 				return Message.CompletedLoad({ value: "activity" })
 			}).pipe(
-				Effect.onInterrupt(function () {
-					return Effect.sync(function () {
+				Effect.onInterrupt(() =>
+					Effect.sync(function () {
 						interruptions += 1
 					})
-				})
+				)
 			)
 		)
 		const { Provider, useModel } = defineApplication({ Model, update })
@@ -243,11 +243,11 @@ describe("React Provider", function () {
 				yield* latch.await
 				return Message.CompletedLoad({ value: "late" })
 			}).pipe(
-				Effect.onInterrupt(function () {
-					return Effect.sync(function () {
+				Effect.onInterrupt(() =>
+					Effect.sync(function () {
 						interruptions += 1
 					})
-				})
+				)
 			)
 		)
 		const { Provider, useModel } = defineApplication({
@@ -290,28 +290,21 @@ describe("React Provider", function () {
 				Effect.sync(function () {
 					acquires += 1
 				}),
-				function () {
-					return Effect.sync(function () {
+				() =>
+					Effect.sync(function () {
 						releases += 1
 					})
-				}
 			)
 		)
-		const subscriptions = Subscription.make<Model, Message>()(function (entry) {
-			return {
-				keepAlive: entry(
-					{ status: Schema.String },
-					{
-						modelToDependencies: function (model) {
-							return { status: model.status }
-						},
-						dependenciesToStream: function () {
-							return Stream.never
-						},
-					}
-				),
-			}
-		})
+		const subscriptions = Subscription.make<Model, Message>()((entry) => ({
+			keepAlive: entry(
+				{ status: Schema.String },
+				{
+					modelToDependencies: (model) => ({ status: model.status }),
+					dependenciesToStream: () => Stream.never,
+				}
+			),
+		}))
 		const { Provider, useModel } = defineApplication({ Model, update, subscriptions, layer })
 
 		function View() {
@@ -342,9 +335,7 @@ describe("React Provider", function () {
 
 		function Selected() {
 			selectedRenders += 1
-			const selected = useModel(function (model) {
-				return { value: model.value }
-			})
+			const selected = useModel((model) => ({ value: model.value }))
 			return <span>{selected.value}</span>
 		}
 

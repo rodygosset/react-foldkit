@@ -298,39 +298,35 @@ function View() {
 				</nav>
 
 				{AsyncData.matchData(model.items, {
-					onEmpty() {
-						return (
-							<>
-								<div className="mt-4 flex items-center justify-between gap-3">
-									<Badge variant="secondary">Loading…</Badge>
-								</div>
-								<Separator className="my-5" />
-								<p className="py-12 text-center text-2xl font-medium text-muted-foreground">Loading…</p>
-							</>
-						)
-					},
-					onFailure(error) {
-						return (
-							<>
-								<div className="mt-4 flex items-center justify-between gap-3">
-									<Badge variant="destructive">Failed</Badge>
-								</div>
-								<Separator className="my-5" />
-								<div className="flex flex-col items-center gap-3 py-12">
-									<p className="text-2xl font-medium text-muted-foreground">{error}</p>
-									<Button
-										variant="outline"
-										size="sm"
-										onClick={function () {
-											dispatch(Message.ClickedRetryLoad())
-										}}
-									>
-										Retry
-									</Button>
-								</div>
-							</>
-						)
-					},
+					onEmpty: () => (
+						<>
+							<div className="mt-4 flex items-center justify-between gap-3">
+								<Badge variant="secondary">Loading…</Badge>
+							</div>
+							<Separator className="my-5" />
+							<p className="py-12 text-center text-2xl font-medium text-muted-foreground">Loading…</p>
+						</>
+					),
+					onFailure: (error) => (
+						<>
+							<div className="mt-4 flex items-center justify-between gap-3">
+								<Badge variant="destructive">Failed</Badge>
+							</div>
+							<Separator className="my-5" />
+							<div className="flex flex-col items-center gap-3 py-12">
+								<p className="text-2xl font-medium text-muted-foreground">{error}</p>
+								<Button
+									variant="outline"
+									size="sm"
+									onClick={function () {
+										dispatch(Message.ClickedRetryLoad())
+									}}
+								>
+									Retry
+								</Button>
+							</div>
+						</>
+					),
 					onData(items) {
 						const remaining = items.filter((item) => !item.done).length
 						const completed = items.length - remaining
@@ -358,22 +354,20 @@ function View() {
 
 								{Option.match(staleError, {
 									onNone: () => null,
-									onSome(error) {
-										return (
-											<p className="mt-3 text-sm text-destructive">
-												{error}{" "}
-												<button
-													type="button"
-													className="underline"
-													onClick={function () {
-														dispatch(Message.ClickedRetryLoad())
-													}}
-												>
-													Retry
-												</button>
-											</p>
-										)
-									},
+									onSome: (error) => (
+										<p className="mt-3 text-sm text-destructive">
+											{error}{" "}
+											<button
+												type="button"
+												className="underline"
+												onClick={function () {
+													dispatch(Message.ClickedRetryLoad())
+												}}
+											>
+												Retry
+											</button>
+										</p>
+									),
 								})}
 
 								<Separator className="my-5" />

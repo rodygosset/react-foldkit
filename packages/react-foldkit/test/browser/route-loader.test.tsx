@@ -9,29 +9,29 @@ import { createFixture, response } from "../fixtures/route-loader"
 let root: Root | undefined
 let container: HTMLDivElement | undefined
 
-afterEach(() => {
+afterEach(function () {
 	root?.unmount()
 	container?.remove()
 	root = undefined
 	container = undefined
 })
 
-describe("route loader delivery with the native browser scheduler", () => {
+describe("route loader delivery with the native browser scheduler", function () {
 	it.each(["navigation", "revalidation"] as const)(
 		"%s publishes loader data before its first render despite queued edits",
-		async (operation) => {
+		async function (operation) {
 			const expectedRevision = operation === "revalidation" ? 2 : 1
 			let revision = 1
 			let pressured = false
 			const fixture = createFixture({
 				initial: operation === "revalidation" ? "/search/a" : "/",
 				load: (query) => Effect.sync(() => response(query, revision)),
-				onBurn: () => {
+				onBurn() {
 					// Exceed the real store's 5 ms drain budget without replacing its clock or channel.
 					const end = performance.now() + 12
 					while (performance.now() < end) {}
 				},
-				onPublish: (snapshot) => {
+				onPublish(snapshot) {
 					if (
 						pressured ||
 						!snapshot.some(
