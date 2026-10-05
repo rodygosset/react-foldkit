@@ -1,15 +1,15 @@
+import * as Project from "@/entities/project"
 import { Schema } from "effect"
 import { defineMessageUnion } from "react-foldkit/message"
 import { defineApplication, defineSubmodelProjection } from "react-foldkit/react"
 import type * as Update from "react-foldkit/update"
-import * as Project from "@/entities/project"
 
 export const Model = Schema.Struct({ projects: Project.Model })
 export type Model = typeof Model.Type
 
 export const Message = defineMessageUnion({
 	GotProjectMessage: { message: Project.Message },
-	CompletedLoadProject: { load: Project.Loader.Load },
+	CompletedLoadProject: { load: Project.loader.Load },
 	ClickedRefreshProject: { projectId: Schema.String },
 })
 export type Message = typeof Message.Type
@@ -42,9 +42,7 @@ export const init = (): Update.Return<Model, Message> => ({
 })
 
 export const projectsProjection = defineSubmodelProjection({
-	read: function (model: Model) {
-		return model.projects
-	},
+	read: (model: Model) => model.projects,
 	toParentMessage: toProjectMessage,
 })
 

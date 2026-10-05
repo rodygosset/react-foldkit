@@ -1,29 +1,26 @@
-import * as React from "react"
+import * as Project from "@/entities/project"
 import { useRouter } from "@tanstack/react-router"
+import * as React from "react"
 import * as Loader from "react-foldkit/loader"
 import * as TanStackSource from "react-foldkit/tanstack"
-import * as Project from "@/entities/project"
 import * as Application from "../model/application"
 
 export function Provider({ children }: { children: React.ReactNode }) {
 	const router = useRouter()
-	const [source] = React.useState(function () {
-		return TanStackSource.make(router, [
-			Project.Loader.pipe(
-				Loader.mapMessages(function (load) {
-					return Application.Message.CompletedLoadProject({ load })
-				})
-			),
+	const [source] = React.useState(() =>
+		TanStackSource.make(router, [
+			Project.loader.pipe(Loader.mapMessages((load) => Application.Message.CompletedLoadProject({ load }))),
 		])
-	})
+	)
 
 	return (
-		<Application.Provider init={Application.init()} commitSource={source}>
+		<Application.Provider
+			init={Application.init()}
+			commitSource={source}
+		>
 			<Application.SubmodelProvider
 				projection={Application.projectsProjection}
-				render={function ({ source }) {
-					return <Project.Provider source={source}>{children}</Project.Provider>
-				}}
+				render={({ source }) => <Project.Provider source={source}>{children}</Project.Provider>}
 			/>
 		</Application.Provider>
 	)
