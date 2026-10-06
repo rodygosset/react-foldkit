@@ -8,17 +8,17 @@ import {
 	Scripts,
 	useRouter,
 } from "@tanstack/react-router"
-import { Context, Effect, Layer, Option, Schema } from "effect"
+import { Context, Effect, Layer, Option, Result, Schema } from "effect"
+import * as Query from "foldkit/experimental/query"
 import React from "react"
 import * as AsyncData from "../../src/asyncData"
 import * as Command from "../../src/command"
 import * as Loader from "../../src/loader"
-import * as TanStackSource from "../../src/tanstack"
 import { defineMessageUnion } from "../../src/message"
-import * as Query from "foldkit/experimental/query"
 import * as ReactFoldkit from "../../src/react"
 import { defineApplication, defineSubmodel, defineSubmodelProjection } from "../../src/react"
 import { modifyFields } from "../../src/struct"
+import * as TanStackSource from "../../src/tanstack"
 import * as Update from "../../src/update"
 
 const SearchResponse = Schema.Struct({
@@ -53,13 +53,7 @@ const query = Query.define({
 	execute: ({ query }) => Effect.flatMap(LoaderApi, (api) => api.load(query)),
 })
 
-const SearchLoader = Loader.fromQuery(query, {
-	name: "RouteLoaderTest",
-	args: { query: Schema.String },
-	data: SearchResponse,
-	error: Schema.String,
-	key: ({ query }) => query,
-})
+const SearchLoader = Loader.fromQuery(query)
 const SearchModel = Schema.Struct({
 	activeQuery: Schema.String,
 	results: query.Model,
@@ -145,13 +139,13 @@ export function createFixture(
 				return child(model, message)
 			},
 			CompletedLoadSearch({ load }) {
-				const { result, ...args } = load
+				const { args, result } = load
 				const settled = Loader.settleQueryIf(query, model.search.results, args, result, {
 					fresher: (incoming, current) => incoming.revision > current.revision,
 				})
 				const search = modifyFields(model.search, {
 					results: () => settled.model,
-					activeQuery: () => load.query,
+					activeQuery: () => args.query,
 				})
 				const commands = Command.mapMessages(settled.commands, (message) =>
 					AppMessage.GotSearchMessage({ message: SearchMessage.GotQueryMessage({ message }) })
@@ -212,13 +206,13 @@ export function createFixture(
 	}
 	function RootLayout() {
 		const router = useRouter()
-		const source = React.useMemo<ReactFoldkit.CommitSource<AppMessage>>(
+		const source = React.useMemo<ReactFoldkit.CommitSource<AppMessage, Schema.SchemaError>>(
 			() => ({
 				getSnapshot: () => adapter.getSnapshot(),
 				subscribe(notify) {
 					isSourceConnected = true
 					const unsubscribe = adapter.subscribe(function () {
-						options.onPublish?.(adapter.getSnapshot())
+						options.onPublish?.(Result.getOrThrow(adapter.getSnapshot()))
 						notify()
 					})
 					return function () {
@@ -275,7 +269,8 @@ export function createFixture(
 	})
 	function SearchView() {
 		const { query: routeQuery } = search.useParams()
-		const loaded = SearchLoader.decode(search.useLoaderData()).result
+		const decoded = SearchLoader.decode(search.useLoaderData())
+		const loaded = Result.getOrThrow(decoded).result
 		const loaderRevision = AsyncData.isSuccess(loaded) ? loaded.data.revision : undefined
 		const model = App.useModel()
 		const searchModel = useModel()
@@ -300,7 +295,7 @@ export function createFixture(
 		defaultPendingMs: 0,
 		defaultPendingMinMs: 0,
 	})
-	const adapter = TanStackSource.make(router, [routeLoader])
+	const adapter = Result.getOrThrow(TanStackSource.make(router, [routeLoader]))
 	return {
 		router,
 		renders,
@@ -317,7 +312,7 @@ export function createFixture(
 			return layoutMounts
 		},
 		get resolvedEntries() {
-			return adapter.getSnapshot()
+			return Result.getOrThrow(adapter.getSnapshot())
 		},
 	}
 }

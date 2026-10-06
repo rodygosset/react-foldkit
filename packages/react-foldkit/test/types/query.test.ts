@@ -8,7 +8,7 @@ import { describe, expectTypeOf, it } from "vitest"
 class Api extends Context.Service<Api, { readonly load: Effect.Effect<Date, string> }>()("QueryTypes/Api") {}
 const keyed = Query.define({
 	name: "PublicKeyedLoad",
-	args: { id: Schema.Number },
+	args: { id: Schema.NumberFromString },
 	data: Schema.DateFromString,
 	error: Schema.String,
 	interrupt: true,
@@ -17,20 +17,28 @@ const keyed = Query.define({
 
 describe("Foldkit Query Loader public types", function () {
 	it("preserves decoded values, keyed args, and fetch services across the adapter", function () {
-		const loader = Loader.fromQuery(keyed, {
-			name: "PublicKeyedLoad",
-			args: { id: Schema.Number },
-			data: Schema.DateFromString,
-			error: Schema.String,
-			key: ({ id }) => String(id),
-		})
+		const loader = Loader.fromQuery(keyed)
 		expectTypeOf(loader.Load.Type).toExtend<{
-			readonly id: number
+			readonly args: { readonly id: number }
 			readonly result: AsyncData.AsyncData<Date, string>
 		}>()
 		expectTypeOf(loader.loadQuery({ id: 1 })).toExtend<
 			Effect.Effect<Loader.Envelope<unknown>, Schema.SchemaError, Api>
 		>()
+		expectTypeOf(loader.Load.Encoded).toEqualTypeOf<{
+			readonly args: { readonly id: string }
+			readonly result: AsyncData.AsyncDataEncoded<string, string>
+		}>()
+		expectTypeOf(loader.query).toEqualTypeOf<typeof keyed>()
+		const program = loader.loadQuery({ id: 1 })
+		expectTypeOf(Loader.loadQuery(loader, { id: 1 })).toEqualTypeOf<typeof program>()
+		expectTypeOf(loader.pipe(Loader.loadQuery({ id: 1 }))).toEqualTypeOf<typeof program>()
+		Loader.fromQuery(keyed, {
+			key({ id }) {
+				expectTypeOf(id).toEqualTypeOf<number>()
+				return String(id)
+			},
+		})
 		const settled = Loader.settleQueryIf(
 			keyed,
 			keyed.init("types"),

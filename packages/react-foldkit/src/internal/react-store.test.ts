@@ -1,23 +1,19 @@
-import { Cause, Effect, Exit, Latch, Layer, Result, Schema, Stream } from "effect"
+import { Cause, Deferred, Effect, Exit, Latch, Layer, Result, Scheduler, Schema, Scope, Stream } from "effect"
 import { describe, expect, it, vi } from "vitest"
 import { modifyFields } from "../struct"
 import type * as Command from "../command"
 import { defineMessageUnion } from "../message"
 import * as Subscription from "../subscription"
 import type * as Update from "../update"
+import * as Store from "../store"
 import * as ReactStore from "./react-store"
 import { CommitError } from "../store"
 
+/** Activation owns a Scope, so closing it is the whole deactivation story. */
 function activate<Model, Message>(store: ReactStore.ReactStore<Model, Message>): () => void {
-	const deactivate = Effect.runSync(store.activate)
-	return () => Effect.runSync(deactivate)
-}
-function register<Model, Message, E>(
-	store: ReactStore.ReactStore<Model, Message>,
-	effect: Effect.Effect<void, E, import("effect").Scope.Scope>
-): () => void {
-	const disconnect = Effect.runSync(store.onActivate(effect))
-	return () => Effect.runSync(disconnect)
+	const scope = Scope.makeUnsafe()
+	Effect.runSync(store.activate.pipe(Scope.provide(scope)))
+	return () => Effect.runSync(Scope.close(scope, Exit.void))
 }
 
 const Message = defineMessageUnion({
@@ -40,6 +36,33 @@ const update = (model: Model, message: Message): UpdateReturn =>
 const makeInitCommand = (effect: Effect.Effect<Message>): Command.Command<Message> => ({ name: "RunInit", effect })
 
 describe("React store lifecycle", function () {
+	it("passes the final lease's failed Exit to resource finalizers", async function () {
+		await Effect.runPromise(
+			Effect.gen(function* () {
+				const acquired = Deferred.makeUnsafe<void>()
+				let resourceExit: Exit.Exit<unknown, unknown> | undefined
+				const scope = yield* Scope.make()
+				const store = ReactStore.make<number, number>(
+					{
+						update: (_model, message) => ({ model: message }),
+						layer: Layer.effectDiscard(
+							Effect.acquireRelease(Deferred.succeed(acquired, undefined), (_resource, exit) =>
+								Effect.sync(function () {
+									resourceExit = exit
+								})
+							)
+						),
+					},
+					{ model: 0, commands: [{ name: "Started", effect: Effect.succeed(1) }] }
+				)
+				yield* store.activate.pipe(Scope.provide(scope))
+				yield* Deferred.await(acquired)
+				const exit = Exit.fail("setup failure")
+				yield* Scope.close(scope, exit)
+				expect(resourceExit).toEqual(exit)
+			})
+		)
+	})
 	it("rejects inactive commits, drops inactive dispatches, and preserves the Model across reactivation", function () {
 		const store = ReactStore.make({ update }, { model: { value: "initial" } })
 
@@ -183,140 +206,141 @@ describe("React store lifecycle", function () {
 		})
 	})
 
-	it("rejects overlapping activations", function () {
+	it("shares overlapping activation leases and releases each once", function () {
 		const store = ReactStore.make({ update }, { model: { value: "initial" } })
-		const deactivate = activate(store)
-
-		try {
-			expect(function () {
-				activate(store)
-			}).toThrow("react-foldkit store is already active")
-		} finally {
-			deactivate()
-		}
+		const first = activate(store)
+		const second = activate(store)
+		first()
+		first()
+		expect(store.commit(Message.SetValue({ value: "still active" }))).toEqual(Result.void)
+		expect(store.getModel()).toEqual({ value: "still active" })
+		second()
+		second()
+		expect(store.commit(Message.SetValue({ value: "inactive" }))).toEqual(
+			Result.fail(new Store.CommitError({ reason: "Inactive" }))
+		)
 	})
 })
 
-describe("external connection lifecycle", function () {
-	it("rolls back a failed late registration without stopping the active store", function () {
-		const store = ReactStore.make({ update }, { model: { value: "initial" } })
-		const released = vi.fn()
-		const failed = Effect.gen(function* () {
-			yield* Effect.addFinalizer(() => Effect.sync(released))
-			return yield* Effect.fail(new Error("late connection failed"))
-		})
-		const first = activate(store)
+describe("activation leases", function () {
+	it("shares one live store across concurrent acquisition and retains its subscription until the last lease", async function () {
+		let acquires = 0
+		let releases = 0
+		const built = Latch.makeUnsafe()
+		const notifications = vi.fn()
+		const store = ReactStore.make(
+			{
+				update,
+				layer: Layer.effectDiscard(
+					Effect.acquireRelease(
+						Effect.sync(function () {
+							acquires += 1
+						}).pipe(Effect.andThen(built.open)),
+						() =>
+							Effect.sync(function () {
+								releases += 1
+							})
+					)
+				),
+			},
+			{
+				model: { value: "initial" },
+				commands: [makeInitCommand(Effect.succeed(Message.CompletedInit({ value: "ready" })))],
+			}
+		)
+		const unsubscribe = store.subscribe(notifications)
+		await Effect.runPromise(
+			Effect.gen(function* () {
+				const first = yield* Scope.make()
+				const second = yield* Scope.make()
+				try {
+					// Force a yield during allocation, before either lease can publish its store.
+					yield* Effect.all(
+						[store.activate.pipe(Scope.provide(first)), store.activate.pipe(Scope.provide(second))],
+						{ concurrency: "unbounded" }
+					).pipe(Effect.provideService(Scheduler.MaxOpsBeforeYield, 8))
+					yield* built.await
+					yield* Effect.promise(() => vi.waitFor(() => expect(store.getModel()).toEqual({ value: "ready" })))
+					yield* Scope.close(first, Exit.void)
+					expect(acquires).toBe(1)
+					expect(releases).toBe(0)
+					notifications.mockClear()
+					expect(store.commit(Message.SetValue({ value: "second lease" }))).toEqual(Result.void)
+					expect(notifications).toHaveBeenCalledOnce()
+					yield* Scope.close(second, Exit.void)
+					expect(releases).toBe(1)
+				} finally {
+					yield* Scope.close(first, Exit.void)
+					yield* Scope.close(second, Exit.void)
+					unsubscribe()
+				}
+			})
+		)
+	})
 
-		expect(() => register(store, failed)).toThrow("late connection failed")
-		expect(released).toHaveBeenCalledTimes(1)
+	it("shares overlapping leases and ends the activation with the last one", function () {
+		const store = ReactStore.make({ update }, { model: { value: "initial" } })
+		const first = activate(store)
+		const second = activate(store)
 		Result.getOrThrow(store.commit(Message.SetValue({ value: "still active" })))
 		expect(store.getModel()).toEqual({ value: "still active" })
 		first()
-
-		const second = activate(store)
-		expect(store.getModel()).toEqual({ value: "still active" })
+		Result.getOrThrow(store.commit(Message.SetValue({ value: "second holds" })))
+		expect(store.getModel()).toEqual({ value: "second holds" })
 		second()
-		expect(released).toHaveBeenCalledTimes(1)
+		expect(store.commit(Message.SetValue({ value: "inactive" }))).toEqual(
+			Result.fail(new CommitError({ reason: "Inactive" }))
+		)
 	})
 
-	it("starts only after activation, reconnects once per lifetime, and cancels registrations", function () {
-		const store = ReactStore.make({ update }, { model: { value: "initial" } })
-		let starts = 0
-		let stops = 0
-		const remove = register(
-			store,
-			Effect.gen(function* () {
-				starts += 1
-				yield* Effect.fromResult(store.commit(Message.SetValue({ value: "source" })))
-				yield* Effect.addFinalizer(() =>
-					Effect.sync(function () {
-						stops += 1
-					})
-				)
-			})
+	it("disposes the store only after the last overlapping lease closes", async function () {
+		let releases = 0
+		// A Subscription forces the Layer to build, so its release proves the store's own scope closed.
+		const subscriptions = Subscription.make<Model, Message>()((entry) => ({
+			keepAlive: entry(
+				{ value: Schema.String },
+				{
+					modelToDependencies: (model) => ({ value: model.value }),
+					dependenciesToStream: () => Stream.never,
+				}
+			),
+		}))
+		const store = ReactStore.make(
+			{
+				update,
+				subscriptions,
+				layer: Layer.effectDiscard(
+					Effect.acquireRelease(Effect.void, () =>
+						Effect.sync(function () {
+							releases += 1
+						})
+					)
+				),
+			},
+			{ model: { value: "initial" } }
 		)
-		expect(starts).toBe(0)
 		const first = activate(store)
-		expect(starts).toBe(1)
-		expect(store.getModel()).toEqual({ value: "source" })
-		first()
-		expect(stops).toBe(1)
 		const second = activate(store)
-		expect(starts).toBe(2)
-		remove()
-		remove()
-		expect(stops).toBe(2)
-		second()
-		const third = activate(store)
-		expect(starts).toBe(2)
-		third()
-	})
-
-	it("rolls back an unsuccessful activation and releases previously acquired connections", function () {
-		const store = ReactStore.make({ update }, { model: { value: "initial" } })
-		const release = vi.fn()
-		register(
-			store,
-			Effect.addFinalizer(() => Effect.sync(release))
-		)
-		const defect = new Error("connection failed")
-		const removeBad = register(store, Effect.die(defect))
-		expect(() => activate(store)).toThrow(defect)
-		expect(release).toHaveBeenCalledTimes(1)
-		expect(store.commit(Message.SetValue({ value: "after failure" }))).toEqual(
-			Result.fail(new CommitError({ reason: "Inactive" }))
-		)
-		removeBad()
-		const deactivate = activate(store)
-		deactivate()
-		expect(release).toHaveBeenCalledTimes(2)
-	})
-
-	it("releases every scoped connection despite a cleanup defect and remains inactive", function () {
-		const store = ReactStore.make({ update }, { model: { value: "initial" } })
-		const good = vi.fn()
-		const bad = vi.fn(function () {
-			throw new Error("cleanup failed")
+		Result.getOrThrow(store.commit(Message.SetValue({ value: "live" })))
+		await vi.waitFor(function () {
+			expect(store.getModel()).toEqual({ value: "live" })
 		})
-		register(
-			store,
-			Effect.addFinalizer(() => Effect.sync(good))
-		)
-		const removeBad = register(
-			store,
-			Effect.addFinalizer(() => Effect.sync(bad))
-		)
-		const deactivate = activate(store)
-		expect(deactivate).toThrow("cleanup failed")
-		expect(good).toHaveBeenCalledTimes(1)
-		expect(bad).toHaveBeenCalledTimes(1)
-		expect(store.commit(Message.SetValue({ value: "inactive" }))).toEqual(
-			Result.fail(new CommitError({ reason: "Inactive" }))
-		)
-		deactivate()
-		removeBad()
-		const again = activate(store)
-		again()
-		expect(good).toHaveBeenCalledTimes(2)
-		expect(bad).toHaveBeenCalledTimes(1)
+		first()
+		await new Promise((resolve) => setTimeout(resolve, 20))
+		expect(releases).toBe(0)
+		second()
+		await vi.waitFor(function () {
+			expect(releases).toBe(1)
+		})
 	})
 
-	it("preserves activation failure and cleanup failure together in the Effect Cause", function () {
+	it("retains the Model from the ended activation for the next one", function () {
 		const store = ReactStore.make({ update }, { model: { value: "initial" } })
-		register(
-			store,
-			Effect.addFinalizer(() => Effect.die(new Error("release failed")))
-		)
-		const failure = new Error("setup failed")
-		register(store, Effect.fail(failure))
-		const exit = Effect.runSyncExit(store.activate)
-		expect(Exit.isFailure(exit)).toBe(true)
-		if (Exit.isFailure(exit)) {
-			expect(Result.getOrThrow(Cause.findError(exit.cause))).toBe(failure)
-			expect(String(Result.getOrThrow(Cause.findDefect(exit.cause)))).toContain("release failed")
-		}
-		expect(store.commit(Message.SetValue({ value: "inactive" }))).toEqual(
-			Result.fail(new CommitError({ reason: "Inactive" }))
-		)
+		const first = activate(store)
+		Result.getOrThrow(store.commit(Message.SetValue({ value: "carried" })))
+		first()
+		const second = activate(store)
+		expect(store.getModel()).toEqual({ value: "carried" })
+		second()
 	})
 })

@@ -100,7 +100,7 @@ describe("subscriptions", function () {
 				expect(store.getModel().emissions.length).toBeGreaterThan(0)
 			})
 		} finally {
-			store.dispose()
+			Effect.runSync(store.dispose())
 		}
 	})
 
@@ -129,7 +129,7 @@ describe("subscriptions", function () {
 			})
 			expect(acquires.count).toBe(1)
 		} finally {
-			store.dispose()
+			Effect.runSync(store.dispose())
 		}
 	})
 
@@ -158,7 +158,7 @@ describe("subscriptions", function () {
 			})
 			expect(releases.count).toBeGreaterThanOrEqual(1)
 		} finally {
-			store.dispose()
+			Effect.runSync(store.dispose())
 		}
 	})
 
@@ -194,7 +194,7 @@ describe("subscriptions", function () {
 			})
 			expect(acquires.count).toBe(2)
 		} finally {
-			store.dispose()
+			Effect.runSync(store.dispose())
 		}
 	})
 
@@ -229,7 +229,7 @@ describe("subscriptions", function () {
 			expect(active.current).toBe(true)
 			expect(store.getModel().unrelated).toBe(2)
 		} finally {
-			store.dispose()
+			Effect.runSync(store.dispose())
 		}
 	})
 
@@ -250,7 +250,7 @@ describe("subscriptions", function () {
 			expect(active.current).toBe(true)
 		})
 
-		store.dispose()
+		Effect.runSync(store.dispose())
 
 		await vi.waitFor(function () {
 			expect(active.current).toBe(false)

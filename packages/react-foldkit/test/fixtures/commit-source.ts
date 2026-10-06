@@ -1,4 +1,4 @@
-import { Schema } from "effect"
+import { Result, Schema } from "effect"
 import { defineMessageUnion } from "../../src/message"
 import type { CommitEntry, CommitSource } from "../../src/react"
 
@@ -19,7 +19,7 @@ export function fakeSource<Message>(initial: ReadonlyArray<CommitEntry<Message>>
 	let onUnsubscribe: ((count: number) => void) | undefined
 	const notifications: Array<() => void> = []
 	const source: CommitSource<Message> = {
-		getSnapshot: () => snapshot,
+		getSnapshot: () => Result.succeed(snapshot),
 		subscribe(notify) {
 			subscriptions += 1
 			listeners.add(notify)

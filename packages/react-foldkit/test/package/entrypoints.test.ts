@@ -22,14 +22,11 @@ describe("built package entry points", function () {
 			error: Schema.String,
 			execute: Effect.succeed("fetch"),
 		})
-		const loader = Loader.fromQuery(query, {
-			name: "Package",
-			data: Schema.String,
-			error: Schema.String,
-			key: () => "package",
-		})
+		const loader = Loader.fromQuery(query)
 		const envelope = Effect.runSync(loader.loadQuery)
-		expect(loader.decode(envelope)).toEqual({ result: Foldkit.AsyncData.Success({ data: "fetch" }) })
+		expect(Result.getOrThrow(loader.decode(envelope))).toEqual({
+			result: Foldkit.AsyncData.Success({ data: "fetch" }),
+		})
 	})
 
 	it("shares public error constructors across the root and subpath exports", function () {
@@ -39,7 +36,7 @@ describe("built package entry points", function () {
 		expect(Foldkit.Store.CommitError).toBe(Store.CommitError)
 		expect(Foldkit.ReactFoldkit.SubmodelProviderError).toBe(ReactFoldkit.SubmodelProviderError)
 
-		const error = new ReactFoldkit.CommitSourceError({ reason: "SourceChanged" })
+		const error = new ReactFoldkit.CommitSourceError({ reason: "Reentrant" })
 		expect(error).toBeInstanceOf(CommitSource.CommitSourceError)
 		expect(error).toBeInstanceOf(Foldkit.CommitSource.CommitSourceError)
 	})
@@ -49,7 +46,7 @@ describe("built package entry points", function () {
 			{ update: (model: number, message: number) => ({ model: model + message }) },
 			{ model: 0 }
 		)
-		store.dispose()
+		Effect.runSync(store.dispose())
 
 		const committed = store.commit(1)
 		expect(Result.isFailure(committed)).toBe(true)

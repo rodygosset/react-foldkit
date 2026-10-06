@@ -1,4 +1,4 @@
-import { Effect, Exit, HashMap, Option, Result, type Scope } from "effect"
+import { Cause, Effect, Exit, HashMap, Option, Result, type Scope } from "effect"
 import type { CommitError } from "../store"
 
 import { CommitSourceError, type CommitEntry, type CommitSource, type CommitSourceOptions } from "../commitSource"
@@ -7,13 +7,14 @@ export { CommitSourceError } from "../commitSource"
 export type { CommitEntry, CommitSource, CommitSourceOptions } from "../commitSource"
 
 type Versions = HashMap.HashMap<string, string | number>
-type ConnectionError = CommitSourceError | CommitError
+export type ConnectionError<E> = E | CommitSourceError | CommitError
 
-export interface Connection<Message> {
-	readonly source: CommitSource<Message>
+export interface Connection<Message, E = never> {
+	readonly source: CommitSource<Message, E>
 	readonly connect: (
-		commit: (message: Message) => Result.Result<void, CommitError>
-	) => Effect.Effect<void, ConnectionError, Scope.Scope>
+		commit: (message: Message) => Result.Result<void, CommitError>,
+		onReconcile: (exit: Exit.Exit<void, ConnectionError<E>>) => void
+	) => Effect.Effect<void, ConnectionError<E>, Scope.Scope>
 }
 
 function versions<Message>(snapshot: ReadonlyArray<CommitEntry<Message>>): Result.Result<Versions, CommitSourceError> {
@@ -25,64 +26,94 @@ function versions<Message>(snapshot: ReadonlyArray<CommitEntry<Message>>): Resul
 	return Result.succeed(result)
 }
 
+const reentrant: Result.Result<void, CommitSourceError> = Result.fail(new CommitSourceError({ reason: "Reentrant" }))
+
+/**
+ * Reconciliation runs synchronously inside a source notification, so a nested publication is a
+ * contract violation rather than a queueable event. `Notifying` marks that window and `Reentered`
+ * records that a publication arrived inside it, which is what reentrancy means here.
+ */
+type Phase = "Subscribing" | "Notifying" | "Reentered" | "Connected" | "Released"
+
 /** Retains only successfully delivered tokens across scoped connection lifetimes. */
-export const make = <Message>(
-	options: CommitSourceOptions<Message>
-): Result.Result<Connection<Message>, CommitSourceError> =>
+export const make = <Message, E>(
+	options: CommitSourceOptions<Message, E>
+): Result.Result<Connection<Message, E>, CommitSourceError> =>
 	Result.map(versions(options.initialSnapshot), function (baseline) {
 		const { source } = options
 		let previous = baseline
-		let reconciling = false
 
-		const connect: Connection<Message>["connect"] = (commit) =>
+		const connect: Connection<Message, E>["connect"] = (commit, onReconcile) =>
 			Effect.gen(function* () {
-				let connected = true
-				let subscribing = true
-				let setupExit: Exit.Exit<void, ConnectionError> = Exit.void
+				// Held in a cell so reads inside the reconcile loops stay widened: a nested
+				// publication writes it from outside the current control flow.
+				const cell: { phase: Phase } = { phase: "Subscribing" }
+				const phase = (): Phase => cell.phase
+				let setup: Exit.Exit<void, ConnectionError<E>> = Exit.void
 
-				const reconcile: Effect.Effect<void, ConnectionError> = Effect.suspend(function () {
-					if (!connected) return Effect.void
-					if (reconciling) return Effect.fail(new CommitSourceError({ reason: "Reentrant" }))
-					reconciling = true
-					return Effect.gen(function* () {
-						const snapshot = yield* Effect.sync(() => source.getSnapshot())
-						const next = yield* Effect.fromResult(versions(snapshot))
+				const deliver = (): Result.Result<void, ConnectionError<E>> =>
+					Result.gen(function* () {
+						const snapshot = yield* source.getSnapshot()
+						if (phase() === "Reentered") return yield* reentrant
+						const next = yield* versions(snapshot)
 						previous = HashMap.filter(previous, (_, key) => HashMap.has(next, key))
 						for (const entry of snapshot) {
-							if (!connected) return
+							if (phase() === "Released") return undefined
 							const version = HashMap.get(previous, entry.key)
 							if (Option.isSome(version) && Object.is(version.value, entry.version)) continue
-							yield* Effect.fromResult(commit(entry.message))
+							yield* commit(entry.message)
+							// A delivered Message stays delivered even if it reentered the source.
 							previous = HashMap.set(previous, entry.key, entry.version)
+							if (phase() === "Reentered") return yield* reentrant
 						}
-					}).pipe(
-						Effect.ensuring(
-							Effect.sync(function () {
-								reconciling = false
-							})
-						)
-					)
-				})
+						return undefined
+					})
+
+				function reconcile(): Result.Result<void, ConnectionError<E>> {
+					if (phase() === "Released") return Result.void
+					if (phase() === "Notifying" || phase() === "Reentered") return reentrant
+					const resume = phase()
+					cell.phase = "Notifying"
+					try {
+						return deliver()
+					} finally {
+						if (phase() === "Notifying" || phase() === "Reentered") cell.phase = resume
+					}
+				}
 
 				yield* Effect.acquireRelease(
 					Effect.sync(() =>
 						source.subscribe(function () {
-							if (!connected) return
-							if (!subscribing) return Effect.runSync(reconcile)
-							// Capture failure until subscribe returns the cleanup handle.
-							setupExit = Effect.runSyncExit(reconcile)
-							if (Exit.isFailure(setupExit)) connected = false
+							const current = phase()
+							if (current === "Notifying" || current === "Reentered") {
+								cell.phase = "Reentered"
+								return
+							}
+							if (current === "Released") return
+							const exit = Effect.runSyncExit(Effect.suspend(() => Effect.fromResult(reconcile())))
+							if (current === "Subscribing") {
+								// Subscribe must return its cleanup handle before a notification can fail setup.
+								if (Exit.isFailure(exit)) {
+									setup = Exit.isFailure(setup)
+										? Exit.failCause(Cause.combine(setup.cause, exit.cause))
+										: exit
+								}
+								return
+							}
+							onReconcile(exit)
 						})
 					),
 					(unsubscribe) =>
 						Effect.sync(function () {
-							connected = false
+							cell.phase = "Released"
 							unsubscribe()
 						})
 				)
-				subscribing = false
-				yield* setupExit
-				yield* reconcile
+				yield* setup
+				cell.phase = "Connected"
+				// Catch up on anything published after subscribe returned its handle.
+				yield* Effect.suspend(() => Effect.fromResult(reconcile()))
 			})
+
 		return { source, connect }
 	})

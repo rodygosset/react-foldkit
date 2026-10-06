@@ -28,15 +28,18 @@ export interface OptionalSubmodelProjection<ParentModel, ParentMessage, Model, M
 	readonly toParentMessage: (message: Message) => ParentMessage
 }
 
-// React requires referentially stable snapshots, including when read allocates.
-function snapshot<Parent, Model>(getParent: () => Parent, read: (parent: Parent) => Model): () => Model {
-	let cached: Option.Option<{ readonly parent: Parent; readonly model: Model }> = Option.none()
+/**
+ * Wraps an allocating read so an unchanged Model keeps the same wrapper reference. React
+ * compares snapshots by identity, so a fresh wrapper per render would loop.
+ */
+export function stabilize<Model, Wrapped>(wrap: (model: Model) => Wrapped, read: () => Model): () => Wrapped {
+	let previous: Option.Option<readonly [Model, Wrapped]> = Option.none()
 	return function () {
-		const parent = getParent()
-		if (Option.isSome(cached) && Object.is(cached.value.parent, parent)) return cached.value.model
-		const model = read(parent)
-		cached = Option.some({ parent, model })
-		return model
+		const model = read()
+		if (Option.isSome(previous) && Object.is(previous.value[0], model)) return previous.value[1]
+		const wrapped = wrap(model)
+		previous = Option.some([model, wrapped] as const)
+		return wrapped
 	}
 }
 
@@ -44,56 +47,64 @@ export const project = <ParentModel, ParentMessage, Model, Message>(
 	parent: ModelSource<ParentModel, ParentMessage>,
 	{ read, toParentMessage }: SubmodelProjection<ParentModel, ParentMessage, Model, Message>
 ): ModelSource<Model, Message> => ({
-	getSnapshot: snapshot(() => parent.getSnapshot(), read),
-	getServerSnapshot: snapshot(() => parent.getServerSnapshot(), read),
+	getSnapshot: stabilize(read, () => parent.getSnapshot()),
+	getServerSnapshot: stabilize(read, () => parent.getServerSnapshot()),
 	subscribe: (notify) => parent.subscribe(notify),
 	dispatch: (message) => parent.dispatch(toParentMessage(message)),
 })
 
+export interface OptionalProjection<Model, Message> {
+	/**
+	 * The projected source, present only once the parent has produced a Model. Memoized, so
+	 * repeated calls return the same reference.
+	 */
+	readonly source: () => Option.Option<ModelSource<Model, Message>>
+	readonly presence: ModelReader<boolean>
+}
+
+/**
+ * A child whose Model may be absent. Live and hydration Models are retained separately, so a
+ * server read never replaces the last live Model and an absent read never clears one.
+ */
 export function projectOptional<ParentModel, ParentMessage, Model, Message>(
 	parent: ModelSource<ParentModel, ParentMessage>,
 	{ read, toParentMessage }: OptionalSubmodelProjection<ParentModel, ParentMessage, Model, Message>
-) {
-	const current = snapshot(() => parent.getSnapshot(), read)
-	const server = snapshot(() => parent.getServerSnapshot(), read)
-	function retain(getModel: () => Option.Option<Model>, initial: Option.Option<Model>) {
+): OptionalProjection<Model, Message> {
+	const current = stabilize(read, () => parent.getSnapshot())
+	const server = stabilize(read, () => parent.getServerSnapshot())
+	function retain(getModel: () => Option.Option<Model>, initial: Model) {
 		let last = initial
-		function read() {
+		return function () {
 			const model = getModel()
-			if (Option.isSome(model)) last = model
-			return model
-		}
-		return {
-			getSnapshot() {
-				read()
-				// An exposed source was present. Preserve its last valid Model
-				// while an already subscribed child waits for React to unmount it.
-				return Option.getOrThrow(last)
-			},
-			isPresent: () => Option.isSome(read()),
+			if (Option.isSome(model)) last = model.value
+			return last
 		}
 	}
-	const initial = current()
-	const bootstrap = server()
-	// Server reads must never overwrite the last live Model (or vice versa).
-	const live = retain(
-		current,
-		Option.orElse(initial, () => bootstrap)
-	)
-	const hydration = retain(
-		server,
-		Option.orElse(bootstrap, () => initial)
-	)
-	const source: ModelSource<Model, Message> = {
-		getSnapshot: live.getSnapshot,
-		getServerSnapshot: hydration.getSnapshot,
-		subscribe: (notify) => parent.subscribe(notify),
-		dispatch: (message) => parent.dispatch(toParentMessage(message)),
+	let source: Option.Option<ModelSource<Model, Message>> = Option.none()
+	function getSource(): Option.Option<ModelSource<Model, Message>> {
+		if (Option.isSome(source)) return source
+		const live = current()
+		const hydration = server()
+		const initial = Option.orElse(live, () => hydration)
+		if (Option.isNone(initial)) return source
+		source = Option.some({
+			getSnapshot: retain(
+				current,
+				Option.getOrElse(live, () => initial.value)
+			),
+			getServerSnapshot: retain(
+				server,
+				Option.getOrElse(hydration, () => initial.value)
+			),
+			subscribe: (notify) => parent.subscribe(notify),
+			dispatch: (message) => parent.dispatch(toParentMessage(message)),
+		})
+		return source
 	}
 	const presence: ModelReader<boolean> = {
-		getSnapshot: live.isPresent,
-		getServerSnapshot: hydration.isPresent,
-		subscribe: source.subscribe,
+		getSnapshot: () => Option.isSome(current()),
+		getServerSnapshot: () => Option.isSome(server()),
+		subscribe: (notify) => parent.subscribe(notify),
 	}
-	return { source: Option.some(source), presence }
+	return { source: getSource, presence }
 }

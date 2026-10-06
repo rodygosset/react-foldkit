@@ -1,6 +1,7 @@
 import {
 	Cause,
 	Context,
+	Deferred,
 	Effect,
 	Exit,
 	Layer,
@@ -36,7 +37,7 @@ type ConfigBase<Model, Message, R> = {
 }
 
 /**
- * Program definition: update + services. Init is supplied later via {@link boot}.
+ * Program definition: update + services. Init is supplied later via {@link make} or {@link boot}.
  *
  * When `R` is `never`, `layer` is optional (defaults to {@link Layer.empty}).
  * When `R` is not `never`, `layer` is required so Command Effects can be provided.
@@ -61,7 +62,8 @@ export type Store<Model, Message> = Readonly<{
 	dispatch: (message: Message) => void
 	/** Processes through this Message synchronously, preserving FIFO and asynchronous Commands. */
 	commit: (message: Message) => Result.Result<void, CommitError>
-	dispose: () => void
+	/** Releases resources once. Concurrent and later callers await the same cleanup result. */
+	dispose: () => Effect.Effect<void>
 	isDisposed: () => boolean
 }>
 
@@ -177,22 +179,7 @@ function microtaskSetImmediate(callback: () => void): () => void {
 
 const browserScheduler = new Scheduler.MixedScheduler("async", microtaskSetImmediate)
 
-/**
- * Captures a Context that already carries {@link browserScheduler}, so
- * `Effect.runForkWith` reschedules fiber yields on microtasks (Foldkit parity).
- */
-const captureRuntimeContextForCommands = (): Context.Context<never> =>
-	Effect.runSync(Effect.provide(Effect.context<never>(), Layer.succeed(Scheduler.Scheduler, browserScheduler)))
-
-/**
- * Cached Foldkit-style resource Context: Layer builds once into `storeScope`.
- * Always an Effect (never `undefined`) — uses {@link Layer.empty} when `R` is `never`.
- */
-const makeAcquireResourceContext = <R>(
-	layer: Layer.Layer<R, never, never>,
-	storeScope: Scope.Scope
-): Effect.Effect<Context.Context<R>> =>
-	Effect.runSync(Effect.cached(Effect.uninterruptible(Layer.buildWithScope(layer, storeScope))))
+const runtimeContextForCommands: Context.Context<never> = Context.make(Scheduler.Scheduler, browserScheduler)
 
 const makeProvideAllResources =
 	<R>(
@@ -279,14 +266,41 @@ function forkSubscriptionFibers<Model, Message, R>(
 }
 
 /**
- * Starts a live store from a config and an init return. Init Commands are
- * forked after the boot barrier lifts so subscribers can attach first.
- * Call from the React Provider (or tests), not at module load.
+ * Allocates a fresh live store in the caller's Scope; services build lazily on first use.
+ * Closing that Scope disposes the store, so a host never has to release it by hand.
  */
-export function boot<Model, Message, R = never>(
+export const make = <Model, Message, R = never>(
 	config: Config<Model, Message, R>,
 	init: Update.Return<Model, Message, R>
-): Store<Model, Message> {
+): Effect.Effect<Store<Model, Message>, never, Scope.Scope> =>
+	Effect.gen(function* () {
+		const scope = yield* Scope.fork(yield* Scope.Scope)
+		// Replay retains a model published before subscription fibers attach.
+		const modelPubSub = yield* PubSub.unbounded<Model>({ replay: 1 })
+		const layer = resolveLayer((config as { readonly layer?: Layer.Layer<R, never, never> }).layer)
+		const acquireResourceContext = yield* Effect.cached(Effect.uninterruptible(Layer.buildWithScope(layer, scope)))
+		return yield* Effect.acquireRelease(
+			Effect.sync(() => start(config, init, scope, modelPubSub, acquireResourceContext)),
+			(store, exit) => store.dispose(exit)
+		)
+	})
+
+/**
+ * Synchronous entry point for imperative hosts. The store owns its Scope, so disposal happens
+ * through `Store.dispose`. Effect programs should use {@link make} and let their Scope own it.
+ */
+export const boot = <Model, Message, R = never>(
+	config: Config<Model, Message, R>,
+	init: Update.Return<Model, Message, R>
+): Store<Model, Message> => Effect.runSync(make(config, init).pipe(Scope.provide(Scope.makeUnsafe())))
+
+function start<Model, Message, R>(
+	config: Config<Model, Message, R>,
+	init: Update.Return<Model, Message, R>,
+	storeScope: Scope.Closeable,
+	modelPubSub: PubSub.PubSub<Model>,
+	acquireResourceContext: Effect.Effect<Context.Context<R>>
+) {
 	const listeners = new Set<() => void>()
 	const pendingMessages = MutableList.make<{ readonly message: Message }>()
 	let phase: Phase = { _tag: "Booting" }
@@ -294,26 +308,13 @@ export function boot<Model, Message, R = never>(
 	let lastDrainEndedAt = 0
 	let deferredDrainChannel: MessageChannel | null = null
 
-	const storeScope = Scope.makeUnsafe()
 	const interruptRegistry = makeInterruptRegistry()
-	// replay:1 covers the async fork race: a model published before the
-	// subscription fiber attaches to PubSub is not lost. Init deps are still
-	// seeded explicitly via Stream.concat (Foldkit).
-	const modelPubSub = Effect.runSync(PubSub.unbounded<Model>({ replay: 1 }))
-	const runtimeContextForCommands = captureRuntimeContextForCommands()
-
 	const initialModel = init.model
 	const initCommands = init.commands ?? []
 	let model: Model = initialModel
 	PubSub.publishUnsafe(modelPubSub, model)
 
-	const provideAllResources = makeProvideAllResources(
-		makeAcquireResourceContext(
-			resolveLayer((config as { readonly layer?: Layer.Layer<R, never, never> }).layer),
-			storeScope
-		),
-		interruptRegistry
-	)
+	const provideAllResources = makeProvideAllResources(acquireResourceContext, interruptRegistry)
 
 	function crashWith(cause: Cause.Cause<unknown>, triggeringMessage: Option.Option<Message>): void {
 		if (isTerminal(phase)) return
@@ -479,17 +480,24 @@ export function boot<Model, Message, R = never>(
 		}
 	}
 
-	function dispose(): void {
-		if (phase._tag === "Disposed") return
-		phase = { _tag: "Disposed" }
-		MutableList.clear(pendingMessages)
-		for (const listener of listeners) {
-			listener()
-		}
-		listeners.clear()
-		cancelDeferredDrain()
-		Effect.runFork(Scope.close(storeScope, Exit.void))
-	}
+	const disposal = Deferred.makeUnsafe<void>()
+	const dispose = (exit: Exit.Exit<unknown, unknown> = Exit.void): Effect.Effect<void> =>
+		Effect.uninterruptibleMask((restore) =>
+			Effect.suspend(function () {
+				if (phase._tag === "Disposed") return restore(Deferred.await(disposal))
+				phase = { _tag: "Disposed" }
+				const notify = [...listeners]
+				return Effect.sync(function () {
+					MutableList.clear(pendingMessages)
+					listeners.clear()
+					cancelDeferredDrain()
+					for (const listener of notify) listener()
+				}).pipe(
+					Effect.ensuring(Scope.close(storeScope, exit)),
+					Effect.onExit((result) => Deferred.done(disposal, result))
+				)
+			})
+		)
 
 	// Foldkit: attach subscriptions before lifting the boot barrier so their
 	// init deps see the init Model, then fork init Commands, then go Live.
@@ -520,5 +528,5 @@ export function boot<Model, Message, R = never>(
 		commit,
 		dispose,
 		isDisposed: () => phase._tag === "Disposed",
-	}
+	} satisfies Store<Model, Message>
 }

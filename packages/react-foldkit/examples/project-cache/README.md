@@ -3,7 +3,8 @@
 TanStack Start example using Feature-Sliced Design. Routes and app composition
 live in `src/app`; lower slices use public indexes and do not import the app.
 
-The loader returns a Schema-encoded envelope. One root Provider stores accepted
+The loader derives serialization and identity with `Loader.fromQuery(query)`
+and returns a Schema-encoded envelope. One root Provider stores accepted
 results in a shared Query Model; project views read it through a projection.
 Refresh uses Query Commands. Update rejects older/equal revisions before
 settlement. Static `Effect.succeed` data keeps the example self-contained.

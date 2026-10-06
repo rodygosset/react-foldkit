@@ -19,7 +19,14 @@ declare const foreignDispatch: (message: ForeignMessage) => void
 describe("defineSubmodel public types", function () {
 	it("binds the hooks and Provider props to Model and Message through both exports", function () {
 		expectTypeOf<keyof typeof Submodel>().toEqualTypeOf<
-			"Provider" | "useModel" | "useDispatch" | "useSubmodel" | "useOptionalSubmodel" | "SubmodelProvider"
+			| "Provider"
+			| "useModel"
+			| "useDispatch"
+			| "useOptionalModel"
+			| "useOptionalDispatch"
+			| "useSubmodel"
+			| "useOptionalSubmodel"
+			| "SubmodelProvider"
 		>()
 		expectTypeOf(Submodel.useModel).toEqualTypeOf<typeof Root.useModel>()
 		expectTypeOf(Submodel.useDispatch).returns.toEqualTypeOf<(message: Message) => void>()

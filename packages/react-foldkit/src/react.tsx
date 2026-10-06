@@ -1,8 +1,10 @@
-import { Array, Effect, Option, Result, Schema } from "effect"
+import { Array, Cause, Effect, Exit, Option, Result, Schema } from "effect"
 import React from "react"
-import * as CommitSource from "./internal/commit-source"
+import * as CommitSource from "./commitSource"
+import * as CommitConnection from "./internal/commit-source"
 import * as ModelSource from "./internal/model-source"
 import * as ReactStore from "./internal/react-store"
+import * as ProviderSession from "./internal/provider-session"
 import * as ModelHooks from "./internal/use-model"
 import * as Store from "./store"
 import * as Update from "./update"
@@ -27,19 +29,31 @@ export type Config<ModelSchema extends ModelCodec, Message, R = never> = Store.C
 
 type Type<ModelSchema extends ModelCodec> = Schema.Schema.Type<ModelSchema>
 
-function useCommitConnection<Model, Message>(
-	store: ReactStore.ReactStore<Model, Message>,
-	connection: CommitSource.Connection<Message> | undefined
-) {
-	React.useEffect(
-		function syncCommitConnection() {
-			if (connection === undefined) return
-			const disconnect = Effect.runSync(store.onActivate(connection.connect(store.commit)))
-			return () => Effect.runSync(disconnect)
-		},
-		[store, connection]
-	)
+export interface ErrorOptions {
+	readonly renderError?: (cause: Cause.Cause<unknown>) => React.ReactNode
+	/** Observes a failure asynchronously. Observer failures join the Cause passed to `renderError`. */
+	readonly onError?: (cause: Cause.Cause<unknown>) => Effect.Effect<void, unknown>
 }
+
+export type SourceOptions<Message, E = never, FactoryError = never> =
+	| { readonly commitSource?: CommitSource.CommitSource<Message, E>; readonly createCommitSource?: never }
+	| {
+			readonly commitSource?: never
+			readonly createCommitSource: () => Result.Result<CommitSource.CommitSource<Message, E>, FactoryError>
+	  }
+
+/**
+ * A user-facing line for one Cause. Typed failures render their message; defects stay generic so
+ * a stack trace never reaches the DOM. `onError` receives the full Cause for logging.
+ */
+const renderFailure = (cause: Cause.Cause<unknown>) => (
+	<pre role="alert">
+		{Option.match(Cause.findErrorOption(cause), {
+			onNone: () => "The application could not start.",
+			onSome: (error) => (error instanceof Error ? error.message : String(error)),
+		})}
+	</pre>
+)
 
 /** A submodel hook was called outside its matching view Provider. */
 export class SubmodelProviderError extends Schema.Error<SubmodelProviderError>(
@@ -94,7 +108,13 @@ export function defineSubmodel<Model, Message>() {
 	function useDispatch() {
 		return useSource().dispatch
 	}
-	return { Provider, useModel, useDispatch, ...projectionHooks(useSource) }
+	function useOptionalModel(): Option.Option<Model> {
+		return ModelHooks.useOptionalModel(React.useContext(Context))
+	}
+	function useOptionalDispatch(): Option.Option<(message: Message) => void> {
+		return Option.map(React.useContext(Context), (source) => source.dispatch)
+	}
+	return { Provider, useModel, useDispatch, useOptionalModel, useOptionalDispatch, ...projectionHooks(useSource) }
 }
 
 function projectionHooks<ParentModel, ParentMessage>(
@@ -129,7 +149,7 @@ function projectionHooks<ParentModel, ParentMessage>(
 			projected.presence.getSnapshot,
 			projected.presence.getServerSnapshot
 		)
-		return present ? projected.source : Option.none()
+		return present ? projected.source() : Option.none()
 	}
 	function SubmodelProvider<Model, Message>(props: {
 		readonly projection: ModelSource.SubmodelProjection<ParentModel, ParentMessage, Model, Message>
@@ -163,45 +183,58 @@ export function defineApplication<ModelSchema extends ModelCodec, Message, R = n
 		return value
 	}
 
-	function Provider(props: {
-		readonly init: Update.Return<Type<ModelSchema>, Message, R>
-		/** Folds the initial snapshot into init and connects subsequent Messages after activation. Keep its identity stable. */
-		readonly commitSource?: CommitSource.CommitSource<Message>
-		readonly children: React.ReactNode
-	}) {
-		const [{ store, connection }] = React.useState(function () {
-			if (props.commitSource === undefined)
-				return { store: ReactStore.make(config, props.init), connection: undefined }
-
-			const snapshot = props.commitSource.getSnapshot()
-			const connection = Result.getOrThrow(
-				CommitSource.make({ source: props.commitSource, initialSnapshot: snapshot })
+	function Provider<E = never, FactoryError = never>(
+		props: {
+			readonly init: Update.Return<Type<ModelSchema>, Message, R>
+			readonly children: React.ReactNode
+		} & SourceOptions<Message, E, FactoryError> &
+			ErrorOptions
+	) {
+		const [bootstrap] = React.useState(() =>
+			Effect.runSyncExit(
+				Effect.gen(function* () {
+					const source: CommitSource.CommitSource<Message, E> | undefined =
+						props.createCommitSource === undefined
+							? props.commitSource
+							: yield* Effect.suspend(() => Effect.fromResult(props.createCommitSource()))
+					if (source === undefined) {
+						return { store: ReactStore.make(config, props.init), connection: undefined }
+					}
+					const snapshot = yield* Effect.fromResult(source.getSnapshot())
+					const connection = yield* Effect.fromResult(
+						CommitConnection.make({ source, initialSnapshot: snapshot })
+					)
+					const init = Update.combine(props.init.model, [
+						() => props.init,
+						...Array.map(
+							snapshot,
+							({ message }) =>
+								(model: Type<ModelSchema>) =>
+									config.update(model, message)
+						),
+					])
+					return { store: ReactStore.make(config, init), connection }
+				})
 			)
-			const init = Update.combine(props.init.model, [
-				() => props.init,
-				...Array.map(
-					snapshot,
-					({ message }) =>
-						(model: Type<ModelSchema>) =>
-							config.update(model, message)
-				),
-			])
-			return { store: ReactStore.make(config, init), connection }
-		})
-		if (connection?.source !== props.commitSource)
-			throw new CommitSource.CommitSourceError({ reason: "SourceChanged" })
-
-		useCommitConnection(store, connection)
-
+		)
+		const observeFailure = React.useEffectEvent(
+			(cause: Cause.Cause<unknown>) => props.onError?.(cause) ?? Effect.void
+		)
+		const [session] = React.useState(() => ProviderSession.make(bootstrap, observeFailure))
+		const cause = React.useSyncExternalStore(session.subscribe, session.getSnapshot, session.getServerSnapshot)
 		React.useEffect(
-			function manageStoreLifetime() {
-				const deactivate = Effect.runSync(store.activate)
-				return () => Effect.runSync(deactivate)
+			function manageSession() {
+				Effect.runFork(session.start)
+				return function () {
+					Effect.runFork(session.stop)
+				}
 			},
-			[store]
+			[session]
 		)
 
-		return <StoreContext.Provider value={store}>{props.children}</StoreContext.Provider>
+		if (Option.isSome(cause)) return (props.renderError ?? renderFailure)(cause.value)
+		if (Exit.isFailure(bootstrap)) return null
+		return <StoreContext.Provider value={bootstrap.value.store}>{props.children}</StoreContext.Provider>
 	}
 
 	function useDispatch() {
@@ -238,5 +271,37 @@ export function defineApplication<ModelSchema extends ModelCodec, Message, R = n
 		return ModelHooks.useModel(useSource(), selector, isEqual)
 	}
 
-	return { Provider, useModel, useDispatch, useCommit, ...projectionHooks(useSource) }
+	function useOptionalModel(): Option.Option<Type<ModelSchema>> {
+		const store = React.useContext(StoreContext)
+		const source = React.useMemo(
+			() =>
+				store === null
+					? Option.none()
+					: Option.some({
+							getSnapshot: store.getModel,
+							getServerSnapshot: store.getServerModel,
+							subscribe: store.subscribe,
+						}),
+			[store]
+		)
+		return ModelHooks.useOptionalModel(source)
+	}
+	function useOptionalDispatch(): Option.Option<(message: Message) => void> {
+		const store = React.useContext(StoreContext)
+		return store === null ? Option.none() : Option.some(store.dispatch)
+	}
+	function useOptionalCommit(): Option.Option<(message: Message) => Result.Result<void, Store.CommitError>> {
+		const store = React.useContext(StoreContext)
+		return store === null ? Option.none() : Option.some(store.commit)
+	}
+	return {
+		Provider,
+		useModel,
+		useDispatch,
+		useCommit,
+		useOptionalModel,
+		useOptionalDispatch,
+		useOptionalCommit,
+		...projectionHooks(useSource),
+	}
 }
