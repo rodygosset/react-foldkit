@@ -7,16 +7,17 @@ import * as Application from "../model/application"
 
 export function Provider({ children }: { children: React.ReactNode }) {
 	const router = useRouter()
-	const [source] = React.useState(() =>
-		TanStackSource.make(router, [
-			Project.loader.pipe(Loader.mapMessages((load) => Application.Message.CompletedLoadProject({ load }))),
-		])
-	)
 
 	return (
 		<Application.Provider
 			init={Application.init()}
-			commitSource={source}
+			createCommitSource={() =>
+				TanStackSource.make(router, [
+					Project.loader.pipe(
+						Loader.mapMessages((load) => Application.Message.CompletedLoadProject({ load }))
+					),
+				])
+			}
 		>
 			<Application.SubmodelProvider
 				projection={Application.projectsProjection}

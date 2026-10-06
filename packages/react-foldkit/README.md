@@ -177,22 +177,30 @@ operations. The cache demos prune post-detail entries through `retainOnly`.
 
 ### External settlement
 
-`Loader.fromQuery(query, options)` binds a Foldkit Query to explicit `name`,
-`data`, `error`, and `key` values. Keyed Queries also need `args` Schemas. The
-returned `Load` Schema contains decoded args and an AsyncData `result`.
+`Loader.fromQuery(query)` derives its payload Codec from the Foldkit Query's
+Model. Keyed `Load` payloads contain `{ args, result }`; plain Queries contain
+`{ result }`. Arguments keep their own namespace, so names such as `args` and
+`result` remain valid. Transformed success and error codecs retain their encoded types.
 `loadQuery` executes and encodes the bound Query in the host's Effect runtime.
 
 ```ts
-const loader = Loader.fromQuery(query, {
-  name: "Project",
-  args: { projectId: Schema.String },
-  data: Project,
-  error: Schema.String,
+const loader = Loader.fromQuery(query)
+
+// Optional delivery identity overrides; no repeated Schemas.
+const namedLoader = Loader.fromQuery(query, {
+  name: "ProjectDetails",
   key: ({ projectId }) => projectId,
 })
 ```
 
-In update, peel args and `result` from the Loader payload and use
+The default name is `query.Fetch.name` (for example, `"FetchProject"`). Keyed
+resource keys use canonical JSON of Schema-encoded arguments; plain Queries use
+`"singleton"` and take no `key` override, because they have no arguments to key on.
+A key override receives decoded arguments, not the fetched result. Loader delivery
+identity is independent of Query's cache identity. Names must be unique within a
+registry.
+
+In update, read `load.args` and `load.result` and use
 `Loader.settleQueryIf(query, model, args, result, { fresher })`. The plain Query
 form omits args. A Success replaces cached data when `fresher` accepts it. Failure
 is accepted only for empty, non-pending data unless `acceptFailure` supplies a
@@ -234,19 +242,22 @@ const exit = Effect.runSyncExit(delivery)
 
 ### Provider connection
 
-The optional `commitSource` prop handles initial and later deliveries:
+Use `createCommitSource` to derive the registry inside the Provider:
 
 ```tsx
-import { defineApplication, type CommitSource } from "react-foldkit/react"
+import { Cause } from "effect"
+import * as Loader from "react-foldkit/loader"
+import * as TanStackSource from "react-foldkit/tanstack"
 
-// App.init() returns the initial Model and optional Commands.
-const Application = defineApplication({ Model: App.Model, update: App.update })
-
-function Root({ source }: { source: CommitSource<App.Message> }) {
+function Root() {
 	return (
 		<Application.Provider
 			init={App.init()}
-			commitSource={source}
+			createCommitSource={() => TanStackSource.make(router, [
+				Project.loader.pipe(Loader.mapMessages((load) => App.Message.CompletedLoadProject({ load }))),
+			])}
+			renderError={(cause) => <pre role="alert">{Cause.pretty(cause)}</pre>}
+			onError={reportFailure}
 		>
 			<AppView />
 		</Application.Provider>
@@ -254,19 +265,44 @@ function Root({ source }: { source: CommitSource<App.Message> }) {
 }
 ```
 
-Provider validates the initial snapshot, applies its Messages through update,
-and preserves Commands. SSR/hydration reads the populated Model; connections
-and Commands start on client activation. Keep update pure for Strict Mode.
+`TanStackSource.make` returns `Result<CommitSource<Message, SchemaError>, RegistryError>`.
+Duplicate declaration names are typed construction failures. Provider accepts this
+Result directly from the factory and handles it with the initial snapshot.
+Factories and update must be pure. React may repeat initialization in Strict Mode
+or abandon a render. Subscriptions start only after client activation.
 
-Keep the source fixed while mounted. Adding, removing, or replacing it raises
-`CommitSourceError` with reason `SourceChanged`. Omit the prop when unused;
-changes to init do not reset the Model. Provider `commitSource` is the only
-bootstrap path: it folds the initial snapshot and connects later deliveries.
+Provider captures init and its source on initialization. Changing those props or
+replacing the factory does not reset the Model or replace the source. Remount with
+a new React key to create another instance. Existing sources can use `commitSource`
+directly. Supply either `commitSource` or `createCommitSource`.
+
+Bootstrap Messages pass through update in snapshot order and preserve Commands.
+SSR/hydration reads the populated Model. Initial Messages do not replay on activation.
+`renderError` receives the complete Cause for bootstrap, setup and live failures.
+Its default renders a typed failure's message and a generic line for a defect, so
+a stack trace never reaches the DOM. `onError` observes client failures, including
+cleanup defects, and returns an `Effect<void, unknown>`. Observers can perform
+asynchronous work and are interrupted when their Provider lifetime ends. Observer
+failures combine with the original Cause; a delayed observer cannot restore a
+fallback after recovery. Cleanup failures are logged through Effect's logger.
+
+Live failures keep the connection and successful delivery tokens. A later valid
+notification retries undelivered tokens and restores the children. Setup failures
+release acquired resources; remount to retry initialization. Error callbacks do not
+run during SSR, but bootstrap failures render the fallback.
+
+`useOptionalModel` and `useOptionalDispatch` return `Option` when a root or child
+Provider may be absent. Root applications also expose `useOptionalCommit`.
+The ordinary hooks retain their missing-Provider errors.
 
 ### Source contract
 
-A `CommitSource<Message>` provides synchronous `getSnapshot()` and
-`subscribe(notify): unsubscribe`. Each entry has:
+A `CommitSource<Message, E = never>` provides
+`getSnapshot(): Result<ReadonlyArray<CommitEntry<Message>>, E>` and
+`subscribe(notify): unsubscribe`. Use `Result.succeed(entries)` for an infallible
+custom source. A snapshot that cannot be read synchronously is a contract
+violation, so a read failure is typed data and a thrown value stays a defect.
+Each entry has:
 
 | Field                       | Meaning                                  |
 | --------------------------- | ---------------------------------------- |
@@ -286,11 +322,38 @@ Notifications must expose accepted data synchronously; the callback commits it.
 Test router adapters to ensure this happens before the page renders. Core entry
 points need no router; `react-foldkit/tanstack` uses optional TanStack peers.
 
-Duplicate keys, source replacement, and reentrant notifications raise
-`CommitSourceError`. Validation returns Result; reconciliation and cleanup use
-Effect. React/source callbacks use `runSync`; inspect the full Cause with
-`runSyncExit`. Render contract violations throw. Catch-up failures release the
-connection; disconnected callbacks do nothing. SSR does not subscribe.
+Duplicate keys and reentrant notifications produce `CommitSourceError` in the
+`Result` failure channel. Reconciliation is synchronous. Snapshot and commit
+defects are captured at the notification boundary; live failures reach `onError`
+and keep the connection.
+`onError` fires once per failure. Catch-up failures release the connection;
+disconnected callbacks do nothing. SSR does not subscribe.
+
+`loader.decode(envelope)` returns `Result<Message, SchemaError>`. A schema
+mismatch or a resource-key mismatch is a typed failure; a throwing `key` callback
+or Message mapper stays a thrown defect. Use `Result.getOrThrow` where the
+envelope is trusted. The TanStack adapter handles decoding for registered
+declarations.
+
+`loader.decodeDelivery(envelope)` returns `Result<Delivery<Message>, SchemaError>`.
+A Delivery contains the validated `receipt` and mapped `message`. The adapter
+uses this method to decode each envelope once. `decode` returns just its Message.
+Derived resource keys keep Schema encoding failures in the typed channel;
+exceptions from custom key callbacks remain defects.
+
+`Store.make(config, init)` returns `Effect<Store<Model, Message>, never, Scope>`,
+allocating a fresh store in the caller's Scope on each execution, so closing that
+Scope disposes it. `Store.dispose()` returns `Effect<void>` and resolves once every
+resource is released. Concurrent and later calls share its completion, including
+cleanup defects. `Store.boot(config, init)` remains the synchronous entry
+point for imperative hosts and owns its own Scope; dispose it with
+`await Effect.runPromise(store.dispose())` so asynchronous resource finalizers
+can finish. React activation uses `Store.make` through the
+Provider's Scope.
+
+Use `Effect.runFork(store.dispose())` inside a synchronous notification callback.
+A reentrant disposal waits for the cleanup already in progress and cannot use
+`Effect.runSync` while that cleanup is pending.
 
 ## Server rendering and lifetimes
 
@@ -302,7 +365,7 @@ Interrupted init Commands restart on reconnect; completed ones do not repeat.
 Subscriptions and Layer resources restart with each activation.
 
 `defineApplication` takes `Store.Config` plus `Model: Schema.Codec`. Preload data
-through init or a stable commitSource on the persistent Provider.
+through init or a Provider-owned commit source.
 
 ## ESLint
 

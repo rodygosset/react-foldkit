@@ -1,5 +1,5 @@
 import { describe, it } from "@effect/vitest"
-import { Array, Cause, Context, Effect, Fiber, Layer, Option, Schema } from "effect"
+import { Array, Cause, Context, Deferred, Effect, Exit, Fiber, Layer, Option, Result, Schema, Scope } from "effect"
 import { afterEach, expect, vi } from "vitest"
 import { modifyFields } from "./struct"
 import * as Command from "./command"
@@ -92,7 +92,7 @@ describe("message processing", function () {
 			})
 		} finally {
 			nowSpy.mockRestore()
-			store.dispose()
+			Effect.runSync(store.dispose())
 		}
 	})
 
@@ -128,7 +128,7 @@ describe("message processing", function () {
 			})
 		} finally {
 			nowSpy.mockRestore()
-			store.dispose()
+			Effect.runSync(store.dispose())
 		}
 	})
 
@@ -160,7 +160,7 @@ describe("message processing", function () {
 			expect(processedLog).toEqual(labels)
 		} finally {
 			nowSpy.mockRestore()
-			store.dispose()
+			Effect.runSync(store.dispose())
 		}
 	})
 
@@ -200,7 +200,7 @@ describe("message processing", function () {
 				log: ["AppendedInitResult", "AppendedChainedResult"],
 			})
 		} finally {
-			store.dispose()
+			Effect.runSync(store.dispose())
 		}
 	})
 
@@ -254,7 +254,7 @@ describe("message processing", function () {
 			expect(commandEffectSpy).not.toHaveBeenCalled()
 		} finally {
 			nowSpy.mockRestore()
-			store.dispose()
+			Effect.runSync(store.dispose())
 		}
 	})
 
@@ -299,7 +299,7 @@ describe("message processing", function () {
 			expect(commandEffectSpy).not.toHaveBeenCalled()
 		} finally {
 			nowSpy.mockRestore()
-			store.dispose()
+			Effect.runSync(store.dispose())
 		}
 	})
 })
@@ -384,7 +384,7 @@ describe("resources", function () {
 			expect(buildCount).toBe(1)
 			expect(releaseCount).toBe(0)
 		} finally {
-			store.dispose()
+			Effect.runSync(store.dispose())
 		}
 
 		await vi.waitFor(function () {
@@ -412,7 +412,7 @@ describe("resources", function () {
 			})
 			expect(store.getModel()).toEqual({ label: "start" })
 		} finally {
-			store.dispose()
+			Effect.runSync(store.dispose())
 		}
 	})
 
@@ -433,6 +433,51 @@ describe("resources", function () {
 })
 
 describe("dispose", function () {
+	it.effect("shares pending disposal and its cleanup defect across callers", () =>
+		Effect.gen(function* () {
+			const started = Deferred.makeUnsafe<void>()
+			const gate = Deferred.makeUnsafe<void>()
+			const defect = new Error("resource cleanup")
+			let completed = 0
+			let releases = 0
+			const store = Store.boot<number, number>(
+				{
+					update: (_model, message) => ({ model: message }),
+					layer: Layer.effectDiscard(
+						Effect.acquireRelease(Effect.void, () =>
+							Effect.gen(function* () {
+								releases += 1
+								yield* Deferred.succeed(started, undefined)
+								yield* Deferred.await(gate)
+								return yield* Effect.die(defect)
+							})
+						)
+					),
+				},
+				{ model: 0, commands: [{ name: "Started", effect: Effect.succeed(1) }] }
+			)
+			yield* Store.takeWhen(store, (model) => (model === 1 ? Option.some(model) : Option.none()))
+			const dispose = store.dispose().pipe(
+				Effect.exit,
+				Effect.tap(() =>
+					Effect.sync(function () {
+						completed += 1
+					})
+				)
+			)
+			const first = yield* Effect.forkChild(dispose)
+			yield* Deferred.await(started)
+			const second = yield* Effect.forkChild(dispose, { startImmediately: true })
+			expect(completed).toBe(0)
+			yield* Deferred.succeed(gate, undefined)
+			expect(yield* Fiber.join(first)).toEqual(Exit.die(defect))
+			expect(yield* Fiber.join(second)).toEqual(Exit.die(defect))
+			expect(yield* Effect.exit(store.dispose())).toEqual(Exit.die(defect))
+			expect(releases).toBe(1)
+			expect(completed).toBe(2)
+		})
+	)
+
 	it("dispose is idempotent and silences the store afterwards", async function () {
 		const processedLog: Array<string> = []
 
@@ -443,8 +488,8 @@ describe("dispose", function () {
 
 		const store = Store.boot({ update }, { model: { log: [] } })
 
-		store.dispose()
-		store.dispose()
+		Effect.runSync(store.dispose())
+		Effect.runSync(store.dispose())
 		store.dispatch(Message.AppendedFirst())
 
 		await new Promise(function (resolve) {
@@ -481,7 +526,7 @@ describe("dispose", function () {
 
 		store.dispatch(LongMessage.Start())
 		expect(store.getModel()).toEqual({ status: "running" })
-		store.dispose()
+		Effect.runSync(store.dispose())
 
 		await new Promise(function (resolve) {
 			setTimeout(resolve, 100)
@@ -535,7 +580,7 @@ describe("command message mappers", function () {
 				expect(store.getModel().label).toBe("child done")
 			})
 		} finally {
-			store.dispose()
+			Effect.runSync(store.dispose())
 		}
 	})
 
@@ -545,18 +590,14 @@ describe("command message mappers", function () {
 				Increment: {},
 			})
 			type CountMessage = typeof CountMessage.Type
-			const store = yield* Effect.acquireRelease(
-				Effect.sync(() =>
-					Store.boot(
-						{
-							update: (model: { count: number }, _message: CountMessage) => ({
-								model: modifyFields(model, { count: (count) => count + 1 }),
-							}),
-						},
-						{ model: { count: 0 } }
-					)
-				),
-				(live) => Effect.sync(() => live.dispose())
+			// Store.make allocates in the test's Scope, so closing it disposes the store.
+			const store = yield* Store.make(
+				{
+					update: (model: { count: number }, _message: CountMessage) => ({
+						model: modifyFields(model, { count: (count) => count + 1 }),
+					}),
+				},
+				{ model: { count: 0 } }
 			)
 			const n = yield* Store.takeWhen(store, (model) =>
 				model.count === 0 ? Option.some(model.count) : Option.none()
@@ -571,18 +612,14 @@ describe("command message mappers", function () {
 				Increment: {},
 			})
 			type CountMessage = typeof CountMessage.Type
-			const store = yield* Effect.acquireRelease(
-				Effect.sync(() =>
-					Store.boot(
-						{
-							update: (model: { count: number }, _message: CountMessage) => ({
-								model: modifyFields(model, { count: (count) => count + 1 }),
-							}),
-						},
-						{ model: { count: 0 } }
-					)
-				),
-				(live) => Effect.sync(() => live.dispose())
+			// Store.make allocates in the test's Scope, so closing it disposes the store.
+			const store = yield* Store.make(
+				{
+					update: (model: { count: number }, _message: CountMessage) => ({
+						model: modifyFields(model, { count: (count) => count + 1 }),
+					}),
+				},
+				{ model: { count: 0 } }
 			)
 			const fiber = yield* Effect.forkChild(
 				Store.takeWhen(store, (model) => (model.count >= 2 ? Option.some(model.count) : Option.none()))
@@ -600,25 +637,127 @@ describe("command message mappers", function () {
 				Increment: {},
 			})
 			type CountMessage = typeof CountMessage.Type
-			const store = yield* Effect.acquireRelease(
-				Effect.sync(() =>
-					Store.boot(
-						{
-							update: (model: { count: number }, _message: CountMessage) => ({
-								model: modifyFields(model, { count: (count) => count + 1 }),
-							}),
-						},
-						{ model: { count: 0 } }
-					)
-				),
-				(live) => Effect.sync(() => live.dispose())
+			// Store.make allocates in the test's Scope, so closing it disposes the store.
+			const store = yield* Store.make(
+				{
+					update: (model: { count: number }, _message: CountMessage) => ({
+						model: modifyFields(model, { count: (count) => count + 1 }),
+					}),
+				},
+				{ model: { count: 0 } }
 			)
 			const fiber = yield* Effect.forkChild(
 				Store.takeWhen(store, (model) => (model.count >= 99 ? Option.some(model.count) : Option.none()))
 			)
-			store.dispose()
+			yield* store.dispose()
 			const error = yield* Effect.flip(Fiber.join(fiber))
 			expect(error).toBeInstanceOf(Store.Disposed)
+		})
+	)
+})
+
+describe("Effect store construction", function () {
+	it.effect("allocates independent stores on each execution", () =>
+		Effect.gen(function* () {
+			const update = (model: number, _message: "increment") => ({ model: model + 1 })
+			const make = Store.make({ update }, { model: 0 })
+			const first = yield* make
+			const second = yield* make
+			first.dispatch("increment")
+			expect(first.getModel()).toBe(1)
+			expect(second.getModel()).toBe(0)
+			expect(second).not.toBe(first)
+		})
+	)
+
+	it.effect("disposes the store and releases services when the caller's Scope closes", () =>
+		Effect.gen(function* () {
+			class Resource extends Context.Service<Resource, number>()("ScopedStoreResource") {}
+			let releases = 0
+			const layer = Layer.effect(
+				Resource,
+				Effect.acquireRelease(Effect.succeed(1), () =>
+					Effect.sync(function () {
+						releases += 1
+					})
+				)
+			)
+			const store = yield* Effect.scoped(
+				Effect.gen(function* () {
+					const store = yield* Store.make<number, number, Resource>(
+						{ layer, update: (_model, message) => ({ model: message }) },
+						{ model: 0, commands: [{ name: "ReadResource", effect: Resource }] }
+					)
+					yield* Store.takeWhen(store, (model) => (model === 1 ? Option.some(model) : Option.none()))
+					return store
+				})
+			)
+			expect(store.isDisposed()).toBe(true)
+			expect(releases).toBe(1)
+			expect(store.commit(2)).toEqual(Result.fail(new Store.CommitError({ reason: "Disposed" })))
+			expect(store.getModel()).toBe(1)
+		})
+	)
+
+	it.effect("passes failed and interrupted caller Exits to resource finalizers", () =>
+		Effect.gen(function* () {
+			for (const outcome of [Effect.fail(new Error("caller failed")), Effect.interrupt]) {
+				let resourceExit: Exit.Exit<unknown, unknown> | undefined
+				const callerExit = yield* Effect.exit(
+					Effect.scoped(
+						Effect.gen(function* () {
+							const store = yield* Store.make<number, number>(
+								{
+									update: (_model, message) => ({ model: message }),
+									layer: Layer.effectDiscard(
+										Effect.acquireRelease(Effect.void, (_resource, exit) =>
+											Effect.sync(function () {
+												resourceExit = exit
+											})
+										)
+									),
+								},
+								{ model: 0, commands: [{ name: "Started", effect: Effect.succeed(1) }] }
+							)
+							yield* Store.takeWhen(store, (model) => (model === 1 ? Option.some(model) : Option.none()))
+							return yield* outcome
+						})
+					)
+				)
+				expect(Exit.isFailure(callerExit)).toBe(true)
+				expect(resourceExit).toEqual(callerExit)
+			}
+		})
+	)
+
+	it.effect("releases resources even when a disposal listener throws", () =>
+		Effect.gen(function* () {
+			const scope = yield* Scope.make()
+			const defect = new Error("disposal listener")
+			let releases = 0
+			const store = yield* Store.make<number, number>(
+				{
+					update: (_model, message) => ({ model: message }),
+					layer: Layer.effectDiscard(
+						Effect.acquireRelease(Effect.void, () =>
+							Effect.sync(function () {
+								releases += 1
+							})
+						)
+					),
+				},
+				{ model: 0, commands: [{ name: "Started", effect: Effect.succeed(1) }] }
+			).pipe(Scope.provide(scope))
+			yield* Store.takeWhen(store, (model) => (model === 1 ? Option.some(model) : Option.none()))
+			store.subscribe(function () {
+				throw defect
+			})
+			expect(yield* Effect.exit(store.dispose())).toEqual(Exit.die(defect))
+			expect(releases).toBe(1)
+			expect(store.isDisposed()).toBe(true)
+			expect(yield* Effect.exit(store.dispose())).toEqual(Exit.die(defect))
+			expect(yield* Effect.exit(Scope.close(scope, Exit.void))).toEqual(Exit.die(defect))
+			expect(releases).toBe(1)
 		})
 	)
 })

@@ -45,12 +45,12 @@ describe("Provider commitSource", function () {
 	it("rejects duplicate bootstrap keys before invoking update", function () {
 		vi.spyOn(console, "error").mockImplementation(function () {})
 		const f = providerFixture([entry("a", 1), entry("a", 2)])
-		expect(() => render(<f.Tree />)).toThrow("Duplicate source key: a")
+		expect(render(<f.Tree />).getByRole("alert").textContent).toContain("Duplicate source key: a")
 		expect(f.handled).toEqual([])
 		expect(f.source.subscriptions).toBe(0)
 	})
 
-	it.each(["replace", "remove", "add"])("rejects %s of the source on a mounted Provider", function (change) {
+	it.each(["replace", "remove", "add"])("retains its owned source after %s on a mounted Provider", function (change) {
 		vi.spyOn(console, "error").mockImplementation(function () {})
 		const f = providerFixture()
 		const replacement = fakeSource<Message>()
@@ -63,12 +63,10 @@ describe("Provider commitSource", function () {
 			</f.App.Provider>
 		)
 		const mounted = render(tree(change === "add" ? undefined : f.source.source))
-		expect(() =>
-			mounted.rerender(
-				tree(change === "replace" ? replacement.source : change === "add" ? f.source.source : undefined)
-			)
-		).toThrow("Commit source identity must remain stable")
-		expect(f.source.listeners).toBe(0)
+		mounted.rerender(
+			tree(change === "replace" ? replacement.source : change === "add" ? f.source.source : undefined)
+		)
+		expect(f.source.listeners).toBe(change === "add" ? 0 : 1)
 		expect(replacement.subscriptions).toBe(0)
 	})
 
@@ -217,7 +215,7 @@ describe("generic commit source contract", function () {
 		const source = fakeSource<Message>()
 		source.onSubscribe(() => source.publish([entry("a", 1), entry("a", 2)]))
 		const f = fixture([], source)
-		expect(() => render(<f.Tree />)).toThrow("Duplicate source key: a")
+		expect(render(<f.Tree />).getByRole("alert").textContent).toContain("Duplicate source key: a")
 		expect(source.subscriptions).toBe(1)
 		expect(source.unsubscriptions).toBe(1)
 		expect(source.listeners).toBe(0)

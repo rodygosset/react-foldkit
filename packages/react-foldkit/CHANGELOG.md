@@ -4,6 +4,17 @@
 
 ### Added
 
+- `Loader.Delivery` and `decodeDelivery` return the validated receipt and mapped
+  Message together. The router adapter decodes each envelope once.
+- Provider-owned `createCommitSource`, `renderError` and `onError`. Full Causes
+  include setup failures and cleanup defects. Live failures recover on a valid
+  notification without replaying successful tokens. `onError` returns an
+  `Effect<void, unknown>`, supports asynchronous observers, and fires once per
+  failure. Observer fibers end with their Provider lifetime.
+- Option-returning root/child `useOptionalModel` and `useOptionalDispatch`, plus
+  root `useOptionalCommit`. Optional projections construct retained snapshots
+  only after presence; overlapping store activations share leases.
+
 - Optional `Provider commitSource` applies initial Messages and connects later
   deliveries, preserving Commands and delivery records.
 - `Loader.Load` from `fromQuery` for Loader-shaped settlement payloads.
@@ -21,6 +32,25 @@
 
 ### Changed
 
+- Provider sessions own resource scopes, asynchronous observers, recovery, and
+  stale-result suppression. React observes their stable failure snapshots.
+- Concurrent and repeated disposal shares the original cleanup result, including
+  defects. Final activation leases forward their closing Exit to resources.
+- Derived resource keys encode through typed Results. Custom key exceptions stay
+  defects. Root and child projections share one snapshot cache implementation.
+- Add Effect-native `Store.make`, which allocates in the caller's Scope; retain
+  `Store.boot` for synchronous hosts. `Store.dispose` returns `Effect<void>` and
+  resolves once resources are released. Allocate PubSub and cached services within
+  construction; build the browser scheduler Context directly.
+- Reconciliation and `Loader.decode` return `Result`. The notification boundary
+  captures snapshot and commit defects without squashing their Causes.
+  `run-sync.ts` is gone.
+- Concurrent activation leases share a store and subscription; scoped disposal
+  releases resources even when a disposal listener throws. Resource finalizers
+  retain the owning Scope's Exit.
+- Query settlement uses typed keyed/plain inputs and preserves Foldkit completion
+  identity. Remove transparent Query aliases and the mapping implementation cast.
+
 - Foldkit uses the sibling checkout on `feat/query-httpapi`; Effect and
   `@effect/vitest` use `4.0.0`.
 - Query and HTTP API endpoint derivation are supplied by
@@ -31,11 +61,29 @@
 
 ### Breaking changes
 
+- Structural Loaders must expose `toMessage(data, receipt)` and `decodeDelivery`
+  for `mapMessages` and router composition.
+  Loaders constructed through `define` or `fromQuery` already provide it.
+- `Loader.decode` returns `Result<Message, SchemaError>`; custom CommitSource
+  snapshots return `Result<ReadonlyArray<CommitEntry<Message>>, E>`. A schema or
+  resource-key mismatch is typed data; a thrown callback stays a defect.
+- `TanStackSource.make` returns `Result<CommitSource<Message, SchemaError>, RegistryError>`.
+  Pass its result through Provider `createCommitSource`.
+- Provider captures source and init at initialization. Source prop changes are
+  ignored; remount to replace them. `SourceChanged` is removed. Boundary failures
+  render/report their Cause instead of escaping React or router notifications.
+- `Loader.fromQuery` accepts `key` only for keyed Queries. A plain Query has no
+  arguments, so its resource identity is always `singleton`.
+
 - Loader envelope `_tag` is `react-foldkit/Loader` (was `react-foldkit/CommitSource`).
 - `defineApplication` no longer returns `useCommitSource`. Use Provider `commitSource`.
 - `TanStackSource.make` accepts only piped Declarations (no `[declaration, map]` tuples).
-- `Loader.fromQuery` requires explicit name, serialization Schemas, and resource
-  key. Keyed Queries also require args Schemas. Use `Loader.settleQueryIf` in
+- `Loader.fromQuery(query)` derives serialization from the Query Model and
+  defaults delivery identity to Fetch.name and canonical encoded arguments
+  (`singleton` for plain Queries). Options accept only optional name and key
+  overrides; key callbacks receive decoded args. Keyed payloads use
+  `{ args, result }`, allowing any Query argument name; plain payloads remain
+  `{ result }`. Use `Loader.settleQueryIf` in
   application update and map its cancellation Commands to parent Messages.
 - `ReactFoldkit.make` becomes `defineApplication`, also exported from
   `react-foldkit/react`.

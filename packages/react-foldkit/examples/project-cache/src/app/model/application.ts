@@ -27,7 +27,7 @@ export const update = (model: Model, message: Message) =>
 	Message.match<Update.Return<Model, Message>>(message, {
 		GotProjectMessage: ({ message }) => projects.fold(model, message),
 		CompletedLoadProject({ load }) {
-			const { result, ...args } = load
+			const { args, result } = load
 			const settled = Loader.settleQueryIf(Project.query, model.projects, args, result, {
 				fresher: (incoming, current) => incoming.revision > current.revision,
 			})

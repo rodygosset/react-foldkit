@@ -17,7 +17,7 @@ beforeEach(function () {
 	vi.spyOn(performance, "now").mockImplementation(() => clock)
 })
 afterEach(function () {
-	for (const store of stores.splice(0)) store.dispose()
+	for (const store of stores.splice(0)) Effect.runSync(store.dispose())
 	vi.restoreAllMocks()
 	vi.unstubAllGlobals()
 })
@@ -54,7 +54,7 @@ describe("synchronous commit", function () {
 		Effect.runSync(commit)
 		Effect.runSync(commit)
 		expect(store.getModel()).toEqual(["effect", "effect"])
-		store.dispose()
+		Effect.runSync(store.dispose())
 		failReason(() => store.commit({ label: "after-disposal" }), "Disposed")
 		expect(store.getModel()).toEqual(["effect", "effect"])
 		const exit = Effect.runSyncExit(commit)
@@ -193,7 +193,7 @@ describe("synchronous commit", function () {
 	it("fails when an earlier queued Message's listener disposes the store", function () {
 		const { store } = boot()
 		store.subscribe(function () {
-			if (store.getModel().at(-1) === "dispose") store.dispose()
+			if (store.getModel().at(-1) === "dispose") Effect.runFork(store.dispose())
 		})
 		store.dispatch({ label: "burn", burn: 10 })
 		store.dispatch({ label: "dispose" })

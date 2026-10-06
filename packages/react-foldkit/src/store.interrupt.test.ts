@@ -306,7 +306,7 @@ describe("store interrupt registry wiring", function () {
 			})
 			expect(store.getModel().status).toBe("cancelled")
 		} finally {
-			store.dispose()
+			Effect.runSync(store.dispose())
 		}
 	})
 })

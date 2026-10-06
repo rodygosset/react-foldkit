@@ -1,8 +1,9 @@
-import { Effect, Function, Option, Pipeable, Predicate, Result, Schema } from "effect"
+import { Effect, Function, Option, Pipeable, Predicate, Result, Schema, SchemaIssue } from "effect"
 import * as AsyncData from "foldkit/asyncData"
-import type * as Update from "./update"
-import { Envelope, EnvelopeHeader, Receipt } from "./internal/loader-envelope"
 import type { KeyedQuery, Query } from "foldkit/experimental/query"
+import { Envelope, EnvelopeHeader, Receipt } from "./internal/loader-envelope"
+import { makeResourceKey, type ReadKey } from "./internal/loader-key"
+import type * as Update from "./update"
 
 type SyncFields = { readonly [x: PropertyKey]: Schema.Codec<unknown, unknown, never, never> }
 type KeyedArgs<Fields extends SyncFields> = Schema.Schema.Type<Schema.Struct<Fields>>
@@ -10,16 +11,24 @@ type KeyedArgs<Fields extends SyncFields> = Schema.Schema.Type<Schema.Struct<Fie
 export { Receipt } from "./internal/loader-envelope"
 export type { Envelope } from "./internal/loader-envelope"
 
+/** A validated delivery receipt and its application Message. */
+export interface Delivery<out Message> {
+	readonly receipt: Receipt
+	readonly message: Message
+}
+
 /** The adapter-facing part of a declaration; heterogeneous payloads stay private. */
 export interface Declaration<out Message> extends Pipeable.Pipeable {
 	readonly name: string
-	readonly decode: (envelope: unknown) => Message
+	readonly decodeDelivery: (envelope: unknown) => Result.Result<Delivery<Message>, Schema.SchemaError>
+	readonly decode: (envelope: unknown) => Result.Result<Message, Schema.SchemaError>
 }
 
 /** A typed loading program and its mapping into external Messages. */
 export interface Loader<A, I, out Message = A> extends Declaration<Message> {
 	readonly data: Schema.Codec<A, I>
 	readonly key: (data: A) => string
+	readonly toMessage: (data: A, receipt: Receipt) => Message
 	readonly load: <E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<Envelope<I>, E | Schema.SchemaError, R>
 }
 
@@ -30,73 +39,78 @@ export interface Config<A, I> {
 }
 
 class LoaderImpl<A, I, Message> extends Pipeable.Class implements Loader<A, I, Message> {
-	readonly decode: (envelope: unknown) => Message
+	readonly decode: Loader<A, I, Message>["decode"]
 
 	constructor(
 		readonly name: string,
 		readonly data: Schema.Codec<A, I>,
 		readonly key: (data: A) => string,
 		readonly toMessage: (data: A, receipt: Receipt) => Message,
-		readonly load: Loader<A, I, Message>["load"]
+		readonly load: Loader<A, I, Message>["load"],
+		readonly decodeDelivery: Loader<A, I, Message>["decodeDelivery"]
 	) {
 		super()
-		const decode = Schema.decodeUnknownSync(
-			Envelope(data)
-				.pipe(Schema.fieldsAssign({ name: Schema.Literal(name) }))
-				.check(
-					Schema.makeFilter((envelope) => key(envelope.payload) === envelope.key, {
-						message: "Loader resource key does not match its payload",
-					})
-				)
-		)
-		this.decode = function (input) {
-			const { name, key, version, payload } = decode(input)
-			return toMessage(payload, { name, key, version })
-		}
+		this.decode = (input) => Result.map(decodeDelivery(input), (delivery) => delivery.message)
 	}
 }
 
-const encodeLoad =
-	<A, I>(config: Config<A, I>, encode: (data: A) => Effect.Effect<I, Schema.SchemaError>): Loader<A, I>["load"] =>
-	(effect) =>
-		Effect.flatMap(effect, (data) =>
-			Effect.map(encode(data), (payload) => ({
-				_tag: EnvelopeHeader.fields._tag.literal,
-				format: EnvelopeHeader.fields.format.literal,
-				name: config.name,
-				key: config.key(data),
-				version: crypto.randomUUID(),
-				payload,
-			}))
-		)
-
-/** Declares a serializable payload without running its loading Effect. */
-export function define<A, I>(config: Config<A, I>): Loader<A, I> {
+function encodeLoad<A, I>(config: Config<A, I>, readKey: ReadKey<A>): Loader<A, I>["load"] {
 	const encode = Schema.encodeEffect(config.data)
-	return new LoaderImpl(config.name, config.data, config.key, Function.identity, encodeLoad(config, encode))
+	return Effect.fnUntraced(function* (effect) {
+		const data = yield* effect
+		const payload = yield* encode(data)
+		const key = yield* Effect.suspend(() => Effect.fromResult(readKey(data)))
+		return {
+			_tag: EnvelopeHeader.fields._tag.literal,
+			format: EnvelopeHeader.fields.format.literal,
+			name: config.name,
+			key,
+			version: crypto.randomUUID(),
+			payload,
+		}
+	})
 }
 
-type KeyedQueryForLoader<Name extends string, A, AI, E, EI, Fields extends SyncFields, R> = KeyedQuery<
-	Name,
-	A,
-	AI,
-	E,
-	EI,
-	Fields,
-	R,
-	boolean
->
+function make<A, I>(config: Config<A, I>, readKey: ReadKey<A>): Loader<A, I> {
+	const decode = Schema.decodeUnknownResult(
+		Envelope(config.data).pipe(Schema.fieldsAssign({ name: Schema.Literal(config.name) }))
+	)
+	const decodeDelivery: Loader<A, I>["decodeDelivery"] = (input) =>
+		Result.gen(function* () {
+			const { name, key, version, payload } = yield* decode(input)
+			const expected = yield* readKey(payload)
+			if (expected !== key) {
+				return yield* Result.fail(
+					new Schema.SchemaError(
+						new SchemaIssue.InvalidValue({ message: "Loader resource key does not match its payload" })
+					)
+				)
+			}
+			return { receipt: { name, key, version }, message: payload }
+		})
+	return new LoaderImpl(
+		config.name,
+		config.data,
+		config.key,
+		Function.identity,
+		encodeLoad(config, readKey),
+		decodeDelivery
+	)
+}
 
-type QueryForLoader<Name extends string, A, AI, E, EI, R> = Query<Name, A, AI, E, EI, R, boolean>
+/** Declares a serializable payload without running its loading Effect. */
+export const define = <A, I>(config: Config<A, I>): Loader<A, I> =>
+	make(config, (data) => Result.succeed(config.key(data)))
 
-/** Loader-shaped payload: query args (empty for unkeyed) plus an AsyncData outcome. */
-export type LoadPayload<Args, A, E> = Args & {
+/** Keyed Loader payload: nested Query arguments and an AsyncData outcome. */
+export type LoadPayload<Args, A, E> = {
+	readonly args: Args
 	readonly result: AsyncData.AsyncData<A, E>
 }
 
 type KeyedLoadType<Fields extends SyncFields, A, E> = LoadPayload<KeyedArgs<Fields>, A, E>
 
-type LoadType<A, E> = LoadPayload<{}, A, E>
+type LoadType<A, E> = { readonly result: AsyncData.AsyncData<A, E> }
 
 type WithLoadSchema<A, I, LoadSchema extends Schema.Top> = Loader<A, I> & {
 	readonly Load: LoadSchema
@@ -111,8 +125,9 @@ export interface KeyedQueryLoader<
 	Fields extends SyncFields,
 	R,
 	LoadSchema extends Schema.Top,
+	Interrupt extends boolean = boolean,
 > extends WithLoadSchema<KeyedLoadType<Fields, A, E>, Schema.Codec.Encoded<LoadSchema>, LoadSchema> {
-	readonly query: KeyedQueryForLoader<Name, A, AI, E, EI, Fields, R>
+	readonly query: KeyedQuery<Name, A, AI, E, EI, Fields, R, Interrupt>
 	readonly loadQuery: (
 		args: KeyedArgs<Fields>
 	) => Effect.Effect<Envelope<Schema.Codec.Encoded<LoadSchema>>, Schema.SchemaError, R>
@@ -127,52 +142,45 @@ export interface QueryLoader<
 	EI,
 	R,
 	LoadSchema extends Schema.Top,
+	Interrupt extends boolean = boolean,
 > extends WithLoadSchema<LoadType<A, E>, Schema.Codec.Encoded<LoadSchema>, LoadSchema> {
-	readonly query: QueryForLoader<Name, A, AI, E, EI, R>
+	readonly query: Query<Name, A, AI, E, EI, R, Interrupt>
 	readonly loadQuery: Effect.Effect<Envelope<Schema.Codec.Encoded<LoadSchema>>, Schema.SchemaError, R>
 }
 
-const isKeyedQueryForLoader = (
-	query:
-		| KeyedQueryForLoader<string, any, any, any, any, SyncFields, any>
-		| QueryForLoader<string, any, any, any, any, any>
-): query is KeyedQueryForLoader<string, any, any, any, any, SyncFields, any> => typeof query.run === "function"
-
-type KeyedQueryLoaderLike = {
-	readonly query: { run: (args: any) => Effect.Effect<AsyncData.AsyncData<unknown, unknown>, never, unknown> }
-	readonly load: Loader<any, unknown>["load"]
+interface KeyedLoadProgram<Args, I, R> {
+	readonly loadQuery: (args: Args) => Effect.Effect<Envelope<I>, Schema.SchemaError, R>
 }
 
-type QueryRunRequirements<Q> = Q extends {
-	run: (...args: Array<any>) => Effect.Effect<AsyncData.AsyncData<unknown, unknown>, never, infer R>
-}
-	? R
-	: never
-
-const runKeyedLoadQuery = (self: KeyedQueryLoaderLike, args: any) =>
-	self.query.run(args).pipe(
-		Effect.map((result) => ({ ...args, result })),
-		self.load as Loader<any, unknown>["load"]
-	)
-
-/** Runs the Query bound to a keyed QueryLoader. Data-first or data-last. */
+/** Runs the bound keyed QueryLoader. Data-first or data-last; encoded types and services are preserved. */
 export const loadQuery: {
-	<Args>(args: Args): <
-		Self extends KeyedQueryLoaderLike & {
-			readonly query: {
-				run: (args: Args) => Effect.Effect<AsyncData.AsyncData<unknown, unknown>, never, unknown>
-			}
-		},
-	>(
-		self: Self
-	) => Effect.Effect<Envelope<unknown>, Schema.SchemaError, QueryRunRequirements<Self["query"]>>
-	<Self extends KeyedQueryLoaderLike, Args extends Parameters<Self["query"]["run"]>[0]>(
-		self: Self,
-		args: Args
-	): Effect.Effect<Envelope<unknown>, Schema.SchemaError, QueryRunRequirements<Self["query"]>>
-} = Function.dual(2, runKeyedLoadQuery)
+	<Args>(args: Args): <I, R>(self: KeyedLoadProgram<Args, I, R>) => Effect.Effect<Envelope<I>, Schema.SchemaError, R>
+	<Args, I, R>(
+		self: KeyedLoadProgram<Args, I, R>,
+		args: NoInfer<Args>
+	): Effect.Effect<Envelope<I>, Schema.SchemaError, R>
+} = Function.dual(2, <Args, I, R>(self: KeyedLoadProgram<Args, I, R>, args: Args) => self.loadQuery(args))
 
-function attachKeyedQueryLoader<
+type QueryLoadSchema<A, AI, E, EI> = Schema.Struct<{
+	readonly result: Schema.Codec<AsyncData.AsyncData<A, E>, AsyncData.AsyncDataEncoded<AI, EI>>
+}>
+
+type KeyedQueryLoadSchema<Fields extends SyncFields, A, AI, E, EI> = Schema.Struct<
+	{ readonly args: Schema.Struct<Fields> } & QueryLoadSchema<A, AI, E, EI>["fields"]
+>
+
+/** Delivery identity overrides; serialization always comes from the Query Model. */
+export interface FromQueryOptions {
+	readonly name?: string
+}
+
+/** A keyed Query derives its resource identity from canonical encoded arguments unless overridden. */
+export interface FromKeyedQueryOptions<Args> extends FromQueryOptions {
+	/** Receives decoded arguments, never the fetched outcome. */
+	readonly key?: (args: Args) => string
+}
+
+type KeyedQueryInput<
 	Name extends string,
 	A,
 	AI,
@@ -180,121 +188,139 @@ function attachKeyedQueryLoader<
 	EI,
 	Fields extends SyncFields,
 	R,
-	LoadSchema extends Schema.Struct<
-		Fields & {
-			readonly result: Schema.Codec<AsyncData.AsyncData<A, E>, AsyncData.AsyncData<AI, EI>, never, never>
-		}
-	>,
->(
-	loader: Loader<KeyedLoadType<Fields, A, E>, any>,
-	Load: LoadSchema,
-	query: KeyedQueryForLoader<Name, A, AI, E, EI, Fields, R>
-): KeyedQueryLoader<Name, A, AI, E, EI, Fields, R, LoadSchema> {
-	const bound = Object.assign(loader, {
+	Interrupt extends boolean,
+> = readonly [
+	query: KeyedQuery<Name, A, AI, E, EI, Fields, R, Interrupt>,
+	options?: FromKeyedQueryOptions<KeyedArgs<Fields>>,
+]
+
+type QueryInput<Name extends string, A, AI, E, EI, R, Interrupt extends boolean> = readonly [
+	query: Query<Name, A, AI, E, EI, R, Interrupt>,
+	options?: FromQueryOptions,
+]
+
+// Narrow the Query and its optional key callback together.
+const isKeyedQueryInput = <Name extends string, A, AI, E, EI, Fields extends SyncFields, R, Interrupt extends boolean>(
+	input: KeyedQueryInput<Name, A, AI, E, EI, Fields, R, Interrupt> | QueryInput<Name, A, AI, E, EI, R, Interrupt>
+): input is KeyedQueryInput<Name, A, AI, E, EI, Fields, R, Interrupt> => typeof input[0].run === "function"
+
+/**
+ * Derives serialization from the Query Model. Defaults to Fetch.name and a canonical
+ * JSON encoding of keyed args ("singleton" for plain Queries). Loader identity is
+ * independent of Query's cache key; name and key overrides are optional.
+ */
+export function fromQuery<Name extends string, A, AI, E, EI, Fields extends SyncFields, R, Interrupt extends boolean>(
+	query: KeyedQuery<Name, A, AI, E, EI, Fields, R, Interrupt>,
+	options?: FromKeyedQueryOptions<KeyedArgs<Fields>>
+): KeyedQueryLoader<Name, A, AI, E, EI, Fields, R, KeyedQueryLoadSchema<Fields, A, AI, E, EI>, Interrupt>
+export function fromQuery<Name extends string, A, AI, E, EI, R, Interrupt extends boolean>(
+	query: Query<Name, A, AI, E, EI, R, Interrupt>,
+	options?: FromQueryOptions
+): QueryLoader<Name, A, AI, E, EI, R, QueryLoadSchema<A, AI, E, EI>, Interrupt>
+export function fromQuery<Name extends string, A, AI, E, EI, Fields extends SyncFields, R, Interrupt extends boolean>(
+	...input: KeyedQueryInput<Name, A, AI, E, EI, Fields, R, Interrupt> | QueryInput<Name, A, AI, E, EI, R, Interrupt>
+) {
+	if (isKeyedQueryInput(input)) {
+		const [query, options = {}] = input
+		const Entry = query.Model.fields.entries.value
+		const Load = Schema.Struct({ args: Entry.fields.args, result: Entry.fields.data })
+		const override = options.key
+		const argsKey: ReadKey<KeyedArgs<Fields>> =
+			override === undefined ? makeResourceKey(Entry.fields.args) : (args) => Result.succeed(override(args))
+		const readKey = ({ args }: KeyedLoadType<Fields, A, E>) => argsKey(args)
+		const key = (data: KeyedLoadType<Fields, A, E>) => Result.getOrThrow(readKey(data))
+		const loader = make({ name: options.name ?? query.Fetch.name, data: Load, key }, readKey)
+		return Object.assign(loader, {
+			Load,
+			query,
+			loadQuery: (args: KeyedArgs<Fields>) =>
+				query.run(args).pipe(
+					Effect.map((result) => ({ args, result })),
+					loader.load
+				),
+		})
+	}
+	const [query, options = {}] = input
+	const Load = Schema.Struct({ result: query.Model.fields.data })
+	const loader = define({
+		name: options.name ?? query.Fetch.name,
+		data: Load,
+		key: () => "singleton",
+	})
+	return Object.assign(loader, {
 		Load,
 		query,
-		loadQuery: (args: KeyedArgs<Fields>) => runKeyedLoadQuery(bound, args),
-	}) as KeyedQueryLoader<Name, A, AI, E, EI, Fields, R, LoadSchema>
-	return bound
-}
-
-function attachQueryLoader<
-	Name extends string,
-	A,
-	AI,
-	E,
-	EI,
-	R,
-	LoadSchema extends Schema.Struct<{
-		readonly result: Schema.Codec<AsyncData.AsyncData<A, E>, AsyncData.AsyncData<AI, EI>, never, never>
-	}>,
->(
-	loader: Loader<LoadType<A, E>, any>,
-	Load: LoadSchema,
-	query: QueryForLoader<Name, A, AI, E, EI, R>
-): QueryLoader<Name, A, AI, E, EI, R, LoadSchema> {
-	const loadQuery = query.run.pipe(
-		Effect.map((result) => ({ result }) as LoadType<A, E>),
-		loader.load
-	)
-	return Object.assign(loader, { Load, query, loadQuery }) as QueryLoader<Name, A, AI, E, EI, R, LoadSchema>
-}
-
-type LoadResultCodec = Schema.Codec<
-	AsyncData.AsyncData<unknown, unknown>,
-	AsyncData.AsyncData<unknown, unknown>,
-	never,
-	never
->
-
-/** Binds a Foldkit Query to explicit Loader serialization Schemas and resource identity. */
-export function fromQuery<Name extends string, A, AI, E, EI, Fields extends SyncFields, R>(
-	query: KeyedQueryForLoader<Name, A, AI, E, EI, Fields, R>,
-	options: {
-		readonly name: string
-		readonly args: NoInfer<Fields>
-		readonly data: Schema.Codec<NoInfer<A>, NoInfer<AI>>
-		readonly error: Schema.Codec<NoInfer<E>, NoInfer<EI>>
-		readonly key: (load: KeyedLoadType<Fields, A, E>) => string
-	}
-): KeyedQueryLoader<
-	Name,
-	A,
-	AI,
-	E,
-	EI,
-	Fields,
-	R,
-	Schema.Struct<
-		Fields & {
-			readonly result: Schema.Codec<AsyncData.AsyncData<A, E>, AsyncData.AsyncData<AI, EI>, never, never>
-		}
-	>
->
-export function fromQuery<Name extends string, A, AI, E, EI, R>(
-	query: QueryForLoader<Name, A, AI, E, EI, R>,
-	options: {
-		readonly name: string
-		readonly data: Schema.Codec<NoInfer<A>, NoInfer<AI>>
-		readonly error: Schema.Codec<NoInfer<E>, NoInfer<EI>>
-		readonly key: (load: LoadType<A, E>) => string
-	}
-): QueryLoader<
-	Name,
-	A,
-	AI,
-	E,
-	EI,
-	R,
-	Schema.Struct<{
-		readonly result: Schema.Codec<AsyncData.AsyncData<A, E>, AsyncData.AsyncData<AI, EI>, never, never>
-	}>
->
-export function fromQuery(
-	query: any,
-	options: {
-		readonly name: string
-		readonly args?: SyncFields
-		readonly data: Schema.Codec<any, any>
-		readonly error: Schema.Codec<any, any>
-		readonly key: (load: any) => string
-	}
-): any {
-	if (options === undefined) throw new Error("Loader.fromQuery requires serialization options and a resource key")
-	const result = AsyncData.Schema(options.data, options.error).schema as LoadResultCodec
-	if (isKeyedQueryForLoader(query)) {
-		if (options.args === undefined) throw new Error("Keyed Loader.fromQuery requires options.args")
-		const Load = Schema.Struct({ ...options.args, result })
-		return attachKeyedQueryLoader(define({ name: options.name, data: Load, key: options.key }), Load, query)
-	}
-	const Load = Schema.Struct({ result })
-	return attachQueryLoader(define({ name: options.name, data: Load, key: options.key }), Load, query)
+		loadQuery: query.run.pipe(
+			Effect.map((result) => ({ result })),
+			loader.load
+		),
+	})
 }
 
 /** Freshness policy for applying a Loader outcome to a Foldkit Query. */
 export interface SettleQueryIfOptions<A, E> {
 	readonly fresher: (incoming: A, current: A) => boolean
 	readonly acceptFailure?: (current: AsyncData.AsyncData<A, E>) => boolean
+}
+
+type QuerySettlementInput<Name extends string, A, AI, E, EI, R, Interrupt extends boolean> = readonly [
+	query: Query<Name, A, AI, E, EI, R, Interrupt>,
+	model: Query<Name, A, AI, E, EI, R, Interrupt>["Model"]["Type"],
+	result: AsyncData.AsyncData<A, E>,
+	options: SettleQueryIfOptions<A, E>,
+]
+
+type KeyedQuerySettlementInput<
+	Name extends string,
+	A,
+	AI,
+	E,
+	EI,
+	Fields extends SyncFields,
+	R,
+	Interrupt extends boolean,
+> = readonly [
+	query: KeyedQuery<Name, A, AI, E, EI, Fields, R, Interrupt>,
+	model: KeyedQuery<Name, A, AI, E, EI, Fields, R, Interrupt>["Model"]["Type"],
+	args: KeyedArgs<Fields>,
+	result: AsyncData.AsyncData<A, E>,
+	options: SettleQueryIfOptions<A, E>,
+]
+
+interface Settlement<Model, Message, A, E> {
+	readonly clear: (model: Model) => Update.Return<Model, Message>
+	readonly loadIfMissing: (model: Model) => Model
+	readonly revalidate: (model: Model) => Model
+	readonly complete: (model: Model, result: Result.Result<A, E>) => Model
+}
+
+function settle<Model, Message, A, E>(
+	model: Model,
+	current: AsyncData.AsyncData<A, E>,
+	result: AsyncData.AsyncData<A, E>,
+	options: SettleQueryIfOptions<A, E>,
+	query: Settlement<Model, Message, A, E>
+): Update.Return<Model, Message> {
+	const maybeData = AsyncData.getData(current)
+	if (AsyncData.isSuccess(result)) {
+		if (Option.isSome(maybeData) && !options.fresher(result.data, maybeData.value)) return { model }
+	} else if (AsyncData.isFailure(result)) {
+		if (!(options.acceptFailure?.(current) ?? (!AsyncData.hasData(current) && !AsyncData.isPending(current))))
+			return { model }
+	} else return { model }
+
+	const cleared = query.clear(model)
+	let next = query.loadIfMissing(cleared.model)
+	// Refreshing retained data preserves Foldkit's failure-with-cached-data transition.
+	if (AsyncData.isFailure(result) && Option.isSome(maybeData)) {
+		next = query.revalidate(query.complete(next, Result.succeed(maybeData.value)))
+	}
+	const settled = query.complete(
+		next,
+		AsyncData.isSuccess(result) ? Result.succeed(result.data) : Result.fail(result.error)
+	)
+	// Loading operations reserve a generation; their fetch Commands are not executed.
+	return { model: settled, ...(cleared.commands === undefined ? {} : { commands: cleared.commands }) }
 }
 
 /** Applies an accepted Loader outcome through Foldkit lifecycle operations, returning only cancellation Commands. */
@@ -326,40 +352,59 @@ export function settleQueryIf<Name extends string, A, AI, E, EI, R, Interrupt ex
 	Query<Name, A, AI, E, EI, R, Interrupt>["Model"]["Type"],
 	Query<Name, A, AI, E, EI, R, Interrupt>["Message"]["Type"]
 >
-export function settleQueryIf(query: any, model: any, ...input: any[]): Update.Return<any, any> {
-	const isKeyed = typeof query.run === "function"
-	const [args, result, options] = isKeyed ? input : [undefined, ...input]
-	const current = isKeyed ? query.read(model, args) : query.read(model)
-	const maybeData = AsyncData.getData(current)
-	const isAccepted = AsyncData.isSuccess(result)
-		? Option.isNone(maybeData) || options.fresher(result.data, maybeData.value)
-		: AsyncData.isFailure(result) &&
-			(options.acceptFailure?.(current) ?? (!AsyncData.hasData(current) && !AsyncData.isPending(current)))
-	if (!isAccepted) return { model }
-
-	const cleared = isKeyed ? query.forget(model, args) : query.reset(model)
-	let started = isKeyed ? query.loadIfMissing(cleared.model, args) : query.loadIfMissing(cleared.model)
-	const complete = (nextModel: any, outcome: Result.Result<unknown, unknown>) =>
-		query.update(
-			nextModel,
-			query.Message.CompletedFetch({
-				...(isKeyed ? { args } : {}),
-				...(Predicate.hasProperty(nextModel, "instanceId") ? { instanceId: nextModel.instanceId } : {}),
-				generation: nextModel.generation,
-				result: outcome,
-			})
-		)
-	// A permitted failure retains cached data using Foldkit's refresh transition.
-	if (AsyncData.isFailure(result) && Option.isSome(maybeData)) {
-		const retained = complete(started.model, Result.succeed(maybeData.value))
-		started = isKeyed ? query.revalidate(retained.model, args) : query.revalidate(retained.model)
+export function settleQueryIf<
+	Name extends string,
+	A,
+	AI,
+	E,
+	EI,
+	Fields extends SyncFields,
+	R,
+	Interrupt extends boolean,
+>(
+	...input:
+		| KeyedQuerySettlementInput<Name, A, AI, E, EI, Fields, R, Interrupt>
+		| QuerySettlementInput<Name, A, AI, E, EI, R, Interrupt>
+) {
+	if (input.length === 5) {
+		const [query, model, args, result, options] = input
+		type Model = typeof query.Model.Type
+		type Completed = Extract<typeof query.Message.Type, { readonly _tag: "CompletedFetch" }>
+		return settle(model, query.read(model, args), result, options, {
+			clear: (model) => query.forget(model, args),
+			loadIfMissing: (model) => query.loadIfMissing(model, args).model,
+			revalidate: (model) => query.revalidate(model, args).model,
+			complete(model: Model, result: Result.Result<A, E>) {
+				// Model and Message share the conditional instanceId field; TS cannot correlate Interrupt.
+				const message = {
+					_tag: "CompletedFetch",
+					args,
+					generation: model.generation,
+					result,
+					...(Predicate.hasProperty(model, "instanceId") ? { instanceId: model.instanceId } : {}),
+				} as Completed
+				return query.update(model, message).model
+			},
+		})
 	}
-	const settled = complete(
-		started.model,
-		AsyncData.isSuccess(result) ? Result.succeed(result.data) : Result.fail(result.error)
-	)
-	// Fetch Commands constructed to reserve a generation are never executed.
-	return { model: settled.model, ...(cleared.commands === undefined ? {} : { commands: cleared.commands }) }
+	const [query, model, result, options] = input
+	type Model = typeof query.Model.Type
+	type Completed = Extract<typeof query.Message.Type, { readonly _tag: "CompletedFetch" }>
+	return settle(model, query.read(model), result, options, {
+		clear: query.reset,
+		loadIfMissing: (model) => query.loadIfMissing(model).model,
+		revalidate: (model) => query.revalidate(model).model,
+		complete(model: Model, result: Result.Result<A, E>) {
+			// Model and Message share the conditional instanceId field; TS cannot correlate Interrupt.
+			const message: Completed = {
+				_tag: "CompletedFetch",
+				generation: model.generation,
+				result,
+				...(Predicate.hasProperty(model, "instanceId") ? { instanceId: model.instanceId } : {}),
+			}
+			return query.update(model, message).model
+		},
+	})
 }
 
 /**
@@ -375,21 +420,25 @@ export const mapMessages: {
 		self: Loader<A, I, Message>,
 		f: (message: Message, receipt: Receipt) => Next
 	): Loader<A, I, Next>
-} = Function.dual(2, function <
-	A,
-	I,
-	Message,
-	Next,
->(self: Loader<A, I, Message>, f: (message: Message, receipt: Receipt) => Next): Loader<A, I, Next> {
-	const mapped = self as LoaderImpl<A, I, Message>
-	return new LoaderImpl(
-		self.name,
-		self.data,
-		self.key,
-		(data, receipt) => f(mapped.toMessage(data, receipt), receipt),
-		self.load
-	)
-})
+} = Function.dual(
+	2,
+	<A, I, Message, Next>(
+		self: Loader<A, I, Message>,
+		f: (message: Message, receipt: Receipt) => Next
+	): Loader<A, I, Next> =>
+		new LoaderImpl(
+			self.name,
+			self.data,
+			self.key,
+			(data, receipt) => f(self.toMessage(data, receipt), receipt),
+			self.load,
+			(input) =>
+				Result.map(self.decodeDelivery(input), ({ receipt, message }) => ({
+					receipt,
+					message: f(message, receipt),
+				}))
+		)
+)
 
 /** Encodes a decoded payload into a versioned envelope. Data-first or data-last. */
 export const load: {

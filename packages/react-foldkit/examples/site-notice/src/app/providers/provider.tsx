@@ -7,16 +7,17 @@ import * as Application from "../model/application"
 
 export function Provider({ children }: { children: React.ReactNode }) {
 	const router = useRouter()
-	const [source] = React.useState(() =>
-		TanStackSource.make(router, [
-			Notice.loader.pipe(Loader.mapMessages((notice) => Application.Message.CompletedLoadNotice({ notice }))),
-		])
-	)
 
 	return (
 		<Application.Provider
 			init={Application.init()}
-			commitSource={source}
+			createCommitSource={() =>
+				TanStackSource.make(router, [
+					Notice.loader.pipe(
+						Loader.mapMessages((notice) => Application.Message.CompletedLoadNotice({ notice }))
+					),
+				])
+			}
 		>
 			{children}
 		</Application.Provider>

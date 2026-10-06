@@ -1,4 +1,4 @@
-import { Array, Effect, Exit, Option, Result, Scope } from "effect"
+import { Array, Effect, Exit, Option, Result, Scope, Semaphore } from "effect"
 import * as Store from "../store"
 import type * as Update from "../update"
 import * as InitCommand from "./init-command"
@@ -20,8 +20,12 @@ export type ReactStore<Model, Message> = Readonly<{
 	subscribe: (listener: () => void) => () => void
 	dispatch: (message: Message) => void
 	commit: (message: Message) => Result.Result<void, Store.CommitError>
-	onActivate: <E>(connect: Effect.Effect<void, E, Scope.Scope>) => Effect.Effect<Effect.Effect<void>, E>
-	activate: Effect.Effect<Effect.Effect<void>, unknown>
+	/**
+	 * Allocates the live store for the ambient Scope's lifetime, or takes a lease on an activation
+	 * that is already running. Delivery programs join the same Scope, so they live and die with it.
+	 * The last lease released ends the activation.
+	 */
+	activate: Effect.Effect<void, never, Scope.Scope>
 }>
 
 const trackCompletion = <Message, R>(state: InitCommandState<Message, R>): InitCommand<Message, R> =>
@@ -29,14 +33,14 @@ const trackCompletion = <Message, R>(state: InitCommandState<Message, R>): InitC
 		state.isComplete = true
 	})
 
-type Connection<E = unknown> = {
-	readonly connect: Effect.Effect<void, E, Scope.Scope>
-	maybeScope: Option.Option<Scope.Closeable>
-}
-
 type Activation<Model, Message> = {
 	readonly store: Store.Store<Model, Message>
+	/**
+	 * Owned here rather than by any one caller, so overlapping leases share one activation and the
+	 * last one released decides when the store is disposed.
+	 */
 	readonly scope: Scope.Closeable
+	leases: number
 }
 
 export function make<Model, Message, R = never>(
@@ -44,89 +48,64 @@ export function make<Model, Message, R = never>(
 	init: Update.Return<Model, Message, R>
 ): ReactStore<Model, Message> {
 	const listeners = new Set<() => void>()
-	const initCommands = init.commands ?? []
-	const initCommandStates = initCommands.map((command) => ({ command, isComplete: false }))
+	const initCommandStates = (init.commands ?? []).map((command) => ({ command, isComplete: false }))
 	let inactiveModel = init.model
 	const serverModel = inactiveModel
 	let maybeActive: Option.Option<Activation<Model, Message>> = Option.none()
-	const connections = new Set<Connection>()
-
-	const release = (connection: Connection): Effect.Effect<void> =>
-		Effect.suspend(function () {
-			connections.delete(connection)
-			return Option.match(connection.maybeScope, {
-				onSome: (scope) => Scope.close(scope, Exit.void),
-				onNone: () => Effect.void,
-			})
-		})
-
-	const attach = <E>(connection: Connection<E>, parent: Scope.Closeable): Effect.Effect<void, E> =>
-		Effect.gen(function* () {
-			if (Option.isSome(connection.maybeScope)) return
-			const scope = yield* Scope.fork(parent)
-			connection.maybeScope = Option.some(scope)
-			yield* Scope.addFinalizer(
-				scope,
-				Effect.sync(function () {
-					if (Option.isSome(connection.maybeScope) && connection.maybeScope.value === scope) {
-						connection.maybeScope = Option.none()
-					}
-				})
-			)
-			yield* connection.connect.pipe(
-				Scope.provide(scope),
-				Effect.onError((cause) => Scope.close(scope, Exit.failCause(cause)))
-			)
-		})
-
-	const onActivate = <E>(connect: Effect.Effect<void, E, Scope.Scope>): Effect.Effect<Effect.Effect<void>, E> =>
-		Effect.gen(function* () {
-			const connection: Connection<E> = { connect, maybeScope: Option.none() }
-			yield* Effect.gen(function* () {
-				connections.add(connection)
-				if (Option.isSome(maybeActive)) yield* attach(connection, maybeActive.value.scope)
-			}).pipe(Effect.onError(() => release(connection)))
-			return release(connection)
-		})
+	const gate = Semaphore.makeUnsafe(1)
 
 	function notifyListeners(): void {
 		for (const listener of listeners) listener()
 	}
 
-	const deactivate = (scope: Scope.Closeable): Effect.Effect<void> =>
-		Effect.suspend(function () {
-			if (Option.isSome(maybeActive) && maybeActive.value.scope === scope) {
-				inactiveModel = maybeActive.value.store.getModel()
-				maybeActive = Option.none()
-			}
-			return Scope.close(scope, Exit.void)
-		})
+	const release = (activation: Activation<Model, Message>, exit: Exit.Exit<unknown, unknown>): Effect.Effect<void> =>
+		gate
+			.withPermit(
+				Effect.sync(function () {
+					activation.leases -= 1
+					if (activation.leases > 0) return false
+					inactiveModel = activation.store.getModel()
+					maybeActive = Option.none()
+					return true
+				})
+			)
+			.pipe(Effect.flatMap((last) => (last ? Scope.close(activation.scope, exit) : Effect.void)))
 
-	const activate = Effect.gen(function* () {
-		if (Option.isSome(maybeActive)) return yield* Effect.die(new Error("react-foldkit store is already active"))
+	const acquire = Effect.gen(function* () {
+		if (Option.isSome(maybeActive)) {
+			const running = maybeActive.value
+			running.leases += 1
+			return running
+		}
+
+		// A Command that already completed must not restart on a later activation.
+		const commands = Array.filterMap(initCommandStates, (state) =>
+			state.isComplete ? Result.failVoid : Result.succeed(trackCompletion(state))
+		)
 		const scope = yield* Scope.make()
-		return yield* Effect.gen(function* () {
-			const activationModel = inactiveModel
-			const commands = Array.filterMap(initCommandStates, (state) =>
-				state.isComplete ? Result.failVoid : Result.succeed(trackCompletion(state))
-			)
-			const store = yield* Effect.acquireRelease(
-				Effect.sync(() => Store.boot(config, { model: activationModel, commands })),
-				(store) => Effect.sync(store.dispose)
-			)
+		const store = yield* Effect.gen(function* () {
+			const store = yield* Store.make(config, { model: inactiveModel, commands })
 			yield* Effect.acquireRelease(
 				Effect.sync(() => store.subscribe(notifyListeners)),
 				(unsubscribe) => Effect.sync(unsubscribe)
 			)
-			maybeActive = Option.some({ store, scope })
-			if (store.getModel() !== activationModel) notifyListeners()
-			for (const connection of connections) yield* attach(connection, scope)
-			return deactivate(scope)
+			return store
 		}).pipe(
 			Scope.provide(scope),
-			Effect.onError(() => deactivate(scope))
+			Effect.onExit((exit) => (Exit.isFailure(exit) ? Scope.close(scope, exit) : Effect.void))
 		)
+		const activation: Activation<Model, Message> = { store, scope, leases: 1 }
+		maybeActive = Option.some(activation)
+		return activation
 	})
+	const activate = Effect.acquireRelease(gate.withPermit(acquire), release).pipe(
+		Effect.tap((activation) =>
+			Effect.sync(function () {
+				if (activation.store.getModel() !== inactiveModel) notifyListeners()
+			})
+		),
+		Effect.asVoid
+	)
 
 	return {
 		[ReactStoreTypeId]: ReactStoreTypeId,
@@ -145,7 +124,6 @@ export function make<Model, Message, R = never>(
 			Option.isNone(maybeActive)
 				? Result.fail(new Store.CommitError({ reason: "Inactive" }))
 				: maybeActive.value.store.commit(message),
-		onActivate,
 		activate,
 	}
 }

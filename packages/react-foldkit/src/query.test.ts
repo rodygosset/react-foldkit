@@ -84,7 +84,7 @@ describe("Foldkit HttpApi Query in the React store", function () {
 			expect(note.read(store.getModel().note, { params: { id: "pending" } })._tag).toBe("Idle")
 			expect(note.read(store.getModel().note, { params: { id: "ready" } })._tag).toBe("Success")
 		} finally {
-			store.dispose()
+			Effect.runSync(store.dispose())
 		}
 	})
 })

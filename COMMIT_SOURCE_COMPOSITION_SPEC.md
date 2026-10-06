@@ -10,7 +10,7 @@ This replaces the app-owned envelopes/adapter in
 - `Loader.mapMessages` for root Message composition at the parent wire.
 - `Loader.load` (dual) and `Loader.loadQuery` for envelope programs.
 - `Loader.settleQueryIf` for freshness-gated external settlement of Loader payloads
-  (peel `result` / args at the call site).
+  (read `load.args` / `load.result` at the call site).
 - `TanStackSource.make` for accepted router results.
 - `SubmodelProvider` for inline child Provider composition.
 - `CommitSource` remains the sync delivery protocol only.
@@ -78,7 +78,7 @@ revisions, still complete rejected requests so they do not stay pending.
 - Views use these bindings and ReactFoldkit hooks. Keep route hooks in app glue
   and lifecycle hooks in Providers.
 - Use `Project.loader` and the application namespace `Application`.
-- Query-backed example: `examples/project-cache` (`fromQuery`, peel + `Loader.settleQueryIf`,
+- Query-backed example: `examples/project-cache` (`fromQuery`, nested args + `Loader.settleQueryIf`,
   revision `fresher`).
 - Define-only example: `examples/site-notice` (`Loader.define`, no Query, flat
   `CompletedLoadNotice`, Option Model write, no Query settlement, root Model hooks
@@ -102,19 +102,18 @@ encoding, and Message mapping live here.
 ```ts
 import * as Loader from "react-foldkit/loader"
 
-export const loader = Loader.fromQuery(query, {
-  name: "Project", args: { projectId: Schema.String }, data: Project, error: Schema.String,
-  key: ({ projectId }) => projectId,
-})
-// Plain Queries omit args; all Query loaders require name, data, error, and key.
-// or define({ name, data, key }) for non-Query payloads
+export const loader = Loader.fromQuery(query)
+// Serialization comes from Query.Model; identity defaults to Query.Fetch.name
+// and canonical Schema-encoded args ("singleton" for plain Queries).
+// Optional overrides: fromQuery(query, { name, key })
+// Non-Query payloads: define({ name, data, key })
 ```
 
 | Option | Contract                                                                                          |
 | ------ | ------------------------------------------------------------------------------------------------- |
-| `name` | Stable name, unique in the adapter registry. Explicit for both `define` and `fromQuery`. |
-| `data` | Schema Codec. Loading, keys, and mapping use decoded values; the envelope carries encoded values. |
-| `key`  | Resource key from decoded data. Required for both KeyedQueries and Queries. |
+| `name` | Stable name, unique in the adapter registry. Required by `define`; `fromQuery` defaults to Fetch.name. |
+| `data` | Schema Codec for `define`; derived from Query.Model by `fromQuery`. The envelope carries encoded values. |
+| `key`  | Required by `define`. Optional for keyed `fromQuery`: decoded args default to canonical encoded JSON. A plain Query has no arguments, so its identity is always `singleton` and takes no override. |
 
 Map to root Messages with `Loader.mapMessages` at the app registry. Prefer that
 over embedding app Message types in the entity declaration.
@@ -124,6 +123,11 @@ The host handles native Schema defects. Loading Effects can require services;
 `load` preserves those requirements.
 
 Declarations are Pipeable. Methods work in pipelines without a JavaScript receiver.
+`decodeDelivery` returns a typed Result containing `Delivery<Message>` with a
+validated receipt and mapped Message. Adapters use it to avoid decoding the
+header separately. `decode` projects the Message from the same decoder.
+Derived key encoding failures remain typed Results; custom key exceptions remain
+defects at the host's Effect boundary.
 
 ### load / loadQuery
 
@@ -211,7 +215,7 @@ checks freshness via `Loader.settleQueryIf`; the example needs only the payload.
 Add the optional `react-foldkit/tanstack` entry point:
 
 ```ts
-const source = TanStackSource.make(router, [
+const sourceResult = TanStackSource.make(router, [
 	Project.loader.pipe(
 		Loader.mapMessages((load) => Application.Message.CompletedLoadProject({ load }))
 	),
@@ -221,7 +225,7 @@ const source = TanStackSource.make(router, [
 One registry and subscription serve all declarations. Payload types stay inferred;
 mapped values fit the root Message union. Duplicate names fail at construction.
 
-- Return the existing synchronous `CommitSource<RootMessage>`.
+- Return `Result<CommitSource<RootMessage, SchemaError>, RegistryError>`; snapshots return Effect.
 - Read successful active matches in order. Skip pending matches, preloads,
   unrelated data, and unregistered envelopes. Malformed registered envelopes fail.
 - Use a tuple of match ID, declaration name, and resource key. Matches can share
@@ -242,7 +246,7 @@ Replace the fixture adapter; keep its router, hydration, and browser tests.
 ```tsx
 <Application.Provider
 	init={Application.init()}
-	commitSource={source}
+	createCommitSource={() => sourceResult}
 >
 	{children}
 </Application.Provider>
@@ -252,10 +256,16 @@ The optional prop validates the snapshot, folds Messages through update in order
 preserves Commands, and uses that snapshot as the baseline. SSR/hydration reads
 the populated Model; activation connects without replaying initial Messages.
 
-Omit the prop for ordinary Provider behavior. Provider `commitSource` is the only
-bootstrap path. Keep the source fixed while mounted; changes raise `SourceChanged`.
-Reconnects keep successful tokens and read the latest snapshot. Source removal
-leaves Model data intact.
+Omit the source props for ordinary Provider behavior. `createCommitSource` returns
+a Result and is captured with init. Direct `commitSource` is also captured once.
+Changing those props has no effect; remount with a new key to replace the source.
+Provider renders full Causes through `renderError` and reports client failures
+through `onError`. Snapshots and Loader.decode return Result. Notification
+boundaries capture snapshot and commit defects as Causes. A live failure reaches
+`onError` once and preserves successful tokens, recovering on the next valid
+notification. Asynchronous observers belong to the Provider lifetime; their
+failures combine with the original Cause without undoing newer recovery. Setup
+failures release resources. Reconnects read the latest snapshot.
 
 ## SubmodelProvider
 
@@ -367,15 +377,10 @@ export const { useModel, useDispatch, Provider } = defineSubmodel<Model, Message
 
 ```ts
 // entities/project/api/loader.ts
-import { Schema } from "effect"
-import { Project } from "../model/project"
 import * as Loader from "react-foldkit/loader"
 import { query } from "../model/query"
 
-export const loader = Loader.fromQuery(query, {
-  name: "Project", args: { projectId: Schema.String }, data: Project, error: Schema.String,
-  key: ({ projectId }) => projectId,
-})
+export const loader = Loader.fromQuery(query)
 export const Load = loader.Load
 export type Load = typeof Load.Type
 ```
@@ -493,7 +498,7 @@ export const update = (model: Model, message: Message) =>
 	Message.match<Update.Return<Model, Message>>(message, {
 		GotProjectMessage: ({ message }) => projects.fold(model, message),
 		CompletedLoadProject: function ({ load }) {
-			const { result, ...args } = load
+			const { args, result } = load
 			const settled = Loader.settleQueryIf(Project.query, model.projects, args, result, {
 				fresher: (incoming, current) => incoming.revision > current.revision,
 			})
@@ -528,18 +533,16 @@ import * as Application from "../model/application"
 
 export function Provider({ children }: { children: React.ReactNode }) {
 	const router = useRouter()
-	const [source] = React.useState(() =>
-		TanStackSource.make(router, [
-			Project.loader.pipe(
-				Loader.mapMessages((load) => Application.Message.CompletedLoadProject({ load }))
-			),
-		])
-	)
+
 
 	return (
 		<Application.Provider
 			init={Application.init()}
-			commitSource={source}
+			createCommitSource={() => TanStackSource.make(router, [
+			Project.loader.pipe(
+				Loader.mapMessages((load) => Application.Message.CompletedLoadProject({ load }))
+			),
+		])}
 		>
 			<Application.SubmodelProvider
 				projection={Application.projectsProjection}

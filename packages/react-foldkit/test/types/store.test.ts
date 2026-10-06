@@ -1,4 +1,4 @@
-import { Effect, Result } from "effect"
+import { Context, Effect, Layer, Result, Scope } from "effect"
 import * as Store from "react-foldkit/store"
 import { describe, expectTypeOf, it } from "vitest"
 
@@ -12,6 +12,23 @@ describe("Store public types", function () {
 			(message: Message) => Result.Result<void, Store.CommitError>
 		>()
 		expectTypeOf(Store.commit<Model, Message>).returns.toEqualTypeOf<Effect.Effect<void, Store.CommitError>>()
+	})
+
+	it("constructs a typed store Effect while providing command services through the config", function () {
+		class Service extends Context.Service<Service, { readonly value: number }>()("StoreTest/Service") {}
+		const update = (model: Model, _message: Message) => ({
+			model,
+			commands: [{ name: "Read", effect: Effect.as(Service, { _tag: "Increment" } as const) }],
+		})
+		const layer = Layer.succeed(Service, { value: 1 })
+		// Store.make allocates in the caller's Scope, so a host closes it to dispose the store.
+		expectTypeOf(Store.make({ update, layer }, { model: { count: 0 } })).toEqualTypeOf<
+			Effect.Effect<Store.Store<Model, Message>, never, Scope.Scope>
+		>()
+		if (false) {
+			// @ts-expect-error Required command services must still be provided.
+			Store.make({ update }, { model: { count: 0 } })
+		}
 	})
 
 	if (false) {

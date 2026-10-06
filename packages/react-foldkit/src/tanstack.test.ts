@@ -1,6 +1,7 @@
 import { createMemoryHistory, createRootRoute, createRoute, createRouter } from "@tanstack/react-router"
-import { Effect, Schema } from "effect"
-import { describe, expect, it, vi } from "vitest"
+import { Effect, Result, Schema } from "effect"
+import { describe, it } from "@effect/vitest"
+import { expect, vi } from "vitest"
 import * as Loader from "./loader"
 import * as TanStackSource from "./tanstack"
 
@@ -15,43 +16,68 @@ function routerWith(rootData: unknown, childData: unknown) {
 
 describe("TanStack CommitSource adapter", function () {
 	it("composes heterogeneous declarations in match order and preserves transported receipts", async function () {
-		const project = Effect.runSync(Project.load(Effect.succeed("a")))
-		const count = Effect.runSync(Count.load(Effect.succeed(2)))
+		const project = await Effect.runPromise(Project.load(Effect.succeed("a")))
+		const count = await Effect.runPromise(Count.load(Effect.succeed(2)))
 		const router = routerWith(JSON.parse(JSON.stringify(count)), JSON.parse(JSON.stringify(project)))
-		const source = TanStackSource.make(router, [
-			Project.pipe(Loader.mapMessages((project, receipt) => ({ _tag: "Project" as const, project, receipt }))),
-			Count.pipe(Loader.mapMessages((count, receipt) => ({ _tag: "Count" as const, count, receipt }))),
-		])
+		const source = Result.getOrThrow(
+			TanStackSource.make(router, [
+				Project.pipe(
+					Loader.mapMessages((project, receipt) => ({ _tag: "Project" as const, project, receipt }))
+				),
+				Count.pipe(Loader.mapMessages((count, receipt) => ({ _tag: "Count" as const, count, receipt }))),
+			])
+		)
 		await router.load()
-		expect(source.getSnapshot().map(({ message }) => message)).toEqual([
+		const first = Result.getOrThrow(source.getSnapshot())
+		expect(first.map(({ message }) => message)).toEqual([
 			{ _tag: "Count", count: 2, receipt: { name: "Count", key: "count", version: count.version } },
 			{ _tag: "Project", project: "a", receipt: { name: "Project", key: "a", version: project.version } },
 		])
-		expect(source.getSnapshot().map(({ version }) => version)).toEqual([count.version, project.version])
+		const second = Result.getOrThrow(source.getSnapshot())
+		expect(second.map(({ version }) => version)).toEqual([count.version, project.version])
+	})
+
+	it("decodes on every read, so a snapshot taken before loading reflects the current matches", async function () {
+		const envelope = await Effect.runPromise(Project.load(Effect.succeed("a")))
+		const router = routerWith(null, envelope)
+		const mapping = vi.fn((value: string) => value)
+		const source = Result.getOrThrow(TanStackSource.make(router, [Project.pipe(Loader.mapMessages(mapping))]))
+		expect(mapping).not.toHaveBeenCalled()
+		await router.load()
+		expect(Result.getOrThrow(source.getSnapshot()).map(({ message }) => message)).toEqual(["a"])
+		expect(Result.getOrThrow(source.getSnapshot()).map(({ message }) => message)).toEqual(["a"])
+		expect(mapping).toHaveBeenCalledTimes(2)
 	})
 
 	it("gives shared resources distinct delivery keys for different matches", async function () {
-		const envelope = Effect.runSync(Project.load(Effect.succeed("a")))
+		const envelope = await Effect.runPromise(Project.load(Effect.succeed("a")))
 		const router = routerWith(envelope, envelope)
 		await router.load()
-		const entries = TanStackSource.make(router, [Project]).getSnapshot()
-		expect(entries).toHaveLength(2)
-		expect(new Set(entries.map((entry) => entry.key)).size).toBe(2)
-		expect(entries.map((entry) => entry.version)).toEqual([envelope.version, envelope.version])
+		const entries = Result.getOrThrow(TanStackSource.make(router, [Project])).getSnapshot()
+		expect(Result.isFailure(entries)).toBe(false)
+		if (Result.isSuccess(entries)) {
+			expect(entries.success).toHaveLength(2)
+			expect(new Set(entries.success.map((entry) => entry.key)).size).toBe(2)
+			expect(entries.success.map((entry) => entry.version)).toEqual([envelope.version, envelope.version])
+		}
 	})
 
 	it("rejects duplicate declarations before subscribing", function () {
 		const router = routerWith(null, null)
 		const subscribe = vi.spyOn(router.stores.matches, "subscribe")
-		expect(() => TanStackSource.make(router, [Project, Project])).toThrow(TanStackSource.RegistryError)
+		expect(TanStackSource.make(router, [Project, Project])).toEqual(
+			Result.fail(new TanStackSource.RegistryError({ declarationName: "Project" }))
+		)
 		expect(subscribe).not.toHaveBeenCalled()
 	})
 
-	it("ignores unrelated and unregistered data but rejects malformed registered envelopes", async function () {
-		const envelope = Effect.runSync(Project.load(Effect.succeed("a")))
+	it("ignores unrelated and unregistered data but reports malformed registered envelopes", async function () {
+		const envelope = await Effect.runPromise(Project.load(Effect.succeed("a")))
 		const ignored = routerWith({ arbitrary: "data" }, { ...envelope, name: "Unregistered", payload: null })
 		await ignored.load()
-		expect(TanStackSource.make(ignored, [Project]).getSnapshot()).toEqual([])
+		expect(
+			Result.getOrThrow(Result.getOrThrow(TanStackSource.make(ignored, [Project])).getSnapshot())
+		).toEqual([])
 		for (const invalid of [
 			{ ...envelope, payload: 42 },
 			{ ...envelope, format: 0 },
@@ -59,7 +85,9 @@ describe("TanStack CommitSource adapter", function () {
 		]) {
 			const router = routerWith(null, invalid)
 			await router.load()
-			expect(() => TanStackSource.make(router, [Project]).getSnapshot()).toThrow(Schema.SchemaError)
+			const snapshot = Result.getOrThrow(TanStackSource.make(router, [Project])).getSnapshot()
+			expect(Result.isFailure(snapshot)).toBe(true)
+			if (Result.isFailure(snapshot)) expect(snapshot.failure).toBeInstanceOf(Schema.SchemaError)
 		}
 	})
 
@@ -73,11 +101,12 @@ describe("TanStack CommitSource adapter", function () {
 		})
 		const router = createRouter({ routeTree: root.addChildren([child]), history: createMemoryHistory() })
 		await router.load()
-		const source = TanStackSource.make(router, [Count])
+		const source = Result.getOrThrow(TanStackSource.make(router, [Count]))
 		const subscribe = vi.spyOn(router.stores.matches, "subscribe")
 		const observed: number[] = []
 		const stop = source.subscribe(function () {
-			observed.push(...source.getSnapshot().map((entry) => entry.message as number))
+			const snapshot = source.getSnapshot()
+			if (Result.isSuccess(snapshot)) observed.push(...snapshot.success.map((entry) => entry.message as number))
 		})
 		expect(subscribe).toHaveBeenCalledTimes(1)
 		await router.invalidate()

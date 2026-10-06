@@ -1,4 +1,4 @@
-import { Context, Layer, Result, Schema } from "effect"
+import { Context, Effect, Exit, Layer, Option, Result, Schema } from "effect"
 import { defineMessageUnion } from "react-foldkit/message"
 import { defineApplication, type CommitEntry, type CommitSource } from "react-foldkit/react"
 import type { CommitError } from "react-foldkit/store"
@@ -28,7 +28,39 @@ describe("React public types", function () {
 
 	if (false) {
 		App.Provider({ init: { model: { count: 0 } }, children: null })
+		App.Provider({ init: { model: { count: 0 } }, children: null, onError: () => Effect.fail("observer failure") })
+		App.Provider({ init: { model: { count: 0 } }, children: null, onError: () => Effect.sleep("1 millis") })
+
 		App.Provider({ init: { model: { count: 0 } }, commitSource: source, children: null })
+		App.Provider({
+			init: { model: { count: 0 } },
+			createCommitSource: () => Result.succeed(source),
+			children: null,
+		})
+		expectTypeOf(App.useOptionalModel()).toEqualTypeOf<Option.Option<Model>>()
+		expectTypeOf(App.useOptionalCommit()).toEqualTypeOf<
+			Option.Option<(message: Message) => Result.Result<void, CommitError>>
+		>()
+		// @ts-expect-error A Provider has one source owner.
+		App.Provider({
+			init: { model: { count: 0 } },
+			commitSource: source,
+			createCommitSource: () => Result.succeed(source),
+			children: null,
+		})
+		App.Provider({
+			init: { model: { count: 0 } },
+			// @ts-expect-error Factory sources must contain the application's Messages.
+			createCommitSource: () => Result.succeed(foreign),
+			children: null,
+		})
+		// @ts-expect-error A factory returns a Result, preserving construction errors.
+		App.Provider({ init: { model: { count: 0 } }, createCommitSource: () => source, children: null })
+		const typed: CommitSource<Message, string> = {
+			getSnapshot: () => Result.fail("failed"),
+			subscribe: () => function () {},
+		}
+		App.Provider({ init: { model: { count: 0 } }, createCommitSource: () => Result.succeed(typed), children: null })
 		// @ts-expect-error Provider sources must contain the app's own Messages.
 		App.Provider({ init: { model: { count: 0 } }, commitSource: foreign, children: null })
 		// @ts-expect-error A consumer cannot widen the app's Message union.

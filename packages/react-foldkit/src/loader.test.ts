@@ -1,7 +1,8 @@
 // @vitest-environment node
 
-import { Context, Deferred, Effect, Layer, ManagedRuntime, Result, Schema } from "effect"
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { Cause, Context, Deferred, Effect, Exit, Layer, ManagedRuntime, Result, Schema } from "effect"
+import { describe, it } from "@effect/vitest"
+import { afterEach, expect, vi } from "vitest"
 import * as AsyncData from "./asyncData"
 import * as Loader from "./loader"
 import * as Query from "foldkit/experimental/query"
@@ -14,54 +15,130 @@ const RecordLoader = Loader.define({ name: "Record", data: Data, key: ({ id }) =
 afterEach(() => vi.restoreAllMocks())
 
 describe("Loader declarations", function () {
-	it("loads lazily, encodes native Schema values, and allocates one token per execution", function () {
-		const tokens = vi.spyOn(crypto, "randomUUID")
-		const input = vi.fn(() => data)
-		const program = RecordLoader.load(Effect.sync(input))
-		expect(input).not.toHaveBeenCalled()
-		expect(tokens).not.toHaveBeenCalled()
-		const first = Effect.runSync(program)
-		const second = Effect.runSync(program)
-		expect(first.payload).toEqual({ id: "a", at: data.at.toISOString() })
-		expect(first.version).not.toBe(second.version)
-		expect(input).toHaveBeenCalledTimes(2)
-		expect(tokens).toHaveBeenCalledTimes(2)
-		expect(RecordLoader.decode(first)).toEqual(data)
-		expect(RecordLoader.decode(JSON.parse(JSON.stringify(first)))).toEqual(data)
-		expect(tokens).toHaveBeenCalledTimes(2)
-	})
+	it.effect("keeps a SchemaError thrown by a custom key callback as a defect", () =>
+		Effect.gen(function* () {
+			const invalid = Schema.decodeUnknownResult(Schema.Number)("invalid")
+			if (Result.isSuccess(invalid)) throw new Error("Expected invalid numeric input")
+			const defect = invalid.failure
+			const loader = Loader.define({
+				name: "Record",
+				data: Data,
+				key() {
+					throw defect
+				},
+			})
+			expect(yield* Effect.exit(loader.load(Effect.succeed(data)))).toEqual(Exit.die(defect))
+			const envelope = yield* RecordLoader.load(Effect.succeed(data))
+			expect(() => loader.decodeDelivery(envelope)).toThrow(defect)
+		})
+	)
 
-	it("supports dual Loader.load and composes mapMessages with unchanged receipt identity", function () {
-		const root = RecordLoader.pipe(
-			Loader.mapMessages((message, receipt) => ({ message, receipt })),
-			Loader.mapMessages((message, receipt) => ({ _tag: "Root" as const, ...message, latest: receipt }))
-		)
-		const envelope = Effect.runSync(Loader.load(root, Effect.succeed(data)))
-		const message = root.decode(envelope)
-		expect(root.load).toBe(RecordLoader.load)
-		expect(root.data).toBe(RecordLoader.data)
-		expect(message.receipt).toEqual({ name: "Record", key: "a", version: envelope.version })
-		expect(message.latest).toBe(message.receipt)
-		expect(message.message).toEqual(data)
-		expect(Schema.decodeUnknownSync(Loader.Receipt)(message.receipt)).toEqual(message.receipt)
-	})
+	it.effect("returns the validated receipt shared with the mapped Message", () =>
+		Effect.gen(function* () {
+			const envelope = yield* RecordLoader.load(Effect.succeed(data))
+			const mapped = RecordLoader.pipe(Loader.mapMessages((value, receipt) => ({ value, receipt })))
+			const delivery = Result.getOrThrow(mapped.decodeDelivery(envelope))
+			expect(delivery.receipt).toEqual({ name: "Record", key: "a", version: envelope.version })
+			expect(delivery.message.value).toEqual(data)
+			expect(delivery.message.receipt).toBe(delivery.receipt)
+			expect(Result.isFailure(mapped.decodeDelivery({ ...envelope, key: "other" }))).toBe(true)
+		})
+	)
 
-	it("preserves input failures and encoding failures without allocating tokens", function () {
-		const tokens = vi.spyOn(crypto, "randomUUID")
-		expect(Effect.runSync(Effect.result(RecordLoader.load(Effect.fail("unavailable"))))).toEqual(
-			Result.fail("unavailable")
-		)
-		const invalid = RecordLoader.load(Effect.succeed({ ...data, at: new Date(NaN) }))
-		const result = Effect.runSync(Effect.result(invalid))
-		expect(result._tag).toBe("Failure")
-		if (result._tag === "Failure") expect(Schema.isSchemaError(result.failure)).toBe(true)
-		expect(tokens).not.toHaveBeenCalled()
-	})
+	it.effect("loads lazily, encodes native Schema values, and allocates one token per execution", () =>
+		Effect.gen(function* () {
+			const tokens = vi.spyOn(crypto, "randomUUID")
+			const input = vi.fn(() => data)
+			const program = RecordLoader.load(Effect.sync(input))
+			expect(input).not.toHaveBeenCalled()
+			expect(tokens).not.toHaveBeenCalled()
+			const first = yield* program
+			const second = yield* program
+			expect(first.payload).toEqual({ id: "a", at: data.at.toISOString() })
+			expect(first.version).not.toBe(second.version)
+			expect(input).toHaveBeenCalledTimes(2)
+			expect(tokens).toHaveBeenCalledTimes(2)
+			expect(Result.getOrThrow(RecordLoader.decode(first))).toEqual(data)
+			expect(Result.getOrThrow(RecordLoader.decode(JSON.parse(JSON.stringify(first))))).toEqual(data)
+			expect(tokens).toHaveBeenCalledTimes(2)
+		})
+	)
 
-	it("rejects resource keys that do not match the decoded payload", function () {
-		const envelope = Effect.runSync(RecordLoader.load(Effect.succeed(data)))
-		expect(() => RecordLoader.decode({ ...envelope, key: "another-resource" })).toThrow(/resource key/)
-	})
+	it.effect("supports dual Loader.load and composes mapMessages with unchanged receipt identity", () =>
+		Effect.gen(function* () {
+			const root = RecordLoader.pipe(
+				Loader.mapMessages((message, receipt) => ({ message, receipt })),
+				Loader.mapMessages((message, receipt) => ({ _tag: "Root" as const, ...message, latest: receipt }))
+			)
+			const envelope = yield* Loader.load(root, Effect.succeed(data))
+			const message = Result.getOrThrow(root.decode(envelope))
+			expect(root.load).toBe(RecordLoader.load)
+			expect(root.data).toBe(RecordLoader.data)
+			expect(message.receipt).toEqual({ name: "Record", key: "a", version: envelope.version })
+			expect(message.latest).toBe(message.receipt)
+			expect(message.message).toEqual(data)
+			expect(Schema.decodeUnknownSync(Loader.Receipt)(message.receipt)).toEqual(message.receipt)
+		})
+	)
+
+	it.effect("preserves input failures and encoding failures without allocating tokens", () =>
+		Effect.gen(function* () {
+			const tokens = vi.spyOn(crypto, "randomUUID")
+			expect(yield* Effect.result(RecordLoader.load(Effect.fail("unavailable")))).toEqual(
+				Result.fail("unavailable")
+			)
+			const invalid = RecordLoader.load(Effect.succeed({ ...data, at: new Date(NaN) }))
+			const result = yield* Effect.result(invalid)
+			expect(result._tag).toBe("Failure")
+			if (result._tag === "Failure") expect(Schema.isSchemaError(result.failure)).toBe(true)
+			expect(tokens).not.toHaveBeenCalled()
+		})
+	)
+
+	it.effect("repeats key validation and Message mapping on every decode", () =>
+		Effect.gen(function* () {
+			const envelope = yield* RecordLoader.load(Effect.succeed(data))
+			const key = vi.fn(({ id }: Data) => id)
+			const mapping = vi.fn((value: Data) => value.id)
+			const loader = Loader.define({ name: "Record", data: Data, key }).pipe(Loader.mapMessages(mapping))
+			expect(key).not.toHaveBeenCalled()
+			expect(mapping).not.toHaveBeenCalled()
+			expect(Result.getOrThrow(loader.decode(envelope))).toBe("a")
+			expect(Result.getOrThrow(loader.decode(envelope))).toBe("a")
+			expect(key).toHaveBeenCalledTimes(2)
+			expect(mapping).toHaveBeenCalledTimes(2)
+		})
+	)
+
+	it.effect("rejects resource keys that do not match the decoded payload", () =>
+		Effect.gen(function* () {
+			const envelope = yield* RecordLoader.load(Effect.succeed(data))
+			const decoded = RecordLoader.decode({ ...envelope, key: "another-resource" })
+			expect(Result.isFailure(decoded)).toBe(true)
+			if (Result.isFailure(decoded)) expect(decoded.failure.message).toContain("resource key")
+		})
+	)
+	it.effect("surfaces key and Message mapping defects as thrown defects", () =>
+		Effect.gen(function* () {
+			const envelope = yield* RecordLoader.load(Effect.succeed(data))
+			const defect = new Error("callback failed")
+			const mapped = RecordLoader.pipe(
+				Loader.mapMessages(function () {
+					throw defect
+				})
+			)
+			const key = Loader.define({
+				name: "Record",
+				data: Data,
+				key() {
+					throw defect
+				},
+			})
+			for (const loader of [mapped, key]) {
+				expect(() => loader.decode(envelope)).toThrow(defect)
+			}
+		})
+	)
 })
 
 describe("Loader.fromQuery", function () {
@@ -75,49 +152,45 @@ describe("Loader.fromQuery", function () {
 	})
 	const ProjectLoader = Loader.fromQuery(keyed, {
 		name: "Project",
-		args: { projectId: Schema.String },
-		data: Schema.Struct({ id: Schema.String, revision: Schema.Number }),
-		error: Schema.String,
 		key: ({ projectId }) => projectId,
 	})
 
-	it("loads a keyed Foldkit Query with explicit serialization and identity", function () {
-		const result = AsyncData.Success({ data: { id: "p1", revision: 1 } })
-		const envelope = Effect.runSync(ProjectLoader.loadQuery({ projectId: "p1" }))
-		const dual = Effect.runSync(Loader.loadQuery(ProjectLoader, { projectId: "p1" }))
-		expect(dual.name).toBe(envelope.name)
-		expect(dual.key).toBe(envelope.key)
-		expect(dual.payload).toEqual(envelope.payload)
-		expect(envelope.name).toBe("Project")
-		expect(envelope.key).toBe("p1")
-		expect(envelope._tag).toBe("react-foldkit/Loader")
-		expect(ProjectLoader.decode(envelope)).toEqual({ projectId: "p1", result })
-		expect(Schema.decodeUnknownSync(ProjectLoader.Load)({ projectId: "p1", result })).toEqual({
-			projectId: "p1",
-			result,
+	it.effect("derives keyed serialization while allowing identity overrides", () =>
+		Effect.gen(function* () {
+			const result = AsyncData.Success({ data: { id: "p1", revision: 1 } })
+			const envelope = yield* ProjectLoader.loadQuery({ projectId: "p1" })
+			const dual = yield* Loader.loadQuery(ProjectLoader, { projectId: "p1" })
+			expect(dual.name).toBe(envelope.name)
+			expect(dual.key).toBe(envelope.key)
+			expect(dual.payload).toEqual(envelope.payload)
+			expect(envelope.name).toBe("Project")
+			expect(envelope.key).toBe("p1")
+			expect(envelope._tag).toBe("react-foldkit/Loader")
+			expect(Result.getOrThrow(ProjectLoader.decode(envelope))).toEqual({ args: { projectId: "p1" }, result })
+			expect(Schema.decodeUnknownSync(ProjectLoader.Load)({ args: { projectId: "p1" }, result })).toEqual({
+				args: { projectId: "p1" },
+				result,
+			})
 		})
-	})
+	)
 
-	it("requires a resource key for a Query", function () {
-		const query = Query.define({
-			name: "Home",
-			data: Schema.String,
-			error: Schema.String,
-			execute: Effect.succeed("home"),
+	it.effect("allows a name override for a plain Query and keeps the singleton key", () =>
+		Effect.gen(function* () {
+			const query = Query.define({
+				name: "Home",
+				data: Schema.String,
+				error: Schema.String,
+				execute: Effect.succeed("home"),
+			})
+			const HomeLoader = Loader.fromQuery(query, { name: "Home" })
+			const result = AsyncData.Success({ data: "home" })
+			const envelope = yield* HomeLoader.load(Effect.succeed({ result }))
+			expect(envelope.name).toBe("Home")
+			// A plain Query has no arguments to key on, so its identity is always singleton.
+			expect(envelope.key).toBe("singleton")
+			expect(Result.getOrThrow(HomeLoader.decode(envelope))).toEqual({ result })
 		})
-		const HomeLoader = Loader.fromQuery(query, {
-			name: "Home",
-			data: Schema.String,
-			error: Schema.String,
-			key: () => "home",
-		})
-		const result = AsyncData.Success({ data: "home" })
-		const envelope = Effect.runSync(HomeLoader.load(Effect.succeed({ result })))
-		expect(envelope.name).toBe("Home")
-		expect(envelope.key).toBe("home")
-		expect(HomeLoader.decode(envelope)).toEqual({ result })
-		expect(() => Loader.fromQuery(query as never, undefined as never)).toThrow(/requires serialization options/)
-	})
+	)
 })
 
 class Reader extends Context.Service<Reader, { readonly read: Effect.Effect<Data> }>()("LoaderTest/Reader") {}
@@ -222,6 +295,79 @@ describe("Loader.settleQueryIf", function () {
 		execute: Effect.succeed(0),
 	})
 	const policy = { fresher: (incoming: number, current: number) => incoming > current }
+
+	it("preserves decoded keyed arguments and unrelated entries while settling transformed outcomes", function () {
+		const keyed = Query.define({
+			name: "TransformedSettlement",
+			args: { id: Schema.NumberFromString, limit: Schema.optionalKey(Schema.NumberFromString) },
+			data: Schema.DateFromString,
+			error: Schema.DateFromString,
+			execute: () => Effect.succeed(data.at),
+		})
+		const policy = { fresher: (incoming: Date, current: Date) => incoming > current }
+		const first = Loader.settleQueryIf(keyed, keyed.init(), { id: 1 }, AsyncData.Success({ data: data.at }), policy)
+		const second = Loader.settleQueryIf(
+			keyed,
+			first.model,
+			{ id: 2, limit: 5 },
+			AsyncData.Success({ data: data.at }),
+			policy
+		)
+		expect(keyed.read(second.model, { id: 1 })).toEqual(AsyncData.Success({ data: data.at }))
+		const failed = Loader.settleQueryIf(
+			keyed,
+			second.model,
+			{ id: 2, limit: 5 },
+			AsyncData.Failure({ error: data.at }),
+			{
+				...policy,
+				acceptFailure: () => true,
+			}
+		)
+		expect(keyed.read(failed.model, { id: 2, limit: 5 })).toEqual(
+			AsyncData.Stale({ data: data.at, error: data.at })
+		)
+		expect(keyed.read(failed.model, { id: 1 })).toEqual(AsyncData.Success({ data: data.at }))
+		expect(failed.commands).toBeUndefined()
+	})
+
+	it("retains interruptible instance identity and returns cancellation Commands without fetching", function () {
+		const keyed = Query.define({
+			name: "InterruptibleSettlement",
+			interrupt: true,
+			args: { id: Schema.String },
+			data: Schema.Number,
+			error: Schema.String,
+			execute: () => Effect.succeed(0),
+		})
+		const args = { id: "a" }
+		const pending = keyed.loadIfMissing(keyed.init("screen"), args)
+		const settled = Loader.settleQueryIf(keyed, pending.model, args, AsyncData.Success({ data: 2 }), policy)
+		expect(settled.model.instanceId).toBe("screen")
+		expect(keyed.read(settled.model, args)).toEqual(AsyncData.Success({ data: 2 }))
+		expect(settled.commands).toHaveLength(1)
+		expect(settled.commands?.[0]?.name).toBe(keyed.Fetch.Interrupt.name)
+		const stale = keyed.Message.CompletedFetch({
+			args,
+			instanceId: "screen",
+			generation: pending.model.generation,
+			result: Result.succeed(1),
+		})
+		expect(keyed.update(settled.model, stale).model).toBe(settled.model)
+
+		const plain = Query.define({
+			name: "InterruptiblePlainSettlement",
+			interrupt: true,
+			data: Schema.Number,
+			error: Schema.String,
+			execute: Effect.succeed(0),
+		})
+		const loading = plain.loadIfMissing(plain.init("screen"))
+		const loaded = Loader.settleQueryIf(plain, loading.model, AsyncData.Success({ data: 2 }), policy)
+		expect(loaded.model.instanceId).toBe("screen")
+		expect(plain.read(loaded.model)).toEqual(AsyncData.Success({ data: 2 }))
+		expect(loaded.commands?.[0]?.name).toBe(plain.Fetch.Interrupt.name)
+	})
 
 	it("applies accepted plain Query outcomes without Fetch Commands and rejects earlier completions", function () {
 		const pending = query.loadIfMissing(query.init())
