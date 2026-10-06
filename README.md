@@ -4,6 +4,22 @@ React Foldkit brings Foldkit's typed Elm Architecture vocabulary to React. It pr
 
 This repository is an early feedback workspace. The package API and lifecycle semantics are documented in [`packages/react-foldkit/README.md`](packages/react-foldkit/README.md).
 
+## Local Foldkit dependency
+
+The library and demo app use `../foldkit/packages/foldkit` from the sibling
+Foldkit checkout. Keep that checkout on `feat/query-httpapi`, build its package,
+and install this workspace:
+
+```sh
+(cd ../foldkit && pnpm --filter foldkit build)
+bun install
+```
+
+Query and HTTP API endpoint derivation come from `foldkit/experimental/query`.
+Effect and `@effect/vitest` use `4.0.0` to match the branch. After changing
+Foldkit source, rebuild Foldkit and refresh the local dependency with
+`bun install --force --frozen-lockfile`.
+
 ## Requirements
 
 - [Bun](https://bun.sh/) 1.3.14

@@ -9,7 +9,7 @@ This replaces the app-owned envelopes/adapter in
 - `Loader.define` / `Loader.fromQuery` for typed loader envelopes.
 - `Loader.mapMessages` for root Message composition at the parent wire.
 - `Loader.load` (dual) and `Loader.loadQuery` for envelope programs.
-- `Query.settleIf` for freshness-gated external settlement of Loader payloads
+- `Loader.settleQueryIf` for freshness-gated external settlement of Loader payloads
   (peel `result` / args at the call site).
 - `TanStackSource.make` for accepted router results.
 - `SubmodelProvider` for inline child Provider composition.
@@ -23,11 +23,11 @@ Delivery, cache slots, and app freshness are separate. Do not conflate them.
 | ----- | ---------- | ----------- |
 | Resource key | Stable identity of the domain resource (from `Loader.key` / Query args) | Declaration / Query |
 | Delivery version (UUID) | One serializable token per accepted envelope; compared with `Object.is` | Loader encode + CommitSource |
-| App fresher | Payload revision or domain rule in `settleIf` | Application update |
+| App fresher | Payload revision or domain rule in `Loader.settleQueryIf` | Application update |
 
 TanStack entry keys are `[matchId, name, resourceKey]`. Matches can share a
 resource without colliding; update chooses which delivery to keep. Delivery
-UUIDs do not order data. `settleIf` installs outcomes; it does not decide
+UUIDs do not order data. `Loader.settleQueryIf` installs outcomes; it does not decide
 which revision wins beyond the `fresher` you pass.
 
 ## Two-value pattern
@@ -71,14 +71,14 @@ revisions, still complete rejected requests so they do not stay pending.
 
 ## Example conventions
 
-- `import { Query } from "react-foldkit"`; export `query = Query.define(...)`;
+- `import * as Query from "foldkit/experimental/query"`; export `query = Query.define(...)`;
   callers use `Project.query`. Alias its Model and Message Schemas/types.
 - Export `Provider`, `useModel`, and `useDispatch` from `defineSubmodel<Model, Message>()`.
   Callers use `Project.Provider`.
 - Views use these bindings and ReactFoldkit hooks. Keep route hooks in app glue
   and lifecycle hooks in Providers.
 - Use `Project.loader` and the application namespace `Application`.
-- Query-backed example: `examples/project-cache` (`fromQuery`, peel + `settleIf`,
+- Query-backed example: `examples/project-cache` (`fromQuery`, peel + `Loader.settleQueryIf`,
   revision `fresher`).
 - Define-only example: `examples/site-notice` (`Loader.define`, no Query, flat
   `CompletedLoadNotice`, Option Model write, no Query settlement, root Model hooks
@@ -102,16 +102,19 @@ encoding, and Message mapping live here.
 ```ts
 import * as Loader from "react-foldkit/loader"
 
-export const loader = Loader.fromQuery(query)
-// Query: fromQuery(query, { key: () => "home" })
+export const loader = Loader.fromQuery(query, {
+  name: "Project", args: { projectId: Schema.String }, data: Project, error: Schema.String,
+  key: ({ projectId }) => projectId,
+})
+// Plain Queries omit args; all Query loaders require name, data, error, and key.
 // or define({ name, data, key }) for non-Query payloads
 ```
 
 | Option | Contract                                                                                          |
 | ------ | ------------------------------------------------------------------------------------------------- |
-| `name` | Stable name, unique in the adapter registry. Taken from `query.name` when using `fromQuery`. |
+| `name` | Stable name, unique in the adapter registry. Explicit for both `define` and `fromQuery`. |
 | `data` | Schema Codec. Loading, keys, and mapping use decoded values; the envelope carries encoded values. |
-| `key`  | Resource key from decoded data. Optional for KeyedQueries (defaults to `query.toKey`); required for Queries. |
+| `key`  | Resource key from decoded data. Required for both KeyedQueries and Queries. |
 
 Map to root Messages with `Loader.mapMessages` at the app registry. Prefer that
 over embedding app Message types in the entity declaration.
@@ -201,7 +204,7 @@ Loader.mapMessages((load, receipt) => Message.CompletedLoadProject({ load, recei
 
 A receipt contains the declaration name, resource key, and string token. Export
 its Schema for Message fields and preserve it through mappings. Update still
-checks freshness via `settleIf`; the example needs only the payload.
+checks freshness via `Loader.settleQueryIf`; the example needs only the payload.
 
 ## TanStack adapter
 
@@ -329,7 +332,7 @@ export type Project = typeof Project.Type
 ```ts
 // entities/project/model/query.ts
 import { Effect, Schema } from "effect"
-import { Query } from "react-foldkit"
+import * as Query from "foldkit/experimental/query"
 import { Project } from "./project"
 
 export const query = Query.define({
@@ -364,11 +367,16 @@ export const { useModel, useDispatch, Provider } = defineSubmodel<Model, Message
 
 ```ts
 // entities/project/api/loader.ts
+import { Schema } from "effect"
+import { Project } from "../model/project"
 import * as Loader from "react-foldkit/loader"
 import { query } from "../model/query"
 
-export const loader = Loader.fromQuery(query)
-export const Load = Loader.Load
+export const loader = Loader.fromQuery(query, {
+  name: "Project", args: { projectId: Schema.String }, data: Project, error: Schema.String,
+  key: ({ projectId }) => projectId,
+})
+export const Load = loader.Load
 export type Load = typeof Load.Type
 ```
 
@@ -457,6 +465,8 @@ export { View } from "./ui/view"
 
 ```ts
 // app/model/application.ts
+import * as Loader from "react-foldkit/loader"
+import * as Command from "react-foldkit/command"
 import { Schema } from "effect"
 import { defineMessageUnion } from "react-foldkit/message"
 import { defineApplication, defineSubmodelProjection } from "react-foldkit/react"
@@ -475,7 +485,7 @@ export type Message = typeof Message.Type
 const toProjectMessage = (message: Project.Message) => Message.GotProjectMessage({ message })
 
 const projects = Project.query.lift<Model, Message>({
-	field: "projects",
+	parentField: "projects",
 	toParentMessage: toProjectMessage,
 })
 
@@ -484,15 +494,19 @@ export const update = (model: Model, message: Message) =>
 		GotProjectMessage: ({ message }) => projects.fold(model, message),
 		CompletedLoadProject: function ({ load }) {
 			const { result, ...args } = load
-			return projects.settleIf(model, args, result, {
+			const settled = Loader.settleQueryIf(Project.query, model.projects, args, result, {
 				fresher: (incoming, current) => incoming.revision > current.revision,
 			})
+			return {
+				model: { ...model, projects: settled.model },
+				commands: Command.mapMessages(settled.commands, toProjectMessage),
+			}
 		},
 		ClickedRefreshProject: ({ projectId }) => projects.revalidateOrLoad(model, { projectId }),
 	})
 
 export const init = (): Update.Return<Model, Message> => ({
-	model: { projects: Project.query.init("projects") },
+	model: { projects: Project.query.init() },
 })
 
 export const projectsProjection = defineSubmodelProjection({

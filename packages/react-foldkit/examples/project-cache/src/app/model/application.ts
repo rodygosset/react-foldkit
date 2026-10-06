@@ -1,4 +1,6 @@
 import * as Project from "@/entities/project"
+import * as Loader from "react-foldkit/loader"
+import * as Command from "react-foldkit/command"
 import { Schema } from "effect"
 import { defineMessageUnion } from "react-foldkit/message"
 import { defineApplication, defineSubmodelProjection } from "react-foldkit/react"
@@ -17,7 +19,7 @@ export type Message = typeof Message.Type
 const toProjectMessage = (message: Project.Message) => Message.GotProjectMessage({ message })
 
 const projects = Project.query.lift<Model, Message>({
-	field: "projects",
+	parentField: "projects",
 	toParentMessage: toProjectMessage,
 })
 
@@ -26,15 +28,19 @@ export const update = (model: Model, message: Message) =>
 		GotProjectMessage: ({ message }) => projects.fold(model, message),
 		CompletedLoadProject({ load }) {
 			const { result, ...args } = load
-			return projects.settleIf(model, args, result, {
+			const settled = Loader.settleQueryIf(Project.query, model.projects, args, result, {
 				fresher: (incoming, current) => incoming.revision > current.revision,
 			})
+			return {
+				model: { ...model, projects: settled.model },
+				commands: Command.mapMessages(settled.commands, toProjectMessage),
+			}
 		},
 		ClickedRefreshProject: ({ projectId }) => projects.revalidateOrLoad(model, { projectId }),
 	})
 
 export const init = (): Update.Return<Model, Message> => ({
-	model: { projects: Project.query.init("projects") },
+	model: { projects: Project.query.init() },
 })
 
 export const projectsProjection = defineSubmodelProjection({

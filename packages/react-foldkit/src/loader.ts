@@ -1,9 +1,11 @@
-import { Effect, Function, Pipeable, Predicate, Schema, Struct } from "effect"
-import type * as AsyncData from "./asyncData"
+import { Effect, Function, Option, Pipeable, Predicate, Result, Schema } from "effect"
+import * as AsyncData from "foldkit/asyncData"
+import type * as Update from "./update"
 import { Envelope, EnvelopeHeader, Receipt } from "./internal/loader-envelope"
-import type { KeyedArgs } from "./query/internal"
-import type { KeyedQuery, SyncFields } from "./query/keyedQuery"
-import type { Query } from "./query/query"
+import type { KeyedQuery, Query } from "foldkit/experimental/query"
+
+type SyncFields = { readonly [x: PropertyKey]: Schema.Codec<unknown, unknown, never, never> }
+type KeyedArgs<Fields extends SyncFields> = Schema.Schema.Type<Schema.Struct<Fields>>
 
 export { Receipt } from "./internal/loader-envelope"
 export type { Envelope } from "./internal/loader-envelope"
@@ -83,15 +85,9 @@ type KeyedQueryForLoader<Name extends string, A, AI, E, EI, Fields extends SyncF
 	Fields,
 	R,
 	boolean
-> & {
-	readonly name: Name
-	readonly Args: Schema.Struct<Fields>
-	readonly toKey: (args: KeyedArgs<Fields>) => string
-}
+>
 
-type QueryForLoader<Name extends string, A, AI, E, EI, R> = Query<Name, A, AI, E, EI, R, boolean> & {
-	readonly name: Name
-}
+type QueryForLoader<Name extends string, A, AI, E, EI, R> = Query<Name, A, AI, E, EI, R, boolean>
 
 /** Loader-shaped payload: query args (empty for unkeyed) plus an AsyncData outcome. */
 export type LoadPayload<Args, A, E> = Args & {
@@ -140,7 +136,7 @@ const isKeyedQueryForLoader = (
 	query:
 		| KeyedQueryForLoader<string, any, any, any, any, SyncFields, any>
 		| QueryForLoader<string, any, any, any, any, any>
-): query is KeyedQueryForLoader<string, any, any, any, any, SyncFields, any> => Predicate.hasProperty(query, "Args")
+): query is KeyedQueryForLoader<string, any, any, any, any, SyncFields, any> => typeof query.run === "function"
 
 type KeyedQueryLoaderLike = {
 	readonly query: { run: (args: any) => Effect.Effect<AsyncData.AsyncData<unknown, unknown>, never, unknown> }
@@ -231,11 +227,15 @@ type LoadResultCodec = Schema.Codec<
 	never
 >
 
-/** Derives a Loader Schema and resource key from a Query. */
+/** Binds a Foldkit Query to explicit Loader serialization Schemas and resource identity. */
 export function fromQuery<Name extends string, A, AI, E, EI, Fields extends SyncFields, R>(
 	query: KeyedQueryForLoader<Name, A, AI, E, EI, Fields, R>,
-	options?: {
-		readonly key?: (load: KeyedLoadType<Fields, A, E>) => string
+	options: {
+		readonly name: string
+		readonly args: NoInfer<Fields>
+		readonly data: Schema.Codec<NoInfer<A>, NoInfer<AI>>
+		readonly error: Schema.Codec<NoInfer<E>, NoInfer<EI>>
+		readonly key: (load: KeyedLoadType<Fields, A, E>) => string
 	}
 ): KeyedQueryLoader<
 	Name,
@@ -254,6 +254,9 @@ export function fromQuery<Name extends string, A, AI, E, EI, Fields extends Sync
 export function fromQuery<Name extends string, A, AI, E, EI, R>(
 	query: QueryForLoader<Name, A, AI, E, EI, R>,
 	options: {
+		readonly name: string
+		readonly data: Schema.Codec<NoInfer<A>, NoInfer<AI>>
+		readonly error: Schema.Codec<NoInfer<E>, NoInfer<EI>>
 		readonly key: (load: LoadType<A, E>) => string
 	}
 ): QueryLoader<
@@ -267,42 +270,96 @@ export function fromQuery<Name extends string, A, AI, E, EI, R>(
 		readonly result: Schema.Codec<AsyncData.AsyncData<A, E>, AsyncData.AsyncData<AI, EI>, never, never>
 	}>
 >
-export function fromQuery(query: any, options?: { readonly key?: (load: any) => string }): any {
-	const result = query.AsyncData.schema as LoadResultCodec
+export function fromQuery(
+	query: any,
+	options: {
+		readonly name: string
+		readonly args?: SyncFields
+		readonly data: Schema.Codec<any, any>
+		readonly error: Schema.Codec<any, any>
+		readonly key: (load: any) => string
+	}
+): any {
+	if (options === undefined) throw new Error("Loader.fromQuery requires serialization options and a resource key")
+	const result = AsyncData.Schema(options.data, options.error).schema as LoadResultCodec
 	if (isKeyedQueryForLoader(query)) {
-		const Load = Schema.Struct({
-			...query.Args.fields,
-			result,
-		})
-		const key =
-			options?.key ??
-			((load: KeyedLoadType<SyncFields, any, any>) =>
-				query.toKey(Struct.omit(load, ["result"]) as KeyedArgs<SyncFields>))
-		return attachKeyedQueryLoader(
-			define({
-				name: query.name,
-				data: Load,
-				key,
-			}) as Loader<KeyedLoadType<SyncFields, any, any>, any>,
-			Load,
-			query
-		)
+		if (options.args === undefined) throw new Error("Keyed Loader.fromQuery requires options.args")
+		const Load = Schema.Struct({ ...options.args, result })
+		return attachKeyedQueryLoader(define({ name: options.name, data: Load, key: options.key }), Load, query)
 	}
-
 	const Load = Schema.Struct({ result })
-	const key = options?.key
-	if (key === undefined) {
-		throw new Error(`Loader.fromQuery("${query.name}"): Queries require options.key`)
+	return attachQueryLoader(define({ name: options.name, data: Load, key: options.key }), Load, query)
+}
+
+/** Freshness policy for applying a Loader outcome to a Foldkit Query. */
+export interface SettleQueryIfOptions<A, E> {
+	readonly fresher: (incoming: A, current: A) => boolean
+	readonly acceptFailure?: (current: AsyncData.AsyncData<A, E>) => boolean
+}
+
+/** Applies an accepted Loader outcome through Foldkit lifecycle operations, returning only cancellation Commands. */
+export function settleQueryIf<
+	Name extends string,
+	A,
+	AI,
+	E,
+	EI,
+	Fields extends SyncFields,
+	R,
+	Interrupt extends boolean,
+>(
+	query: KeyedQuery<Name, A, AI, E, EI, Fields, R, Interrupt>,
+	model: KeyedQuery<Name, A, AI, E, EI, Fields, R, Interrupt>["Model"]["Type"],
+	args: KeyedArgs<Fields>,
+	result: AsyncData.AsyncData<A, E>,
+	options: SettleQueryIfOptions<A, E>
+): Update.Return<
+	KeyedQuery<Name, A, AI, E, EI, Fields, R, Interrupt>["Model"]["Type"],
+	KeyedQuery<Name, A, AI, E, EI, Fields, R, Interrupt>["Message"]["Type"]
+>
+export function settleQueryIf<Name extends string, A, AI, E, EI, R, Interrupt extends boolean>(
+	query: Query<Name, A, AI, E, EI, R, Interrupt>,
+	model: Query<Name, A, AI, E, EI, R, Interrupt>["Model"]["Type"],
+	result: AsyncData.AsyncData<A, E>,
+	options: SettleQueryIfOptions<A, E>
+): Update.Return<
+	Query<Name, A, AI, E, EI, R, Interrupt>["Model"]["Type"],
+	Query<Name, A, AI, E, EI, R, Interrupt>["Message"]["Type"]
+>
+export function settleQueryIf(query: any, model: any, ...input: any[]): Update.Return<any, any> {
+	const isKeyed = typeof query.run === "function"
+	const [args, result, options] = isKeyed ? input : [undefined, ...input]
+	const current = isKeyed ? query.read(model, args) : query.read(model)
+	const maybeData = AsyncData.getData(current)
+	const isAccepted = AsyncData.isSuccess(result)
+		? Option.isNone(maybeData) || options.fresher(result.data, maybeData.value)
+		: AsyncData.isFailure(result) &&
+			(options.acceptFailure?.(current) ?? (!AsyncData.hasData(current) && !AsyncData.isPending(current)))
+	if (!isAccepted) return { model }
+
+	const cleared = isKeyed ? query.forget(model, args) : query.reset(model)
+	let started = isKeyed ? query.loadIfMissing(cleared.model, args) : query.loadIfMissing(cleared.model)
+	const complete = (nextModel: any, outcome: Result.Result<unknown, unknown>) =>
+		query.update(
+			nextModel,
+			query.Message.CompletedFetch({
+				...(isKeyed ? { args } : {}),
+				...(Predicate.hasProperty(nextModel, "instanceId") ? { instanceId: nextModel.instanceId } : {}),
+				generation: nextModel.generation,
+				result: outcome,
+			})
+		)
+	// A permitted failure retains cached data using Foldkit's refresh transition.
+	if (AsyncData.isFailure(result) && Option.isSome(maybeData)) {
+		const retained = complete(started.model, Result.succeed(maybeData.value))
+		started = isKeyed ? query.revalidate(retained.model, args) : query.revalidate(retained.model)
 	}
-	return attachQueryLoader(
-		define({
-			name: query.name,
-			data: Load,
-			key,
-		}) as Loader<LoadType<any, any>, any>,
-		Load,
-		query
+	const settled = complete(
+		started.model,
+		AsyncData.isSuccess(result) ? Result.succeed(result.data) : Result.fail(result.error)
 	)
+	// Fetch Commands constructed to reserve a generation are never executed.
+	return { model: settled.model, ...(cleared.commands === undefined ? {} : { commands: cleared.commands }) }
 }
 
 /**

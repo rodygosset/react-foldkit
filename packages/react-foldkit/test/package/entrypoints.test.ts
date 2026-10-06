@@ -4,18 +4,17 @@ import * as AsyncData from "react-foldkit/asyncData"
 import * as Command from "react-foldkit/command"
 import * as CommitSource from "react-foldkit/commitSource"
 import * as Loader from "react-foldkit/loader"
-import * as Query from "react-foldkit/query"
+import * as Query from "foldkit/experimental/query"
 import * as ReactFoldkit from "react-foldkit/react"
 import * as Store from "react-foldkit/store"
 import * as Struct from "react-foldkit/struct"
 import { describe, expect, it } from "vitest"
 
 describe("built package entry points", function () {
-	it("preserves Foldkit reexports and executes Query settlement through the built entry points", function () {
+	it("preserves Foldkit reexports and loads a Foldkit Query through the built Loader", function () {
 		expect(Foldkit.AsyncData.Success).toBe(AsyncData.Success)
 		expect(Foldkit.Command.define).toBe(Command.define)
 		expect(Foldkit.Struct.modifyFields).toBe(Struct.modifyFields)
-		expect(Foldkit.Query.define).toBe(Query.define)
 
 		const query = Query.define({
 			name: "Package",
@@ -23,8 +22,14 @@ describe("built package entry points", function () {
 			error: Schema.String,
 			execute: Effect.succeed("fetch"),
 		})
-		const settled = query.settle(query.init("package"), AsyncData.Success({ data: "external" }))
-		expect(query.read(settled.model)).toEqual(Foldkit.AsyncData.Success({ data: "external" }))
+		const loader = Loader.fromQuery(query, {
+			name: "Package",
+			data: Schema.String,
+			error: Schema.String,
+			key: () => "package",
+		})
+		const envelope = Effect.runSync(loader.loadQuery)
+		expect(loader.decode(envelope)).toEqual({ result: Foldkit.AsyncData.Success({ data: "fetch" }) })
 	})
 
 	it("shares public error constructors across the root and subpath exports", function () {

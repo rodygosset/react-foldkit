@@ -15,7 +15,7 @@ import * as Command from "../../src/command"
 import * as Loader from "../../src/loader"
 import * as TanStackSource from "../../src/tanstack"
 import { defineMessageUnion } from "../../src/message"
-import * as Query from "../../src/query"
+import * as Query from "foldkit/experimental/query"
 import * as ReactFoldkit from "../../src/react"
 import { defineApplication, defineSubmodel, defineSubmodelProjection } from "../../src/react"
 import { modifyFields } from "../../src/struct"
@@ -53,7 +53,13 @@ const query = Query.define({
 	execute: ({ query }) => Effect.flatMap(LoaderApi, (api) => api.load(query)),
 })
 
-const SearchLoader = Loader.fromQuery(query)
+const SearchLoader = Loader.fromQuery(query, {
+	name: "RouteLoaderTest",
+	args: { query: Schema.String },
+	data: SearchResponse,
+	error: Schema.String,
+	key: ({ query }) => query,
+})
 const SearchModel = Schema.Struct({
 	activeQuery: Schema.String,
 	results: query.Model,
@@ -66,7 +72,7 @@ type SearchModel = typeof SearchModel.Type
 type SearchMessage = typeof SearchMessage.Type
 
 const resultsChild = query.lift<SearchModel, SearchMessage>({
-	field: "results",
+	parentField: "results",
 	toParentMessage: (message) => SearchMessage.GotQueryMessage({ message }),
 })
 
@@ -140,14 +146,15 @@ export function createFixture(
 			},
 			CompletedLoadSearch({ load }) {
 				const { result, ...args } = load
-				const settled = resultsChild.settleIf(model.search, args, result, {
+				const settled = Loader.settleQueryIf(query, model.search.results, args, result, {
 					fresher: (incoming, current) => incoming.revision > current.revision,
 				})
-				const search = modifyFields(settled.model, {
+				const search = modifyFields(model.search, {
+					results: () => settled.model,
 					activeQuery: () => load.query,
 				})
 				const commands = Command.mapMessages(settled.commands, (message) =>
-					AppMessage.GotSearchMessage({ message })
+					AppMessage.GotSearchMessage({ message: SearchMessage.GotQueryMessage({ message }) })
 				)
 				return {
 					model: modifyFields(model, {

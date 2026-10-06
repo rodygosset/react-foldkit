@@ -14,7 +14,14 @@ Stopwatch, AsyncData, and Query examples.
 ## Imports
 
 Import from `react-foldkit` or `react-foldkit/*`. Foldkit is a regular dependency,
-excluded from the package output.
+excluded from the package output. This workspace uses the sibling Foldkit
+checkout on `feat/query-httpapi` with Effect `4.0.0`.
+
+Import Query directly from Foldkit:
+
+```ts
+import * as Query from "foldkit/experimental/query"
+```
 
 ```tsx
 import { ReactFoldkit } from "react-foldkit"
@@ -25,7 +32,6 @@ import { defineMessageUnion } from "react-foldkit/message"
 | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- |
 | `./react`                                                    | Application/child Providers, Model selectors, dispatch, projections, and external-source delivery |
 | `./store`                                                    | Non-React hosts: boot, commit, and `takeWhen`                                                     |
-| `./query`                                                    | Remote-data Submodels, policies, watch/forget, run, and external settlement                       |
 | `./command`, `./message`, `./update`, `./struct`, `./schema` | Foldkit composition and data helpers                                                              |
 | `./asyncData`                                                | Remote-data states and transitions                                                                |
 | `./subscription`                                             | Model-gated ongoing work                                                                          |
@@ -150,46 +156,56 @@ See `REACT_SUBMODEL_API_SPEC.md` and TodoForm for composition and OutMessages.
 
 ## Queries
 
-`Query.define` creates a remote-data Submodel initialized with an instance ID.
-Read it with `query.read(model)` or `keyedQuery.read(model, args)`. Instance and
-request IDs reject obsolete completions.
+`Query.define` from `foldkit/experimental/query` creates a remote-data Submodel.
+Plain Queries use `init()`. Enable `interrupt: true` and use `init(instanceId)`
+when pending Fetches need cancellation. Read values with `query.read(model)` or
+`keyedQuery.read(model, args)`. Generations reject obsolete completions.
 
-| API                                                         | Behavior                                                                               |
-| ----------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `loadIfMissing`, `revalidate`, `replace`, `watch`, `forget` | Pure Model transitions that return Commands; keyed forms also take args                |
-| Keyed `watch(model, argsArray)`                             | Reconciles the complete live key set                                                   |
-| `watchSubscription`                                         | Emits watch Messages when dependencies change                                          |
-| `query.lift`                                                | Parent fold, policy steps, and watch subscription; supports a field or read/write lens |
-| `query.run` / `keyedQuery.run(args)`                        | Loading Effect without Model writes                                                    |
-| `Query.HttpApi.Service.query`                               | Derives endpoint Schemas, service, and keyed args                                      |
+| API | Behavior |
+| --- | --- |
+| `loadIfMissing`, `revalidate`, `revalidateOrLoad`, `replace` | Pure Model transitions returning Fetch Commands |
+| `reset` | Clears data and preserves request identity |
+| Keyed `forget`, `retainOnly` | Removes individual or unretained slots and cancels pending Fetches |
+| `query.lift` | Parent fold and policy operations; accepts `parentField` or a read/write lens |
+| `query.run` / `keyedQuery.run(args)` | Loading Effect without Model writes |
+| `Query.HttpApi.Service.query` | Derives endpoint Schemas, client service, and keyed request args |
 
 Wrap Query Messages as `{ message: query.Message }`, pass `toParentMessage` to
-`lift`, and handle them with `queryChild.fold(model, message)`.
-
-Enable Fetch interruption with `interrupt: true`. Replacement waits for
-cancellation; forgetting a pending slot interrupts it. Plain Fetches also reject
-obsolete request IDs.
+`lift`, and handle completions with `queryChild.fold(model, message)`.
+Subscriptions can emit application Messages whose update handlers call Query
+operations. The cache demos prune post-detail entries through `retainOnly`.
 
 ### External settlement
 
-`query.settle(model, result)` and `keyedQuery.settle(model, args, result)` install
-external outcomes without fetching. Lifted forms update the parent and map
-interrupt Commands. All support data-last steps and need no fetch services.
+`Loader.fromQuery(query, options)` binds a Foldkit Query to explicit `name`,
+`data`, `error`, and `key` values. Keyed Queries also need `args` Schemas. The
+returned `Load` Schema contains decoded args and an AsyncData `result`.
+`loadQuery` executes and encodes the bound Query in the host's Effect runtime.
 
-Success/Failure settle the slot; other variants are ignored. Failure keeps good
-data as Stale. Settlement advances request identity, clears the pending ID, and
-can interrupt the old Fetch. Request-specific keys protect newer work from delayed
-cancellation. Direct `Fetch.Interrupt` calls need `requestId`, instance ID, and
-keyed args where applicable.
+```ts
+const loader = Loader.fromQuery(query, {
+  name: "Project",
+  args: { projectId: Schema.String },
+  data: Project,
+  error: Schema.String,
+  key: ({ projectId }) => projectId,
+})
+```
 
-Reuse `query.AsyncData` for Foldkit AsyncData Schemas. Loader payloads live on
-`Loader.fromQuery(...).Load`. Peel args and `result` at the call site, then call
-`settleIf` on the Query or lift. Update checks freshness via `fresher`. Delivery
-tokens, resource keys, and app revisions are separate layers; see the identity
-table in
+In update, peel args and `result` from the Loader payload and use
+`Loader.settleQueryIf(query, model, args, result, { fresher })`. The plain Query
+form omits args. A Success replaces cached data when `fresher` accepts it. Failure
+is accepted only for empty, non-pending data unless `acceptFailure` supplies a
+custom policy. Other AsyncData variants leave the Model unchanged.
+
+The adapter uses Foldkit's reset/forget, loading transitions, and completion
+Messages to apply accepted outcomes. It reserves a fresh generation without
+executing a Fetch and returns cancellation Commands for the previous request.
+Parent updates embed the returned Query Model and map those Commands to parent
+Messages. See `examples/project-cache` for the complete composition.
+
+Delivery tokens, resource keys, and domain revisions are separate layers; see
 [COMMIT_SOURCE_COMPOSITION_SPEC.md](../../COMMIT_SOURCE_COMPOSITION_SPEC.md).
-That composition spec is the contract of record for Loader wiring and Provider
-`commitSource`.
 
 ## Commit and external sources
 
