@@ -4,6 +4,8 @@
 > `mapMessages`, TanStack registry wiring, and Provider `commitSource` is
 > [COMMIT_SOURCE_COMPOSITION_SPEC.md](COMMIT_SOURCE_COMPOSITION_SPEC.md).
 > Keep this document for historical delivery timing and Query settlement notes.
+> Query now comes from `foldkit/experimental/query`; current external settlement
+> uses `Loader.settleQueryIf`. The Query methods shown below are historical.
 > Do not follow the app-owned adapter or `useCommitSource` sketches below.
 
 Implemented: commit/source APIs, `Query.settle`, and child views.

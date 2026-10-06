@@ -2,7 +2,7 @@ import type { AnyRouter } from "@tanstack/react-router"
 import { Context, Effect, Layer, ManagedRuntime, Schema } from "effect"
 import { Loader as RootLoader } from "react-foldkit"
 import * as Loader from "react-foldkit/loader"
-import * as Query from "react-foldkit/query"
+import * as Query from "foldkit/experimental/query"
 import * as TanStackSource from "react-foldkit/tanstack"
 import { describe, expectTypeOf, it } from "vitest"
 
@@ -74,7 +74,13 @@ describe("Loader public types", function () {
 			error: Schema.String,
 			execute: () => Effect.succeed("ok"),
 		})
-		const keyedLoader = Loader.fromQuery(keyed)
+		const keyedLoader = Loader.fromQuery(keyed, {
+			name: "Typed",
+			args: { id: Schema.String },
+			data: Schema.String,
+			error: Schema.String,
+			key: ({ id }) => id,
+		})
 		expectTypeOf(keyedLoader.Load.Type).toExtend<{ readonly id: string; readonly result: unknown }>()
 		expectTypeOf(keyedLoader.loadQuery({ id: "a" })).toExtend<
 			Effect.Effect<Loader.Envelope<unknown>, Schema.SchemaError, never>
@@ -98,11 +104,14 @@ describe("Loader public types", function () {
 			execute: Effect.succeed("home"),
 		})
 		const homeLoader = Loader.fromQuery(query, {
+			name: "Home",
+			data: Schema.String,
+			error: Schema.String,
 			key: () => "home",
 		})
 		expectTypeOf(homeLoader.Load.Type).toExtend<{ readonly result: unknown }>()
 		expectTypeOf(homeLoader.Load.Type).not.toExtend<{ readonly id: string }>()
-		// @ts-expect-error Queries require options.key.
+		// @ts-expect-error Queries require serialization options.
 		Loader.fromQuery(query)
 	}
 })

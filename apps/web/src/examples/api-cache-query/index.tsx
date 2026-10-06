@@ -4,7 +4,7 @@ import { Separator } from "@workspace/ui/components/separator"
 import { Array, Clock, Duration, Effect, Match, Option, pipe, Schema, Stream } from "effect"
 import * as AsyncData from "react-foldkit/asyncData"
 import { defineMessageUnion } from "react-foldkit/message"
-import * as Query from "react-foldkit/query"
+import * as Query from "foldkit/experimental/query"
 import { defineApplication } from "react-foldkit/react"
 import { modifyFields } from "react-foldkit/struct"
 import * as Subscription from "react-foldkit/subscription"
@@ -45,6 +45,7 @@ const statsQuery = Query.define({
 
 const postDetailQuery = Query.define({
 	name: "PostDetail",
+	interrupt: true,
 	args: { postId: Schema.String },
 	data: FetchedPostDetail,
 	error: Schema.String,
@@ -89,17 +90,17 @@ type Message = typeof Message.Type
 type UpdateReturn = Update.Return<Model, Message>
 
 const postsChild = postsQuery.lift<Model, Message>({
-	field: "posts",
+	parentField: "posts",
 	toParentMessage: (message) => Message.GotPostsMessage({ message }),
 })
 
 const statsChild = statsQuery.lift<Model, Message>({
-	field: "stats",
+	parentField: "stats",
 	toParentMessage: (message) => Message.GotStatsMessage({ message }),
 })
 
 const postDetailChild = postDetailQuery.lift<Model, Message>({
-	field: "postDetailById",
+	parentField: "postDetailById",
 	toParentMessage: (message) => Message.GotPostDetailMessage({ message }),
 })
 
@@ -121,12 +122,12 @@ const update = (model: Model, message: Message): UpdateReturn =>
 		GotPostDetailMessage: (value) => postDetailChild.fold(model, value.message),
 		ClickedTab: ({ tab }) => activateTab(model, tab),
 		ClickedPost: ({ postId }) =>
-			Update.identity(
-				modifyFields(model, {
-					maybeSelectedPostId: () => Option.some(postId),
-				})
-			),
-		ClickedBackToPosts: () => Update.identity(modifyFields(model, { maybeSelectedPostId: () => Option.none() })),
+			Update.combine(modifyFields(model, { maybeSelectedPostId: () => Option.some(postId) }), [
+				postDetailChild.retainOnly([{ postId }]),
+				postDetailChild.loadIfMissing({ postId }),
+			]),
+		ClickedBackToPosts: () =>
+			postDetailChild.retainOnly(modifyFields(model, { maybeSelectedPostId: () => Option.none() }), []),
 		ClickedInvalidatePosts: () => postsChild.revalidateOrLoad(model),
 		ClickedRetryPosts: () => postsChild.revalidateOrLoad(model),
 		ClickedRetryPostDetail: ({ postId }) => postDetailChild.revalidateOrLoad(model, { postId }),
@@ -138,10 +139,10 @@ const update = (model: Model, message: Message): UpdateReturn =>
 const init = (): UpdateReturn =>
 	postsChild.revalidateOrLoad({
 		activeTab: "Posts",
-		posts: postsQuery.init("posts"),
+		posts: postsQuery.init(),
 		postDetailById: postDetailQuery.init("postDetail"),
 		maybeSelectedPostId: Option.none(),
-		stats: statsQuery.init("stats"),
+		stats: statsQuery.init(),
 	})
 
 const subscriptions = Subscription.make<Model, Message>()((entry) => ({
@@ -159,12 +160,6 @@ const subscriptions = Subscription.make<Model, Message>()((entry) => ({
 					Effect.sync(() => isObservingStats)
 				),
 		}
-	),
-	watchPostDetail: postDetailChild.watchSubscription(entry, (model) =>
-		Option.match(model.maybeSelectedPostId, {
-			onNone: () => [],
-			onSome: (postId) => [{ postId }],
-		})
 	),
 }))
 
@@ -275,9 +270,9 @@ function PostsListView() {
 				</Button>
 			</div>
 			<p className="text-sm text-muted-foreground">
-				Open a post, then go back. The list stays Success. <code>watchSubscription</code> keeps the live key
-				set. A dropped key runs the same forget path as <code>forget</code>, including optional interruption
-				while pending. Open the same post again to load it fresh. The Cached badge uses{" "}
+				Open a post, then go back. The list stays Success. <code>retainOnly</code> keeps the live key set. A
+				dropped key runs the same forget path as <code>forget</code>, including optional interruption while
+				pending. Open the same post again to load it fresh. The Cached badge uses{" "}
 				<code>postDetailQuery.read</code>, which returns the slot&apos;s <code>AsyncData</code>.
 			</p>
 			{AsyncData.matchDataSplitEmpty(postsData, {
@@ -508,7 +503,7 @@ function View() {
 	return (
 		<ExampleShell
 			title="API Cache (Query)"
-			description="The same Model-as-cache TEA as API Cache. Query.define owns settle, retry, dedup, and keyed slots ({ args, data, maybePendingRequestId }). watchSubscription reconciles the live key set with Interrupt on drop. The parent only folds Got* and intent."
+			description="The same Model-as-cache TEA as API Cache. Foldkit Query owns fetch completion, retry, deduplication, and keyed slots. retainOnly reconciles the live key set and interrupts removed requests. The parent folds Query Messages and handles user intent."
 		>
 			<div className="mx-auto flex w-full max-w-lg flex-1 flex-col gap-6 px-6 pt-8 pb-16">
 				<TabList />

@@ -2,10 +2,10 @@ import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import { Separator } from "@workspace/ui/components/separator"
 import { Array, Clock, Duration, Effect, Layer, Match, Option, pipe, Schema, Stream } from "effect"
-import { HttpApi, HttpApiEndpoint, HttpApiGroup } from "effect/unstable/httpapi"
+import { HttpApi, HttpApiEndpoint, HttpApiGroup } from "effect/http-api"
 import * as AsyncData from "react-foldkit/asyncData"
 import { defineMessageUnion } from "react-foldkit/message"
-import * as Query from "react-foldkit/query"
+import * as Query from "foldkit/experimental/query"
 import { defineApplication } from "react-foldkit/react"
 import { modifyFields } from "react-foldkit/struct"
 import * as Subscription from "react-foldkit/subscription"
@@ -77,7 +77,7 @@ const postsQuery = BlogClient.query("Posts", "blog", "listPosts")
 
 const statsQuery = BlogClient.query("Stats", "blog", "getStats")
 
-const postDetailQuery = BlogClient.query("PostDetail", "blog", "getPost")
+const postDetailQuery = BlogClient.query("PostDetail", "blog", "getPost", { interrupt: true })
 
 const Tab = Schema.Literals(["Posts", "Stats"])
 type Tab = typeof Tab.Type
@@ -112,17 +112,17 @@ type Message = typeof Message.Type
 type UpdateReturn = Update.Return<Model, Message, BlogClient>
 
 const postsChild = postsQuery.lift<Model, Message>({
-	field: "posts",
+	parentField: "posts",
 	toParentMessage: (message) => Message.GotPostsMessage({ message }),
 })
 
 const statsChild = statsQuery.lift<Model, Message>({
-	field: "stats",
+	parentField: "stats",
 	toParentMessage: (message) => Message.GotStatsMessage({ message }),
 })
 
 const postDetailChild = postDetailQuery.lift<Model, Message>({
-	field: "postDetailById",
+	parentField: "postDetailById",
 	toParentMessage: (message) => Message.GotPostDetailMessage({ message }),
 })
 
@@ -144,12 +144,12 @@ const update = (model: Model, message: Message): UpdateReturn =>
 		GotPostDetailMessage: (value) => postDetailChild.fold(model, value.message),
 		ClickedTab: ({ tab }) => activateTab(model, tab),
 		ClickedPost: ({ postId }) =>
-			Update.identity(
-				modifyFields(model, {
-					maybeSelectedPostId: () => Option.some(postId),
-				})
-			),
-		ClickedBackToPosts: () => Update.identity(modifyFields(model, { maybeSelectedPostId: () => Option.none() })),
+			Update.combine(modifyFields(model, { maybeSelectedPostId: () => Option.some(postId) }), [
+				postDetailChild.retainOnly([{ params: { postId } }]),
+				postDetailChild.loadIfMissing({ params: { postId } }),
+			]),
+		ClickedBackToPosts: () =>
+			postDetailChild.retainOnly(modifyFields(model, { maybeSelectedPostId: () => Option.none() }), []),
 		ClickedInvalidatePosts: () => postsChild.revalidateOrLoad(model),
 		ClickedRetryPosts: () => postsChild.revalidateOrLoad(model),
 		ClickedRetryPostDetail: ({ postId }) => postDetailChild.revalidateOrLoad(model, { params: { postId } }),
@@ -161,10 +161,10 @@ const update = (model: Model, message: Message): UpdateReturn =>
 const init = (): UpdateReturn =>
 	postsChild.revalidateOrLoad({
 		activeTab: "Posts",
-		posts: postsQuery.init("posts"),
+		posts: postsQuery.init(),
 		postDetailById: postDetailQuery.init("postDetail"),
 		maybeSelectedPostId: Option.none(),
-		stats: statsQuery.init("stats"),
+		stats: statsQuery.init(),
 	})
 
 const subscriptions = Subscription.make<Model, Message, BlogClient>()((entry) => ({
@@ -182,12 +182,6 @@ const subscriptions = Subscription.make<Model, Message, BlogClient>()((entry) =>
 					Effect.sync(() => isObservingStats)
 				),
 		}
-	),
-	watchPostDetail: postDetailChild.watchSubscription(entry, (model) =>
-		Option.match(model.maybeSelectedPostId, {
-			onNone: () => [],
-			onSome: (postId) => [{ params: { postId } }],
-		})
 	),
 }))
 
@@ -299,9 +293,9 @@ function PostsListView() {
 				</Button>
 			</div>
 			<p className="text-sm text-muted-foreground">
-				Open a post, then go back. The list stays Success. <code>watchSubscription</code> keeps the live key
-				set. A dropped key runs the same forget path as <code>forget</code>, including optional interruption
-				while pending. Open the same post again to load it fresh. The Cached badge uses{" "}
+				Open a post, then go back. The list stays Success. <code>retainOnly</code> keeps the live key set. A
+				dropped key runs the same forget path as <code>forget</code>, including optional interruption while
+				pending. Open the same post again to load it fresh. The Cached badge uses{" "}
 				<code>postDetailQuery.read</code> with <code>params.postId</code> from the HttpApi endpoint.
 			</p>
 			{AsyncData.matchDataSplitEmpty(postsData, {

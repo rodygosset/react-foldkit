@@ -4,7 +4,7 @@ import { Context, Deferred, Effect, Layer, ManagedRuntime, Result, Schema } from
 import { afterEach, describe, expect, it, vi } from "vitest"
 import * as AsyncData from "./asyncData"
 import * as Loader from "./loader"
-import * as Query from "./query"
+import * as Query from "foldkit/experimental/query"
 
 const Data = Schema.Struct({ id: Schema.String, at: Schema.DateFromString })
 type Data = typeof Data.Type
@@ -73,9 +73,15 @@ describe("Loader.fromQuery", function () {
 		error: Schema.String,
 		execute: ({ projectId }) => Effect.succeed({ id: projectId, revision: 1 }),
 	})
-	const ProjectLoader = Loader.fromQuery(keyed)
+	const ProjectLoader = Loader.fromQuery(keyed, {
+		name: "Project",
+		args: { projectId: Schema.String },
+		data: Schema.Struct({ id: Schema.String, revision: Schema.Number }),
+		error: Schema.String,
+		key: ({ projectId }) => projectId,
+	})
 
-	it("derives Load schema and key from a keyed Query", function () {
+	it("loads a keyed Foldkit Query with explicit serialization and identity", function () {
 		const result = AsyncData.Success({ data: { id: "p1", revision: 1 } })
 		const envelope = Effect.runSync(ProjectLoader.loadQuery({ projectId: "p1" }))
 		const dual = Effect.runSync(Loader.loadQuery(ProjectLoader, { projectId: "p1" }))
@@ -85,7 +91,6 @@ describe("Loader.fromQuery", function () {
 		expect(envelope.name).toBe("Project")
 		expect(envelope.key).toBe("p1")
 		expect(envelope._tag).toBe("react-foldkit/Loader")
-		expect(ProjectLoader.Load.fields.result).toBe(keyed.AsyncData.schema)
 		expect(ProjectLoader.decode(envelope)).toEqual({ projectId: "p1", result })
 		expect(Schema.decodeUnknownSync(ProjectLoader.Load)({ projectId: "p1", result })).toEqual({
 			projectId: "p1",
@@ -101,6 +106,9 @@ describe("Loader.fromQuery", function () {
 			execute: Effect.succeed("home"),
 		})
 		const HomeLoader = Loader.fromQuery(query, {
+			name: "Home",
+			data: Schema.String,
+			error: Schema.String,
 			key: () => "home",
 		})
 		const result = AsyncData.Success({ data: "home" })
@@ -108,7 +116,7 @@ describe("Loader.fromQuery", function () {
 		expect(envelope.name).toBe("Home")
 		expect(envelope.key).toBe("home")
 		expect(HomeLoader.decode(envelope)).toEqual({ result })
-		expect(() => Loader.fromQuery(query as never)).toThrow(/require options\.key/)
+		expect(() => Loader.fromQuery(query as never, undefined as never)).toThrow(/requires serialization options/)
 	})
 })
 
@@ -203,5 +211,44 @@ describe("host-owned Effect execution", function () {
 		} finally {
 			await runtime.dispose()
 		}
+	})
+})
+
+describe("Loader.settleQueryIf", function () {
+	const query = Query.define({
+		name: "ExternalRecord",
+		data: Schema.Number,
+		error: Schema.String,
+		execute: Effect.succeed(0),
+	})
+	const policy = { fresher: (incoming: number, current: number) => incoming > current }
+
+	it("applies accepted plain Query outcomes without Fetch Commands and rejects earlier completions", function () {
+		const pending = query.loadIfMissing(query.init())
+		const settled = Loader.settleQueryIf(query, pending.model, AsyncData.Success({ data: 2 }), policy)
+		expect(query.read(settled.model)).toEqual(AsyncData.Success({ data: 2 }))
+		expect(settled.commands).toBeUndefined()
+		const oldCompletion = query.Message.CompletedFetch({
+			generation: pending.model.generation,
+			result: Result.succeed(1),
+		})
+		expect(query.update(settled.model, oldCompletion).model).toBe(settled.model)
+		expect(Loader.settleQueryIf(query, settled.model, AsyncData.Success({ data: 1 }), policy).model).toBe(
+			settled.model
+		)
+		expect(Loader.settleQueryIf(query, settled.model, AsyncData.Loading(), policy).model).toBe(settled.model)
+	})
+
+	it("keeps cached data on rejected failure and retains it as Stale when a custom failure policy accepts", function () {
+		const loaded = Loader.settleQueryIf(query, query.init(), AsyncData.Success({ data: 2 }), policy)
+		const failure = AsyncData.Failure({ error: "offline" })
+		expect(Loader.settleQueryIf(query, loaded.model, failure, policy).model).toBe(loaded.model)
+		const accepted = Loader.settleQueryIf(query, loaded.model, failure, { ...policy, acceptFailure: () => true })
+		expect(query.read(accepted.model)).toEqual(AsyncData.Stale({ data: 2, error: "offline" }))
+		expect(accepted.commands).toBeUndefined()
+		const empty = Loader.settleQueryIf(query, query.init(), failure, policy)
+		expect(query.read(empty.model)).toEqual(failure)
+		const pending = query.loadIfMissing(query.init())
+		expect(Loader.settleQueryIf(query, pending.model, failure, policy).model).toBe(pending.model)
 	})
 })

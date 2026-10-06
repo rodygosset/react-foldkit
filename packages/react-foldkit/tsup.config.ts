@@ -14,7 +14,6 @@ export default defineConfig({
 		commitSource: "src/commitSource.ts",
 		loader: "src/loader.ts",
 		message: "src/message.ts",
-		query: "src/query/index.ts",
 		schema: "src/schema.ts",
 		store: "src/store.ts",
 		struct: "src/struct.ts",

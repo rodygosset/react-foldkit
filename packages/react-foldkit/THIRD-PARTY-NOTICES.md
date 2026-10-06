@@ -1,6 +1,6 @@
 # Third-party notices
 
-ReactFoldkit reexports [Foldkit](https://github.com/foldkit/foldkit) `0.164.0`:
+ReactFoldkit reexports [Foldkit](https://github.com/foldkit/foldkit) `0.166.0` from the local `feat/query-httpapi` checkout:
 `asyncData`, `command`, `message`, `schema`, `struct`, `subscription`
 (`make`/`entry`), and `update` through `react-foldkit/*`.
 
