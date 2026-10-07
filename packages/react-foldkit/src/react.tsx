@@ -15,14 +15,12 @@ export type { ModelReader, ModelSource, OptionalSubmodelProjection, SubmodelProj
 export { CommitSourceError } from "./commitSource"
 export type { CommitEntry, CommitSource, CommitSourceOptions } from "./commitSource"
 
-type SchemaServices<S extends Schema.Constraint> = S["DecodingServices"] | S["EncodingServices"]
-
 type ModelCodec = Schema.Codec<unknown, unknown, unknown, unknown>
 
 export type Config<ModelSchema extends ModelCodec, Message, R = never> = Store.Config<
 	Schema.Schema.Type<ModelSchema>,
 	Message,
-	R | SchemaServices<ModelSchema>
+	R
 > & {
 	readonly Model: ModelSchema
 }
@@ -169,11 +167,6 @@ function projectionHooks<ParentModel, ParentMessage>(
  * Defines Provider and hooks around a Foldkit-shaped store.
  *
  * Provider cold-boots from `init` and disposes on unmount. Live updates go through dispatch or commit after activation.
- *
- * Model may require Schema decoding or encoding services. Those services join
- * update `R`, so `layer` is required when the codec is not `never`. Sync JSON
- * encode still needs `never` services at the call site that uses
- * `encodeUnknownSync`.
  */
 export function defineApplication<ModelSchema extends ModelCodec, Message, R = never>(
 	config: Config<ModelSchema, Message, R>
@@ -225,8 +218,8 @@ export function defineApplication<ModelSchema extends ModelCodec, Message, R = n
 			(cause: Cause.Cause<unknown>) => props.onError?.(cause) ?? Effect.void
 		)
 		const [session] = React.useState(() => ProviderSession.make(bootstrap, observeFailure))
-		const cause = React.useSyncExternalStore(session.subscribe, session.getSnapshot, session.getServerSnapshot)
-		React.useEffect(
+		const { cause } = React.useSyncExternalStore(session.subscribe, session.getSnapshot, session.getServerSnapshot)
+		React.useLayoutEffect(
 			function manageSession() {
 				Effect.runFork(session.start)
 				return function () {

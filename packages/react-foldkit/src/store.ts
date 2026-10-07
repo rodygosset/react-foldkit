@@ -191,7 +191,7 @@ const makeProvideAllResources =
 type SubscriptionRuntime<Model, Message, R> = {
 	readonly bootModel: Model
 	readonly modelPubSub: PubSub.PubSub<Model>
-	readonly storeScope: Scope.Scope
+	readonly fiberScope: Scope.Scope
 	readonly runtimeContextForCommands: Context.Context<never>
 	readonly provideAllResources: <A, E>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E>
 	readonly enqueueMessage: (message: Message) => void
@@ -213,7 +213,7 @@ function forkSubscriptionFibers<Model, Message, R>(
 	const {
 		bootModel,
 		modelPubSub,
-		storeScope,
+		fiberScope,
 		runtimeContextForCommands,
 		provideAllResources,
 		enqueueMessage,
@@ -223,10 +223,9 @@ function forkSubscriptionFibers<Model, Message, R>(
 	for (const [, entry] of Record.toEntries(subscriptions)) {
 		const { dependenciesSchema, modelToDependencies, keepAliveEquivalence, dependenciesToStream } = entry
 
-		const equivalence = keepAliveEquivalence ?? Schema.toEquivalence(dependenciesSchema)
-		const initDependencies = modelToDependencies(bootModel)
-
 		const fiber = Effect.gen(function* () {
+			const equivalence = keepAliveEquivalence ?? Schema.toEquivalence(dependenciesSchema)
+			const initDependencies = modelToDependencies(bootModel)
 			const latestDependenciesRef = yield* Ref.make(initDependencies)
 
 			const modelChangesStream = Stream.fromPubSub(modelPubSub).pipe(
@@ -249,33 +248,19 @@ function forkSubscriptionFibers<Model, Message, R>(
 						enqueueMessage(message)
 					})
 				),
-				provideAllResources,
-				Effect.catchCause((cause) =>
-					Effect.sync(function () {
-						crashWith(cause, Option.none())
-					})
-				)
+				provideAllResources
 			)
-		})
+		}).pipe(
+			Effect.catchCause((cause) =>
+				Effect.sync(function () {
+					crashWith(cause, Option.none())
+				})
+			)
+		)
 
-		Effect.runForkWith(runtimeContextForCommands)(Effect.forkIn(fiber, storeScope))
+		Effect.runForkWith(runtimeContextForCommands)(Effect.forkIn(fiber, fiberScope))
 	}
 }
-
-/**
- * Lazily builds Layer services once, owned by the store Scope. Waiters join over
- * a cached Fiber, so one waiter leaving never cancels the shared build, while store
- * shutdown interrupts it through Scope close.
- */
-const makeAcquireResourceContext = <R>(
-	layer: Layer.Layer<R, never, never>,
-	scope: Scope.Scope
-): Effect.Effect<Effect.Effect<Context.Context<R>>> =>
-	Effect.cached(
-		Effect.forkIn(Layer.buildWithScope(layer, scope), scope, {
-			uninterruptible: false,
-		}).pipe(Effect.uninterruptible)
-	).pipe(Effect.map((getBuild) => Effect.flatMap(getBuild, Fiber.join)))
 
 /**
  * Allocates a fresh live store in the caller's Scope; services build lazily on first use.
@@ -286,13 +271,22 @@ export const make = <Model, Message, R = never>(
 	init: Update.Return<Model, Message, R>
 ): Effect.Effect<Store<Model, Message>, never, Scope.Scope> =>
 	Effect.gen(function* () {
-		const scope = yield* Scope.fork(yield* Scope.Scope)
+		const scope = yield* Scope.fork(yield* Scope.Scope, "sequential")
+		// Scopes close in reverse order: finish Commands and subscriptions before releasing services.
+		const layerScope = yield* Scope.fork(scope)
+		const fiberScope = yield* Scope.fork(scope, "parallel")
 		// Replay retains a model published before subscription fibers attach.
 		const modelPubSub = yield* PubSub.unbounded<Model>({ replay: 1 })
 		const layer = resolveLayer((config as { readonly layer?: Layer.Layer<R, never, never> }).layer)
-		const acquireResourceContext = yield* makeAcquireResourceContext(layer, scope)
+		// Joining the shared build lets a waiter leave without interrupting other waiters.
+		const getBuild = yield* Effect.cached(
+			Effect.forkIn(Layer.buildWithScope(layer, layerScope), layerScope, {
+				uninterruptible: false,
+			}).pipe(Effect.uninterruptible)
+		)
+		const acquireResourceContext = Effect.flatMap(getBuild, Fiber.join)
 		return yield* Effect.acquireRelease(
-			Effect.sync(() => start(config, init, scope, modelPubSub, acquireResourceContext)),
+			Effect.sync(() => start(config, init, scope, fiberScope, modelPubSub, acquireResourceContext)),
 			(store, exit) => store.dispose(exit)
 		)
 	})
@@ -301,15 +295,24 @@ export const make = <Model, Message, R = never>(
  * Synchronous entry point for imperative hosts. The store owns its Scope, so disposal happens
  * through `Store.dispose`. Effect programs should use {@link make} and let their Scope own it.
  */
-export const boot = <Model, Message, R = never>(
+export function boot<Model, Message, R = never>(
 	config: Config<Model, Message, R>,
 	init: Update.Return<Model, Message, R>
-): Store<Model, Message> => Effect.runSync(make(config, init).pipe(Scope.provide(Scope.makeUnsafe())))
+): Store<Model, Message> {
+	const scope = Scope.makeUnsafe()
+	return Effect.runSync(
+		make(config, init).pipe(
+			Scope.provide(scope),
+			Effect.onExit((exit) => (Exit.isFailure(exit) ? Scope.close(scope, exit) : Effect.void))
+		)
+	)
+}
 
 function start<Model, Message, R>(
 	config: Config<Model, Message, R>,
 	init: Update.Return<Model, Message, R>,
 	storeScope: Scope.Closeable,
+	fiberScope: Scope.Scope,
 	modelPubSub: PubSub.PubSub<Model>,
 	acquireResourceContext: Effect.Effect<Context.Context<R>>
 ) {
@@ -416,7 +419,7 @@ function start<Model, Message, R>(
 				)
 			)
 		})
-		Effect.runForkWith(runtimeContextForCommands)(Effect.forkIn(effect, storeScope))
+		Effect.runForkWith(runtimeContextForCommands)(Effect.forkIn(effect, fiberScope))
 	}
 
 	function processMessage({ message, command }: PendingMessage): void {
@@ -535,7 +538,7 @@ function start<Model, Message, R>(
 	forkSubscriptionFibers(config.subscriptions, {
 		bootModel: initialModel,
 		modelPubSub,
-		storeScope,
+		fiberScope,
 		runtimeContextForCommands,
 		provideAllResources,
 		enqueueMessage,

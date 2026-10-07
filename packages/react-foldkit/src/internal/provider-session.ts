@@ -8,7 +8,11 @@ export interface Bootstrap<Model, Message> {
 	readonly connection?: Connection<Message, unknown>
 }
 
-export interface ProviderSession extends ModelReader<Option.Option<Cause.Cause<unknown>>> {
+export interface Snapshot {
+	readonly cause: Option.Option<Cause.Cause<unknown>>
+}
+
+export interface ProviderSession extends ModelReader<Snapshot> {
 	readonly start: Effect.Effect<void>
 	readonly stop: Effect.Effect<void>
 }
@@ -37,14 +41,16 @@ export function make<Model, Message>(
 ): ProviderSession {
 	const healthy = Option.none<Cause.Cause<unknown>>()
 	const initialFailure = Exit.isFailure(bootstrap) ? Option.some(bootstrap.cause) : healthy
-	let snapshot = initialFailure
+	const initialSnapshot: Snapshot = { cause: initialFailure }
+	let snapshot = initialSnapshot
 	let observedCrash: Option.Option<Cause.Cause<unknown>> = Option.none()
 	let phase: Phase = { _tag: "Stopped", close: Effect.void }
 	const listeners = new Set<() => void>()
 
 	function publish(value: Option.Option<Cause.Cause<unknown>>): void {
-		if (Option.isNone(value) && Option.isNone(snapshot)) return
-		snapshot = value
+		if (Option.isNone(value) && Option.isNone(snapshot.cause)) return
+		// Recovery needs a fresh snapshot even when Activity retained an earlier healthy value.
+		snapshot = { cause: value }
 		for (const listener of listeners) listener()
 	}
 	function fail(cause: Cause.Cause<unknown>): void {
@@ -202,7 +208,7 @@ export function make<Model, Message>(
 
 	return {
 		getSnapshot: () => snapshot,
-		getServerSnapshot: () => initialFailure,
+		getServerSnapshot: () => initialSnapshot,
 		subscribe(listener) {
 			listeners.add(listener)
 			// React Activity retains the previous store value while its subscription is detached.

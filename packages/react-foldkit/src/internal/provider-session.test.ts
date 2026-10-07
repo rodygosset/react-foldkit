@@ -57,7 +57,7 @@ for (const delivery of ["dispatch", "commit", "source", "listener"] as const) {
 			yield* session.start
 			if (delivery === "listener")
 				store.subscribe(function () {
-					throw defect
+					if (store.getModel() === 9) throw defect
 				})
 			if (delivery === "dispatch" || delivery === "listener") store.dispatch(9)
 			if (delivery === "commit") store.commit(9)
@@ -66,8 +66,8 @@ for (const delivery of ["dispatch", "commit", "source", "listener"] as const) {
 			input.publish([])
 			expect(observed).toEqual([Cause.die(defect)])
 			expect(crashed).toEqual([Cause.die(defect)])
-			expect(session.getSnapshot()).toEqual(Option.some(Cause.die(defect)))
-			expect(session.getServerSnapshot()).toEqual(Option.none())
+			expect(session.getSnapshot().cause).toEqual(Option.some(Cause.die(defect)))
+			expect(session.getServerSnapshot().cause).toEqual(Option.none())
 			expect(store.getModel()).toBe(delivery === "listener" ? 9 : 0)
 			yield* session.stop
 			expect(store.getCrash()).toEqual(Option.some(Cause.die(defect)))
@@ -112,7 +112,7 @@ for (const command of ["init", "update", "subscription"] as const) {
 			expect(Result.getOrThrow(Cause.findDefect(actual))).toBe(defect)
 			expect(Option.getOrThrow(store.getCrash())).toBe(actual)
 			expect(configCause).toBe(actual)
-			expect(Option.getOrThrow(session.getSnapshot())).toBe(actual)
+			expect(Option.getOrThrow(session.getSnapshot().cause)).toBe(actual)
 			yield* session.stop
 		})
 	)
@@ -149,7 +149,7 @@ it.effect(
 			yield* Deferred.await(notified)
 			input.publish([{ key: "next", version: 1, message: 2 }])
 			expect(observations).toEqual([Cause.die(defect)])
-			expect(session.getSnapshot()).toEqual(Option.some(Cause.die(defect)))
+			expect(session.getSnapshot().cause).toEqual(Option.some(Cause.die(defect)))
 			yield* session.stop
 		})
 )
@@ -184,7 +184,7 @@ it.effect("a healthy replacement activation clears a terminal crash and ignores 
 		yield* session.start
 		store.dispatch(9)
 		yield* Deferred.await(observerStarted)
-		expect(session.getSnapshot()).toEqual(Option.some(Cause.die(defect)))
+		expect(session.getSnapshot().cause).toEqual(Option.some(Cause.die(defect)))
 		yield* session.stop
 		yield* Deferred.await(observerInterrupted)
 		yield* session.start
@@ -192,7 +192,7 @@ it.effect("a healthy replacement activation clears a terminal crash and ignores 
 		expect(store.getModel()).toBe(2)
 		yield* Deferred.succeed(observerGate, undefined)
 		expect(observations).toEqual([Cause.die(defect)])
-		expect(session.getSnapshot()).toEqual(Option.none())
+		expect(session.getSnapshot().cause).toEqual(Option.none())
 		yield* session.stop
 	})
 )
@@ -243,7 +243,7 @@ it.effect(
 			const first = yield* Effect.forkChild(session.stop)
 			yield* Deferred.await(started)
 			const second = yield* Effect.forkChild(session.stop)
-			expect(session.getSnapshot()).toEqual(Option.some(Cause.die(defect)))
+			expect(session.getSnapshot().cause).toEqual(Option.some(Cause.die(defect)))
 			yield* TestClock.adjust("4999 millis")
 			expect(first.pollUnsafe()).toBeUndefined()
 			yield* TestClock.adjust("1 millis")
@@ -252,7 +252,7 @@ it.effect(
 			yield* Fiber.join(second)
 			yield* session.stop
 			expect({ released, observations }).toEqual({ released: 1, observations: 1 })
-			expect(session.getSnapshot()).toEqual(Option.some(Cause.die(defect)))
+			expect(session.getSnapshot().cause).toEqual(Option.some(Cause.die(defect)))
 		})
 )
 
@@ -290,7 +290,7 @@ it.effect("protects resource release while a stop caller is interrupted, then in
 		yield* Deferred.succeed(releaseGate, undefined)
 		yield* Fiber.join(interrupting)
 		expect(released).toBe(1)
-		expect(session.getSnapshot()).toEqual(Option.some(Cause.die("cleanup")))
+		expect(session.getSnapshot().cause).toEqual(Option.some(Cause.die("cleanup")))
 
 		const secondAcquired = Deferred.makeUnsafe<void>()
 		const secondObserverStarted = Deferred.makeUnsafe<void>()
@@ -310,7 +310,7 @@ it.effect("protects resource release while a stop caller is interrupted, then in
 		yield* Deferred.await(secondObserverStarted)
 		yield* Fiber.interrupt(secondStopping)
 		yield* Deferred.await(secondObserverInterrupted)
-		expect(secondSession.getSnapshot()).toEqual(Option.some(Cause.die("second cleanup")))
+		expect(secondSession.getSnapshot().cause).toEqual(Option.some(Cause.die("second cleanup")))
 	})
 )
 
@@ -358,7 +358,7 @@ it.effect("reports independent cleanup defects during terminal source catchup wi
 			Cause.die(runtimeDefect),
 			Cause.combine(Cause.die(runtimeDefect), Cause.die(cleanupDefect)),
 		])
-		expect(session.getSnapshot()).toEqual(
+		expect(session.getSnapshot().cause).toEqual(
 			Option.some(Cause.combine(Cause.die(runtimeDefect), Cause.die(cleanupDefect)))
 		)
 		expect(Option.getOrThrow(store.getCrash())).toBe(observations[0])
@@ -407,7 +407,7 @@ it.effect("logs nonterminal setup cleanup failure once before observing the comb
 			{ kind: "log", cause: Cause.die(defect) },
 			{ kind: "observe", cause: combined },
 		])
-		expect(session.getSnapshot()).toEqual(Option.some(combined))
+		expect(session.getSnapshot().cause).toEqual(Option.some(combined))
 		expect(store.getCrash()).toEqual(Option.none())
 	})
 )
@@ -423,7 +423,7 @@ it.effect("replays failures published while readers were detached before a healt
 		yield* session.stop
 		const snapshots: Array<Option.Option<Cause.Cause<unknown>>> = []
 		const unsubscribe = session.subscribe(function () {
-			snapshots.push(session.getSnapshot())
+			snapshots.push(session.getSnapshot().cause)
 		})
 		yield* session.start
 		expect(snapshots).toEqual([Option.some(Cause.die(defect)), Option.none()])
