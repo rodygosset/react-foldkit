@@ -359,7 +359,7 @@ it("preserves a failing error observer's defect in the fallback", function () {
 	expect(mounted.getByRole("alert").textContent).toContain("factory failure")
 })
 
-it("gives renderError the whole Cause, including a failing observer's defect", function () {
+it("gives renderError the application Cause when its observer fails", function () {
 	const f = createSourceFixture([])
 	const error = new Error("factory failure")
 	const seen: Array<Cause.Cause<unknown>> = []
@@ -379,10 +379,10 @@ it("gives renderError the whole Cause, including a failing observer's defect", f
 		</f.App.Provider>
 	)
 	expect(mounted.getByRole("alert").textContent).toContain("factory failure")
-	expect(mounted.getByRole("alert").textContent).toContain("observer defect")
+	expect(mounted.getByRole("alert").textContent).not.toContain("observer defect")
 	const cause = seen.at(-1)!
 	expect(Result.getOrThrow(Cause.findError(cause))).toBe(error)
-	expect(String(Result.getOrThrow(Cause.findDefect(cause)))).toContain("observer defect")
+	expect(Result.isFailure(Cause.findDefect(cause))).toBe(true)
 })
 
 it("uses the latest error observer and fallback after rerendering", function () {

@@ -1,6 +1,6 @@
 import { it } from "@effect/vitest"
 import { Cause, Deferred, Effect, Exit, Fiber, Layer, Option, Result } from "effect"
-import { expect } from "vitest"
+import { expect, vi } from "vitest"
 import { entry, fakeSource, Message } from "../../test/fixtures/commit-source"
 import { CommitSourceError } from "../commitSource"
 import { CommitError } from "../store"
@@ -27,31 +27,28 @@ function fixture() {
 
 const duplicate = (key: string) => Cause.fail(new CommitSourceError({ reason: "DuplicateKey", key }))
 
-it.effect("publishes bootstrap failure before its observer settles and retains both typed failures", () =>
+it.effect("publishes bootstrap failure before its observer settles and keeps it when the observer fails", () =>
 	Effect.gen(function* () {
 		const failure = new Error("bootstrap failure")
 		const observerFailure = new Error("async observer failure")
 		const gate = yield* Deferred.make<void>()
-		const observed = yield* Deferred.make<void>()
+		const started = yield* Deferred.make<void>()
 		const seen: Cause.Cause<unknown>[] = []
 		const session = Session.make<number, Message>(Exit.fail(failure), function (cause) {
 			seen.push(cause)
-			return Deferred.await(gate).pipe(Effect.andThen(Effect.fail(observerFailure)))
-		})
-		const unsubscribe = session.subscribe(function () {
-			if (Option.isSome(session.getSnapshot()) && seen.length > 0) Deferred.doneUnsafe(observed, Effect.void)
+			return Deferred.succeed(started, undefined).pipe(
+				Effect.andThen(Deferred.await(gate)),
+				Effect.andThen(Effect.fail(observerFailure))
+			)
 		})
 		yield* session.start
+		yield* Deferred.await(started)
 		expect(session.getServerSnapshot()).toEqual(Option.some(Cause.fail(failure)))
 		expect(session.getSnapshot()).toEqual(Option.some(Cause.fail(failure)))
 		expect(seen).toEqual([Cause.fail(failure)])
 		yield* Deferred.succeed(gate, undefined)
-		yield* Deferred.await(observed)
-		expect(session.getSnapshot()).toEqual(
-			Option.some(Cause.combine(Cause.fail(failure), Cause.fail(observerFailure)))
-		)
-		unsubscribe()
 		yield* session.stop
+		expect(session.getSnapshot()).toEqual(Option.some(Cause.fail(failure)))
 	})
 )
 
@@ -119,13 +116,50 @@ it.effect("keeps the latest source failure when an older asynchronous observer f
 		yield* session.start
 		f.source.publish([entry("a", 1), entry("a", 2)])
 		f.source.publish([entry("b", 1), entry("b", 2)])
-		const latest = Option.some(Cause.combine(duplicate("b"), Cause.die(secondDefect)))
+		const latest = Option.some(duplicate("b"))
 		expect(session.getSnapshot()).toEqual(latest)
 		yield* Deferred.succeed(gate, undefined)
 		yield* Deferred.await(completed)
 		expect(session.getSnapshot()).toEqual(latest)
 		expect(seen).toEqual([duplicate("a"), duplicate("b")])
 		yield* session.stop
+	})
+)
+
+it.effect("bounds repeated stalled observers by deadline while the session stays healthy", () =>
+	Effect.gen(function* () {
+		const f = fixture()
+		const seen: Cause.Cause<unknown>[] = []
+		let interrupted = 0
+		const session = Session.make(Exit.succeed(f.bootstrap), function (cause) {
+			seen.push(cause)
+			return Effect.never.pipe(
+				Effect.onInterrupt(() =>
+					Effect.sync(function () {
+						interrupted += 1
+					})
+				)
+			)
+		})
+		yield* session.start
+		f.source.publish([entry("a", 1), entry("a", 2)])
+		f.source.publish([entry("b", 1), entry("b", 2)])
+		f.source.publish([entry("c", 1), entry("c", 2)])
+		expect(session.getSnapshot()).toEqual(Option.some(duplicate("c")))
+		expect(seen).toEqual([duplicate("a"), duplicate("b"), duplicate("c")])
+		yield* Effect.promise(() =>
+			vi.waitFor(
+				function () {
+					expect(interrupted).toBe(3)
+				},
+				{ timeout: 10_000 }
+			)
+		)
+		f.source.publish([entry("a", 1)])
+		expect(f.handled).toEqual([Message.Received({ value: "a" })])
+		expect(session.getSnapshot()).toEqual(Option.none())
+		yield* session.stop
+		expect(f.source.listeners).toBe(0)
 	})
 )
 
