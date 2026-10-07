@@ -761,3 +761,64 @@ describe("Effect store construction", function () {
 		})
 	)
 })
+
+it.effect("retains the authoritative crash after disposal and isolates crash observers from onCrash", () =>
+	Effect.gen(function* () {
+		const defect = new Error("update")
+		const observed: Array<Cause.Cause<unknown>> = []
+		const configured: Array<Cause.Cause<unknown>> = []
+		let modelNotifications = 0
+		const store = yield* Store.make<number, number>(
+			{
+				update() {
+					throw defect
+				},
+				onCrash(cause) {
+					configured.push(cause)
+				},
+			},
+			{ model: 0 }
+		)
+		store.subscribe(function () {
+			modelNotifications += 1
+		})
+		store.subscribeCrash(function () {
+			throw new Error("internal observer")
+		})
+		store.subscribeCrash(function () {
+			observed.push(Option.getOrThrow(store.getCrash()))
+		})
+		store.dispatch(1)
+		const original = Option.getOrThrow(store.getCrash())
+		expect(observed).toEqual([Cause.die(defect)])
+		expect(configured).toEqual([Cause.die(defect)])
+		expect(configured[0]).toBe(original)
+		expect(modelNotifications).toBe(0)
+		store.dispatch(2)
+		expect(store.commit(3)).toEqual(Result.fail(new Store.CommitError({ reason: "Crashed", cause: original })))
+		yield* store.dispose()
+		expect(Option.getOrThrow(store.getCrash())).toBe(original)
+		expect(store.isDisposed()).toBe(true)
+		expect({ model: store.getModel(), modelNotifications, crashes: configured.length }).toEqual({
+			model: 0,
+			modelNotifications: 1,
+			crashes: 1,
+		})
+	})
+)
+
+it.effect("healthy disposal retains no terminal crash", () =>
+	Effect.gen(function* () {
+		const store = yield* Store.make<number, number>(
+			{ update: (_model, message) => ({ model: message }) },
+			{ model: 0 }
+		)
+		expect(store.commit(1)).toEqual(Result.void)
+		yield* store.dispose()
+		expect({ model: store.getModel(), crash: store.getCrash(), disposed: store.isDisposed() }).toEqual({
+			model: 1,
+			crash: Option.none(),
+			disposed: true,
+		})
+	})
+)

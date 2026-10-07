@@ -45,6 +45,36 @@ describe("Loader declarations", function () {
 		})
 	)
 
+	it.effect("maps structural Loaders through decoded deliveries without a payload mapping field", () =>
+		Effect.gen(function* () {
+			const decodeDelivery = (input: unknown) =>
+				Result.map(RecordLoader.decodeDelivery(input), ({ receipt, message }) => ({
+					receipt,
+					message: message.id,
+				}))
+			const structural: Loader.Loader<Data, typeof Data.Encoded, string> = {
+				name: RecordLoader.name,
+				data: RecordLoader.data,
+				key: RecordLoader.key,
+				load: RecordLoader.load,
+				pipe: RecordLoader.pipe,
+				decodeDelivery,
+				decode: (input) => Result.map(decodeDelivery(input), (delivery) => delivery.message),
+			}
+			const mapped = Loader.mapMessages(structural, (id, receipt) => ({ label: `record ${id}`, receipt })).pipe(
+				Loader.mapMessages((message, receipt) => ({ ...message, label: `${message.label}!`, latest: receipt }))
+			)
+			const envelope = yield* mapped.load(Effect.succeed(data))
+			const delivery = Result.getOrThrow(mapped.decodeDelivery(envelope))
+			expect(delivery.message.label).toBe("record a!")
+			expect(delivery.receipt).toEqual({ name: "Record", key: "a", version: envelope.version })
+			expect(delivery.message.receipt).toBe(delivery.receipt)
+			expect(delivery.message.latest).toBe(delivery.receipt)
+			expect(Result.getOrThrow(mapped.decode(envelope)).label).toBe("record a!")
+			expect(envelope.payload).toEqual({ id: "a", at: "2026-10-01T12:00:00.000Z" })
+		})
+	)
+
 	it.effect("loads lazily, encodes native Schema values, and allocates one token per execution", () =>
 		Effect.gen(function* () {
 			const tokens = vi.spyOn(crypto, "randomUUID")

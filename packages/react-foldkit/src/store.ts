@@ -58,6 +58,10 @@ export type StoreTypeId = typeof StoreTypeId
 export type Store<Model, Message> = Readonly<{
 	[StoreTypeId]: StoreTypeId
 	getModel: () => Model
+	/** Terminal crash Cause, retained after disposal. */
+	getCrash: () => Option.Option<Cause.Cause<unknown>>
+	/** Crash invalidation only. Read getCrash for current health; registration does not replay. */
+	subscribeCrash: (listener: () => void) => () => void
 	subscribe: (listener: () => void) => () => void
 	dispatch: (message: Message) => void
 	/** Processes through this Message synchronously, preserving FIFO and asynchronous Commands. */
@@ -151,7 +155,7 @@ type Phase =
 	| { readonly _tag: "Booting" }
 	| { readonly _tag: "Live"; readonly drain: "Idle" | "Sync" | "Deferred" }
 	| { readonly _tag: "Crashed"; readonly cause: Cause.Cause<unknown> }
-	| { readonly _tag: "Disposed" }
+	| { readonly _tag: "Disposed"; readonly crash: Option.Option<Cause.Cause<unknown>> }
 
 const isTerminal = (phase: Phase): boolean => phase._tag === "Crashed" || phase._tag === "Disposed"
 
@@ -302,6 +306,7 @@ function start<Model, Message, R>(
 	acquireResourceContext: Effect.Effect<Context.Context<R>>
 ) {
 	const listeners = new Set<() => void>()
+	const crashListeners = new Set<() => void>()
 	const pendingMessages = MutableList.make<{ readonly message: Message }>()
 	let phase: Phase = { _tag: "Booting" }
 	let syncWorkMsSinceYield = 0
@@ -315,11 +320,24 @@ function start<Model, Message, R>(
 	PubSub.publishUnsafe(modelPubSub, model)
 
 	const provideAllResources = makeProvideAllResources(acquireResourceContext, interruptRegistry)
+	const getCrash = (): Option.Option<Cause.Cause<unknown>> =>
+		Match.value(phase).pipe(
+			Match.tagsExhaustive({
+				Booting: () => Option.none(),
+				Live: () => Option.none(),
+				Crashed: ({ cause }) => Option.some(cause),
+				Disposed: ({ crash }) => crash,
+			})
+		)
 
 	function crashWith(cause: Cause.Cause<unknown>, triggeringMessage: Option.Option<Message>): void {
 		if (isTerminal(phase)) return
 		phase = { _tag: "Crashed", cause }
 		MutableList.clear(pendingMessages)
+		for (const listener of crashListeners) {
+			const exit = Effect.runSyncExit(Effect.sync(listener))
+			if (Exit.isFailure(exit)) Effect.runFork(Effect.logError(exit.cause))
+		}
 		if (config.onCrash !== undefined) config.onCrash(cause, triggeringMessage)
 		else console.error("[react-foldkit] Store crashed:", Cause.pretty(cause))
 	}
@@ -485,11 +503,12 @@ function start<Model, Message, R>(
 		Effect.uninterruptibleMask((restore) =>
 			Effect.suspend(function () {
 				if (phase._tag === "Disposed") return restore(Deferred.await(disposal))
-				phase = { _tag: "Disposed" }
+				phase = { _tag: "Disposed", crash: getCrash() }
 				const notify = [...listeners]
 				return Effect.sync(function () {
 					MutableList.clear(pendingMessages)
 					listeners.clear()
+					crashListeners.clear()
 					cancelDeferredDrain()
 					for (const listener of notify) listener()
 				}).pipe(
@@ -523,6 +542,13 @@ function start<Model, Message, R>(
 	return {
 		[StoreTypeId]: StoreTypeId,
 		getModel: () => model,
+		getCrash,
+		subscribeCrash(listener) {
+			crashListeners.add(listener)
+			return function () {
+				crashListeners.delete(listener)
+			}
+		},
 		subscribe,
 		dispatch: enqueueMessage,
 		commit,

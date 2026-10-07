@@ -1,4 +1,18 @@
-import { Cause, Deferred, Effect, Exit, Latch, Layer, Result, Scheduler, Schema, Scope, Stream } from "effect"
+import {
+	Cause,
+	Deferred,
+	Effect,
+	Exit,
+	Fiber,
+	Latch,
+	Layer,
+	Option,
+	Result,
+	Scheduler,
+	Schema,
+	Scope,
+	Stream,
+} from "effect"
 import { describe, expect, it, vi } from "vitest"
 import { modifyFields } from "../struct"
 import type * as Command from "../command"
@@ -278,21 +292,6 @@ describe("activation leases", function () {
 		)
 	})
 
-	it("shares overlapping leases and ends the activation with the last one", function () {
-		const store = ReactStore.make({ update }, { model: { value: "initial" } })
-		const first = activate(store)
-		const second = activate(store)
-		Result.getOrThrow(store.commit(Message.SetValue({ value: "still active" })))
-		expect(store.getModel()).toEqual({ value: "still active" })
-		first()
-		Result.getOrThrow(store.commit(Message.SetValue({ value: "second holds" })))
-		expect(store.getModel()).toEqual({ value: "second holds" })
-		second()
-		expect(store.commit(Message.SetValue({ value: "inactive" }))).toEqual(
-			Result.fail(new CommitError({ reason: "Inactive" }))
-		)
-	})
-
 	it("disposes the store only after the last overlapping lease closes", async function () {
 		let releases = 0
 		// A Subscription forces the Layer to build, so its release proves the store's own scope closed.
@@ -342,5 +341,90 @@ describe("activation leases", function () {
 		const second = activate(store)
 		expect(store.getModel()).toEqual({ value: "carried" })
 		second()
+	})
+})
+
+describe("crash projection", function () {
+	it("isolates facade crash observers and recovers the retained health on a new activation", function () {
+		const defect = new Error("terminal")
+		const observations: Array<string> = []
+		const store = ReactStore.make<number, number>(
+			{
+				update(_model, message) {
+					if (message === 9) throw defect
+					return { model: message }
+				},
+				onCrash() {},
+			},
+			{ model: 0 }
+		)
+		store.subscribeCrash(function () {
+			throw new Error("internal observer")
+		})
+		store.subscribeCrash(function () {
+			observations.push(Option.isSome(store.getCrash()) ? "crashed" : "healthy")
+		})
+		const first = activate(store)
+		expect(store.commit(1)).toEqual(Result.void)
+		store.dispatch(9)
+		const cause = Option.getOrThrow(store.getCrash())
+		first()
+		expect(Option.getOrThrow(store.getCrash())).toBe(cause)
+		const second = activate(store)
+		expect(store.commit(2)).toEqual(Result.void)
+		expect({ model: store.getModel(), crash: store.getCrash(), observations }).toEqual({
+			model: 2,
+			crash: Option.none(),
+			observations: ["healthy", "crashed", "healthy"],
+		})
+		second()
+	})
+
+	it("does not overwrite replacement health when an older activation finishes resource cleanup", async function () {
+		await Effect.runPromise(
+			Effect.gen(function* () {
+				const acquired = Deferred.makeUnsafe<void>()
+				const releasing = Deferred.makeUnsafe<void>()
+				const gate = Deferred.makeUnsafe<void>()
+				const first = yield* Scope.make()
+				const second = yield* Scope.make()
+				let releases = 0
+				const store = ReactStore.make<number, number>(
+					{
+						update(_model, message) {
+							if (message === 9) throw new Error("old activation")
+							return { model: message }
+						},
+						onCrash() {},
+						layer: Layer.effectDiscard(
+							Effect.acquireRelease(Deferred.succeed(acquired, undefined), () =>
+								Effect.sync(function () {
+									releases += 1
+								}).pipe(
+									Effect.andThen(Deferred.succeed(releasing, undefined)),
+									Effect.andThen(Deferred.await(gate))
+								)
+							)
+						),
+					},
+					{ model: 0, commands: [{ name: "Acquire", effect: Effect.never }] }
+				)
+				yield* store.activate.pipe(Scope.provide(first))
+				yield* Deferred.await(acquired)
+				store.dispatch(9)
+				const closing = yield* Effect.forkChild(Scope.close(first, Exit.void))
+				yield* Deferred.await(releasing)
+				yield* store.activate.pipe(Scope.provide(second))
+				expect(store.commit(2)).toEqual(Result.void)
+				yield* Deferred.succeed(gate, undefined)
+				yield* Fiber.join(closing)
+				expect({ model: store.getModel(), crash: store.getCrash(), releases }).toEqual({
+					model: 2,
+					crash: Option.none(),
+					releases: 1,
+				})
+				yield* Scope.close(second, Exit.void)
+			})
+		)
 	})
 })

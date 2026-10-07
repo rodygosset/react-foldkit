@@ -7,10 +7,13 @@
 - `Loader.Delivery` and `decodeDelivery` return the validated receipt and mapped
   Message together. The router adapter decodes each envelope once.
 - Provider-owned `createCommitSource`, `renderError` and `onError`. Full Causes
-  include setup failures and cleanup defects. Live failures recover on a valid
-  notification without replaying successful tokens. `onError` returns an
-  `Effect<void, unknown>`, supports asynchronous observers, and fires once per
-  failure. Observer fibers end with their Provider lifetime.
+  include setup failures, source failures, terminal Store crashes, and cleanup
+  defects. Source failures recover on a valid notification without replaying
+  successful tokens; terminal Store crashes remain until a fresh healthy
+  activation. `onError` returns an `Effect<void, unknown>` and supports
+  asynchronous observers. Live observer fibers end when the Provider stops.
+  Cleanup reporting after stop has a five-second cooperative deadline, and cleanup
+  defects are logged even if the observer fails, is interrupted, or times out.
 - Option-returning root/child `useOptionalModel` and `useOptionalDispatch`, plus
   root `useOptionalCommit`. Optional projections construct retained snapshots
   only after presence; overlapping store activations share leases.
@@ -61,9 +64,10 @@
 
 ### Breaking changes
 
-- Structural Loaders must expose `toMessage(data, receipt)` and `decodeDelivery`
-  for `mapMessages` and router composition.
-  Loaders constructed through `define` or `fromQuery` already provide it.
+- Structural `Loader` implementations no longer expose `toMessage`. Message
+  mappings run through `decodeDelivery`, which returns the mapped Message and its
+  validated receipt while preserving the Loader's name, data Codec, key, and load
+  function.
 - `Loader.decode` returns `Result<Message, SchemaError>`; custom CommitSource
   snapshots return `Result<ReadonlyArray<CommitEntry<Message>>, E>`. A schema or
   resource-key mismatch is typed data; a thrown callback stays a defect.
