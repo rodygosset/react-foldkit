@@ -1,6 +1,4 @@
-// @vitest-environment node
-
-import { Context, Deferred, Effect, Exit, Layer, ManagedRuntime, Result, Schema } from "effect"
+import { DateTime, Context, Deferred, Effect, Exit, Layer, ManagedRuntime, Result, Schema } from "effect"
 import { describe, it } from "@effect/vitest"
 import { afterEach, expect, vi } from "vitest"
 import * as AsyncData from "./asyncData"
@@ -9,7 +7,7 @@ import * as Query from "foldkit/experimental/query"
 
 const Data = Schema.Struct({ id: Schema.String, at: Schema.DateFromString })
 type Data = typeof Data.Type
-const data: Data = { id: "a", at: new Date("2026-10-01T12:00:00Z") }
+const data: Data = { id: "a", at: DateTime.toDateUtc(DateTime.makeUnsafe("2026-10-01T12:00:00Z")) }
 const RecordLoader = Loader.define({ name: "Record", data: Data, key: ({ id }) => id })
 
 afterEach(() => vi.restoreAllMocks())
@@ -77,7 +75,7 @@ describe("Loader declarations", function () {
 
 	it.effect("loads lazily, encodes native Schema values, and allocates one token per execution", () =>
 		Effect.gen(function* () {
-			const tokens = vi.spyOn(crypto, "randomUUID")
+			const tokens = vi.spyOn(crypto, "getRandomValues")
 			const input = vi.fn(() => data)
 			const program = RecordLoader.load(Effect.sync(input))
 			expect(input).not.toHaveBeenCalled()
@@ -86,11 +84,24 @@ describe("Loader declarations", function () {
 			const second = yield* program
 			expect(first.payload).toEqual({ id: "a", at: data.at.toISOString() })
 			expect(first.version).not.toBe(second.version)
+			expect(first.version).toMatch(/^[\da-f]{8}-[\da-f]{4}-4[\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/i)
 			expect(input).toHaveBeenCalledTimes(2)
 			expect(tokens).toHaveBeenCalledTimes(2)
 			expect(Result.getOrThrow(RecordLoader.decode(first))).toEqual(data)
-			expect(Result.getOrThrow(RecordLoader.decode(JSON.parse(JSON.stringify(first))))).toEqual(data)
+			const Json = Schema.fromJsonString(Schema.Unknown)
+			const transported = yield* Schema.decodeEffect(Json)(yield* Schema.encodeEffect(Json)(first))
+			expect(Result.getOrThrow(RecordLoader.decode(transported))).toEqual(data)
 			expect(tokens).toHaveBeenCalledTimes(2)
+		})
+	)
+
+	it.effect("keeps secure randomness failures as defects", () =>
+		Effect.gen(function* () {
+			const defect = new Error("secure randomness unavailable")
+			vi.spyOn(crypto, "getRandomValues").mockImplementation(function () {
+				throw defect
+			})
+			expect(yield* Effect.exit(RecordLoader.load(Effect.succeed(data)))).toEqual(Exit.die(defect))
 		})
 	)
 
@@ -113,11 +124,13 @@ describe("Loader declarations", function () {
 
 	it.effect("preserves input failures and encoding failures without allocating tokens", () =>
 		Effect.gen(function* () {
-			const tokens = vi.spyOn(crypto, "randomUUID")
+			const tokens = vi.spyOn(crypto, "getRandomValues")
 			expect(yield* Effect.result(RecordLoader.load(Effect.fail("unavailable")))).toEqual(
 				Result.fail("unavailable")
 			)
-			const invalid = RecordLoader.load(Effect.succeed({ ...data, at: new Date(NaN) }))
+			const invalidDate = DateTime.toDateUtc(DateTime.makeUnsafe(0))
+			invalidDate.setTime(NaN)
+			const invalid = RecordLoader.load(Effect.succeed({ ...data, at: invalidDate }))
 			const result = yield* Effect.result(invalid)
 			expect(result._tag).toBe("Failure")
 			if (result._tag === "Failure") expect(Schema.isSchemaError(result.failure)).toBe(true)
@@ -226,95 +239,107 @@ describe("Loader.fromQuery", function () {
 class Reader extends Context.Service<Reader, { readonly read: Effect.Effect<Data> }>()("LoaderTest/Reader") {}
 
 describe("host-owned Effect execution", function () {
-	it("acquires services lazily, reuses them within a runtime, and isolates requests", async function () {
-		let acquired = 0
-		let released = 0
-		const runtime = (id: string) =>
-			ManagedRuntime.make(
-				Layer.effect(
-					Reader,
-					Effect.acquireRelease(
-						Effect.sync(function () {
-							acquired += 1
-							return { read: Effect.succeed({ ...data, id }) }
-						}),
-						() =>
+	it.live("acquires services lazily, reuses them within a runtime, and isolates requests", () =>
+		Effect.gen(function* () {
+			let acquired = 0
+			let released = 0
+			const runtime = (id: string) =>
+				ManagedRuntime.make(
+					Layer.effect(
+						Reader,
+						Effect.acquireRelease(
 							Effect.sync(function () {
-								released += 1
-							})
+								acquired += 1
+								return { read: Effect.succeed({ ...data, id }) }
+							}),
+							() =>
+								Effect.sync(function () {
+									released += 1
+								})
+						)
 					)
 				)
-			)
-		const first = runtime("first")
-		const second = runtime("second")
-		const program = RecordLoader.load(Effect.flatMap(Reader, (reader) => reader.read))
-		expect(acquired).toBe(0)
-		try {
-			expect((await first.runPromise(program)).key).toBe("first")
-			expect((await first.runPromise(program)).key).toBe("first")
-			expect((await second.runPromise(program)).key).toBe("second")
-			expect(acquired).toBe(2)
-			expect(released).toBe(0)
-		} finally {
-			await first.dispose()
-			await second.dispose()
-		}
-		expect(released).toBe(2)
-	})
+			const first = runtime("first")
+			const second = runtime("second")
+			const program = RecordLoader.load(Effect.flatMap(Reader, (reader) => reader.read))
+			expect(acquired).toBe(0)
+			try {
+				expect((yield* Effect.promise(() => first.runPromise(program))).key).toBe("first")
+				expect((yield* Effect.promise(() => first.runPromise(program))).key).toBe("first")
+				expect((yield* Effect.promise(() => second.runPromise(program))).key).toBe("second")
+				expect(acquired).toBe(2)
+				expect(released).toBe(0)
+			} finally {
+				yield* Effect.promise(() => first.dispose())
+				yield* Effect.promise(() => second.dispose())
+			}
+			expect(released).toBe(2)
+		})
+	)
 
-	it("forwards host abortion without disposing the shared runtime", async function () {
-		const started = Deferred.makeUnsafe<void>()
-		let interrupted = false
-		let released = false
-		const runtime = ManagedRuntime.make(
-			Layer.effect(
-				Reader,
-				Effect.acquireRelease(Effect.succeed({ read: Effect.succeed(data) }), () =>
-					Effect.sync(function () {
-						released = true
-					})
-				)
-			)
-		)
-		const input = Effect.gen(function* () {
-			yield* Reader
-			yield* Deferred.succeed(started, undefined)
-			return yield* Effect.never
-		}).pipe(
-			Effect.onInterrupt(() =>
-				Effect.sync(function () {
-					interrupted = true
-				})
-			)
-		)
+	it("forwards host abortion without disposing the shared runtime", function () {
 		const controller = new AbortController()
-		try {
-			const result = runtime.runPromise(RecordLoader.load(input), { signal: controller.signal })
-			const rejected = expect(result).rejects.toBeDefined()
-			await Effect.runPromise(Deferred.await(started))
-			controller.abort()
-			await rejected
-			expect(interrupted).toBe(true)
-			expect(released).toBe(false)
-			expect(
-				(await runtime.runPromise(RecordLoader.load(Effect.flatMap(Reader, (reader) => reader.read)))).key
-			).toBe("a")
-		} finally {
-			await runtime.dispose()
-		}
-		expect(released).toBe(true)
+		return Effect.runPromise(
+			Effect.gen(function* () {
+				const started = Deferred.makeUnsafe<void>()
+				let interrupted = false
+				let released = false
+				const runtime = ManagedRuntime.make(
+					Layer.effect(
+						Reader,
+						Effect.acquireRelease(Effect.succeed({ read: Effect.succeed(data) }), () =>
+							Effect.sync(function () {
+								released = true
+							})
+						)
+					)
+				)
+				const input = Effect.gen(function* () {
+					yield* Reader
+					yield* Deferred.succeed(started, undefined)
+					return yield* Effect.never
+				}).pipe(
+					Effect.onInterrupt(() =>
+						Effect.sync(function () {
+							interrupted = true
+						})
+					)
+				)
+				try {
+					const result = runtime.runPromise(RecordLoader.load(input), { signal: controller.signal })
+					const rejected = expect(result).rejects.toBeDefined()
+					yield* Deferred.await(started)
+					controller.abort()
+					yield* Effect.promise(() => rejected)
+					expect(interrupted).toBe(true)
+					expect(released).toBe(false)
+					expect(
+						(yield* Effect.promise(() =>
+							runtime.runPromise(RecordLoader.load(Effect.flatMap(Reader, (reader) => reader.read)))
+						)).key
+					).toBe("a")
+				} finally {
+					yield* Effect.promise(() => runtime.dispose())
+				}
+				expect(released).toBe(true)
+			})
+		)
 	})
 
-	it("leaves runtime initialization failures at the host execution boundary", async function () {
-		const runtime = ManagedRuntime.make(Layer.effect(Reader, Effect.fail("initialization failed")))
-		try {
-			await expect(
-				runtime.runPromise(RecordLoader.load(Effect.flatMap(Reader, (reader) => reader.read)))
-			).rejects.toThrow(/initialization failed/)
-		} finally {
-			await runtime.dispose()
-		}
-	})
+	it.live("leaves runtime initialization failures at the host execution boundary", () =>
+		Effect.gen(function* () {
+			const runtime = ManagedRuntime.make(Layer.effect(Reader, Effect.fail("initialization failed")))
+			try {
+				yield* Effect.promise(() =>
+					expect(
+						runtime.runPromise(RecordLoader.load(Effect.flatMap(Reader, (reader) => reader.read)))
+					).rejects.toThrow(/initialization failed/)
+				)
+			} finally {
+				yield* Effect.promise(() => runtime.dispose())
+			}
+		})
+	)
 })
 
 describe("Loader.settleQueryIf", function () {

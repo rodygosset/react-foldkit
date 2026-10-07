@@ -8,7 +8,7 @@ import {
 	Scripts,
 	useRouter,
 } from "@tanstack/react-router"
-import { Context, Effect, Layer, Option, Result, Schema } from "effect"
+import { DateTime, Context, Effect, Layer, Option, Result, Schema } from "effect"
 import * as Query from "foldkit/experimental/query"
 import React from "react"
 import * as AsyncData from "../../src/asyncData"
@@ -31,7 +31,7 @@ export type SearchResponse = typeof SearchResponse.Type
 export const response = (query: string, revision = 1): SearchResponse => ({
 	query,
 	revision,
-	fetchedAt: new Date("2026-09-30T10:00:00.000Z"),
+	fetchedAt: DateTime.toDateUtc(DateTime.makeUnsafe("2026-09-30T10:00:00.000Z")),
 })
 
 type Load = (query: string) => Effect.Effect<SearchResponse, string>

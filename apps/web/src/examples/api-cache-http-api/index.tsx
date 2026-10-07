@@ -1,7 +1,7 @@
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import { Separator } from "@workspace/ui/components/separator"
-import { Array, Clock, Duration, Effect, Layer, Match, Option, pipe, Schema, Stream } from "effect"
+import { DateTime, Array, Clock, Duration, Effect, Layer, Match, Option, pipe, Schema, Stream } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup } from "effect/http-api"
 import * as AsyncData from "react-foldkit/asyncData"
 import { defineMessageUnion } from "react-foldkit/message"
@@ -192,7 +192,8 @@ const { Provider, useModel, useDispatch } = defineApplication({
 	layer: BlogClient.layer,
 })
 
-const formatFetchedAt = (fetchedAt: number): string => new Date(fetchedAt).toLocaleTimeString()
+const formatFetchedAt = (fetchedAt: number): string =>
+	DateTime.formatLocal(DateTime.makeUnsafe(fetchedAt), { timeStyle: "medium" })
 
 const isPostDetailCached = (postDetailById: Model["postDetailById"], postId: string): boolean =>
 	AsyncData.hasData(postDetailQuery.read(postDetailById, { params: { postId } }))

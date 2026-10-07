@@ -1,6 +1,9 @@
 {
 	"$schema": "./node_modules/@effect/tsgo/oxlint-schema.json",
-	"extends": ["./node_modules/@effect/tsgo/oxlint-presets/recommended.json"],
+	"extends": [
+		"./node_modules/@effect/tsgo/oxlint-presets/recommended.json",
+		"./node_modules/@effect/tsgo/oxlint-presets/effect-native.json"
+	],
 	"ignorePatterns": [
 		"repos/**",
 		"**/node_modules/**",
@@ -23,7 +26,10 @@
 			}
 		},
 		{
-			"files": ["packages/react-foldkit/src/internal/provider-session.ts", "packages/react-foldkit/src/react.tsx"],
+			"files": [
+				"packages/react-foldkit/src/internal/provider-session.ts",
+				"packages/react-foldkit/src/react.tsx"
+			],
 			"rules": {
 				// Crash-reporting boundary: observers receive Cause<unknown>
 				// from crashed stores and the public onError callback keeps an

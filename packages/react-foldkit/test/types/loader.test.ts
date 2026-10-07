@@ -1,5 +1,5 @@
 import type { AnyRouter } from "@tanstack/react-router"
-import { Context, Effect, Layer, ManagedRuntime, Result, Schema } from "effect"
+import { DateTime, Context, Effect, Layer, ManagedRuntime, Result, Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup } from "effect/http-api"
 import * as AsyncData from "react-foldkit/asyncData"
 import { Loader as RootLoader } from "react-foldkit"
@@ -44,7 +44,9 @@ describe("Loader public types", function () {
 		>()
 		// @ts-expect-error Required services are preserved until host provisioning.
 		void Effect.runPromise(program)
-		const runtime = ManagedRuntime.make(Layer.succeed(Reader, { value: { id: "a", at: new Date() } }))
+		const runtime = ManagedRuntime.make(
+			Layer.succeed(Reader, { value: { id: "a", at: DateTime.toDateUtc(DateTime.nowUnsafe()) } })
+		)
 		void runtime.runPromise(program)
 		// @ts-expect-error load accepts no runtime or execution options.
 		RecordLoader.load(input, { runtime })
@@ -124,23 +126,29 @@ describe("Loader public types", function () {
 			args: { id: Schema.FiniteFromString, limit: Schema.optionalKey(Schema.FiniteFromString) },
 			data: Schema.DateFromString,
 			error: Schema.DateFromString,
-			execute: () => Effect.fail(new Date()),
+			execute: () => Effect.fail(DateTime.toDateUtc(DateTime.nowUnsafe())),
 		})
 		const transformedLoader = Loader.fromQuery(transformed)
 		const settlement = Loader.settleQueryIf(
 			transformed,
 			transformed.init(),
 			{ id: 1 },
-			AsyncData.Success({ data: new Date() }),
+			AsyncData.Success({ data: DateTime.toDateUtc(DateTime.nowUnsafe()) }),
 			{ fresher: (incoming, current) => incoming > current }
 		)
 		expectTypeOf(settlement).toEqualTypeOf<
 			Update.Return<typeof transformed.Model.Type, typeof transformed.Message.Type>
 		>()
-		// @ts-expect-error Settlement arguments use decoded numbers.
-		Loader.settleQueryIf(transformed, transformed.init(), { id: "1" }, AsyncData.Success({ data: new Date() }), {
-			fresher: () => true,
-		})
+		Loader.settleQueryIf(
+			transformed,
+			transformed.init(),
+			// @ts-expect-error Settlement arguments use decoded numbers.
+			{ id: "1" },
+			AsyncData.Success({ data: DateTime.toDateUtc(DateTime.nowUnsafe()) }),
+			{
+				fresher: () => true,
+			}
+		)
 		// @ts-expect-error Settlement outcomes use the Query's decoded data type.
 		Loader.settleQueryIf(transformed, transformed.init(), { id: 1 }, AsyncData.Success({ data: "encoded date" }), {
 			fresher: () => true,
@@ -177,7 +185,7 @@ describe("Loader public types", function () {
 			httpQuery,
 			httpQuery.init("request"),
 			{ params: { id: "a" } },
-			AsyncData.Success({ data: new Date() }),
+			AsyncData.Success({ data: DateTime.toDateUtc(DateTime.nowUnsafe()) }),
 			{ fresher: (incoming, current) => incoming > current }
 		)
 		expectTypeOf(httpSettlement).toEqualTypeOf<

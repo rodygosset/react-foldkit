@@ -1,8 +1,9 @@
+import { it } from "@effect/vitest"
 import { act, cleanup, render, waitFor } from "@testing-library/react"
 import { Effect, Schema } from "effect"
 import React from "react"
 import { renderToString } from "react-dom/server"
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, vi } from "vitest"
 import { entry, fakeSource, Message } from "../test/fixtures/commit-source"
 import { createSourceFixture } from "../test/fixtures/react-commit-source"
 import { defineApplication, type CommitEntry, type CommitSource } from "./react"
@@ -112,50 +113,52 @@ describe("Provider commitSource", function () {
 		expect(f.source.unsubscriptions).toBe(f.source.subscriptions)
 	})
 
-	it("preserves base init and bootstrap Commands, deferring both until client activation", async function () {
-		const Model = Schema.Struct({ value: Schema.String, completions: Schema.Finite })
-		type Model = typeof Model.Type
-		const runs: string[] = []
-		const command = (name: string): Command.Command<Message> => ({
-			name,
-			effect: Effect.sync(function () {
-				runs.push(name)
-				return Message.Edited()
-			}),
-		})
-		const App = defineApplication({
-			Model,
-			update: (model: Model, message: Message): Update.Return<Model, Message> =>
-				Message.match(message, {
-					Received: ({ value }) => ({
-						model: { ...model, value: model.value + value },
-						commands: [command(value)],
-					}),
-					Edited: () => ({ model: { ...model, completions: model.completions + 1 } }),
+	it.live("preserves base init and bootstrap Commands, deferring both until client activation", () =>
+		Effect.gen(function* () {
+			const Model = Schema.Struct({ value: Schema.String, completions: Schema.Finite })
+			type Model = typeof Model.Type
+			const runs: string[] = []
+			const command = (name: string): Command.Command<Message> => ({
+				name,
+				effect: Effect.sync(function () {
+					runs.push(name)
+					return Message.Edited()
 				}),
+			})
+			const App = defineApplication({
+				Model,
+				update: (model: Model, message: Message): Update.Return<Model, Message> =>
+					Message.match(message, {
+						Received: ({ value }) => ({
+							model: { ...model, value: model.value + value },
+							commands: [command(value)],
+						}),
+						Edited: () => ({ model: { ...model, completions: model.completions + 1 } }),
+					}),
+			})
+			const source = fakeSource([entry("a", 1), entry("b", 1)])
+			function View() {
+				const model = App.useModel()
+				return <span>{`${model.value}:${model.completions}`}</span>
+			}
+			const tree = (
+				<App.Provider
+					init={{ model: { value: "base:", completions: 0 }, commands: [command("init")] }}
+					commitSource={source.source}
+				>
+					<View />
+				</App.Provider>
+			)
+			expect(renderToString(tree)).toBe("<span>base:ab:0</span>")
+			expect(runs).toEqual([])
+			expect(source.subscriptions).toBe(0)
+			const mounted = render(tree)
+			yield* Effect.promise(() => waitFor(() => expect(mounted.container.textContent).toBe("base:ab:3")))
+			expect(runs).toEqual(["init", "a", "b"])
+			act(() => source.notify())
+			expect(runs).toEqual(["init", "a", "b"])
 		})
-		const source = fakeSource([entry("a", 1), entry("b", 1)])
-		function View() {
-			const model = App.useModel()
-			return <span>{`${model.value}:${model.completions}`}</span>
-		}
-		const tree = (
-			<App.Provider
-				init={{ model: { value: "base:", completions: 0 }, commands: [command("init")] }}
-				commitSource={source.source}
-			>
-				<View />
-			</App.Provider>
-		)
-		expect(renderToString(tree)).toBe("<span>base:ab:0</span>")
-		expect(runs).toEqual([])
-		expect(source.subscriptions).toBe(0)
-		const mounted = render(tree)
-		await waitFor(() => expect(mounted.container.textContent).toBe("base:ab:3"))
-		expect(runs).toEqual(["init", "a", "b"])
-		act(() => source.notify())
-		expect(runs).toEqual(["init", "a", "b"])
-	})
+	)
 })
 const fixture = (initial: ReadonlyArray<CommitEntry<Message>> = [], source = fakeSource(initial)) =>
 	createSourceFixture(initial, source)

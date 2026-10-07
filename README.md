@@ -32,8 +32,9 @@ bun install --frozen-lockfile
 ```
 
 The install hook patches TypeScript 7 and Oxlint with `@effect/tsgo`.
-Effect diagnostics are enabled in the workspace TypeScript projects; warnings
-remain visible without failing typechecks. Run `bun run lint:effect` to inspect
+Effect diagnostics, including all rules from the `effect-native` preset, are
+enabled in the workspace TypeScript projects and Oxlint. Warnings remain visible
+without failing typechecks; `bun run lint` fails on lint warnings. Run `bun run lint:effect` to inspect
 the library's Effect diagnostics from the command line.
 
 For Cursor or VS Code, install the recommended **TypeScript 7** extension
