@@ -59,7 +59,7 @@ function encodeLoad<A, I>(config: Config<A, I>, readKey: ReadKey<A>): Loader<A, 
 		const payload = yield* encode(data)
 		const key = yield* Effect.suspend(() => Effect.fromResult(readKey(data)))
 		return {
-			_tag: EnvelopeHeader.fields._tag.literal,
+			_tag: EnvelopeHeader.fields._tag.schema.literal,
 			format: EnvelopeHeader.fields.format.literal,
 			name: config.name,
 			key,

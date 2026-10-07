@@ -8,7 +8,7 @@ import { afterEach, vi } from "vitest"
 import * as AsyncData from "./asyncData"
 import * as Loader from "./loader"
 
-const at = Schema.decodeUnknownSync(Schema.DateFromString)("2026-10-01T12:00:00.000Z")
+const at = Schema.decodeSync(Schema.DateFromString)("2026-10-01T12:00:00.000Z")
 afterEach(() => vi.restoreAllMocks())
 
 describe("derived Query Loaders", function () {
@@ -27,7 +27,9 @@ describe("derived Query Loaders", function () {
 			assert.strictEqual(envelope.name, "FetchDate")
 			assert.strictEqual(envelope.key, "singleton")
 			assert.deepStrictEqual(envelope.payload, { result: { _tag: "Success", data: at.toISOString() } })
-			assert.deepStrictEqual(Result.getOrThrow(loader.decode(envelope)), { result: AsyncData.Success({ data: at }) })
+			assert.deepStrictEqual(Result.getOrThrow(loader.decode(envelope)), {
+				result: AsyncData.Success({ data: at }),
+			})
 		})
 	)
 
@@ -35,7 +37,7 @@ describe("derived Query Loaders", function () {
 		Effect.gen(function* () {
 			const query = Query.define({
 				name: "Transformed",
-				args: { id: Schema.NumberFromString },
+				args: { id: Schema.FiniteFromString },
 				data: Schema.DateFromString,
 				error: Schema.DateFromString,
 				execute: ({ id }) => (id === 1 ? Effect.succeed(at) : Effect.fail(at)),
@@ -194,7 +196,7 @@ describe("derived Query Loaders", function () {
 		Effect.gen(function* () {
 			const query = Query.define({
 				name: "UnrestrictedArgs",
-				args: { result: Schema.NumberFromString, args: Schema.String },
+				args: { result: Schema.FiniteFromString, args: Schema.String },
 				data: Schema.String,
 				error: Schema.String,
 				execute: ({ args, result }) => Effect.succeed(`${args}/${result}`),

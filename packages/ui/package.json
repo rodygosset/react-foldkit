@@ -4,7 +4,7 @@
 	"type": "module",
 	"private": true,
 	"scripts": {
-		"lint": "eslint .",
+		"lint": "NODE_OPTIONS=\"--import ../../eslint/ts6-register.mjs\" eslint .",
 		"format": "prettier --write \"**/*.{ts,tsx}\"",
 		"typecheck": "tsc --noEmit"
 	},
@@ -30,7 +30,7 @@
 		"@types/react-dom": "^19",
 		"eslint": "^9",
 		"tailwindcss": "^4",
-		"typescript": "^6"
+		"typescript": "^7"
 	},
 	"exports": {
 		"./globals.css": "./src/styles/globals.css",

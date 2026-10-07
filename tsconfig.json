@@ -1,10 +1,18 @@
 {
+    "$schema": "./node_modules/@effect/tsgo/schema.json",
     "compilerOptions": {
         "target": "ES2022",
         "module": "ESNext",
         "moduleResolution": "bundler",
         "noUncheckedIndexedAccess": true,
         "skipLibCheck": true,
-        "strict": true
+        "strict": true,
+        "plugins": [
+            {
+                "name": "@effect/language-service",
+                "diagnostics": true,
+                "ignoreEffectWarningsInTscExitCode": true
+            }
+        ]
     }
 }

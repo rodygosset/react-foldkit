@@ -1,7 +1,7 @@
 import { Schema } from "effect"
 
 export const TodoItem = Schema.Struct({
-	id: Schema.Number,
+	id: Schema.Finite,
 	text: Schema.String,
 	done: Schema.Boolean,
 })

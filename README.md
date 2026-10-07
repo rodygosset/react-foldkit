@@ -31,6 +31,18 @@ Foldkit source, rebuild Foldkit and refresh the local dependency with
 bun install --frozen-lockfile
 ```
 
+The install hook patches TypeScript 7 and Oxlint with `@effect/tsgo`.
+Effect diagnostics are enabled in the workspace TypeScript projects; warnings
+remain visible without failing typechecks. Run `bun run lint:effect` to inspect
+the library's Effect diagnostics from the command line.
+
+For Cursor or VS Code, install the recommended **TypeScript 7** extension
+(`TypeScriptTeam.native-preview`). Open a TypeScript file, run **TypeScript:
+Select Version**, and select the workspace version. The workspace settings
+point to `node_modules/typescript/bin`, whose version should include
+`+effect-tsgo`. After reinstalling dependencies, run **TypeScript: Restart TS
+Server** to reload the patched binary.
+
 Run the example application:
 
 ```bash
@@ -52,8 +64,8 @@ bun run build --filter=web
 ```
 
 Function syntax is enforced across source, tests, examples, shared UI, and tooling.
-See [the function syntax rules](eslint/README.md) for the conventions copied from
-Recolnat. Run their regression tests separately with `bun run test:lint`.
+See [the function syntax rules](eslint/README.md) for the conventions.
+Run their regression tests separately with `bun run test:lint`.
 
 ## Repository layout
 

@@ -39,10 +39,10 @@ export function fakeSource<Message>(initial: ReadonlyArray<CommitEntry<Message>>
 		},
 		publish(next: ReadonlyArray<CommitEntry<Message>>) {
 			snapshot = next
-			for (const listener of [...listeners]) listener()
+			for (const listener of Array.from(listeners)) listener()
 		},
 		notify() {
-			for (const listener of [...listeners]) listener()
+			for (const listener of Array.from(listeners)) listener()
 		},
 		onSubscribe(callback: (count: number) => void) {
 			onSubscribe = callback

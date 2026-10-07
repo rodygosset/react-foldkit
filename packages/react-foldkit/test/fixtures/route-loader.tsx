@@ -23,7 +23,7 @@ import * as Update from "../../src/update"
 
 const SearchResponse = Schema.Struct({
 	query: Schema.String,
-	revision: Schema.Number,
+	revision: Schema.Finite,
 	fetchedAt: Schema.DateFromString,
 })
 export type SearchResponse = typeof SearchResponse.Type
@@ -85,7 +85,7 @@ const searchUpdate = (
 	})
 const { Provider, useModel } = defineSubmodel<SearchModel, SearchMessage>()
 
-export const AppModel = Schema.Struct({ search: SearchModel, edits: Schema.Number, loads: Schema.Number })
+export const AppModel = Schema.Struct({ search: SearchModel, edits: Schema.Finite, loads: Schema.Finite })
 export type AppModel = typeof AppModel.Type
 const AppMessage = defineMessageUnion({
 	GotSearchMessage: { message: SearchMessage },

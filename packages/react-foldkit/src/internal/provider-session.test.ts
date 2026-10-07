@@ -235,7 +235,7 @@ it.effect(
 					observations += 1
 					expect(released).toBe(1)
 					yield* Deferred.succeed(started, undefined)
-					yield* Effect.never.pipe(Effect.onInterrupt(() => Deferred.succeed(interrupted, undefined)))
+					return yield* Effect.never.pipe(Effect.onInterrupt(() => Deferred.succeed(interrupted, undefined)))
 				})
 			)
 			yield* session.start
@@ -276,7 +276,9 @@ it.effect("protects resource release while a stop caller is interrupted, then in
 		const session = Session.make(Exit.succeed({ store }), () =>
 			Effect.gen(function* () {
 				yield* Deferred.succeed(observerStarted, undefined)
-				yield* Effect.never.pipe(Effect.onInterrupt(() => Deferred.succeed(observerInterrupted, undefined)))
+				return yield* Effect.never.pipe(
+					Effect.onInterrupt(() => Deferred.succeed(observerInterrupted, undefined))
+				)
 			})
 		)
 		yield* session.start
@@ -297,7 +299,7 @@ it.effect("protects resource release while a stop caller is interrupted, then in
 		const secondSession = Session.make(Exit.succeed({ store: secondStore }), () =>
 			Effect.gen(function* () {
 				yield* Deferred.succeed(secondObserverStarted, undefined)
-				yield* Effect.never.pipe(
+				return yield* Effect.never.pipe(
 					Effect.onInterrupt(() => Deferred.succeed(secondObserverInterrupted, undefined))
 				)
 			})

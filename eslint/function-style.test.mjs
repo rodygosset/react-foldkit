@@ -7,11 +7,11 @@ const linter = new Linter()
 const rules = Object.assign({}, ...functionStyleConfig.map((config) => config.rules))
 const disabledRules = Object.fromEntries(Object.keys(rules).map((rule) => [rule, "off"]))
 const fixtures = {
-	"recolnat-style/no-block-bodied-arrows": {
+	"foldkit-style/no-block-bodied-arrows": {
 		valid: ["const size = (xs) => xs.length", "items.forEach(function () { work(); finish() })"],
 		invalid: ["const size = (xs) => { return xs.length }", "items.forEach(() => { work(); finish() })"],
 	},
-	"recolnat-style/no-named-function-expressions": {
+	"foldkit-style/no-named-function-expressions": {
 		valid: [
 			"items.forEach(function () { work() })",
 			"function handleClick() { work(); finish() }",
@@ -19,7 +19,7 @@ const fixtures = {
 		],
 		invalid: ["items.forEach(function handleItem() { work() })"],
 	},
-	"recolnat-style/prefer-named-effect-callbacks": {
+	"foldkit-style/prefer-named-effect-callbacks": {
 		valid: [
 			"useEffect(function syncCount() { work() }, [])",
 			"React.useLayoutEffect(function syncLayout() { work() }, [])",
@@ -32,7 +32,7 @@ const fixtures = {
 			"useInsertionEffect(function () { work() }, [])",
 		],
 	},
-	"recolnat-style/prefer-arrow-for-expression-return": {
+	"foldkit-style/prefer-arrow-for-expression-return": {
 		valid: [
 			"const size = (xs) => xs.length",
 			"function Card() { return <div /> }",
@@ -52,7 +52,7 @@ const fixtures = {
 			"function factory() { return function () { return this.value } }",
 		],
 	},
-	"recolnat-style/prefer-object-method-shorthand": {
+	"foldkit-style/prefer-object-method-shorthand": {
 		valid: [
 			"const source = { subscribe() { work(); finish() } }",
 			"const source = { read: () => snapshot }",
@@ -60,7 +60,7 @@ const fixtures = {
 		],
 		invalid: ["const source = { subscribe: function () { work(); finish() } }"],
 	},
-	"recolnat-react/prefer-hook-function-declaration": {
+	"foldkit-react/prefer-hook-function-declaration": {
 		valid: ["function useCount() { return readCount() }", "const userName = () => name"],
 		invalid: ["const useCount = () => readCount()", "const useCount = function () { return readCount() }"],
 	},

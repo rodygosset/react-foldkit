@@ -113,7 +113,7 @@ describe("Provider commitSource", function () {
 	})
 
 	it("preserves base init and bootstrap Commands, deferring both until client activation", async function () {
-		const Model = Schema.Struct({ value: Schema.String, completions: Schema.Number })
+		const Model = Schema.Struct({ value: Schema.String, completions: Schema.Finite })
 		type Model = typeof Model.Type
 		const runs: string[] = []
 		const command = (name: string): Command.Command<Message> => ({

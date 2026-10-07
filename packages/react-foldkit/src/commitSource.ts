@@ -12,6 +12,7 @@ export interface CommitEntry<Message> {
  * synchronously is a contract violation, so read failures are typed data rather than Effects.
  */
 export interface CommitSource<Message, E = never> {
+	/** Reads the current snapshot without publishing notifications or acquiring live resources. */
 	readonly getSnapshot: () => Result.Result<ReadonlyArray<CommitEntry<Message>>, E>
 	readonly subscribe: (notify: () => void) => () => void
 }

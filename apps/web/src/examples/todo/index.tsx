@@ -25,7 +25,7 @@ const ItemsData = AsyncData.Schema(Schema.Array(TodoItem), Schema.String)
 
 const Model = Schema.Struct({
 	form: TodoForm.Model,
-	nextId: Schema.Number,
+	nextId: Schema.Finite,
 	items: ItemsData.schema,
 	filter: Filter,
 })
@@ -38,8 +38,8 @@ type Flags = {
 
 const Message = defineMessageUnion({
 	GotFormMessage: { message: TodoForm.Message },
-	ToggledItem: { id: Schema.Number },
-	RemovedItem: { id: Schema.Number },
+	ToggledItem: { id: Schema.Finite },
+	RemovedItem: { id: Schema.Finite },
 	ClickedClearCompleted: {},
 	ClickedRetryLoad: {},
 	/** Silent ack from the NavigateFilter Command — Model already updated in update. */
@@ -119,7 +119,7 @@ const FetchTodos = Command.define("FetchTodos", {
 
 const AddTodo = Command.define("AddTodo", {
 	args: {
-		id: Schema.Number,
+		id: Schema.Finite,
 		text: Schema.String,
 	},
 	messages: [Message.SettledWriteTodos],
@@ -135,7 +135,7 @@ const AddTodo = Command.define("AddTodo", {
 })
 
 const PersistToggle = Command.define("PersistToggle", {
-	args: { id: Schema.Number },
+	args: { id: Schema.Finite },
 	messages: [Message.SettledWriteTodos],
 	execute: ({ id }) =>
 		Effect.gen(function* () {
@@ -151,7 +151,7 @@ const PersistToggle = Command.define("PersistToggle", {
 })
 
 const PersistRemove = Command.define("PersistRemove", {
-	args: { id: Schema.Number },
+	args: { id: Schema.Finite },
 	messages: [Message.SettledWriteTodos],
 	execute: ({ id }) =>
 		Effect.gen(function* () {

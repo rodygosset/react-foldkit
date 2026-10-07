@@ -4,11 +4,11 @@ import { modifyFields } from "../../src/struct"
 import { defineMessageUnion } from "../../src/message"
 import { defineApplication, defineSubmodel, defineSubmodelProjection, type ModelSource } from "../../src/react"
 
-export const ChildModel = Schema.Struct({ count: Schema.Number, unrelated: Schema.Number })
+export const ChildModel = Schema.Struct({ count: Schema.Finite, unrelated: Schema.Finite })
 export type ChildModel = typeof ChildModel.Type
 export const ChildMessage = defineMessageUnion({ Increment: {}, IncrementOther: {} })
 export type ChildMessage = typeof ChildMessage.Type
-const Model = Schema.Struct({ child: ChildModel, other: Schema.Number })
+const Model = Schema.Struct({ child: ChildModel, other: Schema.Finite })
 type Model = typeof Model.Type
 const Message = defineMessageUnion({ Child: { message: ChildMessage }, Set: { child: ChildModel }, Other: {} })
 type Message = typeof Message.Type

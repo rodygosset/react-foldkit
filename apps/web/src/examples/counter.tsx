@@ -8,7 +8,7 @@ import type * as Update from "react-foldkit/update"
 import { ExampleShell } from "../components/example-shell"
 
 const Model = Schema.Struct({
-	count: Schema.Number,
+	count: Schema.Finite,
 })
 
 type Model = typeof Model.Type
@@ -54,7 +54,7 @@ function View() {
 						variant="outline"
 						size="icon-lg"
 						aria-label="Decrement"
-						onClick={() => void dispatch(Message.ClickedDecrement())}
+						onClick={() => dispatch(Message.ClickedDecrement())}
 					>
 						<MinusIcon />
 					</Button>
@@ -62,7 +62,7 @@ function View() {
 						variant="outline"
 						size="icon-lg"
 						aria-label="Increment"
-						onClick={() => void dispatch(Message.ClickedIncrement())}
+						onClick={() => dispatch(Message.ClickedIncrement())}
 					>
 						<PlusIcon />
 					</Button>
@@ -70,7 +70,7 @@ function View() {
 						variant="ghost"
 						size="icon-lg"
 						aria-label="Reset"
-						onClick={() => void dispatch(Message.ClickedReset())}
+						onClick={() => dispatch(Message.ClickedReset())}
 					>
 						<RotateCcwIcon />
 					</Button>

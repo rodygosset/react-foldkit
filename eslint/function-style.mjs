@@ -1,6 +1,6 @@
-// Function-shape rules copied from MNHN/recolnat eslint.config.ts.
-const RecolnatReactPlugin = {
-	meta: { name: "recolnat-react", version: "0.0.0" },
+// Project function-shape rules.
+const FoldkitReactPlugin = {
+	meta: { name: "foldkit-react", version: "0.0.0" },
 	rules: {
 		"prefer-hook-function-declaration": {
 			meta: {
@@ -73,8 +73,8 @@ function hasOwnFunctionBindings(node, context) {
 	return visit(node.body)
 }
 
-const RecolnatStylePlugin = {
-	meta: { name: "recolnat-style", version: "0.0.0" },
+const FoldkitStylePlugin = {
+	meta: { name: "foldkit-style", version: "0.0.0" },
 	rules: {
 		"no-block-bodied-arrows": {
 			meta: {
@@ -268,4 +268,4 @@ const RecolnatStylePlugin = {
 		},
 	},
 }
-export { RecolnatReactPlugin, RecolnatStylePlugin }
+export { FoldkitReactPlugin, FoldkitStylePlugin }

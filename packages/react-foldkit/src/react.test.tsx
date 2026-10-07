@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
-import { Context, Effect, Latch, Layer, Schema, Stream } from "effect"
+import { Effect, Latch, Layer, Schema, Stream } from "effect"
 import React, { StrictMode } from "react"
 import { hydrateRoot, type Root } from "react-dom/client"
 import { renderToString } from "react-dom/server"
@@ -22,7 +22,7 @@ type Message = typeof Message.Type
 const Model = Schema.Struct({
 	status: Schema.String,
 	value: Schema.String,
-	unrelated: Schema.Number,
+	unrelated: Schema.Finite,
 })
 type Model = typeof Model.Type
 

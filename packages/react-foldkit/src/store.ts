@@ -4,8 +4,8 @@ import {
 	Deferred,
 	Effect,
 	Exit,
+	Fiber,
 	Layer,
-	Match,
 	MutableList,
 	Option,
 	PubSub,
@@ -15,15 +15,15 @@ import {
 	Scheduler,
 	Schema,
 	Scope,
-	Semaphore,
 	Stream,
 } from "effect"
-import { CurrentInterruptRegistry, type InterruptRegistry, makeInterruptRegistry } from "./internal/foldkit"
 import * as InitCommand from "./internal/init-command"
+import { CurrentInterruptRegistry, type InterruptRegistry, makeInterruptRegistry } from "./internal/interrupt"
 import type * as Subscription from "./subscription"
 import type * as Update from "./update"
 
 type ConfigBase<Model, Message, R> = {
+	/** Pure Model transition. Return Commands for side effects. Bootstrap may call update during render. */
 	update: (model: Model, message: Message) => Update.Return<Model, Message, R>
 	/**
 	 * Model-gated standing orders. Each entry restarts its Stream when
@@ -103,7 +103,7 @@ export const takeWhen = <Model, Message, A>(
 	store: Store<Model, Message>,
 	pick: (model: Model) => Option.Option<A>
 ): Effect.Effect<A, Disposed> =>
-	Effect.callback<A, Disposed>(function (resume, signal) {
+	Effect.callback<A, Disposed>(function (resume) {
 		let isSettled = false
 
 		function tryPick(): boolean {
@@ -132,14 +132,6 @@ export const takeWhen = <Model, Message, A>(
 				unsubscribe()
 			}
 		})
-
-		signal.addEventListener(
-			"abort",
-			function () {
-				unsubscribe()
-			},
-			{ once: true }
-		)
 
 		return Effect.sync(function () {
 			unsubscribe()
@@ -272,38 +264,18 @@ function forkSubscriptionFibers<Model, Message, R>(
 
 /**
  * Lazily builds Layer services once, owned by the store Scope. Waiters join over
- * a Deferred, so one waiter leaving never cancels the shared build, while store
+ * a cached Fiber, so one waiter leaving never cancels the shared build, while store
  * shutdown interrupts it through Scope close.
  */
 const makeAcquireResourceContext = <R>(
 	layer: Layer.Layer<R, never, never>,
 	scope: Scope.Scope
 ): Effect.Effect<Effect.Effect<Context.Context<R>>> =>
-	Effect.gen(function* () {
-		const gate = yield* Semaphore.make(1)
-		const slot = yield* Ref.make(Option.none<Deferred.Deferred<Context.Context<R>>>())
-		return Semaphore.withPermits(
-			gate,
-			1
-		)(
-			Effect.flatMap(Ref.get(slot), function (existing) {
-				if (Option.isSome(existing)) return Deferred.await(existing.value)
-				return Effect.uninterruptibleMask((restore) =>
-					Effect.gen(function* () {
-						const ready = yield* Deferred.make<Context.Context<R>>()
-						yield* Ref.set(slot, Option.some(ready))
-						yield* Effect.forkIn(
-							Effect.exit(Layer.buildWithScope(layer, scope)).pipe(
-								Effect.flatMap((exit) => Deferred.done(ready, exit))
-							),
-							scope
-						)
-						return yield* restore(Deferred.await(ready))
-					})
-				)
-			})
-		)
-	})
+	Effect.cached(
+		Effect.forkIn(Layer.buildWithScope(layer, scope), scope, {
+			uninterruptible: false,
+		}).pipe(Effect.uninterruptible)
+	).pipe(Effect.map((getBuild) => Effect.flatMap(getBuild, Fiber.join)))
 
 /**
  * Allocates a fresh live store in the caller's Scope; services build lazily on first use.
@@ -343,7 +315,11 @@ function start<Model, Message, R>(
 ) {
 	const listeners = new Set<() => void>()
 	const crashListeners = new Set<() => void>()
-	const pendingMessages = MutableList.make<{ readonly message: Message }>()
+	type PendingMessage = {
+		readonly message: Message
+		readonly command?: Update.Commands<Message, R>[number]
+	}
+	const pendingMessages = MutableList.make<PendingMessage>()
 	let phase: Phase = { _tag: "Booting" }
 	let syncWorkMsSinceYield = 0
 	let lastDrainEndedAt = 0
@@ -356,15 +332,17 @@ function start<Model, Message, R>(
 	PubSub.publishUnsafe(modelPubSub, model)
 
 	const provideAllResources = makeProvideAllResources(acquireResourceContext, interruptRegistry)
-	const getCrash = (): Option.Option<Cause.Cause<unknown>> =>
-		Match.value(phase).pipe(
-			Match.tagsExhaustive({
-				Booting: () => Option.none(),
-				Live: () => Option.none(),
-				Crashed: ({ cause }) => Option.some(cause),
-				Disposed: ({ crash }) => crash,
-			})
-		)
+	function getCrash(): Option.Option<Cause.Cause<unknown>> {
+		switch (phase._tag) {
+			case "Booting":
+			case "Live":
+				return Option.none()
+			case "Crashed":
+				return Option.some(phase.cause)
+			case "Disposed":
+				return phase.crash
+		}
+	}
 
 	function crashWith(cause: Cause.Cause<unknown>, triggeringMessage: Option.Option<Message>): void {
 		if (isTerminal(phase)) return
@@ -378,12 +356,11 @@ function start<Model, Message, R>(
 		else console.error("[react-foldkit] Store crashed:", Cause.pretty(cause))
 	}
 
-	function enqueueMessage(message: Message): boolean {
-		if (isTerminal(phase)) return false
-		MutableList.append(pendingMessages, { message })
-		if (phase._tag === "Booting") return true
+	function enqueueMessage(message: Message, command?: Update.Commands<Message, R>[number]): void {
+		if (isTerminal(phase)) return
+		MutableList.append(pendingMessages, { message, command })
+		if (phase._tag === "Booting") return
 		drainPendingMessages()
-		return true
 	}
 
 	function publishModel(nextModel: Model): void {
@@ -418,18 +395,18 @@ function start<Model, Message, R>(
 		command: Update.Commands<Message, R>[number],
 		triggeringMessage: Option.Option<Message>
 	): void {
-		queueMicrotask(function () {
-			if (isTerminal(phase)) return
+		const effect = Effect.suspend(function () {
+			if (isTerminal(phase)) return Effect.void
 
 			// `command.effect` is typed loosely upstream; cast is required at this boundary.
-			const effect = (command.effect as Effect.Effect<Message, never, R>).pipe(
+			return (command.effect as Effect.Effect<Message, never, R>).pipe(
 				Effect.withSpan(command.name, {
 					attributes: command.args ?? {},
 				}),
 				provideAllResources,
 				Effect.flatMap((message) =>
 					Effect.sync(function () {
-						if (enqueueMessage(message)) InitCommand.complete(command)
+						enqueueMessage(message, command)
 					})
 				),
 				Effect.catchCause((cause) =>
@@ -438,16 +415,16 @@ function start<Model, Message, R>(
 					})
 				)
 			)
-
-			Effect.runForkWith(runtimeContextForCommands)(Effect.forkIn(effect, storeScope))
 		})
+		Effect.runForkWith(runtimeContextForCommands)(Effect.forkIn(effect, storeScope))
 	}
 
-	function processMessage(message: Message): void {
+	function processMessage({ message, command }: PendingMessage): void {
 		try {
 			const result = config.update(model, message)
 			const previous = model
 			model = result.model
+			if (command !== undefined) InitCommand.complete(command)
 			if (previous !== result.model) {
 				publishModel(result.model)
 				for (const listener of listeners) listener()
@@ -458,7 +435,7 @@ function start<Model, Message, R>(
 		}
 	}
 
-	function drainPendingMessages(until?: { readonly message: Message }): void {
+	function drainPendingMessages(until?: PendingMessage): void {
 		if (!canEnterDrain(phase)) return
 
 		const drainStartedAt = performance.now()
@@ -476,7 +453,7 @@ function start<Model, Message, R>(
 				const entry = MutableList.take(pendingMessages)
 				if (entry === MutableList.Empty) return
 				currentMessage = Option.some(entry.message)
-				processMessage(entry.message)
+				processMessage(entry)
 
 				if (entry === until) {
 					if (pendingMessages.length > 0) scheduleDeferredDrain()
@@ -503,19 +480,18 @@ function start<Model, Message, R>(
 		}
 	}
 
-	const canCommit = (): Result.Result<void, CommitError> =>
-		Match.value(phase).pipe(
-			Match.withReturnType<Result.Result<void, CommitError>>(),
-			Match.tagsExhaustive({
-				Booting: () => Result.fail(new CommitError({ reason: "Inactive" })),
-				Crashed: ({ cause }) => Result.fail(new CommitError({ reason: "Crashed", cause })),
-				Disposed: () => Result.fail(new CommitError({ reason: "Disposed" })),
-				Live: ({ drain }) =>
-					drain === "Sync"
-						? Result.fail(new CommitError({ reason: "Reentrant" }))
-						: Result.succeed(undefined),
-			})
-		)
+	function canCommit(): Result.Result<void, CommitError> {
+		switch (phase._tag) {
+			case "Booting":
+				return Result.fail(new CommitError({ reason: "Inactive" }))
+			case "Crashed":
+				return Result.fail(new CommitError({ reason: "Crashed", cause: phase.cause }))
+			case "Disposed":
+				return Result.fail(new CommitError({ reason: "Disposed" }))
+			case "Live":
+				return phase.drain === "Sync" ? Result.fail(new CommitError({ reason: "Reentrant" })) : Result.void
+		}
+	}
 
 	const commit = (message: Message): Result.Result<void, CommitError> =>
 		Result.flatMap(canCommit(), function () {
