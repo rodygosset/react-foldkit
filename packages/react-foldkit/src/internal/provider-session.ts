@@ -1,4 +1,4 @@
-import { Cause, Deferred, Effect, Exit, Option, Scope } from "effect"
+import { Cause, Deferred, Duration, Effect, Exit, Option, Scope, Semaphore } from "effect"
 import type { Connection } from "./commit-source"
 import type { ModelReader } from "./model-source"
 import type { ReactStore } from "./react-store"
@@ -13,8 +13,6 @@ export interface ProviderSession extends ModelReader<Option.Option<Cause.Cause<u
 	readonly stop: Effect.Effect<void>
 }
 
-type Revision = object
-
 type Presentation =
 	| { readonly _tag: "Healthy" }
 	| { readonly _tag: "Recoverable"; readonly cause: Cause.Cause<unknown> }
@@ -23,9 +21,16 @@ type Presentation =
 interface Lifetime {
 	readonly resources: Scope.Closeable
 	readonly observers: Scope.Closeable
+	readonly reportGate: Semaphore.Semaphore
 	readonly setup: Deferred.Deferred<Exit.Exit<void, unknown>>
-	readonly closingRevision: Revision
 }
+
+/** Live observer deadline. It bounds queue wait and execution, so a burst degrades to dropped logs. */
+const liveReportDeadline: Duration.Input = "2 seconds" as const
+/** Shutdown keeps the established five-second bound. */
+const shutdownReportDeadline: Duration.Input = "5 seconds" as const
+/** Concurrent live observers. Waiting reports share the live deadline, then drop their log. */
+const maxConcurrentLiveReports = 4
 
 type Phase =
 	| { readonly _tag: "Stopped"; readonly close: Effect.Effect<void> }
@@ -41,47 +46,52 @@ export function make<Model, Message>(
 		? { _tag: "Recoverable", cause: bootstrap.cause }
 		: { _tag: "Healthy" }
 	let snapshot = initialFailure
-	let latest: Revision = {}
 	let observedCrash: Option.Option<Cause.Cause<unknown>> = Option.none()
 	let phase: Phase = { _tag: "Stopped", close: Effect.void }
 	const listeners = new Set<() => void>()
 
-	function publish(value: Presentation, revision: Revision): void {
-		if (revision !== latest || (value._tag === "Healthy" && presentation._tag === "Healthy")) return
+	function publish(value: Presentation): void {
+		if (value._tag === "Healthy" && presentation._tag === "Healthy") return
 		presentation = value
 		snapshot = value._tag === "Healthy" ? healthy : Option.some(value.cause)
 		for (const listener of listeners) listener()
 	}
-	function fail(cause: Cause.Cause<unknown>, terminal = false): Revision {
-		const revision = (latest = {})
-		publish({ _tag: terminal ? "Terminal" : "Recoverable", cause }, revision)
-		return revision
+	function fail(cause: Cause.Cause<unknown>, terminal = false): void {
+		publish({ _tag: terminal ? "Terminal" : "Recoverable", cause })
 	}
 	function recover(): void {
-		publish({ _tag: "Healthy" }, (latest = {}))
+		publish({ _tag: "Healthy" })
 	}
 	const isRunning = (lifetime: Lifetime) => phase._tag === "Running" && phase.lifetime === lifetime
 	const crash = () => (Exit.isSuccess(bootstrap) ? bootstrap.value.store.getCrash() : Option.none())
 
-	const report = (cause: Cause.Cause<unknown>, revision: Revision): Effect.Effect<void> =>
+	// Observer failures are logged here. They never reach renderError.
+	const report = (cause: Cause.Cause<unknown>): Effect.Effect<void, never> =>
 		Effect.suspend(() => onError(cause)).pipe(
-			Effect.onExit(function (observed) {
-				if (Exit.isSuccess(observed) || Cause.hasInterruptsOnly(observed.cause)) return Effect.void
-				const reported = Cause.combine(cause, observed.cause)
-				if (revision === latest) {
-					publish(
-						{
-							_tag: presentation._tag === "Terminal" ? "Terminal" : "Recoverable",
-							cause: reported,
-						},
-						revision
-					)
-				}
-				return Effect.void
+			Effect.catchCause(function (observed) {
+				if (Cause.hasInterruptsOnly(observed)) return Effect.void
+				return Effect.logError(observed)
 			}),
-			Effect.ignoreCause,
 			Effect.interruptible
 		)
+
+	// Single owner for live observer lifetime. The gate caps concurrency, the
+	// deadline bounds queue wait and execution, and scope close interrupts stragglers.
+	const reportToObservers = (lifetime: Lifetime, cause: Cause.Cause<unknown>): Effect.Effect<void, never> =>
+		Semaphore.withPermits(
+			lifetime.reportGate,
+			1
+		)(report(cause)).pipe(
+			Effect.timeoutOption(liveReportDeadline),
+			Effect.asVoid,
+			Effect.interruptible,
+			Effect.forkIn(lifetime.observers, { startImmediately: true, uninterruptible: false }),
+			Effect.asVoid
+		)
+
+	function scheduleReport(lifetime: Lifetime, cause: Cause.Cause<unknown>): void {
+		Effect.runFork(reportToObservers(lifetime, cause))
+	}
 
 	function observeCrash(lifetime: Lifetime): boolean {
 		if (!isRunning(lifetime)) return false
@@ -89,13 +99,8 @@ export function make<Model, Message>(
 		if (Option.isNone(current)) return false
 		if (Option.isSome(observedCrash) && observedCrash.value === current.value) return true
 		observedCrash = current
-		const revision = fail(current.value, true)
-		Effect.runFork(
-			Effect.forkIn(report(current.value, revision), lifetime.observers, {
-				startImmediately: true,
-				uninterruptible: false,
-			})
-		)
+		fail(current.value, true)
+		scheduleReport(lifetime, current.value)
 		return true
 	}
 
@@ -105,13 +110,8 @@ export function make<Model, Message>(
 			if (presentation._tag === "Recoverable") recover()
 			return
 		}
-		const revision = fail(exit.cause)
-		Effect.runFork(
-			Effect.forkIn(report(exit.cause, revision), lifetime.observers, {
-				startImmediately: true,
-				uninterruptible: false,
-			})
-		)
+		fail(exit.cause)
+		scheduleReport(lifetime, exit.cause)
 	}
 
 	const setup = (lifetime: Lifetime): Effect.Effect<void> =>
@@ -134,28 +134,22 @@ export function make<Model, Message>(
 				)
 				if (Exit.isSuccess(exit)) return
 				const terminal = observeCrash(lifetime)
-				const revision = isRunning(lifetime) ? (terminal ? latest : fail(exit.cause)) : lifetime.closingRevision
+				if (isRunning(lifetime) && !terminal) fail(exit.cause)
 				const cleanup = yield* Effect.exit(Scope.close(lifetime.resources, exit))
 				const finalized = Exit.asVoidAll([exit, cleanup])
 				if (isRunning(lifetime) && Exit.isFailure(finalized)) {
 					if (Exit.isFailure(cleanup) && !Cause.hasInterruptsOnly(cleanup.cause))
 						yield* Effect.logError(cleanup.cause)
 					if (!terminal) {
-						publish({ _tag: "Recoverable", cause: finalized.cause }, revision)
-						yield* Effect.forkIn(report(finalized.cause, revision), lifetime.observers, {
-							startImmediately: true,
-							uninterruptible: false,
-						})
+						publish({ _tag: "Recoverable", cause: finalized.cause })
+						yield* reportToObservers(lifetime, finalized.cause)
 					} else if (Exit.isFailure(cleanup)) {
 						const current = crash()
 						const cause = Option.isSome(current)
 							? Cause.combine(current.value, cleanup.cause)
 							: cleanup.cause
-						const cleanupRevision = fail(cause, true)
-						yield* Effect.forkIn(report(cause, cleanupRevision), lifetime.observers, {
-							startImmediately: true,
-							uninterruptible: false,
-						})
+						fail(cause, true)
+						yield* reportToObservers(lifetime, cause)
 					}
 					return
 				}
@@ -177,29 +171,29 @@ export function make<Model, Message>(
 			)
 			const setup = yield* Deferred.await(lifetime.setup)
 			return Exit.asVoidAll([...closed, setup])
-		}).pipe(Effect.uninterruptible)
+		})
 
 	const start = Effect.gen(function* () {
 		if (phase._tag === "Running") return
 		const lifetime: Lifetime = {
 			resources: yield* Scope.make(),
 			observers: yield* Scope.make(),
+			reportGate: yield* Semaphore.make(maxConcurrentLiveReports),
 			setup: yield* Deferred.make<Exit.Exit<void, unknown>>(),
-			closingRevision: {},
 		}
 		const closing = yield* Effect.cached(
 			Effect.gen(function* () {
 				const exit = yield* Effect.gen(function* () {
 					const exit = yield* release(lifetime)
 					if (Exit.isFailure(exit) && !Cause.hasInterruptsOnly(exit.cause)) {
-						publish({ _tag: "Recoverable", cause: exit.cause }, lifetime.closingRevision)
+						publish({ _tag: "Recoverable", cause: exit.cause })
 						yield* Effect.logError(exit.cause)
 					}
 					return exit
 				}).pipe(Effect.uninterruptible)
 				if (Exit.isSuccess(exit) || Cause.hasInterruptsOnly(exit.cause)) return
-				yield* report(exit.cause, lifetime.closingRevision).pipe(
-					Effect.timeoutOption("5 seconds"),
+				yield* report(exit.cause).pipe(
+					Effect.timeoutOption(shutdownReportDeadline),
 					Effect.asVoid,
 					Effect.interruptible
 				)
@@ -210,7 +204,6 @@ export function make<Model, Message>(
 	}).pipe(Effect.uninterruptible)
 	const stop = Effect.suspend(function () {
 		if (phase._tag === "Running") {
-			latest = phase.lifetime.closingRevision
 			phase = { _tag: "Stopped", close: phase.close }
 		}
 		return phase.close

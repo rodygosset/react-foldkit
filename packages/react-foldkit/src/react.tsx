@@ -31,7 +31,7 @@ type Type<ModelSchema extends ModelCodec> = Schema.Schema.Type<ModelSchema>
 
 export interface ErrorOptions {
 	readonly renderError?: (cause: Cause.Cause<unknown>) => React.ReactNode
-	/** Observes a failure asynchronously. Observer failures join the Cause passed to `renderError`. */
+	/** Observes a failure asynchronously. Observer failures are logged and never change the Cause passed to `renderError`. */
 	readonly onError?: (cause: Cause.Cause<unknown>) => Effect.Effect<void, unknown>
 }
 

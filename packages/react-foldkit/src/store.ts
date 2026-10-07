@@ -15,6 +15,7 @@ import {
 	Scheduler,
 	Schema,
 	Scope,
+	Semaphore,
 	Stream,
 } from "effect"
 import { CurrentInterruptRegistry, type InterruptRegistry, makeInterruptRegistry } from "./internal/foldkit"
@@ -270,6 +271,41 @@ function forkSubscriptionFibers<Model, Message, R>(
 }
 
 /**
+ * Lazily builds Layer services once, owned by the store Scope. Waiters join over
+ * a Deferred, so one waiter leaving never cancels the shared build, while store
+ * shutdown interrupts it through Scope close.
+ */
+const makeAcquireResourceContext = <R>(
+	layer: Layer.Layer<R, never, never>,
+	scope: Scope.Scope
+): Effect.Effect<Effect.Effect<Context.Context<R>>> =>
+	Effect.gen(function* () {
+		const gate = yield* Semaphore.make(1)
+		const slot = yield* Ref.make(Option.none<Deferred.Deferred<Context.Context<R>>>())
+		return Semaphore.withPermits(
+			gate,
+			1
+		)(
+			Effect.flatMap(Ref.get(slot), function (existing) {
+				if (Option.isSome(existing)) return Deferred.await(existing.value)
+				return Effect.uninterruptibleMask((restore) =>
+					Effect.gen(function* () {
+						const ready = yield* Deferred.make<Context.Context<R>>()
+						yield* Ref.set(slot, Option.some(ready))
+						yield* Effect.forkIn(
+							Effect.exit(Layer.buildWithScope(layer, scope)).pipe(
+								Effect.flatMap((exit) => Deferred.done(ready, exit))
+							),
+							scope
+						)
+						return yield* restore(Deferred.await(ready))
+					})
+				)
+			})
+		)
+	})
+
+/**
  * Allocates a fresh live store in the caller's Scope; services build lazily on first use.
  * Closing that Scope disposes the store, so a host never has to release it by hand.
  */
@@ -282,7 +318,7 @@ export const make = <Model, Message, R = never>(
 		// Replay retains a model published before subscription fibers attach.
 		const modelPubSub = yield* PubSub.unbounded<Model>({ replay: 1 })
 		const layer = resolveLayer((config as { readonly layer?: Layer.Layer<R, never, never> }).layer)
-		const acquireResourceContext = yield* Effect.cached(Effect.uninterruptible(Layer.buildWithScope(layer, scope)))
+		const acquireResourceContext = yield* makeAcquireResourceContext(layer, scope)
 		return yield* Effect.acquireRelease(
 			Effect.sync(() => start(config, init, scope, modelPubSub, acquireResourceContext)),
 			(store, exit) => store.dispose(exit)

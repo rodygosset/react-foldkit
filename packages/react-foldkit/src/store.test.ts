@@ -478,6 +478,42 @@ describe("dispose", function () {
 		})
 	)
 
+	it.effect("dispose finishes while Layer acquisition is suspended and interrupts the build", () =>
+		Effect.gen(function* () {
+			class SlowService extends Context.Service<SlowService, Readonly<{ value: string }>>()("SlowService") {}
+			const acquired = Deferred.makeUnsafe<void>()
+			const gate = Deferred.makeUnsafe<void>()
+			const interrupted = Deferred.makeUnsafe<void>()
+			let builds = 0
+			const SlowLive = Layer.effect(
+				SlowService,
+				Deferred.succeed(acquired, undefined).pipe(
+					Effect.andThen(Deferred.await(gate)),
+					Effect.onInterrupt(() => Deferred.succeed(interrupted, undefined)),
+					Effect.andThen(
+						Effect.sync(function (): Readonly<{ value: string }> {
+							builds += 1
+							return { value: "slow" }
+						})
+					)
+				)
+			)
+			const store = yield* Store.make<number, number, SlowService>(
+				{
+					update: (model, message) => ({ model: message }),
+					layer: SlowLive,
+				},
+				{ model: 0, commands: [{ name: "Read", effect: Effect.map(SlowService, () => 1) }] }
+			)
+			yield* Deferred.await(acquired)
+			yield* store.dispose()
+			expect(store.isDisposed()).toBe(true)
+			yield* Deferred.await(interrupted)
+			expect(builds).toBe(0)
+			yield* Deferred.succeed(gate, undefined)
+		})
+	)
+
 	it("dispose is idempotent and silences the store afterwards", async function () {
 		const processedLog: Array<string> = []
 
