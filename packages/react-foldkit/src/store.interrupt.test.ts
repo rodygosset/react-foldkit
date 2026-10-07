@@ -242,71 +242,75 @@ describe("interruptible Command.define", function () {
 })
 
 describe("store interrupt registry wiring", function () {
-	it("provides the interrupt registry so Interrupt stops an in-flight store Command", async function () {
-		const WiringMessage = defineMessageUnion({
-			Completed: {},
-			GotOutcome: { tag: Schema.String },
-			Start: {},
-			Cancel: {},
+	it.live("provides the interrupt registry so Interrupt stops an in-flight store Command", () =>
+		Effect.gen(function* () {
+			const WiringMessage = defineMessageUnion({
+				Completed: {},
+				GotOutcome: { tag: Schema.String },
+				Start: {},
+				Cancel: {},
+			})
+			type WiringMessage = typeof WiringMessage.Type
+
+			const Model = Schema.Struct({
+				status: Schema.String,
+				outcome: Schema.NullOr(Schema.String),
+			})
+			type Model = typeof Model.Type
+
+			const RunForever = Command.define("RunForever", {
+				messages: [WiringMessage.Completed],
+				interrupt: true,
+				execute: Effect.as(Effect.never, WiringMessage.Completed()),
+			})
+
+			type UpdateReturn = Update.Return<Model, WiringMessage>
+
+			const update = (model: Model, message: WiringMessage): UpdateReturn =>
+				WiringMessage.match<UpdateReturn>(message, {
+					Start: () => ({
+						model: modifyFields(model, { status: () => "running", outcome: () => null }),
+						commands: [RunForever()],
+					}),
+					Cancel: () => ({
+						model,
+						commands: [RunForever.Interrupt((outcome) => WiringMessage.GotOutcome({ tag: outcome._tag }))],
+					}),
+					Completed: () => ({
+						model: modifyFields(model, { status: () => "done", outcome: () => null }),
+					}),
+					GotOutcome: ({ tag }) => ({
+						model: modifyFields(model, { status: () => "cancelled", outcome: () => tag }),
+					}),
+				})
+
+			const store = Store.boot({ update }, { model: { status: "idle", outcome: null } })
+
+			try {
+				store.dispatch(WiringMessage.Start())
+				expect(store.getModel().status).toBe("running")
+
+				// Yield so the Command fiber can register under its interrupt key.
+				yield* Effect.callback<void>(function (resume) {
+					queueMicrotask(() => resume(Effect.void))
+				})
+				yield* Effect.callback<void>(function (resume) {
+					queueMicrotask(() => resume(Effect.void))
+				})
+
+				store.dispatch(WiringMessage.Cancel())
+
+				yield* Effect.promise(() =>
+					vi.waitFor(function () {
+						expect(store.getModel()).toEqual({ status: "cancelled", outcome: "Interrupted" })
+					})
+				)
+
+				yield* Effect.sleep("30 millis")
+				expect(store.getModel().status).toBe("cancelled")
+			} finally {
+				yield* store.dispose()
+			}
 		})
-		type WiringMessage = typeof WiringMessage.Type
-
-		const Model = Schema.Struct({
-			status: Schema.String,
-			outcome: Schema.NullOr(Schema.String),
-		})
-		type Model = typeof Model.Type
-
-		const RunForever = Command.define("RunForever", {
-			messages: [WiringMessage.Completed],
-			interrupt: true,
-			execute: Effect.as(Effect.never, WiringMessage.Completed()),
-		})
-
-		type UpdateReturn = Update.Return<Model, WiringMessage>
-
-		const update = (model: Model, message: WiringMessage): UpdateReturn =>
-			WiringMessage.match<UpdateReturn>(message, {
-				Start: () => ({
-					model: modifyFields(model, { status: () => "running", outcome: () => null }),
-					commands: [RunForever()],
-				}),
-				Cancel: () => ({
-					model,
-					commands: [RunForever.Interrupt((outcome) => WiringMessage.GotOutcome({ tag: outcome._tag }))],
-				}),
-				Completed: () => ({ model: modifyFields(model, { status: () => "done", outcome: () => null }) }),
-				GotOutcome: ({ tag }) => ({
-					model: modifyFields(model, { status: () => "cancelled", outcome: () => tag }),
-				}),
-			})
-
-		const store = Store.boot({ update }, { model: { status: "idle", outcome: null } })
-
-		try {
-			store.dispatch(WiringMessage.Start())
-			expect(store.getModel().status).toBe("running")
-
-			// Yield so the Command fiber can register under its interrupt key.
-			await new Promise<void>(function (resolve) {
-				queueMicrotask(resolve)
-			})
-			await new Promise<void>(function (resolve) {
-				queueMicrotask(resolve)
-			})
-
-			store.dispatch(WiringMessage.Cancel())
-
-			await vi.waitFor(function () {
-				expect(store.getModel()).toEqual({ status: "cancelled", outcome: "Interrupted" })
-			})
-
-			await new Promise(function (resolve) {
-				setTimeout(resolve, 30)
-			})
-			expect(store.getModel().status).toBe("cancelled")
-		} finally {
-			Effect.runSync(store.dispose())
-		}
-	})
+	)
 })

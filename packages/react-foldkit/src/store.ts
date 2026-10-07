@@ -353,7 +353,7 @@ function start<Model, Message, R>(
 			if (Exit.isFailure(exit)) Effect.runFork(Effect.logError(exit.cause))
 		}
 		if (config.onCrash !== undefined) config.onCrash(cause, triggeringMessage)
-		else console.error("[react-foldkit] Store crashed:", Cause.pretty(cause))
+		else Effect.runFork(Effect.logError("[react-foldkit] Store crashed:", Cause.pretty(cause)))
 	}
 
 	function enqueueMessage(message: Message, command?: Update.Commands<Message, R>[number]): void {

@@ -75,9 +75,9 @@ describe("React public types", function () {
 		}
 		const asynchronous: CommitSource<Message> = {
 			// @ts-expect-error Snapshots must be synchronously readable.
-			getSnapshot: async () => [],
+			getSnapshot: () => Promise.resolve([]),
 			// @ts-expect-error Subscription setup must synchronously return cleanup.
-			subscribe: async () => function () {},
+			subscribe: () => Promise.resolve(function () {}),
 		}
 		const entry: CommitEntry<Message> = {
 			key: "count",

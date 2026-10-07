@@ -1,5 +1,6 @@
+import { it } from "@effect/vitest"
 import { Deferred, Effect, Exit, Fiber, Latch, Layer, Option, Result, Scheduler, Schema, Scope, Stream } from "effect"
-import { describe, expect, it, vi } from "vitest"
+import { describe, expect, vi } from "vitest"
 import { modifyFields } from "../struct"
 import type * as Command from "../command"
 import { defineMessageUnion } from "../message"
@@ -36,8 +37,8 @@ const update = (model: Model, message: Message): UpdateReturn =>
 const makeInitCommand = (effect: Effect.Effect<Message>): Command.Command<Message> => ({ name: "RunInit", effect })
 
 describe("React store lifecycle", function () {
-	it("passes the final lease's failed Exit to resource finalizers", async function () {
-		await Effect.runPromise(
+	it.live("passes the final lease's failed Exit to resource finalizers", () =>
+		Effect.asVoid(
 			Effect.gen(function* () {
 				const acquired = Deferred.makeUnsafe<void>()
 				let resourceExit: Exit.Exit<unknown, unknown> | undefined
@@ -62,7 +63,7 @@ describe("React store lifecycle", function () {
 				expect(resourceExit).toEqual(exit)
 			})
 		)
-	})
+	)
 	it("rejects inactive commits, drops inactive dispatches, and preserves the Model across reactivation", function () {
 		const store = ReactStore.make({ update }, { model: { value: "initial" } })
 
@@ -105,42 +106,46 @@ describe("React store lifecycle", function () {
 		)
 	})
 
-	it("does not rerun an init Command after it has produced its result", async function () {
-		let runs = 0
-		const command = makeInitCommand(
-			Effect.sync(function () {
-				runs += 1
-				return Message.CompletedInit({ value: "complete" })
-			})
-		)
-		const store = ReactStore.make({ update }, { model: { value: "initial" }, commands: [command] })
+	it.live("does not rerun an init Command after it has produced its result", () =>
+		Effect.gen(function* () {
+			let runs = 0
+			const command = makeInitCommand(
+				Effect.sync(function () {
+					runs += 1
+					return Message.CompletedInit({ value: "complete" })
+				})
+			)
+			const store = ReactStore.make({ update }, { model: { value: "initial" }, commands: [command] })
 
-		const deactivateFirst = activate(store)
-		await vi.waitFor(function () {
+			const deactivateFirst = activate(store)
+			yield* Effect.promise(() =>
+				vi.waitFor(function () {
+					expect(store.getModel()).toEqual({ value: "complete" })
+				})
+			)
+			deactivateFirst()
+
+			const deactivateSecond = activate(store)
+			yield* Effect.yieldNow
+			expect(runs).toBe(1)
 			expect(store.getModel()).toEqual({ value: "complete" })
+			deactivateSecond()
 		})
-		deactivateFirst()
+	)
 
-		const deactivateSecond = activate(store)
-		await Effect.runPromise(Effect.yieldNow)
-		expect(runs).toBe(1)
-		expect(store.getModel()).toEqual({ value: "complete" })
-		deactivateSecond()
-	})
-
-	it("retries an init result discarded before the deferred drain processes it", async function () {
-		let now = 0
-		const clock = vi.spyOn(performance, "now").mockImplementation(() => now)
-		vi.stubGlobal(
-			"MessageChannel",
-			class {
-				port1 = { postMessage() {}, close() {} }
-				port2 = { onmessage: undefined, close() {} }
-			}
-		)
-		try {
-			await Effect.runPromise(
-				Effect.gen(function* () {
+	it.live("retries an init result discarded before the deferred drain processes it", () =>
+		Effect.gen(function* () {
+			let now = 0
+			const clock = vi.spyOn(performance, "now").mockImplementation(() => now)
+			vi.stubGlobal(
+				"MessageChannel",
+				class {
+					port1 = { postMessage() {}, close() {} }
+					port2 = { onmessage: undefined, close() {} }
+				}
+			)
+			try {
+				yield* Effect.gen(function* () {
 					const started = yield* Deferred.make<void>()
 					const ready = yield* Deferred.make<void>()
 					let runs = 0
@@ -172,90 +177,108 @@ describe("React store lifecycle", function () {
 					expect(runs).toBe(2)
 					expect(store.getModel()).toBe(99)
 				}).pipe(Effect.scoped)
-			)
-		} finally {
-			clock.mockRestore()
-			vi.unstubAllGlobals()
-		}
-	})
-
-	it("restarts an interrupted init Command until it produces its result", async function () {
-		const latch = Latch.makeUnsafe()
-		let runs = 0
-		const command = makeInitCommand(
-			Effect.gen(function* () {
-				runs += 1
-				yield* latch.await
-				return Message.CompletedInit({ value: "complete" })
-			})
-		)
-		const store = ReactStore.make({ update }, { model: { value: "initial" }, commands: [command] })
-
-		const deactivateFirst = activate(store)
-		await vi.waitFor(function () {
-			expect(runs).toBe(1)
+			} finally {
+				clock.mockRestore()
+				vi.unstubAllGlobals()
+			}
 		})
-		deactivateFirst()
+	)
 
-		const deactivateSecond = activate(store)
-		await vi.waitFor(function () {
+	it.live("restarts an interrupted init Command until it produces its result", () =>
+		Effect.gen(function* () {
+			const latch = Latch.makeUnsafe()
+			let runs = 0
+			const command = makeInitCommand(
+				Effect.gen(function* () {
+					runs += 1
+					yield* latch.await
+					return Message.CompletedInit({ value: "complete" })
+				})
+			)
+			const store = ReactStore.make({ update }, { model: { value: "initial" }, commands: [command] })
+
+			const deactivateFirst = activate(store)
+			yield* Effect.promise(() =>
+				vi.waitFor(function () {
+					expect(runs).toBe(1)
+				})
+			)
+			deactivateFirst()
+
+			const deactivateSecond = activate(store)
+			yield* Effect.promise(() =>
+				vi.waitFor(function () {
+					expect(runs).toBe(2)
+				})
+			)
+			yield* latch.open
+			yield* Effect.promise(() =>
+				vi.waitFor(function () {
+					expect(store.getModel()).toEqual({ value: "complete" })
+				})
+			)
+			deactivateSecond()
+
+			const deactivateThird = activate(store)
+			yield* Effect.yieldNow
 			expect(runs).toBe(2)
+			deactivateThird()
 		})
-		Effect.runSync(latch.open)
-		await vi.waitFor(function () {
-			expect(store.getModel()).toEqual({ value: "complete" })
-		})
-		deactivateSecond()
+	)
 
-		const deactivateThird = activate(store)
-		await Effect.runPromise(Effect.yieldNow)
-		expect(runs).toBe(2)
-		deactivateThird()
-	})
-
-	it("reconnects Subscriptions and Layer resources on every activation", async function () {
-		let acquires = 0
-		let releases = 0
-		const layer = Layer.effectDiscard(
-			Effect.acquireRelease(
-				Effect.sync(function () {
-					acquires += 1
-				}),
-				() =>
+	it.live("reconnects Subscriptions and Layer resources on every activation", () =>
+		Effect.gen(function* () {
+			let acquires = 0
+			let releases = 0
+			const layer = Layer.effectDiscard(
+				Effect.acquireRelease(
 					Effect.sync(function () {
-						releases += 1
-					})
+						acquires += 1
+					}),
+					() =>
+						Effect.sync(function () {
+							releases += 1
+						})
+				)
 			)
-		)
-		const subscriptions = Subscription.make<Model, Message>()((entry) => ({
-			keepAlive: entry(
-				{ value: Schema.String },
-				{
-					modelToDependencies: (model) => ({ value: model.value }),
-					dependenciesToStream: () => Stream.never,
-				}
-			),
-		}))
-		const store = ReactStore.make({ update, subscriptions, layer }, { model: { value: "initial" } })
+			const subscriptions = Subscription.make<Model, Message>()((entry) => ({
+				keepAlive: entry(
+					{ value: Schema.String },
+					{
+						modelToDependencies: (model) => ({ value: model.value }),
+						dependenciesToStream: () => Stream.never,
+					}
+				),
+			}))
+			const store = ReactStore.make({ update, subscriptions, layer }, { model: { value: "initial" } })
 
-		const deactivateFirst = activate(store)
-		await vi.waitFor(function () {
-			expect(acquires).toBe(1)
-		})
-		deactivateFirst()
-		await vi.waitFor(function () {
-			expect(releases).toBe(1)
-		})
+			const deactivateFirst = activate(store)
+			yield* Effect.promise(() =>
+				vi.waitFor(function () {
+					expect(acquires).toBe(1)
+				})
+			)
+			deactivateFirst()
+			yield* Effect.promise(() =>
+				vi.waitFor(function () {
+					expect(releases).toBe(1)
+				})
+			)
 
-		const deactivateSecond = activate(store)
-		await vi.waitFor(function () {
-			expect(acquires).toBe(2)
+			const deactivateSecond = activate(store)
+			yield* Effect.promise(() =>
+				vi.waitFor(function () {
+					expect(acquires).toBe(2)
+				})
+			)
+			deactivateSecond()
+			yield* Effect.promise(() =>
+				vi.waitFor(function () {
+					expect(releases).toBe(2)
+				})
+			)
 		})
-		deactivateSecond()
-		await vi.waitFor(function () {
-			expect(releases).toBe(2)
-		})
-	})
+	)
 
 	it("shares overlapping activation leases and releases each once", function () {
 		const store = ReactStore.make({ update }, { model: { value: "initial" } })
@@ -274,101 +297,111 @@ describe("React store lifecycle", function () {
 })
 
 describe("activation leases", function () {
-	it("shares one live store across concurrent acquisition and retains its subscription until the last lease", async function () {
-		let acquires = 0
-		let releases = 0
-		const built = Latch.makeUnsafe()
-		const notifications = vi.fn()
-		const store = ReactStore.make(
-			{
-				update,
-				layer: Layer.effectDiscard(
-					Effect.acquireRelease(
-						Effect.sync(function () {
-							acquires += 1
-						}).pipe(Effect.andThen(built.open)),
-						() =>
+	it.live(
+		"shares one live store across concurrent acquisition and retains its subscription until the last lease",
+		() =>
+			Effect.gen(function* () {
+				let acquires = 0
+				let releases = 0
+				const built = Latch.makeUnsafe()
+				const notifications = vi.fn()
+				const store = ReactStore.make(
+					{
+						update,
+						layer: Layer.effectDiscard(
+							Effect.acquireRelease(
+								Effect.sync(function () {
+									acquires += 1
+								}).pipe(Effect.andThen(built.open)),
+								() =>
+									Effect.sync(function () {
+										releases += 1
+									})
+							)
+						),
+					},
+					{
+						model: { value: "initial" },
+						commands: [makeInitCommand(Effect.succeed(Message.CompletedInit({ value: "ready" })))],
+					}
+				)
+				const unsubscribe = store.subscribe(notifications)
+				yield* Effect.gen(function* () {
+					const first = yield* Scope.make()
+					const second = yield* Scope.make()
+					try {
+						// Force a yield during allocation, before either lease can publish its store.
+						yield* Effect.all(
+							[store.activate.pipe(Scope.provide(first)), store.activate.pipe(Scope.provide(second))],
+							{ concurrency: "unbounded" }
+						).pipe(Effect.provideService(Scheduler.MaxOpsBeforeYield, 8))
+						yield* built.await
+						yield* Effect.promise(() =>
+							vi.waitFor(() => expect(store.getModel()).toEqual({ value: "ready" }))
+						)
+						yield* Scope.close(first, Exit.void)
+						expect(acquires).toBe(1)
+						expect(releases).toBe(0)
+						notifications.mockClear()
+						expect(store.commit(Message.SetValue({ value: "second lease" }))).toEqual(Result.void)
+						expect(notifications).toHaveBeenCalledOnce()
+						yield* Scope.close(second, Exit.void)
+						expect(releases).toBe(1)
+					} finally {
+						yield* Scope.close(first, Exit.void)
+						yield* Scope.close(second, Exit.void)
+						unsubscribe()
+					}
+				})
+			})
+	)
+
+	it.live("disposes the store only after the last overlapping lease closes", () =>
+		Effect.gen(function* () {
+			let releases = 0
+			// A Subscription forces the Layer to build, so its release proves the store's own scope closed.
+			const subscriptions = Subscription.make<Model, Message>()((entry) => ({
+				keepAlive: entry(
+					{ value: Schema.String },
+					{
+						modelToDependencies: (model) => ({ value: model.value }),
+						dependenciesToStream: () => Stream.never,
+					}
+				),
+			}))
+			const store = ReactStore.make(
+				{
+					update,
+					subscriptions,
+					layer: Layer.effectDiscard(
+						Effect.acquireRelease(Effect.void, () =>
 							Effect.sync(function () {
 								releases += 1
 							})
-					)
-				),
-			},
-			{
-				model: { value: "initial" },
-				commands: [makeInitCommand(Effect.succeed(Message.CompletedInit({ value: "ready" })))],
-			}
-		)
-		const unsubscribe = store.subscribe(notifications)
-		await Effect.runPromise(
-			Effect.gen(function* () {
-				const first = yield* Scope.make()
-				const second = yield* Scope.make()
-				try {
-					// Force a yield during allocation, before either lease can publish its store.
-					yield* Effect.all(
-						[store.activate.pipe(Scope.provide(first)), store.activate.pipe(Scope.provide(second))],
-						{ concurrency: "unbounded" }
-					).pipe(Effect.provideService(Scheduler.MaxOpsBeforeYield, 8))
-					yield* built.await
-					yield* Effect.promise(() => vi.waitFor(() => expect(store.getModel()).toEqual({ value: "ready" })))
-					yield* Scope.close(first, Exit.void)
-					expect(acquires).toBe(1)
-					expect(releases).toBe(0)
-					notifications.mockClear()
-					expect(store.commit(Message.SetValue({ value: "second lease" }))).toEqual(Result.void)
-					expect(notifications).toHaveBeenCalledOnce()
-					yield* Scope.close(second, Exit.void)
+						)
+					),
+				},
+				{ model: { value: "initial" } }
+			)
+			const first = activate(store)
+			const second = activate(store)
+			Result.getOrThrow(store.commit(Message.SetValue({ value: "live" })))
+			yield* Effect.promise(() =>
+				vi.waitFor(function () {
+					expect(store.getModel()).toEqual({ value: "live" })
+				})
+			)
+			first()
+			yield* Effect.sleep("20 millis")
+			expect(releases).toBe(0)
+			second()
+			yield* Effect.promise(() =>
+				vi.waitFor(function () {
 					expect(releases).toBe(1)
-				} finally {
-					yield* Scope.close(first, Exit.void)
-					yield* Scope.close(second, Exit.void)
-					unsubscribe()
-				}
-			})
-		)
-	})
-
-	it("disposes the store only after the last overlapping lease closes", async function () {
-		let releases = 0
-		// A Subscription forces the Layer to build, so its release proves the store's own scope closed.
-		const subscriptions = Subscription.make<Model, Message>()((entry) => ({
-			keepAlive: entry(
-				{ value: Schema.String },
-				{
-					modelToDependencies: (model) => ({ value: model.value }),
-					dependenciesToStream: () => Stream.never,
-				}
-			),
-		}))
-		const store = ReactStore.make(
-			{
-				update,
-				subscriptions,
-				layer: Layer.effectDiscard(
-					Effect.acquireRelease(Effect.void, () =>
-						Effect.sync(function () {
-							releases += 1
-						})
-					)
-				),
-			},
-			{ model: { value: "initial" } }
-		)
-		const first = activate(store)
-		const second = activate(store)
-		Result.getOrThrow(store.commit(Message.SetValue({ value: "live" })))
-		await vi.waitFor(function () {
-			expect(store.getModel()).toEqual({ value: "live" })
+				})
+			)
 		})
-		first()
-		await new Promise((resolve) => setTimeout(resolve, 20))
-		expect(releases).toBe(0)
-		second()
-		await vi.waitFor(function () {
-			expect(releases).toBe(1)
-		})
-	})
+	)
 
 	it("retains the Model from the ended activation for the next one", function () {
 		const store = ReactStore.make({ update }, { model: { value: "initial" } })
@@ -417,8 +450,8 @@ describe("crash projection", function () {
 		second()
 	})
 
-	it("does not overwrite replacement health when an older activation finishes resource cleanup", async function () {
-		await Effect.runPromise(
+	it.live("does not overwrite replacement health when an older activation finishes resource cleanup", () =>
+		Effect.asVoid(
 			Effect.gen(function* () {
 				const acquired = Deferred.makeUnsafe<void>()
 				const releasing = Deferred.makeUnsafe<void>()
@@ -463,5 +496,5 @@ describe("crash projection", function () {
 				yield* Scope.close(second, Exit.void)
 			})
 		)
-	})
+	)
 })

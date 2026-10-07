@@ -1,14 +1,12 @@
-// @vitest-environment node
-
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Exit, Result, Schema } from "effect"
+import { DateTime, Effect, Exit, Result, Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup } from "effect/http-api"
 import * as Query from "foldkit/experimental/query"
 import { afterEach, vi } from "vitest"
 import * as AsyncData from "./asyncData"
 import * as Loader from "./loader"
 
-const at = Schema.decodeSync(Schema.DateFromString)("2026-10-01T12:00:00.000Z")
+const at = DateTime.toDateUtc(DateTime.makeUnsafe("2026-10-01T12:00:00.000Z"))
 afterEach(() => vi.restoreAllMocks())
 
 describe("derived Query Loaders", function () {

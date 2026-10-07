@@ -33,11 +33,18 @@ published React Foldkit ESLint recommendations.
 ## Relationship to oxlint
 
 Effect-native linting lives in oxlint (`.oxlintrc.json`, `@effect/tsgo`
-recommended preset). oxlint cannot run custom JS rules, so the six
+recommended and effect-native presets). All 22 Effect-native rules also run in
+the editor through each workspace's TypeScript plugin configuration. The root
+lint command checks all maintained files and fails on warnings. oxlint cannot
+run custom JS rules, so the six
 function-shape rules above stay in this minimal ESLint setup while oxlint owns
 everything else. Per-file Effect rule waivers also live in `.oxlintrc.json`
 `overrides`, each with a reason; inline `@effect-diagnostics` and
 `eslint-disable` comments do not suppress `effecttsgo` rules under oxlint.
+
+Negative type fixtures disable `floatingEffect` and `missingEffectContext` in
+their TypeScript config because the examples intentionally leave Effects unused
+or omit required services. All Effect-native rules remain enabled there.
 
 ## TypeScript side-by-side
 
@@ -51,7 +58,7 @@ typescript-eslint supports TS >= 7.1.
 
 ## Patching after install
 
-`effect-tsgo patch --oxlint` (the `prepare` script) enables the Effect rules in
-oxlint and TypeScript. Bun does not auto-run `prepare`, so run
-`bunx effect-tsgo patch --oxlint` manually after every `bun install`; without
-it, oxlint fails closed with `Unknown plugin: 'effecttsgo'`.
+`effect-tsgo patch --typescript --oxlint` (the `scripts.prepare` hook) enables
+the Effect rules in TypeScript and oxlint. Bun runs this hook during installation.
+To reapply the patch manually, run `bun run prepare`; without the oxlint patch,
+linting fails closed with `Unknown plugin: 'effecttsgo'`.

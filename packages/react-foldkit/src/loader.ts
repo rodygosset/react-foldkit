@@ -4,6 +4,7 @@ import type { KeyedQuery, Query } from "foldkit/experimental/query"
 import { Envelope, EnvelopeHeader, Receipt } from "./internal/loader-envelope"
 import { makeResourceKey, type ReadKey } from "./internal/loader-key"
 import type * as Update from "./update"
+import { webCrypto } from "./internal/web-crypto"
 
 type SyncFields = { readonly [x: PropertyKey]: Schema.Codec<unknown, unknown, never, never> }
 type KeyedArgs<Fields extends SyncFields> = Schema.Schema.Type<Schema.Struct<Fields>>
@@ -63,7 +64,7 @@ function encodeLoad<A, I>(config: Config<A, I>, readKey: ReadKey<A>): Loader<A, 
 			format: EnvelopeHeader.fields.format.literal,
 			name: config.name,
 			key,
-			version: crypto.randomUUID(),
+			version: yield* Effect.orDie(webCrypto.randomUUIDv4),
 			payload,
 		}
 	})

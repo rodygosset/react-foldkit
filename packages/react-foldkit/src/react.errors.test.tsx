@@ -1,9 +1,10 @@
+import { it } from "@effect/vitest"
 import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react"
 import { Cause, Effect, Option, Result, Schema } from "effect"
 import React from "react"
 import { hydrateRoot } from "react-dom/client"
 import { renderToString } from "react-dom/server"
-import { afterEach, expect, it, vi } from "vitest"
+import { afterEach, expect, vi } from "vitest"
 import { entry, fakeSource, Message } from "../test/fixtures/commit-source"
 import { createSourceFixture } from "../test/fixtures/react-commit-source"
 import { defineApplication, defineSubmodel } from "./react"
@@ -114,101 +115,113 @@ it("captures factory, snapshot and bootstrap update defects", function () {
 	expect(source.subscriptions).toBe(0)
 })
 
-it("replaces mounted children with the fallback after an update defect and keeps the crash terminal", async function () {
-	const defect = new Error("update defect")
-	const source = fakeSource<Message>()
-	const onCrash = vi.fn()
-	const App = defineApplication({
-		Model: Schema.Finite,
-		update(model: number, message: Message) {
-			if (message._tag === "Edited") throw defect
-			return { model: model + 1 }
-		},
-		onCrash,
+it.live("replaces mounted children with the fallback after an update defect and keeps the crash terminal", () =>
+	Effect.gen(function* () {
+		const defect = new Error("update defect")
+		const source = fakeSource<Message>()
+		const onCrash = vi.fn()
+		const App = defineApplication({
+			Model: Schema.Finite,
+			update(model: number, message: Message) {
+				if (message._tag === "Edited") throw defect
+				return { model: model + 1 }
+			},
+			onCrash,
+		})
+		const seen: Array<Cause.Cause<unknown>> = []
+		const onError = vi.fn(() => Effect.void)
+		function View() {
+			const dispatch = App.useDispatch()
+			return <button onClick={() => dispatch(Message.Edited())}>Cause update defect</button>
+		}
+		const mounted = render(
+			<App.Provider
+				init={{ model: 0 }}
+				commitSource={source.source}
+				onError={onError}
+				renderError={(cause) => (
+					<CauseView
+						cause={cause}
+						seen={seen}
+					/>
+				)}
+			>
+				<View />
+			</App.Provider>
+		)
+		fireEvent.click(mounted.getByRole("button", { name: "Cause update defect" }))
+		yield* Effect.promise(() =>
+			waitFor(function () {
+				expect(onCrash).toHaveBeenCalledExactlyOnceWith(Cause.die(defect), Option.some(Message.Edited()))
+				expect(mounted.getByRole("alert").textContent).toContain("update defect")
+				expect(mounted.queryByRole("button")).toBeNull()
+				expect(onError).toHaveBeenCalledExactlyOnceWith(Cause.die(defect))
+				expect(seen).toEqual([Cause.die(defect)])
+			})
+		)
+		source.publish([entry("a", 1)])
+		yield* Effect.promise(() =>
+			waitFor(function () {
+				expect(onCrash).toHaveBeenCalledExactlyOnceWith(Cause.die(defect), Option.some(Message.Edited()))
+				expect(mounted.getByRole("alert").textContent).toContain("update defect")
+				expect(onError).toHaveBeenCalledExactlyOnceWith(Cause.die(defect))
+				expect(seen).toEqual([Cause.die(defect)])
+			})
+		)
+		mounted.unmount()
 	})
-	const seen: Array<Cause.Cause<unknown>> = []
-	const onError = vi.fn(() => Effect.void)
-	function View() {
-		const dispatch = App.useDispatch()
-		return <button onClick={() => dispatch(Message.Edited())}>Cause update defect</button>
-	}
-	const mounted = render(
-		<App.Provider
-			init={{ model: 0 }}
-			commitSource={source.source}
-			onError={onError}
-			renderError={(cause) => (
-				<CauseView
-					cause={cause}
-					seen={seen}
-				/>
-			)}
-		>
-			<View />
-		</App.Provider>
-	)
-	fireEvent.click(mounted.getByRole("button", { name: "Cause update defect" }))
-	await waitFor(function () {
-		expect(onCrash).toHaveBeenCalledExactlyOnceWith(Cause.die(defect), Option.some(Message.Edited()))
-		expect(mounted.getByRole("alert").textContent).toContain("update defect")
-		expect(mounted.queryByRole("button")).toBeNull()
-		expect(onError).toHaveBeenCalledExactlyOnceWith(Cause.die(defect))
-		expect(seen).toEqual([Cause.die(defect)])
-	})
-	source.publish([entry("a", 1)])
-	await waitFor(function () {
-		expect(onCrash).toHaveBeenCalledExactlyOnceWith(Cause.die(defect), Option.some(Message.Edited()))
-		expect(mounted.getByRole("alert").textContent).toContain("update defect")
-		expect(onError).toHaveBeenCalledExactlyOnceWith(Cause.die(defect))
-		expect(seen).toEqual([Cause.die(defect)])
-	})
-	mounted.unmount()
-})
+)
 
-it("replaces mounted children with the fallback after a Command defect", async function () {
-	const defect = new Error("command defect")
-	const onCrash = vi.fn<(cause: Cause.Cause<unknown>, message: Option.Option<Message>) => void>()
-	const App = defineApplication({
-		Model: Schema.Finite,
-		update: (model: number, message: Message) =>
-			message._tag === "Edited" ? { model, commands: [{ name: "Fail", effect: Effect.die(defect) }] } : { model },
-		onCrash,
+it.live("replaces mounted children with the fallback after a Command defect", () =>
+	Effect.gen(function* () {
+		const defect = new Error("command defect")
+		const onCrash = vi.fn<(cause: Cause.Cause<unknown>, message: Option.Option<Message>) => void>()
+		const App = defineApplication({
+			Model: Schema.Finite,
+			update: (model: number, message: Message) =>
+				message._tag === "Edited"
+					? { model, commands: [{ name: "Fail", effect: Effect.die(defect) }] }
+					: { model },
+			onCrash,
+		})
+		const seen: Array<Cause.Cause<unknown>> = []
+		const onError = vi.fn((_cause: Cause.Cause<unknown>) => Effect.void)
+		function View() {
+			const dispatch = App.useDispatch()
+			return <button onClick={() => dispatch(Message.Edited())}>Run failing command</button>
+		}
+		const mounted = render(
+			<App.Provider
+				init={{ model: 0 }}
+				onError={onError}
+				renderError={(cause) => (
+					<CauseView
+						cause={cause}
+						seen={seen}
+					/>
+				)}
+			>
+				<View />
+			</App.Provider>
+		)
+		fireEvent.click(mounted.getByRole("button", { name: "Run failing command" }))
+		yield* Effect.promise(() =>
+			waitFor(function () {
+				expect(onCrash).toHaveBeenCalledTimes(1)
+				const [crashCause, message] = onCrash.mock.calls[0]!
+				expect(Result.getOrThrow(Cause.findDefect(crashCause))).toBe(defect)
+				expect(message).toEqual(Option.some(Message.Edited()))
+				expect(onError).toHaveBeenCalledTimes(1)
+				expect(Result.getOrThrow(Cause.findDefect(onError.mock.calls[0]![0]))).toBe(defect)
+				expect(mounted.getByRole("alert").textContent).toContain("command defect")
+				expect(mounted.queryByRole("button")).toBeNull()
+				expect(seen).toHaveLength(1)
+				expect(Result.getOrThrow(Cause.findDefect(seen[0]!))).toBe(defect)
+			})
+		)
+		mounted.unmount()
 	})
-	const seen: Array<Cause.Cause<unknown>> = []
-	const onError = vi.fn((_cause: Cause.Cause<unknown>) => Effect.void)
-	function View() {
-		const dispatch = App.useDispatch()
-		return <button onClick={() => dispatch(Message.Edited())}>Run failing command</button>
-	}
-	const mounted = render(
-		<App.Provider
-			init={{ model: 0 }}
-			onError={onError}
-			renderError={(cause) => (
-				<CauseView
-					cause={cause}
-					seen={seen}
-				/>
-			)}
-		>
-			<View />
-		</App.Provider>
-	)
-	fireEvent.click(mounted.getByRole("button", { name: "Run failing command" }))
-	await waitFor(function () {
-		expect(onCrash).toHaveBeenCalledTimes(1)
-		const [crashCause, message] = onCrash.mock.calls[0]!
-		expect(Result.getOrThrow(Cause.findDefect(crashCause))).toBe(defect)
-		expect(message).toEqual(Option.some(Message.Edited()))
-		expect(onError).toHaveBeenCalledTimes(1)
-		expect(Result.getOrThrow(Cause.findDefect(onError.mock.calls[0]![0]))).toBe(defect)
-		expect(mounted.getByRole("alert").textContent).toContain("command defect")
-		expect(mounted.queryByRole("button")).toBeNull()
-		expect(seen).toHaveLength(1)
-		expect(Result.getOrThrow(Cause.findDefect(seen[0]!))).toBe(defect)
-	})
-	mounted.unmount()
-})
+)
 
 it("reports a typed live snapshot failure, then accepts the next publication", function () {
 	const f = createSourceFixture([])
@@ -466,9 +479,8 @@ it("preserves typed snapshot failures before any bootstrap delivery", function (
 	expect(f.handled).toEqual([])
 })
 
-it.each(["setup", "cleanup"])(
-	"recovers a %s failure after Activity reconnects without a notification",
-	async function (kind) {
+it.live.each(["setup", "cleanup"])("recovers a %s failure after Activity reconnects without a notification", (kind) =>
+	Effect.gen(function* () {
 		const source = fakeSource<Message>()
 		const f = createSourceFixture([], source)
 		const onError = vi.fn(() => Effect.void)
@@ -493,14 +505,16 @@ it.each(["setup", "cleanup"])(
 		mounted.rerender(tree(false))
 		source.set([entry("a", 1)])
 		mounted.rerender(tree(true))
-		await waitFor(function () {
-			expect(mounted.queryByRole("alert")).toBeNull()
-			expect(f.model.values).toEqual(["a"])
-			expect(f.handled).toHaveLength(1)
-			expect(onError).toHaveBeenCalledTimes(1)
-			expect(source.listeners).toBe(1)
-		})
-	}
+		yield* Effect.promise(() =>
+			waitFor(function () {
+				expect(mounted.queryByRole("alert")).toBeNull()
+				expect(f.model.values).toEqual(["a"])
+				expect(f.handled).toHaveLength(1)
+				expect(onError).toHaveBeenCalledTimes(1)
+				expect(source.listeners).toBe(1)
+			})
+		)
+	})
 )
 
 it("retains tokens for committed Messages when rejecting a reentrant notification", function () {
@@ -531,83 +545,94 @@ it("retains tokens for committed Messages when rejecting a reentrant notificatio
 	expect(mounted.getByTestId("model").textContent).toBe("1")
 })
 
-it("hydrates optional root and child hooks with stable server snapshots", async function () {
-	const App = defineApplication({
-		Model: Schema.Finite,
-		update: (model: number, _message: Message) => ({ model: model + 1 }),
-	})
-	const Child = defineSubmodel<number, Message>()
-	const projection = { read: (model: number) => model, toParentMessage: (message: Message) => message }
-	let commit: Option.Option<ReturnType<typeof App.useCommit>> = Option.none()
-	function Read() {
-		commit = App.useOptionalCommit()
-		const root = Option.getOrElse(App.useOptionalModel(), () => -1)
-		const child = Option.getOrElse(Child.useOptionalModel(), () => -1)
-		return (
-			<span>
-				{root}/{child}
-			</span>
-		)
-	}
-	function Content() {
-		return (
-			<Child.Provider source={App.useSubmodel(projection)}>
-				<Read />
-			</Child.Provider>
-		)
-	}
-	expect(renderToString(<Read />)).toContain("-1<!-- -->/<!-- -->-1")
-	const tree = (
-		<App.Provider init={{ model: 1 }}>
-			<Content />
-		</App.Provider>
-	)
-	const container = document.createElement("div")
-	container.innerHTML = renderToString(tree)
-	const onRecoverableError = vi.fn()
-	let root: ReturnType<typeof hydrateRoot> | undefined
-	try {
-		await act(async function () {
-			root = hydrateRoot(container, tree, { onRecoverableError })
+it.live("hydrates optional root and child hooks with stable server snapshots", () =>
+	Effect.gen(function* () {
+		const testServices = yield* Effect.context<never>()
+		const App = defineApplication({
+			Model: Schema.Finite,
+			update: (model: number, _message: Message) => ({ model: model + 1 }),
 		})
-		expect(container.textContent).toBe("1/1")
-		void act(() => Option.getOrThrow(commit)(Message.Edited()))
-		expect(container.textContent).toBe("2/2")
-		expect(onRecoverableError).not.toHaveBeenCalled()
-	} finally {
-		act(() => root?.unmount())
-	}
-})
+		const Child = defineSubmodel<number, Message>()
+		const projection = { read: (model: number) => model, toParentMessage: (message: Message) => message }
+		let commit: Option.Option<ReturnType<typeof App.useCommit>> = Option.none()
+		function Read() {
+			commit = App.useOptionalCommit()
+			const root = Option.getOrElse(App.useOptionalModel(), () => -1)
+			const child = Option.getOrElse(Child.useOptionalModel(), () => -1)
+			return (
+				<span>
+					{root}/{child}
+				</span>
+			)
+		}
+		function Content() {
+			return (
+				<Child.Provider source={App.useSubmodel(projection)}>
+					<Read />
+				</Child.Provider>
+			)
+		}
+		expect(renderToString(<Read />)).toContain("-1<!-- -->/<!-- -->-1")
+		const tree = (
+			<App.Provider init={{ model: 1 }}>
+				<Content />
+			</App.Provider>
+		)
+		const container = document.createElement("div")
+		container.innerHTML = renderToString(tree)
+		const onRecoverableError = vi.fn()
+		let root: ReturnType<typeof hydrateRoot> | undefined
+		try {
+			yield* Effect.promise(() =>
+				act(() =>
+					Effect.runPromiseWith(testServices)(
+						Effect.sync(function () {
+							root = hydrateRoot(container, tree, { onRecoverableError })
+						})
+					)
+				)
+			)
+			expect(container.textContent).toBe("1/1")
+			void act(() => Option.getOrThrow(commit)(Message.Edited()))
+			expect(container.textContent).toBe("2/2")
+			expect(onRecoverableError).not.toHaveBeenCalled()
+		} finally {
+			act(() => root?.unmount())
+		}
+	})
+)
 
-it("reports subscription defects and cancels their asynchronous observer on unmount", async function () {
-	const f = createSourceFixture([])
-	const defect = new Error("subscription defect")
-	let interrupted = false
-	const onError = vi.fn(() =>
-		Effect.never.pipe(
-			Effect.onInterrupt(() =>
-				Effect.sync(function () {
-					interrupted = true
-				})
+it.live("reports subscription defects and cancels their asynchronous observer on unmount", () =>
+	Effect.gen(function* () {
+		const f = createSourceFixture([])
+		const defect = new Error("subscription defect")
+		let interrupted = false
+		const onError = vi.fn(() =>
+			Effect.never.pipe(
+				Effect.onInterrupt(() =>
+					Effect.sync(function () {
+						interrupted = true
+					})
+				)
 			)
 		)
-	)
-	const mounted = render(
-		<f.App.Provider
-			init={f.init}
-			commitSource={{
-				...f.source.source,
-				subscribe() {
-					throw defect
-				},
-			}}
-			onError={onError}
-		>
-			<f.View />
-		</f.App.Provider>
-	)
-	expect(mounted.getByRole("alert").textContent).toBe("The application could not start.")
-	expect(onError).toHaveBeenCalledExactlyOnceWith(Cause.die(defect))
-	mounted.unmount()
-	await waitFor(() => expect(interrupted).toBe(true))
-})
+		const mounted = render(
+			<f.App.Provider
+				init={f.init}
+				commitSource={{
+					...f.source.source,
+					subscribe() {
+						throw defect
+					},
+				}}
+				onError={onError}
+			>
+				<f.View />
+			</f.App.Provider>
+		)
+		expect(mounted.getByRole("alert").textContent).toBe("The application could not start.")
+		expect(onError).toHaveBeenCalledExactlyOnceWith(Cause.die(defect))
+		mounted.unmount()
+		yield* Effect.promise(() => waitFor(() => expect(interrupted).toBe(true)))
+	})
+)

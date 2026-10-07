@@ -1,7 +1,8 @@
+import { it } from "@effect/vitest"
 import { Effect, Layer, Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup } from "effect/http-api"
 import * as Query from "foldkit/experimental/query"
-import { describe, expect, it, vi } from "vitest"
+import { describe, expect, vi } from "vitest"
 import { defineMessageUnion } from "./message"
 import * as Store from "./store"
 import * as Update from "./update"
@@ -36,55 +37,63 @@ const update = (model: Model, message: Message): Update.Return<Model, Message, C
 	})
 
 describe("Foldkit HttpApi Query in the React store", function () {
-	it("runs endpoint Commands with the store Layer and interrupts an evicted request", async function () {
-		let isStarted = false
-		let isInterrupted = false
-		const store = Store.boot(
-			{
-				update,
-				layer: Layer.succeed(
-					Client,
-					Client.of({
-						notes: {
-							get: ({ params }) =>
-								(params.id === "ready"
-									? Effect.succeed("loaded")
-									: Effect.sync(function () {
-											isStarted = true
-										}).pipe(
-											Effect.andThen(Effect.never),
-											Effect.onInterrupt(() =>
-												Effect.sync(function () {
-													isInterrupted = true
-												})
-											)
-										)) as never,
-						},
+	it.live("runs endpoint Commands with the store Layer and interrupts an evicted request", () =>
+		Effect.gen(function* () {
+			let isStarted = false
+			let isInterrupted = false
+			const store = Store.boot(
+				{
+					update,
+					layer: Layer.succeed(
+						Client,
+						Client.of({
+							notes: {
+								get: ({ params }) =>
+									(params.id === "ready"
+										? Effect.succeed("loaded")
+										: Effect.sync(function () {
+												isStarted = true
+											}).pipe(
+												Effect.andThen(Effect.never),
+												Effect.onInterrupt(() =>
+													Effect.sync(function () {
+														isInterrupted = true
+													})
+												)
+											)) as never,
+							},
+						})
+					),
+				},
+				{ model: { note: note.init("store") } }
+			)
+			try {
+				store.dispatch(Message.ClickedLoadNote({ id: "ready" }))
+				yield* Effect.promise(() =>
+					vi.waitFor(function () {
+						expect(note.read(store.getModel().note, { params: { id: "ready" } })).toEqual({
+							_tag: "Success",
+							data: "loaded",
+						})
 					})
-				),
-			},
-			{ model: { note: note.init("store") } }
-		)
-		try {
-			store.dispatch(Message.ClickedLoadNote({ id: "ready" }))
-			await vi.waitFor(function () {
-				expect(note.read(store.getModel().note, { params: { id: "ready" } })).toEqual({
-					_tag: "Success",
-					data: "loaded",
-				})
-			})
-			store.dispatch(Message.ClickedLoadNote({ id: "pending" }))
-			await vi.waitFor(function () {
-				expect(isStarted).toBe(true)
-			})
-			store.dispatch(Message.ClickedForgetNote({ id: "pending" }))
-			await vi.waitFor(function () {
-				expect(isInterrupted).toBe(true)
-			})
-			expect(note.read(store.getModel().note, { params: { id: "pending" } })._tag).toBe("Idle")
-			expect(note.read(store.getModel().note, { params: { id: "ready" } })._tag).toBe("Success")
-		} finally {
-			Effect.runSync(store.dispose())
-		}
-	})
+				)
+				store.dispatch(Message.ClickedLoadNote({ id: "pending" }))
+				yield* Effect.promise(() =>
+					vi.waitFor(function () {
+						expect(isStarted).toBe(true)
+					})
+				)
+				store.dispatch(Message.ClickedForgetNote({ id: "pending" }))
+				yield* Effect.promise(() =>
+					vi.waitFor(function () {
+						expect(isInterrupted).toBe(true)
+					})
+				)
+				expect(note.read(store.getModel().note, { params: { id: "pending" } })._tag).toBe("Idle")
+				expect(note.read(store.getModel().note, { params: { id: "ready" } })._tag).toBe("Success")
+			} finally {
+				yield* store.dispose()
+			}
+		})
+	)
 })

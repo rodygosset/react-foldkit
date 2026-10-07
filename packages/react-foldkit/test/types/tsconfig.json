@@ -1,5 +1,41 @@
 {
 	"extends": "../../tsconfig.json",
 	"include": ["./*.test.ts"],
-	"exclude": []
+	"exclude": [],
+	"compilerOptions": {
+		"plugins": [
+			{
+				"name": "@effect/language-service",
+				"diagnostics": true,
+				"ignoreEffectWarningsInTscExitCode": true,
+				"diagnosticSeverity": {
+					"abortControllerInEffect": "warning",
+					"asyncFunction": "warning",
+					"cryptoRandomUUID": "warning",
+					"cryptoRandomUUIDInEffect": "warning",
+					"extendsNativeError": "warning",
+					"globalConsole": "warning",
+					"globalConsoleInEffect": "warning",
+					"globalDate": "warning",
+					"globalDateInEffect": "warning",
+					"globalFetch": "warning",
+					"globalFetchInEffect": "warning",
+					"globalRandom": "warning",
+					"globalRandomInEffect": "warning",
+					"globalTimers": "warning",
+					"globalTimersInEffect": "warning",
+					"instanceOfSchema": "warning",
+					"newPromise": "warning",
+					"nodeBuiltinImport": "warning",
+					"preferSchemaOverJson": "warning",
+					"processEnv": "warning",
+					"processEnvInEffect": "warning",
+					"schemaSync": "warning",
+					// Negative type fixtures intentionally leave Effects unused and omit services.
+					"floatingEffect": "off",
+					"missingEffectContext": "off"
+				}
+			}
+		]
+	}
 }

@@ -5,7 +5,7 @@
 	"scripts": {
 		"build": "turbo build",
 		"dev": "turbo dev",
-		"lint": "bun run test:lint && NODE_OPTIONS=\"--import ./eslint/ts6-register.mjs\" eslint . && oxlint apps packages eslint && turbo lint",
+		"lint": "bun run test:lint && NODE_OPTIONS=\"--import ./eslint/ts6-register.mjs\" eslint . && oxlint . --ignore-pattern 'repos/**' --max-warnings=0 && turbo lint",
 		"lint:effect": "effect-tsgo diagnostics --project packages/react-foldkit/tsconfig.json",
 		"test:lint": "node --import ./eslint/ts6-register.mjs --test eslint/function-style.test.mjs",
 		"format": "turbo format",

@@ -1,4 +1,4 @@
-import { Context, Effect, Schema } from "effect"
+import { DateTime, Context, Effect, Schema } from "effect"
 import * as Query from "foldkit/experimental/query"
 import * as AsyncData from "react-foldkit/asyncData"
 import * as Loader from "react-foldkit/loader"
@@ -43,7 +43,7 @@ describe("Foldkit Query Loader public types", function () {
 			keyed,
 			keyed.init("types"),
 			{ id: 1 },
-			AsyncData.Success({ data: new Date() }),
+			AsyncData.Success({ data: DateTime.toDateUtc(DateTime.nowUnsafe()) }),
 			{
 				fresher: (incoming, current) => incoming > current,
 			}
@@ -56,9 +56,15 @@ describe("Foldkit Query Loader public types", function () {
 		Loader.settleQueryIf(keyed, keyed.init("types"), { id: 1 }, AsyncData.Success({ data: "2026-10-01" }), {
 			fresher: () => true,
 		})
-		// @ts-expect-error Keyed settlement retains the Query args.
-		Loader.settleQueryIf(keyed, keyed.init("types"), { id: "1" }, AsyncData.Success({ data: new Date() }), {
-			fresher: () => true,
-		})
+		Loader.settleQueryIf(
+			keyed,
+			keyed.init("types"),
+			// @ts-expect-error Keyed settlement retains the Query args.
+			{ id: "1" },
+			AsyncData.Success({ data: DateTime.toDateUtc(DateTime.nowUnsafe()) }),
+			{
+				fresher: () => true,
+			}
+		)
 	}
 })

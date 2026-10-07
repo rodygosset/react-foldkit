@@ -1,7 +1,7 @@
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import { Separator } from "@workspace/ui/components/separator"
-import { Array, Clock, Duration, Effect, HashMap, Match, Option, Schema, Stream, pipe } from "effect"
+import { DateTime, Array, Clock, Duration, Effect, HashMap, Match, Option, Schema, Stream, pipe } from "effect"
 import * as AsyncData from "react-foldkit/asyncData"
 import * as Command from "react-foldkit/command"
 import { defineMessageUnion } from "react-foldkit/message"
@@ -233,7 +233,8 @@ const { Provider, useModel, useDispatch } = defineApplication({
 
 // VIEW
 
-const formatFetchedAt = (fetchedAt: number): string => new Date(fetchedAt).toLocaleTimeString()
+const formatFetchedAt = (fetchedAt: number): string =>
+	DateTime.formatLocal(DateTime.makeUnsafe(fetchedAt), { timeStyle: "medium" })
 
 const isPostDetailCached = (postDetailById: HashMap.HashMap<string, PostDetailData>, postId: string): boolean =>
 	Option.exists(HashMap.get(postDetailById, postId), AsyncData.hasData)

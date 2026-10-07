@@ -1,5 +1,6 @@
+import { it } from "@effect/vitest"
 import { Array, Cause, Effect, Exit, Result } from "effect"
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, vi } from "vitest"
 import * as Store from "./store"
 import { controlledDrains } from "../test/fixtures/controlled-drains"
 import type * as Update from "./update"
@@ -203,27 +204,29 @@ describe("synchronous commit", function () {
 		expect(store.getModel()).toEqual(["burn", "dispose"])
 	})
 
-	it("runs Commands asynchronously once through the ordinary Effect runtime", async function () {
-		let executions = 0
-		const { store } = boot((model, message) => ({
-			model: Array.append(model, message.label),
-			commands:
-				message.label === "start"
-					? [
-							{
-								name: "Complete",
-								effect: Effect.sync(function () {
-									executions += 1
-									return { label: "result" }
-								}),
-							},
-						]
-					: [],
-		}))
-		Result.getOrThrow(store.commit({ label: "start" }))
-		expect(executions).toBe(0)
-		expect(store.getModel()).toEqual(["start"])
-		await vi.waitFor(() => expect(store.getModel()).toEqual(["start", "result"]))
-		expect(executions).toBe(1)
-	})
+	it.live("runs Commands asynchronously once through the ordinary Effect runtime", () =>
+		Effect.gen(function* () {
+			let executions = 0
+			const { store } = boot((model, message) => ({
+				model: Array.append(model, message.label),
+				commands:
+					message.label === "start"
+						? [
+								{
+									name: "Complete",
+									effect: Effect.sync(function () {
+										executions += 1
+										return { label: "result" }
+									}),
+								},
+							]
+						: [],
+			}))
+			Result.getOrThrow(store.commit({ label: "start" }))
+			expect(executions).toBe(0)
+			expect(store.getModel()).toEqual(["start"])
+			yield* Effect.promise(() => vi.waitFor(() => expect(store.getModel()).toEqual(["start", "result"])))
+			expect(executions).toBe(1)
+		})
+	)
 })
