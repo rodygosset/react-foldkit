@@ -43,12 +43,12 @@ it.effect("publishes bootstrap failure before its observer settles and keeps it 
 		})
 		yield* session.start
 		yield* Deferred.await(started)
-		expect(session.getServerSnapshot()).toEqual(Option.some(Cause.fail(failure)))
-		expect(session.getSnapshot()).toEqual(Option.some(Cause.fail(failure)))
+		expect(session.getServerSnapshot().cause).toEqual(Option.some(Cause.fail(failure)))
+		expect(session.getSnapshot().cause).toEqual(Option.some(Cause.fail(failure)))
 		expect(seen).toEqual([Cause.fail(failure)])
 		yield* Deferred.succeed(gate, undefined)
 		yield* session.stop
-		expect(session.getSnapshot()).toEqual(Option.some(Cause.fail(failure)))
+		expect(session.getSnapshot().cause).toEqual(Option.some(Cause.fail(failure)))
 	})
 )
 
@@ -62,7 +62,7 @@ it.effect("interrupts a suspended bootstrap observer when its lifetime stops", (
 			return Effect.never.pipe(Effect.onInterrupt(() => Deferred.succeed(interrupted, undefined)))
 		})
 		yield* session.start
-		expect(session.getSnapshot()).toEqual(Option.some(Cause.fail(failure)))
+		expect(session.getSnapshot().cause).toEqual(Option.some(Cause.fail(failure)))
 		yield* session.stop
 		expect(yield* Deferred.isDone(interrupted)).toBe(true)
 		expect(seen).toEqual([Cause.fail(failure)])
@@ -84,12 +84,12 @@ it.effect("keeps a newer source success after an older asynchronous observer fai
 		})
 		yield* session.start
 		f.source.publish([entry("a", 1), entry("a", 2)])
-		expect(session.getSnapshot()).toEqual(Option.some(duplicate("a")))
+		expect(session.getSnapshot().cause).toEqual(Option.some(duplicate("a")))
 		f.source.publish([entry("a", 1)])
 		expect(f.store.getModel()).toBe(1)
 		yield* Deferred.succeed(gate, undefined)
 		yield* Deferred.await(completed)
-		expect(session.getSnapshot()).toEqual(Option.none())
+		expect(session.getSnapshot().cause).toEqual(Option.none())
 		expect(seen).toEqual([duplicate("a")])
 		expect(f.handled).toEqual([Message.Received({ value: "a" })])
 		yield* session.stop
@@ -117,10 +117,10 @@ it.effect("keeps the latest source failure when an older asynchronous observer f
 		f.source.publish([entry("a", 1), entry("a", 2)])
 		f.source.publish([entry("b", 1), entry("b", 2)])
 		const latest = Option.some(duplicate("b"))
-		expect(session.getSnapshot()).toEqual(latest)
+		expect(session.getSnapshot().cause).toEqual(latest)
 		yield* Deferred.succeed(gate, undefined)
 		yield* Deferred.await(completed)
-		expect(session.getSnapshot()).toEqual(latest)
+		expect(session.getSnapshot().cause).toEqual(latest)
 		expect(seen).toEqual([duplicate("a"), duplicate("b")])
 		yield* session.stop
 	})
@@ -145,7 +145,7 @@ it.effect("bounds repeated stalled observers by deadline while the session stays
 		f.source.publish([entry("a", 1), entry("a", 2)])
 		f.source.publish([entry("b", 1), entry("b", 2)])
 		f.source.publish([entry("c", 1), entry("c", 2)])
-		expect(session.getSnapshot()).toEqual(Option.some(duplicate("c")))
+		expect(session.getSnapshot().cause).toEqual(Option.some(duplicate("c")))
 		expect(seen).toEqual([duplicate("a"), duplicate("b"), duplicate("c")])
 		yield* Effect.promise(() =>
 			vi.waitFor(
@@ -157,7 +157,7 @@ it.effect("bounds repeated stalled observers by deadline while the session stays
 		)
 		f.source.publish([entry("a", 1)])
 		expect(f.handled).toEqual([Message.Received({ value: "a" })])
-		expect(session.getSnapshot()).toEqual(Option.none())
+		expect(session.getSnapshot().cause).toEqual(Option.none())
 		yield* session.stop
 		expect(f.source.listeners).toBe(0)
 	})
@@ -187,14 +187,14 @@ it.effect("combines setup failure with asynchronous cleanup before observing it"
 			return Deferred.succeed(observed, undefined)
 		})
 		yield* session.start
-		expect(session.getSnapshot()).toEqual(Option.some(duplicate("a")))
+		expect(session.getSnapshot().cause).toEqual(Option.some(duplicate("a")))
 		expect(seen).toEqual([])
 		expect(f.source.listeners).toBe(0)
 		yield* Deferred.succeed(gate, undefined)
 		yield* Deferred.await(observed)
 		const combined = Cause.combine(duplicate("a"), Cause.die(defect))
 		expect(seen).toEqual([combined])
-		expect(session.getSnapshot()).toEqual(Option.some(combined))
+		expect(session.getSnapshot().cause).toEqual(Option.some(combined))
 		yield* session.stop
 	})
 )
@@ -308,7 +308,7 @@ it.effect("closes store resources before cleanup observation and awaits both", (
 		yield* Deferred.await(observed)
 		expect(events).toEqual(["resource closed", "observer started"])
 		expect(seen).toEqual([Cause.die(defect)])
-		expect(session.getSnapshot()).toEqual(Option.some(Cause.die(defect)))
+		expect(session.getSnapshot().cause).toEqual(Option.some(Cause.die(defect)))
 		expect(stopping.pollUnsafe()).toBeUndefined()
 		yield* Deferred.succeed(observerGate, undefined)
 		expect(yield* Fiber.await(stopping)).toEqual(Exit.void)
@@ -367,17 +367,17 @@ it.effect("keeps a healthy reconnect after an older cleanup observer fails", () 
 		yield* Deferred.await(secondAcquired)
 		yield* Effect.yieldNow
 		expect(source.listeners).toBe(1)
-		expect(session.getSnapshot()).toEqual(Option.none())
+		expect(session.getSnapshot().cause).toEqual(Option.none())
 		yield* Deferred.succeed(cleanupGate, undefined)
 		yield* Deferred.await(observed)
-		expect(session.getSnapshot()).toEqual(Option.none())
+		expect(session.getSnapshot().cause).toEqual(Option.none())
 		source.publish([entry("a", 1)])
 		expect(store.getModel()).toBe(1)
 		expect(source.listeners).toBe(1)
-		expect(session.getSnapshot()).toEqual(Option.none())
+		expect(session.getSnapshot().cause).toEqual(Option.none())
 		yield* Deferred.succeed(observerGate, undefined)
 		expect(yield* Fiber.await(stopping)).toEqual(Exit.void)
-		expect(session.getSnapshot()).toEqual(Option.none())
+		expect(session.getSnapshot().cause).toEqual(Option.none())
 		expect(seen).toEqual([Cause.die(cleanupDefect)])
 		yield* session.stop
 		expect(releases).toBe(2)

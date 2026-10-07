@@ -139,6 +139,8 @@ export function make<Model, Message, R = never>(
 		getServerModel: () => serverModel,
 		subscribe(listener) {
 			listeners.add(listener)
+			// Activity may reconnect after activation published a new Model.
+			listener()
 			return function () {
 				listeners.delete(listener)
 			}

@@ -103,9 +103,8 @@ if (false) {
 	const app = defineApplication({
 		Model: servicefulModel,
 		update: idle,
-		layer: Layer.succeed(Resource, { value: "ok" }),
 	})
 	expectTypeOf(app.useModel()).toEqualTypeOf<Model>()
-	// @ts-expect-error Codec services also require a Layer.
-	defineApplication({ Model: servicefulModel, update: idle })
+	// @ts-expect-error Update services must be provided even when the Model codec also needs them.
+	defineApplication({ Model: servicefulModel, update })
 }
