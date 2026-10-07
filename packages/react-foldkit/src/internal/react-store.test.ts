@@ -1,18 +1,4 @@
-import {
-	Cause,
-	Deferred,
-	Effect,
-	Exit,
-	Fiber,
-	Latch,
-	Layer,
-	Option,
-	Result,
-	Scheduler,
-	Schema,
-	Scope,
-	Stream,
-} from "effect"
+import { Deferred, Effect, Exit, Fiber, Latch, Layer, Option, Result, Scheduler, Schema, Scope, Stream } from "effect"
 import { describe, expect, it, vi } from "vitest"
 import { modifyFields } from "../struct"
 import type * as Command from "../command"
@@ -140,6 +126,57 @@ describe("React store lifecycle", function () {
 		expect(runs).toBe(1)
 		expect(store.getModel()).toEqual({ value: "complete" })
 		deactivateSecond()
+	})
+
+	it("retries an init result discarded before the deferred drain processes it", async function () {
+		let now = 0
+		const clock = vi.spyOn(performance, "now").mockImplementation(() => now)
+		vi.stubGlobal(
+			"MessageChannel",
+			class {
+				port1 = { postMessage() {}, close() {} }
+				port2 = { onmessage: undefined, close() {} }
+			}
+		)
+		try {
+			await Effect.runPromise(
+				Effect.gen(function* () {
+					const started = yield* Deferred.make<void>()
+					const ready = yield* Deferred.make<void>()
+					let runs = 0
+					const command = Effect.gen(function* () {
+						runs += 1
+						yield* Deferred.succeed(started, undefined)
+						yield* Deferred.await(ready)
+						return 99
+					})
+					const store = ReactStore.make<number, number>(
+						{
+							update(_model, message) {
+								if (message === 1) now += 6
+								return { model: message }
+							},
+						},
+						{ model: 0, commands: [{ name: "Init", effect: command }] }
+					)
+					const first = yield* Scope.fork(yield* Scope.Scope)
+					yield* store.activate.pipe(Scope.provide(first))
+					yield* Deferred.await(started)
+					store.dispatch(1)
+					yield* Deferred.succeed(ready, undefined)
+					yield* Effect.yieldNow
+					expect(store.getModel()).toBe(1)
+					yield* Scope.close(first, Exit.void)
+					yield* store.activate
+					yield* Effect.yieldNow
+					expect(runs).toBe(2)
+					expect(store.getModel()).toBe(99)
+				}).pipe(Effect.scoped)
+			)
+		} finally {
+			clock.mockRestore()
+			vi.unstubAllGlobals()
+		}
 	})
 
 	it("restarts an interrupted init Command until it produces its result", async function () {

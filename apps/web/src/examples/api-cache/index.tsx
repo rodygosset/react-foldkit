@@ -16,12 +16,12 @@ const STATS_REFETCH_INTERVAL = Duration.seconds(5)
 
 // MODEL
 
-const FetchedPosts = Schema.Struct({ posts: Schema.Array(Post), fetchedAt: Schema.Number })
+const FetchedPosts = Schema.Struct({ posts: Schema.Array(Post), fetchedAt: Schema.Finite })
 const FetchedPostDetail = Schema.Struct({
 	detail: PostDetail,
-	fetchedAt: Schema.Number,
+	fetchedAt: Schema.Finite,
 })
-const FetchedStats = Schema.Struct({ stats: Stats, fetchedAt: Schema.Number })
+const FetchedStats = Schema.Struct({ stats: Stats, fetchedAt: Schema.Finite })
 
 const PostsData = AsyncData.Schema(FetchedPosts, Schema.String)
 const PostDetailData = AsyncData.Schema(FetchedPostDetail, Schema.String)

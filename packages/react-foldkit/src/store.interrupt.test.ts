@@ -1,15 +1,15 @@
 import { describe, it } from "@effect/vitest"
 import { Array, Effect, Fiber, Schema } from "effect"
 import { expect, vi } from "vitest"
-import { modifyFields } from "./struct"
 import * as Command from "./command"
 import {
 	CurrentInterruptRegistry as __CurrentRegistry,
 	makeInterruptRegistry as __makeRegistry,
 	type InterruptRegistry as __Registry,
-} from "./internal/foldkit"
+} from "./internal/interrupt"
 import { defineMessageUnion } from "./message"
 import * as Store from "./store"
+import { modifyFields } from "./struct"
 import type * as Update from "./update"
 
 /**
@@ -22,7 +22,7 @@ import type * as Update from "./update"
 
 const Message = defineMessageUnion({
 	CompletedWork: {},
-	SucceededTask: { taskId: Schema.Number },
+	SucceededTask: { taskId: Schema.Finite },
 })
 
 const provideRegistry =
@@ -33,7 +33,7 @@ const provideRegistry =
 describe("interruptible Command.define", function () {
 	it("derives the key from args at construction, prefixed by the Command name", function () {
 		const RunTask = Command.define("RunTask", {
-			args: { taskId: Schema.Number, label: Schema.String },
+			args: { taskId: Schema.Finite, label: Schema.String },
 			messages: [Message.SucceededTask],
 			interrupt: {
 				keyFields: ["taskId"],
@@ -126,7 +126,7 @@ describe("interruptible Command.define", function () {
 			const registry = __makeRegistry()
 
 			const RunTask = Command.define("RunTask", {
-				args: { taskId: Schema.Number },
+				args: { taskId: Schema.Finite },
 				messages: [Message.SucceededTask],
 				interrupt: {
 					keyFields: ["taskId"],
@@ -152,7 +152,7 @@ describe("interruptible Command.define", function () {
 			const interruptedTaskIds: Array<number> = []
 
 			const RunTask = Command.define("RunTask", {
-				args: { taskId: Schema.Number },
+				args: { taskId: Schema.Finite },
 				messages: [Message.SucceededTask],
 				interrupt: {
 					keyFields: ["taskId"],
@@ -230,7 +230,7 @@ describe("interruptible Command.define", function () {
 			const FailingTask = Command.define("FailingTask", {
 				messages: [Message.CompletedWork],
 				interrupt: true,
-				execute: Effect.flatMap(Effect.fail("boom"), () => Effect.succeed(Message.CompletedWork())),
+				execute: Effect.map(Effect.fail("boom"), () => Message.CompletedWork()),
 			})
 
 			const exit = yield* Effect.exit(FailingTask().effect.pipe(provideRegistry(registry)))

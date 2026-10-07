@@ -5,9 +5,9 @@ import { defineMessageUnion } from "react-foldkit/message"
 import { defineApplication, defineSubmodel, type ModelSource } from "react-foldkit/react"
 import { describe, expectTypeOf, it } from "vitest"
 
-const Model = Schema.Struct({ count: Schema.Number })
+const Model = Schema.Struct({ count: Schema.Finite })
 type Model = typeof Model.Type
-const Message = defineMessageUnion({ Load: {}, Loaded: { count: Schema.Number } })
+const Message = defineMessageUnion({ Load: {}, Loaded: { count: Schema.Finite } })
 type Message = typeof Message.Type
 
 type ForeignMessage = { readonly _tag: "Other" }

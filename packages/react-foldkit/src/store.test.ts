@@ -392,6 +392,45 @@ describe("resources", function () {
 		})
 	})
 
+	it.effect("shares one suspended Layer build across concurrent Commands", () =>
+		Effect.gen(function* () {
+			const started = yield* Deferred.make<void>()
+			const ready = yield* Deferred.make<void>()
+			let builds = 0
+			let releases = 0
+			const live = Layer.effect(
+				ResourceService,
+				Effect.acquireRelease(
+					Effect.gen(function* () {
+						builds += 1
+						yield* Deferred.succeed(started, undefined)
+						yield* Deferred.await(ready)
+						return { value: "shared" }
+					}),
+					() =>
+						Effect.sync(function () {
+							releases += 1
+						})
+				)
+			)
+			const store = yield* Store.make(
+				{ update: resourceUpdate, layer: live },
+				{ model: { label: "start" }, commands: [ReadValue(), ReadValue()] }
+			)
+			yield* Deferred.await(started)
+			yield* Effect.yieldNow
+			expect(builds).toBe(1)
+			expect(store.getModel().label).toBe("start")
+			yield* Deferred.succeed(ready, undefined)
+			yield* Store.takeWhen(store, (model) =>
+				model.label === "start shared shared" ? Option.some(model) : Option.none()
+			)
+			expect(builds).toBe(1)
+			yield* store.dispose()
+			expect(releases).toBe(1)
+		})
+	)
+
 	it("reports the crash once when the Layer fails to build for an init Command", async function () {
 		const crashes: Array<Cause.Cause<unknown>> = []
 
@@ -667,6 +706,23 @@ describe("command message mappers", function () {
 		})
 	)
 
+	it.effect("interruption stops takeWhen from observing later Models or disposal", () =>
+		Effect.gen(function* () {
+			const store = yield* Store.make<number, number>(
+				{ update: (_model, message) => ({ model: message }) },
+				{ model: 0 }
+			)
+			const pick = vi.fn((_model: number) => Option.none<number>())
+			const waiting = yield* Effect.forkChild(Store.takeWhen(store, pick))
+			yield* Effect.yieldNow
+			expect(pick).toHaveBeenCalledTimes(1)
+			yield* Fiber.interrupt(waiting)
+			store.dispatch(1)
+			yield* store.dispose()
+			expect(pick).toHaveBeenCalledTimes(1)
+		})
+	)
+
 	it.effect("takeWhen fails when the store is disposed before pick hits", () =>
 		Effect.gen(function* () {
 			const CountMessage = defineMessageUnion({
@@ -737,7 +793,7 @@ describe("Effect store construction", function () {
 
 	it.effect("passes failed and interrupted caller Exits to resource finalizers", () =>
 		Effect.gen(function* () {
-			for (const outcome of [Effect.fail(new Error("caller failed")), Effect.interrupt]) {
+			for (const outcome of [Effect.fail("caller failed"), Effect.interrupt]) {
 				let resourceExit: Exit.Exit<unknown, unknown> | undefined
 				const callerExit = yield* Effect.exit(
 					Effect.scoped(

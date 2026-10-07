@@ -94,7 +94,7 @@ it("captures factory, snapshot and bootstrap update defects", function () {
 		mounted.unmount()
 	}
 	const App = defineApplication({
-		Model: Schema.Number,
+		Model: Schema.Finite,
 		update(_model: number, _message: Message) {
 			throw defect
 		},
@@ -119,7 +119,7 @@ it("replaces mounted children with the fallback after an update defect and keeps
 	const source = fakeSource<Message>()
 	const onCrash = vi.fn()
 	const App = defineApplication({
-		Model: Schema.Number,
+		Model: Schema.Finite,
 		update(model: number, message: Message) {
 			if (message._tag === "Edited") throw defect
 			return { model: model + 1 }
@@ -169,7 +169,7 @@ it("replaces mounted children with the fallback after a Command defect", async f
 	const defect = new Error("command defect")
 	const onCrash = vi.fn<(cause: Cause.Cause<unknown>, message: Option.Option<Message>) => void>()
 	const App = defineApplication({
-		Model: Schema.Number,
+		Model: Schema.Finite,
 		update: (model: number, message: Message) =>
 			message._tag === "Edited" ? { model, commands: [{ name: "Fail", effect: Effect.die(defect) }] } : { model },
 		onCrash,
@@ -420,7 +420,7 @@ it("uses the latest error observer and fallback after rerendering", function () 
 
 it("optional root and child hooks return absence and subscribe when provided", function () {
 	const App = defineApplication({
-		Model: Schema.Number,
+		Model: Schema.Finite,
 		update: (model: number, _message: Message) => ({ model: model + 1 }),
 	})
 	const Child = defineSubmodel<number, Message>()
@@ -442,7 +442,7 @@ it("optional root and child hooks return absence and subscribe when provided", f
 		</App.Provider>
 	)
 	expect(values.at(-1)).toEqual(Option.some(1))
-	act(() => Option.getOrThrow(commit)(Message.Edited()))
+	void act(() => Option.getOrThrow(commit)(Message.Edited()))
 	expect(values.at(-1)).toEqual(Option.some(2))
 	mounted.rerender(<View />)
 	expect(values.at(-1)).toEqual(Option.none())
@@ -506,7 +506,7 @@ it.each(["setup", "cleanup"])(
 it("retains tokens for committed Messages when rejecting a reentrant notification", function () {
 	const source = fakeSource<Message>()
 	const App = defineApplication({
-		Model: Schema.Number,
+		Model: Schema.Finite,
 		update(model: number, _message: Message) {
 			source.notify()
 			return { model: model + 1 }
@@ -533,7 +533,7 @@ it("retains tokens for committed Messages when rejecting a reentrant notificatio
 
 it("hydrates optional root and child hooks with stable server snapshots", async function () {
 	const App = defineApplication({
-		Model: Schema.Number,
+		Model: Schema.Finite,
 		update: (model: number, _message: Message) => ({ model: model + 1 }),
 	})
 	const Child = defineSubmodel<number, Message>()
@@ -571,7 +571,7 @@ it("hydrates optional root and child hooks with stable server snapshots", async 
 			root = hydrateRoot(container, tree, { onRecoverableError })
 		})
 		expect(container.textContent).toBe("1/1")
-		act(() => Option.getOrThrow(commit)(Message.Edited()))
+		void act(() => Option.getOrThrow(commit)(Message.Edited()))
 		expect(container.textContent).toBe("2/2")
 		expect(onRecoverableError).not.toHaveBeenCalled()
 	} finally {

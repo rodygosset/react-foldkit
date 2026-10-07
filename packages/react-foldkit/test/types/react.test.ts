@@ -1,11 +1,11 @@
-import { Context, Effect, Exit, Layer, Option, Result, Schema } from "effect"
+import { Context, Effect, Layer, Option, Result, Schema } from "effect"
 import { defineMessageUnion } from "react-foldkit/message"
 import { defineApplication, type CommitEntry, type CommitSource } from "react-foldkit/react"
 import type { CommitError } from "react-foldkit/store"
 import type * as Update from "react-foldkit/update"
 import { describe, expectTypeOf, it } from "vitest"
 
-const Model = Schema.Struct({ count: Schema.Number })
+const Model = Schema.Struct({ count: Schema.Finite })
 type Model = typeof Model.Type
 const Message = defineMessageUnion({ Increment: {} })
 type Message = typeof Message.Type

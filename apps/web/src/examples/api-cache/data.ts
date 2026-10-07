@@ -1,4 +1,4 @@
-import { Array, Duration, Effect, Option, Random, Schema } from "effect"
+import { Array, Duration, Effect, Random, Schema } from "effect"
 
 export const Post = Schema.Struct({
 	id: Schema.String,
@@ -16,9 +16,9 @@ export const PostDetail = Schema.Struct({
 export type PostDetail = typeof PostDetail.Type
 
 export const Stats = Schema.Struct({
-	activeUsers: Schema.Number,
-	requestsPerSecond: Schema.Number,
-	cacheHitRatePercent: Schema.Number,
+	activeUsers: Schema.Finite,
+	requestsPerSecond: Schema.Finite,
+	cacheHitRatePercent: Schema.Finite,
 })
 export type Stats = typeof Stats.Type
 
@@ -98,12 +98,9 @@ export const fetchPostDetail = (postId: string): Effect.Effect<PostDetail, strin
 			}
 		}
 
-		return yield* Option.match(
+		return yield* Effect.fromOption(
 			Array.findFirst(postDetails, ({ id }) => id === postId),
-			{
-				onNone: () => Effect.fail(`No post found with id ${postId}`),
-				onSome: Effect.succeed,
-			}
+			() => `No post found with id ${postId}`
 		)
 	})
 

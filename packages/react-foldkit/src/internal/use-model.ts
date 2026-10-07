@@ -1,5 +1,6 @@
 import React from "react"
 import { Equal, Option } from "effect"
+import { identity } from "effect/Function"
 import { useSyncExternalStoreWithSelector } from "use-sync-external-store/with-selector"
 import { stabilize, type ModelReader } from "./model-source"
 
@@ -9,26 +10,14 @@ export function useModel<Model, Selected>(
 	selector?: (model: Model) => Selected,
 	isEqual?: (a: Selected, b: Selected) => boolean
 ): Model | Selected {
-	const value = useSyncExternalStoreWithSelector(
+	const select = (selector ?? identity) as (model: Model) => Selected
+	return useSyncExternalStoreWithSelector(
 		source.subscribe,
 		source.getSnapshot,
 		source.getServerSnapshot,
-		(model) => ({
-			model,
-			selected: selector === undefined ? Option.none<Selected>() : Option.some(selector(model)),
-		}),
-		function (previous, next) {
-			if (Option.isSome(previous.selected) && Option.isSome(next.selected)) {
-				return (isEqual ?? Equal.equals)(previous.selected.value, next.selected.value)
-			}
-			return (
-				Option.isNone(previous.selected) &&
-				Option.isNone(next.selected) &&
-				Object.is(previous.model, next.model)
-			)
-		}
+		select,
+		selector === undefined ? Object.is : (isEqual ?? Equal.equals)
 	)
-	return Option.isSome(value.selected) ? value.selected.value : value.model
 }
 
 const absent = Option.none<never>()

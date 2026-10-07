@@ -43,9 +43,9 @@ describe("Loader public types", function () {
 			Effect.Effect<Loader.Envelope<typeof Data.Encoded>, "unavailable" | Schema.SchemaError, Reader>
 		>()
 		// @ts-expect-error Required services are preserved until host provisioning.
-		Effect.runPromise(program)
+		void Effect.runPromise(program)
 		const runtime = ManagedRuntime.make(Layer.succeed(Reader, { value: { id: "a", at: new Date() } }))
-		runtime.runPromise(program)
+		void runtime.runPromise(program)
 		// @ts-expect-error load accepts no runtime or execution options.
 		RecordLoader.load(input, { runtime })
 		// @ts-expect-error load accepts no Layer.
@@ -71,7 +71,7 @@ describe("Loader public types", function () {
 				}
 			>
 		>()
-		const other = Loader.define({ name: "Count", data: Schema.Number, key: () => "count" }).pipe(
+		const other = Loader.define({ name: "Count", data: Schema.Finite, key: () => "count" }).pipe(
 			Loader.mapMessages((count, receipt) => ({ _tag: "Count" as const, count, receipt }))
 		)
 		expectTypeOf<ReturnType<typeof RecordLoader.decode>>().toExtend<Result.Result<Data, Schema.SchemaError>>()
@@ -121,7 +121,7 @@ describe("Loader public types", function () {
 
 		const transformed = Query.define({
 			name: "TransformedTypes",
-			args: { id: Schema.NumberFromString, limit: Schema.optionalKey(Schema.NumberFromString) },
+			args: { id: Schema.FiniteFromString, limit: Schema.optionalKey(Schema.FiniteFromString) },
 			data: Schema.DateFromString,
 			error: Schema.DateFromString,
 			execute: () => Effect.fail(new Date()),
@@ -192,7 +192,7 @@ describe("Loader public types", function () {
 			Effect.Effect<Loader.Envelope<typeof httpLoader.Load.Encoded>, Schema.SchemaError, Client>
 		>()
 		// @ts-expect-error HttpApi-derived Queries preserve required client services.
-		Effect.runPromise(httpLoader.loadQuery({ params: { id: "a" } }))
+		void Effect.runPromise(httpLoader.loadQuery({ params: { id: "a" } }))
 		// @ts-expect-error Interruptible Query definitions retain their instance-id requirement.
 		httpLoader.query.init()
 		httpLoader.query.init("request")
@@ -203,7 +203,7 @@ describe("Loader public types", function () {
 
 		const unrestricted = Query.define({
 			name: "UnrestrictedTypes",
-			args: { result: Schema.NumberFromString, args: Schema.String },
+			args: { result: Schema.FiniteFromString, args: Schema.String },
 			data: Schema.String,
 			error: Schema.String,
 			execute: ({ args }) => Effect.succeed(args),
@@ -246,7 +246,7 @@ describe("Loader public types", function () {
 		// @ts-expect-error A plain Query has no arguments, so its identity is not overridable.
 		Loader.fromQuery(query, { key: () => "home" })
 		// @ts-expect-error Serialization is derived from the Query, not supplied by the caller.
-		Loader.fromQuery(keyed, { data: Schema.Number })
+		Loader.fromQuery(keyed, { data: Schema.Finite })
 		// @ts-expect-error Bound keyed loads require the declared argument type.
 		keyedLoader.loadQuery({ id: 1 })
 		// @ts-expect-error Dual keyed loads require the declared argument type.

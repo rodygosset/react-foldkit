@@ -9,7 +9,14 @@
 		"skipLibCheck": true,
 		"strict": true,
 		"noEmit": true,
-		"ignoreDeprecations": "6.0"
+		"ignoreDeprecations": "6.0",
+		"plugins": [
+			{
+				"name": "@effect/language-service",
+				"diagnostics": true,
+				"ignoreEffectWarningsInTscExitCode": true
+			}
+		]
 	},
 	"include": [
 		"src/**/*.ts",

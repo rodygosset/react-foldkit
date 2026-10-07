@@ -1,7 +1,7 @@
 import { Array, Context, Effect, Fiber } from "effect"
 import { Interruptible } from "foldkit/command"
 
-type InterruptOutcome = typeof Interruptible.Outcome.Type
+type InterruptOutcome = Interruptible.Outcome
 
 /**
  * Runtime side of Foldkit's interruptible Command protocol.

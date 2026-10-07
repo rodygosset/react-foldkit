@@ -5,7 +5,7 @@ import { modifyFields } from "../../src/struct"
 import * as Update from "../../src/update"
 import { fakeSource, Message } from "./commit-source"
 
-const Model = Schema.Struct({ values: Schema.Array(Schema.String), edits: Schema.Number })
+const Model = Schema.Struct({ values: Schema.Array(Schema.String), edits: Schema.Finite })
 type Model = typeof Model.Type
 
 export function createSourceFixture(

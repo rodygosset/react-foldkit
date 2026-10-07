@@ -6,7 +6,7 @@ import * as Loader from "./loader"
 import * as TanStackSource from "./tanstack"
 
 const Project = Loader.define({ name: "Project", data: Schema.String, key: (value) => value })
-const Count = Loader.define({ name: "Count", data: Schema.Number, key: () => "count" })
+const Count = Loader.define({ name: "Count", data: Schema.Finite, key: () => "count" })
 
 function routerWith(rootData: unknown, childData: unknown) {
 	const root = createRootRoute({ loader: () => rootData })
@@ -18,7 +18,9 @@ describe("TanStack CommitSource adapter", function () {
 	it("composes heterogeneous declarations in match order and preserves transported receipts", async function () {
 		const project = await Effect.runPromise(Project.load(Effect.succeed("a")))
 		const count = await Effect.runPromise(Count.load(Effect.succeed(2)))
-		const router = routerWith(JSON.parse(JSON.stringify(count)), JSON.parse(JSON.stringify(project)))
+		const Json = Schema.Unknown.pipe(Schema.fromJsonString)
+		const roundTrip = (value: unknown) => Schema.decodeSync(Json)(Schema.encodeSync(Json)(value))
+		const router = routerWith(roundTrip(count), roundTrip(project))
 		const source = Result.getOrThrow(
 			TanStackSource.make(router, [
 				Project.pipe(
@@ -37,16 +39,21 @@ describe("TanStack CommitSource adapter", function () {
 		expect(second.map(({ version }) => version)).toEqual([count.version, project.version])
 	})
 
-	it("decodes on every read, so a snapshot taken before loading reflects the current matches", async function () {
+	it("reuses an unchanged matches snapshot and observes new matches after loading", async function () {
 		const envelope = await Effect.runPromise(Project.load(Effect.succeed("a")))
 		const router = routerWith(null, envelope)
 		const mapping = vi.fn((value: string) => value)
 		const source = Result.getOrThrow(TanStackSource.make(router, [Project.pipe(Loader.mapMessages(mapping))]))
+		const initial = source.getSnapshot()
+		expect(Result.getOrThrow(initial)).toEqual([])
+		expect(source.getSnapshot()).toBe(initial)
 		expect(mapping).not.toHaveBeenCalled()
 		await router.load()
-		expect(Result.getOrThrow(source.getSnapshot()).map(({ message }) => message)).toEqual(["a"])
-		expect(Result.getOrThrow(source.getSnapshot()).map(({ message }) => message)).toEqual(["a"])
-		expect(mapping).toHaveBeenCalledTimes(2)
+		const loaded = source.getSnapshot()
+		expect(loaded).not.toBe(initial)
+		expect(Result.getOrThrow(loaded).map(({ message }) => message)).toEqual(["a"])
+		expect(source.getSnapshot()).toBe(loaded)
+		expect(mapping).toHaveBeenCalledTimes(1)
 	})
 
 	it("gives shared resources distinct delivery keys for different matches", async function () {
@@ -75,9 +82,7 @@ describe("TanStack CommitSource adapter", function () {
 		const envelope = await Effect.runPromise(Project.load(Effect.succeed("a")))
 		const ignored = routerWith({ arbitrary: "data" }, { ...envelope, name: "Unregistered", payload: null })
 		await ignored.load()
-		expect(
-			Result.getOrThrow(Result.getOrThrow(TanStackSource.make(ignored, [Project])).getSnapshot())
-		).toEqual([])
+		expect(Result.getOrThrow(Result.getOrThrow(TanStackSource.make(ignored, [Project])).getSnapshot())).toEqual([])
 		for (const invalid of [
 			{ ...envelope, payload: 42 },
 			{ ...envelope, format: 0 },

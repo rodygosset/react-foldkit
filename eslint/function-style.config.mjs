@@ -1,27 +1,27 @@
 import parser from "@typescript-eslint/parser"
 import react from "eslint-plugin-react"
-import { RecolnatReactPlugin, RecolnatStylePlugin } from "./function-style.mjs"
+import { FoldkitReactPlugin, FoldkitStylePlugin } from "./function-style.mjs"
 
 export default [
 	{
-		name: "recolnat/function-style",
+		name: "foldkit/function-style",
 		files: ["**/*.{js,jsx,mjs,cjs,ts,tsx,mts,cts}"],
 		languageOptions: { parser },
 		plugins: {
-			"recolnat-style": RecolnatStylePlugin,
-			"recolnat-react": RecolnatReactPlugin,
+			"foldkit-style": FoldkitStylePlugin,
+			"foldkit-react": FoldkitReactPlugin,
 		},
 		rules: {
-			"recolnat-style/no-block-bodied-arrows": "error",
-			"recolnat-style/no-named-function-expressions": "error",
-			"recolnat-style/prefer-named-effect-callbacks": "error",
-			"recolnat-style/prefer-arrow-for-expression-return": "error",
-			"recolnat-style/prefer-object-method-shorthand": "error",
-			"recolnat-react/prefer-hook-function-declaration": "error",
+			"foldkit-style/no-block-bodied-arrows": "error",
+			"foldkit-style/no-named-function-expressions": "error",
+			"foldkit-style/prefer-named-effect-callbacks": "error",
+			"foldkit-style/prefer-arrow-for-expression-return": "error",
+			"foldkit-style/prefer-object-method-shorthand": "error",
+			"foldkit-react/prefer-hook-function-declaration": "error",
 		},
 	},
 	{
-		name: "recolnat/component-function-style",
+		name: "foldkit/component-function-style",
 		files: ["**/*.{jsx,tsx}"],
 		plugins: { react },
 		settings: { react: { version: "19.2" } },

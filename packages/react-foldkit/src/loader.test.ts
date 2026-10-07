@@ -1,6 +1,6 @@
 // @vitest-environment node
 
-import { Cause, Context, Deferred, Effect, Exit, Layer, ManagedRuntime, Result, Schema } from "effect"
+import { Context, Deferred, Effect, Exit, Layer, ManagedRuntime, Result, Schema } from "effect"
 import { describe, it } from "@effect/vitest"
 import { afterEach, expect, vi } from "vitest"
 import * as AsyncData from "./asyncData"
@@ -17,7 +17,7 @@ afterEach(() => vi.restoreAllMocks())
 describe("Loader declarations", function () {
 	it.effect("keeps a SchemaError thrown by a custom key callback as a defect", () =>
 		Effect.gen(function* () {
-			const invalid = Schema.decodeUnknownResult(Schema.Number)("invalid")
+			const invalid = Schema.decodeUnknownResult(Schema.Finite)("invalid")
 			if (Result.isSuccess(invalid)) throw new Error("Expected invalid numeric input")
 			const defect = invalid.failure
 			const loader = Loader.define({
@@ -107,7 +107,7 @@ describe("Loader declarations", function () {
 			expect(message.receipt).toEqual({ name: "Record", key: "a", version: envelope.version })
 			expect(message.latest).toBe(message.receipt)
 			expect(message.message).toEqual(data)
-			expect(Schema.decodeUnknownSync(Loader.Receipt)(message.receipt)).toEqual(message.receipt)
+			expect(yield* Schema.decodeEffect(Loader.Receipt)(message.receipt)).toEqual(message.receipt)
 		})
 	)
 
@@ -176,7 +176,7 @@ describe("Loader.fromQuery", function () {
 		name: "Project",
 		args: { projectId: Schema.String },
 		toKey: ({ projectId }) => projectId,
-		data: Schema.Struct({ id: Schema.String, revision: Schema.Number }),
+		data: Schema.Struct({ id: Schema.String, revision: Schema.Finite }),
 		error: Schema.String,
 		execute: ({ projectId }) => Effect.succeed({ id: projectId, revision: 1 }),
 	})
@@ -197,7 +197,7 @@ describe("Loader.fromQuery", function () {
 			expect(envelope.key).toBe("p1")
 			expect(envelope._tag).toBe("react-foldkit/Loader")
 			expect(Result.getOrThrow(ProjectLoader.decode(envelope))).toEqual({ args: { projectId: "p1" }, result })
-			expect(Schema.decodeUnknownSync(ProjectLoader.Load)({ args: { projectId: "p1" }, result })).toEqual({
+			expect(yield* Schema.decodeEffect(ProjectLoader.Load)({ args: { projectId: "p1" }, result })).toEqual({
 				args: { projectId: "p1" },
 				result,
 			})
@@ -320,7 +320,7 @@ describe("host-owned Effect execution", function () {
 describe("Loader.settleQueryIf", function () {
 	const query = Query.define({
 		name: "ExternalRecord",
-		data: Schema.Number,
+		data: Schema.Finite,
 		error: Schema.String,
 		execute: Effect.succeed(0),
 	})
@@ -329,7 +329,7 @@ describe("Loader.settleQueryIf", function () {
 	it("preserves decoded keyed arguments and unrelated entries while settling transformed outcomes", function () {
 		const keyed = Query.define({
 			name: "TransformedSettlement",
-			args: { id: Schema.NumberFromString, limit: Schema.optionalKey(Schema.NumberFromString) },
+			args: { id: Schema.FiniteFromString, limit: Schema.optionalKey(Schema.FiniteFromString) },
 			data: Schema.DateFromString,
 			error: Schema.DateFromString,
 			execute: () => Effect.succeed(data.at),
@@ -366,7 +366,7 @@ describe("Loader.settleQueryIf", function () {
 			name: "InterruptibleSettlement",
 			interrupt: true,
 			args: { id: Schema.String },
-			data: Schema.Number,
+			data: Schema.Finite,
 			error: Schema.String,
 			execute: () => Effect.succeed(0),
 		})
@@ -388,7 +388,7 @@ describe("Loader.settleQueryIf", function () {
 		const plain = Query.define({
 			name: "InterruptiblePlainSettlement",
 			interrupt: true,
-			data: Schema.Number,
+			data: Schema.Finite,
 			error: Schema.String,
 			execute: Effect.succeed(0),
 		})

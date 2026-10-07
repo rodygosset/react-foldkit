@@ -15,14 +15,14 @@ const Message = defineMessageUnion({
 	Enabled: {},
 	Disabled: {},
 	BumpedUnrelated: {},
-	Emitted: { seq: Schema.Number },
+	Emitted: { seq: Schema.Finite },
 })
 type Message = typeof Message.Type
 
 const Model = Schema.Struct({
 	enabled: Schema.Boolean,
-	unrelated: Schema.Number,
-	emissions: Schema.Array(Schema.Number),
+	unrelated: Schema.Finite,
+	emissions: Schema.Array(Schema.Finite),
 })
 type Model = typeof Model.Type
 

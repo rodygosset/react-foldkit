@@ -16,11 +16,11 @@ import {
 } from "./react"
 import * as Update from "./update"
 
-const Model = Schema.Struct({ count: Schema.Number })
+const Model = Schema.Struct({ count: Schema.Finite })
 type Model = typeof Model.Type
-const Message = defineMessageUnion({ Increment: {}, Load: {}, Loaded: { count: Schema.Number } })
+const Message = defineMessageUnion({ Increment: {}, Load: {}, Loaded: { count: Schema.Finite } })
 type Message = typeof Message.Type
-const OutMessage = defineMessageUnion({ Changed: { count: Schema.Number } })
+const OutMessage = defineMessageUnion({ Changed: { count: Schema.Finite } })
 type OutMessage = typeof OutMessage.Type
 
 class Reader extends Context.Service<Reader, { readonly read: Effect.Effect<number> }>()("SubmodelTest/Reader") {}
@@ -69,7 +69,7 @@ describe("defineSubmodel", function () {
 		const fixture = createSubmodelFixture()
 		const NumberView = defineSubmodel<number, string>()
 		const nestedProjection = defineSubmodelProjection({
-			read: (model: typeof ChildModel.Type) => model.count,
+			read: (model: ChildModel) => model.count,
 			toParentMessage: (_message: string) => ChildMessage.Increment(),
 		})
 		let commit: ReturnType<typeof fixture.App.useCommit> | undefined
@@ -227,12 +227,12 @@ describe("defineSubmodel", function () {
 		const fixture = createSubmodelFixture()
 		const NumberView = defineSubmodel<number, ChildMessage>()
 		const left = {
-			read: (model: typeof Model.Type & { unrelated: number }) => model.count,
+			read: (model: Model & { unrelated: number }) => model.count,
 			toParentMessage: (message: ChildMessage) => message,
 		}
 		const right = {
 			...left,
-			read: (model: typeof Model.Type & { unrelated: number }) => model.unrelated,
+			read: (model: Model & { unrelated: number }) => model.unrelated,
 			toParentMessage: (_message: ChildMessage) => ChildMessage.IncrementOther(),
 		}
 		const renders: number[] = []
@@ -422,9 +422,9 @@ describe("defineSubmodel", function () {
 		const layer = Layer.succeed(Reader, { read: Effect.succeed(7) })
 		const ParentMessage = defineMessageUnion({ GotChild: { message: Message } })
 		type ParentMessage = typeof ParentMessage.Type
-		const FirstModel = Schema.Struct({ form: Model, reported: Schema.Number })
+		const FirstModel = Schema.Struct({ form: Model, reported: Schema.Finite })
 		type FirstModel = typeof FirstModel.Type
-		const SecondModel = Schema.Struct({ editor: Model, total: Schema.Number })
+		const SecondModel = Schema.Struct({ editor: Model, total: Schema.Finite })
 		type SecondModel = typeof SecondModel.Type
 		const foldFirst = Update.foldChild({
 			update,
@@ -557,7 +557,7 @@ describe("defineSubmodel", function () {
 			}),
 		})
 		const Child = Schema.Struct({ instanceId: Schema.String, model: Model })
-		const ParentModel = Schema.Struct({ child: Schema.Option(Child), reported: Schema.Number })
+		const ParentModel = Schema.Struct({ child: Schema.Option(Child), reported: Schema.Finite })
 		type ParentModel = typeof ParentModel.Type
 		const ParentMessage = defineMessageUnion({
 			GotChild: { instanceId: Schema.String, message: Message },

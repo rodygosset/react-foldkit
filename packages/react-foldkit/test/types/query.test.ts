@@ -8,7 +8,7 @@ import { describe, expectTypeOf, it } from "vitest"
 class Api extends Context.Service<Api, { readonly load: Effect.Effect<Date, string> }>()("QueryTypes/Api") {}
 const keyed = Query.define({
 	name: "PublicKeyedLoad",
-	args: { id: Schema.NumberFromString },
+	args: { id: Schema.FiniteFromString },
 	data: Schema.DateFromString,
 	error: Schema.String,
 	interrupt: true,

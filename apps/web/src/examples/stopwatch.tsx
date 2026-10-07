@@ -13,9 +13,9 @@ const TICK_INTERVAL_MS = 100
 // MODEL
 
 const Model = Schema.Struct({
-	elapsedMs: Schema.Number,
+	elapsedMs: Schema.Finite,
 	isRunning: Schema.Boolean,
-	startTime: Schema.Number,
+	startTime: Schema.Finite,
 })
 type Model = typeof Model.Type
 
@@ -24,13 +24,13 @@ type Model = typeof Model.Type
 const Message = defineMessageUnion({
 	ClickedStart: {},
 	CompletedDetermineStartTime: {
-		startTime: Schema.Number,
+		startTime: Schema.Finite,
 	},
 	ClickedStop: {},
 	ClickedReset: {},
 	Ticked: {},
 	CompletedDetermineTickTime: {
-		elapsedMs: Schema.Number,
+		elapsedMs: Schema.Finite,
 	},
 })
 type Message = typeof Message.Type
@@ -40,7 +40,7 @@ type UpdateReturn = Update.Return<Model, Message>
 // COMMAND
 
 const DetermineStartTime = Command.define("DetermineStartTime", {
-	args: { elapsedMs: Schema.Number },
+	args: { elapsedMs: Schema.Finite },
 	messages: [Message.CompletedDetermineStartTime],
 	execute: ({ elapsedMs }) =>
 		Effect.gen(function* () {
@@ -50,7 +50,7 @@ const DetermineStartTime = Command.define("DetermineStartTime", {
 })
 
 const DetermineTickTime = Command.define("DetermineTickTime", {
-	args: { startTime: Schema.Number },
+	args: { startTime: Schema.Finite },
 	messages: [Message.CompletedDetermineTickTime],
 	execute: ({ startTime }) =>
 		Effect.gen(function* () {

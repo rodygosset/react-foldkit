@@ -39,6 +39,10 @@ export type SourceOptions<Message, E = never, FactoryError = never> =
 	| { readonly commitSource?: CommitSource.CommitSource<Message, E>; readonly createCommitSource?: never }
 	| {
 			readonly commitSource?: never
+			/**
+			 * Constructs an inert source during render, including SSR. React may repeat or abandon it.
+			 * Acquire live resources in subscribe and release them in its returned cleanup.
+			 */
 			readonly createCommitSource: () => Result.Result<CommitSource.CommitSource<Message, E>, FactoryError>
 	  }
 

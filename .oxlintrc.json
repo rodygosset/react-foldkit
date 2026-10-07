@@ -1,0 +1,78 @@
+{
+	"$schema": "./node_modules/@effect/tsgo/oxlint-schema.json",
+	"extends": ["./node_modules/@effect/tsgo/oxlint-presets/recommended.json"],
+	"ignorePatterns": [
+		"repos/**",
+		"**/node_modules/**",
+		"**/dist/**",
+		"**/build/**",
+		"**/.output/**",
+		"**/.tanstack/**",
+		"**/.turbo/**",
+		"**/coverage/**",
+		"**/routeTree.gen.ts"
+	],
+	"overrides": [
+		{
+			"files": ["packages/react-foldkit/src/store.ts"],
+			"rules": {
+				// Intentional nested Effect: makeAcquireResourceContext declares
+				// Effect<Effect<Context<R>>> (lazy acquisition separates
+				// gate/slot setup from the permitted build).
+				"effecttsgo/return-effect-in-gen": "off"
+			}
+		},
+		{
+			"files": ["packages/react-foldkit/src/internal/provider-session.ts", "packages/react-foldkit/src/react.tsx"],
+			"rules": {
+				// Crash-reporting boundary: observers receive Cause<unknown>
+				// from crashed stores and the public onError callback keeps an
+				// unknown error channel by design; failures are contained
+				// with catchCause and never escape (functions return never).
+				"effecttsgo/any-unknown-in-error-context": "off"
+			}
+		},
+		{
+			"files": ["packages/react-foldkit/test/types/**"],
+			"rules": {
+				// Negative type tests: `if (false)` blocks, bare
+				// @ts-expect-error expressions, and un-awaited Effect values
+				// are the assertion idiom in this directory.
+				"no-constant-condition": "off",
+				"no-unused-expressions": "off",
+				"effecttsgo/floating-effect": "off",
+				"typescript/no-floating-promises": "off"
+			}
+		},
+		{
+			"files": [
+				"packages/react-foldkit/src/query.test.ts",
+				"packages/react-foldkit/src/loader-query.test.ts",
+				"packages/react-foldkit/test/types/loader.test.ts",
+				"apps/web/src/examples/api-cache-http-api/index.tsx"
+			],
+			"rules": {
+				// Deliberate exercise of the unstable effect/http-api surface
+				// in tests and the http-api example.
+				"effecttsgo/unstable-api-usage": "off"
+			}
+		},
+		{
+			"files": ["packages/react-foldkit/src/loader.test.ts"],
+			"rules": {
+				// Pipeable.Prototype.pipe is this-dynamic, so the copied
+				// reference binds the structural stub correctly at call time;
+				// the Loader interface requires the pipe member.
+				"typescript/unbound-method": "off"
+			}
+		},
+		{
+			"files": ["packages/react-foldkit/examples/site-notice/src/pages/home/api/load.ts"],
+			"rules": {
+				// TanStack route loaders call Home.load() per navigation, so
+				// the zero-arg function wrapper is the required contract.
+				"effecttsgo/lazy-effect": "off"
+			}
+		}
+	]
+}

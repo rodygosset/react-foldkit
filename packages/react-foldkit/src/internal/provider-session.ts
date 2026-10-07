@@ -13,11 +13,6 @@ export interface ProviderSession extends ModelReader<Option.Option<Cause.Cause<u
 	readonly stop: Effect.Effect<void>
 }
 
-type Presentation =
-	| { readonly _tag: "Healthy" }
-	| { readonly _tag: "Recoverable"; readonly cause: Cause.Cause<unknown> }
-	| { readonly _tag: "Terminal"; readonly cause: Cause.Cause<unknown> }
-
 interface Lifetime {
 	readonly resources: Scope.Closeable
 	readonly observers: Scope.Closeable
@@ -42,25 +37,21 @@ export function make<Model, Message>(
 ): ProviderSession {
 	const healthy = Option.none<Cause.Cause<unknown>>()
 	const initialFailure = Exit.isFailure(bootstrap) ? Option.some(bootstrap.cause) : healthy
-	let presentation: Presentation = Exit.isFailure(bootstrap)
-		? { _tag: "Recoverable", cause: bootstrap.cause }
-		: { _tag: "Healthy" }
 	let snapshot = initialFailure
 	let observedCrash: Option.Option<Cause.Cause<unknown>> = Option.none()
 	let phase: Phase = { _tag: "Stopped", close: Effect.void }
 	const listeners = new Set<() => void>()
 
-	function publish(value: Presentation): void {
-		if (value._tag === "Healthy" && presentation._tag === "Healthy") return
-		presentation = value
-		snapshot = value._tag === "Healthy" ? healthy : Option.some(value.cause)
+	function publish(value: Option.Option<Cause.Cause<unknown>>): void {
+		if (Option.isNone(value) && Option.isNone(snapshot)) return
+		snapshot = value
 		for (const listener of listeners) listener()
 	}
-	function fail(cause: Cause.Cause<unknown>, terminal = false): void {
-		publish({ _tag: terminal ? "Terminal" : "Recoverable", cause })
+	function fail(cause: Cause.Cause<unknown>): void {
+		publish(Option.some(cause))
 	}
 	function recover(): void {
-		publish({ _tag: "Healthy" })
+		publish(healthy)
 	}
 	const isRunning = (lifetime: Lifetime) => phase._tag === "Running" && phase.lifetime === lifetime
 	const crash = () => (Exit.isSuccess(bootstrap) ? bootstrap.value.store.getCrash() : Option.none())
@@ -99,7 +90,7 @@ export function make<Model, Message>(
 		if (Option.isNone(current)) return false
 		if (Option.isSome(observedCrash) && observedCrash.value === current.value) return true
 		observedCrash = current
-		fail(current.value, true)
+		fail(current.value)
 		scheduleReport(lifetime, current.value)
 		return true
 	}
@@ -107,7 +98,7 @@ export function make<Model, Message>(
 	function reconcile(lifetime: Lifetime, exit: Exit.Exit<void, unknown>): void {
 		if (!isRunning(lifetime) || observeCrash(lifetime)) return
 		if (Exit.isSuccess(exit)) {
-			if (presentation._tag === "Recoverable") recover()
+			recover()
 			return
 		}
 		fail(exit.cause)
@@ -141,14 +132,14 @@ export function make<Model, Message>(
 					if (Exit.isFailure(cleanup) && !Cause.hasInterruptsOnly(cleanup.cause))
 						yield* Effect.logError(cleanup.cause)
 					if (!terminal) {
-						publish({ _tag: "Recoverable", cause: finalized.cause })
+						publish(Option.some(finalized.cause))
 						yield* reportToObservers(lifetime, finalized.cause)
 					} else if (Exit.isFailure(cleanup)) {
 						const current = crash()
 						const cause = Option.isSome(current)
 							? Cause.combine(current.value, cleanup.cause)
 							: cleanup.cause
-						fail(cause, true)
+						fail(cause)
 						yield* reportToObservers(lifetime, cause)
 					}
 					return
@@ -181,12 +172,12 @@ export function make<Model, Message>(
 			reportGate: yield* Semaphore.make(maxConcurrentLiveReports),
 			setup: yield* Deferred.make<Exit.Exit<void, unknown>>(),
 		}
-		const closing = yield* Effect.cached(
+		const closing: Effect.Effect<void> = yield* Effect.cached(
 			Effect.gen(function* () {
 				const exit = yield* Effect.gen(function* () {
 					const exit = yield* release(lifetime)
 					if (Exit.isFailure(exit) && !Cause.hasInterruptsOnly(exit.cause)) {
-						publish({ _tag: "Recoverable", cause: exit.cause })
+						if (phase.close === closing) publish(Option.some(exit.cause))
 						yield* Effect.logError(exit.cause)
 					}
 					return exit
