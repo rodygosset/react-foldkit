@@ -96,6 +96,16 @@ export function defineSubmodel<Model, Message>() {
 		return Option.getOrThrowWith(React.useContext(Context), () => new SubmodelProviderError({}))
 	}
 
+	function useOptionalSource() {
+		return React.useContext(Context)
+	}
+	return { Provider, ...modelHooks(useSource, useOptionalSource) }
+}
+
+function modelHooks<Model, Message>(
+	useSource: () => ModelSource.ModelSource<Model, Message>,
+	useOptionalSource: () => Option.Option<ModelSource.ModelSource<Model, Message>>
+) {
 	function useModel(): Model
 	function useModel<Selected>(
 		selector: (model: Model) => Selected,
@@ -111,12 +121,12 @@ export function defineSubmodel<Model, Message>() {
 		return useSource().dispatch
 	}
 	function useOptionalModel(): Option.Option<Model> {
-		return ModelHooks.useOptionalModel(React.useContext(Context))
+		return ModelHooks.useOptionalModel(useOptionalSource())
 	}
 	function useOptionalDispatch(): Option.Option<(message: Message) => void> {
-		return Option.map(React.useContext(Context), (source) => source.dispatch)
+		return Option.map(useOptionalSource(), (source) => source.dispatch)
 	}
-	return { Provider, useModel, useDispatch, useOptionalModel, useOptionalDispatch, ...projectionHooks(useSource) }
+	return { useModel, useDispatch, useOptionalModel, useOptionalDispatch, ...projectionHooks(useSource) }
 }
 
 function projectionHooks<ParentModel, ParentMessage>(
@@ -234,43 +244,14 @@ export function defineApplication<ModelSchema extends ModelCodec, Message, R = n
 		return <StoreContext.Provider value={bootstrap.value.store}>{props.children}</StoreContext.Provider>
 	}
 
-	function useDispatch() {
-		return useStore().dispatch
-	}
-
 	/** Completes a Message's Model transition synchronously; Commands remain asynchronous. */
 	function useCommit() {
 		return useStore().commit
 	}
 
-	function useSource(): ModelSource.ModelSource<Type<ModelSchema>, Message> {
-		const store = useStore()
-		return React.useMemo(
-			() => ({
-				getSnapshot: store.getModel,
-				getServerSnapshot: store.getServerModel,
-				subscribe: store.subscribe,
-				dispatch: store.dispatch,
-			}),
-			[store]
-		)
-	}
-
-	function useModel(): Type<ModelSchema>
-	function useModel<Selected>(
-		selector: (model: Type<ModelSchema>) => Selected,
-		isEqual?: (a: Selected, b: Selected) => boolean
-	): Selected
-	function useModel<Selected>(
-		selector?: (model: Type<ModelSchema>) => Selected,
-		isEqual?: (a: Selected, b: Selected) => boolean
-	): Type<ModelSchema> | Selected {
-		return ModelHooks.useModel(useSource(), selector, isEqual)
-	}
-
-	function useOptionalModel(): Option.Option<Type<ModelSchema>> {
+	function useOptionalSource(): Option.Option<ModelSource.ModelSource<Type<ModelSchema>, Message>> {
 		const store = React.useContext(StoreContext)
-		const source = React.useMemo(
+		return React.useMemo(
 			() =>
 				store === null
 					? Option.none()
@@ -278,27 +259,20 @@ export function defineApplication<ModelSchema extends ModelCodec, Message, R = n
 							getSnapshot: store.getModel,
 							getServerSnapshot: store.getServerModel,
 							subscribe: store.subscribe,
+							dispatch: store.dispatch,
 						}),
 			[store]
 		)
-		return ModelHooks.useOptionalModel(source)
 	}
-	function useOptionalDispatch(): Option.Option<(message: Message) => void> {
-		const store = React.useContext(StoreContext)
-		return store === null ? Option.none() : Option.some(store.dispatch)
+	function useSource() {
+		return Option.getOrThrowWith(
+			useOptionalSource(),
+			() => new Error("react-foldkit hooks must be used within a <Provider>")
+		)
 	}
 	function useOptionalCommit(): Option.Option<(message: Message) => Result.Result<void, Store.CommitError>> {
 		const store = React.useContext(StoreContext)
 		return store === null ? Option.none() : Option.some(store.commit)
 	}
-	return {
-		Provider,
-		useModel,
-		useDispatch,
-		useCommit,
-		useOptionalModel,
-		useOptionalDispatch,
-		useOptionalCommit,
-		...projectionHooks(useSource),
-	}
+	return { Provider, useCommit, useOptionalCommit, ...modelHooks(useSource, useOptionalSource) }
 }

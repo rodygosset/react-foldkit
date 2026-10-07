@@ -5,11 +5,6 @@ import type { CommitEntry, CommitSource } from "./commitSource"
 import { EnvelopeHeader } from "./internal/loader-envelope"
 import type { Declaration } from "./loader"
 
-// The tested router exposes Readable at runtime but omits the React-store augmentation.
-declare module "@tanstack/router-core" {
-	interface RouterReadableStore<TValue> extends Readable<TValue> {}
-}
-
 export class RegistryError extends Schema.Error<RegistryError>("react-foldkit/TanStack/RegistryError")({
 	_tag: Schema.tag("RegistryError"),
 	declarationName: Schema.String,
@@ -77,7 +72,12 @@ export function make(
 				return snapshot
 			},
 			subscribe(notify) {
-				const subscription = router.stores.matches.subscribe(() => notify())
+				const store = router.stores.matches
+				if (!Predicate.hasProperty(store, "subscribe") || !Predicate.isFunction(store.subscribe)) {
+					throw new Error("TanStack CommitSource requires a reactive matches store")
+				}
+				const reactive = store as typeof store & Pick<Readable<Matches>, "subscribe">
+				const subscription = reactive.subscribe(() => notify())
 				return () => subscription.unsubscribe()
 			},
 		} satisfies CommitSource<unknown, Schema.SchemaError>

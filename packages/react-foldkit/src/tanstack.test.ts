@@ -1,4 +1,5 @@
 import { createMemoryHistory, createRootRoute, createRoute, createRouter } from "@tanstack/react-router"
+import type { Readable } from "@tanstack/react-store"
 import { Effect, Result, Schema } from "effect"
 import { describe, it } from "@effect/vitest"
 import { expect, vi } from "vitest"
@@ -79,11 +80,27 @@ describe("TanStack CommitSource adapter", function () {
 
 	it("rejects duplicate declarations before subscribing", function () {
 		const router = routerWith(null, null)
-		const subscribe = vi.spyOn(router.stores.matches, "subscribe")
+		const subscribe = vi.spyOn(
+			router.stores.matches as typeof router.stores.matches &
+				Pick<Readable<ReturnType<typeof router.stores.matches.get>>, "subscribe">,
+			"subscribe"
+		)
 		expect(TanStackSource.make(router, [Project, Project])).toEqual(
 			Result.fail(new TanStackSource.RegistryError({ declarationName: "Project" }))
 		)
 		expect(subscribe).not.toHaveBeenCalled()
+	})
+
+	it("reads server snapshots without claiming subscription support", function () {
+		const root = createRootRoute()
+		const router = createRouter({
+			routeTree: root,
+			history: createMemoryHistory(),
+			isServer: true,
+		})
+		const source = Result.getOrThrow(TanStackSource.make(router, [Project]))
+		expect(Result.getOrThrow(source.getSnapshot())).toEqual([])
+		expect(() => source.subscribe(vi.fn())).toThrow("TanStack CommitSource requires a reactive matches store")
 	})
 
 	it.live("ignores unrelated and unregistered data but reports malformed registered envelopes", () =>
@@ -121,7 +138,11 @@ describe("TanStack CommitSource adapter", function () {
 			const router = createRouter({ routeTree: root.addChildren([child]), history: createMemoryHistory() })
 			yield* Effect.promise(() => router.load())
 			const source = Result.getOrThrow(TanStackSource.make(router, [Count]))
-			const subscribe = vi.spyOn(router.stores.matches, "subscribe")
+			const subscribe = vi.spyOn(
+				router.stores.matches as typeof router.stores.matches &
+					Pick<Readable<ReturnType<typeof router.stores.matches.get>>, "subscribe">,
+				"subscribe"
+			)
 			const observed: number[] = []
 			const stop = source.subscribe(function () {
 				const snapshot = source.getSnapshot()

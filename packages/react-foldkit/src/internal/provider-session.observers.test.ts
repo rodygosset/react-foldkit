@@ -1,6 +1,7 @@
 import { it } from "@effect/vitest"
-import { Cause, Deferred, Effect, Exit, Fiber, Layer, Option, Result } from "effect"
-import { expect, vi } from "vitest"
+import { Cause, Deferred, Effect, Exit, Fiber, Layer, Logger, Option, Result } from "effect"
+import { TestClock } from "effect/testing"
+import { expect } from "vitest"
 import { entry, fakeSource, Message } from "../../test/fixtures/commit-source"
 import { CommitSourceError } from "../commitSource"
 import { CommitError } from "../store"
@@ -147,14 +148,8 @@ it.effect("bounds repeated stalled observers by deadline while the session stays
 		f.source.publish([entry("c", 1), entry("c", 2)])
 		expect(session.getSnapshot().cause).toEqual(Option.some(duplicate("c")))
 		expect(seen).toEqual([duplicate("a"), duplicate("b"), duplicate("c")])
-		yield* Effect.promise(() =>
-			vi.waitFor(
-				function () {
-					expect(interrupted).toBe(3)
-				},
-				{ timeout: 10_000 }
-			)
-		)
+		yield* TestClock.adjust("2 seconds")
+		expect(interrupted).toBe(3)
 		f.source.publish([entry("a", 1)])
 		expect(f.handled).toEqual([Message.Received({ value: "a" })])
 		expect(session.getSnapshot().cause).toEqual(Option.none())
@@ -381,5 +376,65 @@ it.effect("keeps a healthy reconnect after an older cleanup observer fails", () 
 		expect(seen).toEqual([Cause.die(cleanupDefect)])
 		yield* session.stop
 		expect(releases).toBe(2)
+	})
+)
+
+it.effect("drops overflow reports and releases capacity when observers finish", () =>
+	Effect.gen(function* () {
+		const f = fixture()
+		const seen: Cause.Cause<unknown>[] = []
+		const gate = yield* Deferred.make<void>()
+		const drained = yield* Deferred.make<void>()
+		let completed = 0
+		const session = Session.make(Exit.succeed(f.bootstrap), function (cause) {
+			seen.push(cause)
+			return Deferred.await(gate).pipe(
+				Effect.andThen(
+					Effect.suspend(function () {
+						completed += 1
+						return completed === 4 ? Deferred.succeed(drained, undefined) : Effect.void
+					})
+				)
+			)
+		})
+		yield* session.start
+		for (let i = 0; i < 100; i++) f.source.publish([entry(String(i), 1), entry(String(i), 2)])
+		expect(seen).toEqual([duplicate("0"), duplicate("1"), duplicate("2"), duplicate("3")])
+		expect(session.getSnapshot().cause).toEqual(Option.some(duplicate("99")))
+		yield* Deferred.succeed(gate, undefined)
+		yield* Deferred.await(drained)
+		yield* Effect.yieldNow
+		expect(seen).toHaveLength(4)
+		f.source.publish([entry("next", 1), entry("next", 2)])
+		expect(seen).toEqual([duplicate("0"), duplicate("1"), duplicate("2"), duplicate("3"), duplicate("next")])
+		yield* session.stop
+	})
+)
+
+it.effect("preserves the start logger for live and shutdown observers", () =>
+	Effect.gen(function* () {
+		const f = fixture()
+		const logged: unknown[] = []
+		const logger = Logger.make(function (options) {
+			logged.push(options.message)
+		})
+		const reported = yield* Deferred.make<void>()
+		const cleanupFailure = new Error("cleanup failure")
+		f.source.onUnsubscribe(function () {
+			throw cleanupFailure
+		})
+		const session = Session.make(Exit.succeed(f.bootstrap), () =>
+			Effect.logInfo("observer-context").pipe(Effect.andThen(Deferred.succeed(reported, undefined)))
+		)
+		yield* session.start.pipe(Effect.provide(Logger.layer([logger])))
+		f.source.publish([entry("a", 1), entry("a", 2)])
+		yield* Deferred.await(reported)
+		yield* session.stop
+		expect(logged.filter((message) => Array.isArray(message) && message[0] === "observer-context")).toEqual([
+			["observer-context"],
+			["observer-context"],
+		])
+		expect(Option.isSome(session.getSnapshot().cause)).toBe(true)
+		expect(f.source.listeners).toBe(0)
 	})
 )
