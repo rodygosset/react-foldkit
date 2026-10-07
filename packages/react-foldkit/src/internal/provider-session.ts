@@ -1,4 +1,4 @@
-import { Cause, Deferred, Duration, Effect, Exit, Option, Scope, Semaphore } from "effect"
+import { Cause, Context, Deferred, Duration, Effect, Exit, Option, Scope, Semaphore } from "effect"
 import type { Connection } from "./commit-source"
 import type { ModelReader } from "./model-source"
 import type { ReactStore } from "./react-store"
@@ -18,17 +18,18 @@ export interface ProviderSession extends ModelReader<Snapshot> {
 }
 
 interface Lifetime {
+	readonly context: Context.Context<never>
 	readonly resources: Scope.Closeable
 	readonly observers: Scope.Closeable
 	readonly reportGate: Semaphore.Semaphore
 	readonly setup: Deferred.Deferred<Exit.Exit<void, unknown>>
 }
 
-/** Live observer deadline. It bounds queue wait and execution, so a burst degrades to dropped logs. */
+/** Bounds accepted live observers; overflow reports drop immediately. */
 const liveReportDeadline: Duration.Input = "2 seconds" as const
 /** Shutdown keeps the established five-second bound. */
 const shutdownReportDeadline: Duration.Input = "5 seconds" as const
-/** Concurrent live observers. Waiting reports share the live deadline, then drop their log. */
+/** Maximum concurrent live observers. */
 const maxConcurrentLiveReports = 4
 
 type Phase =
@@ -72,14 +73,12 @@ export function make<Model, Message>(
 			Effect.interruptible
 		)
 
-	// Single owner for live observer lifetime. The gate caps concurrency, the
-	// deadline bounds queue wait and execution, and scope close interrupts stragglers.
+	// Scope close interrupts accepted reports; unavailable permits drop overflow immediately.
 	const reportToObservers = (lifetime: Lifetime, cause: Cause.Cause<unknown>): Effect.Effect<void, never> =>
-		Semaphore.withPermits(
+		Semaphore.withPermitsIfAvailable(
 			lifetime.reportGate,
 			1
-		)(report(cause)).pipe(
-			Effect.timeoutOption(liveReportDeadline),
+		)(report(cause).pipe(Effect.timeoutOption(liveReportDeadline))).pipe(
 			Effect.asVoid,
 			Effect.interruptible,
 			Effect.forkIn(lifetime.observers, { startImmediately: true, uninterruptible: false }),
@@ -87,7 +86,7 @@ export function make<Model, Message>(
 		)
 
 	function scheduleReport(lifetime: Lifetime, cause: Cause.Cause<unknown>): void {
-		Effect.runFork(reportToObservers(lifetime, cause))
+		Effect.runForkWith(lifetime.context)(reportToObservers(lifetime, cause))
 	}
 
 	function observeCrash(lifetime: Lifetime): boolean {
@@ -173,6 +172,7 @@ export function make<Model, Message>(
 	const start = Effect.gen(function* () {
 		if (phase._tag === "Running") return
 		const lifetime: Lifetime = {
+			context: yield* Effect.context<never>(),
 			resources: yield* Scope.make(),
 			observers: yield* Scope.make(),
 			reportGate: yield* Semaphore.make(maxConcurrentLiveReports),
@@ -194,7 +194,7 @@ export function make<Model, Message>(
 					Effect.asVoid,
 					Effect.interruptible
 				)
-			})
+			}).pipe(Effect.provideContext(lifetime.context))
 		)
 		phase = { _tag: "Running", lifetime, close: closing }
 		yield* Effect.forkIn(setup(lifetime), lifetime.observers, { startImmediately: true, uninterruptible: false })

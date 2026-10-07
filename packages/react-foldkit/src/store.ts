@@ -176,8 +176,6 @@ function microtaskSetImmediate(callback: () => void): () => void {
 
 const browserScheduler = new Scheduler.MixedScheduler("async", microtaskSetImmediate)
 
-const runtimeContextForCommands: Context.Context<never> = Context.make(Scheduler.Scheduler, browserScheduler)
-
 const makeProvideAllResources =
 	<R>(
 		acquireResourceContext: Effect.Effect<Context.Context<R>>,
@@ -192,7 +190,7 @@ type SubscriptionRuntime<Model, Message, R> = {
 	readonly bootModel: Model
 	readonly modelPubSub: PubSub.PubSub<Model>
 	readonly fiberScope: Scope.Scope
-	readonly runtimeContextForCommands: Context.Context<never>
+	readonly runtimeContext: Context.Context<never>
 	readonly provideAllResources: <A, E>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E>
 	readonly enqueueMessage: (message: Message) => void
 	readonly crashWith: (cause: Cause.Cause<unknown>, triggeringMessage: Option.Option<Message>) => void
@@ -210,15 +208,8 @@ function forkSubscriptionFibers<Model, Message, R>(
 ): void {
 	if (subscriptions === undefined) return
 
-	const {
-		bootModel,
-		modelPubSub,
-		fiberScope,
-		runtimeContextForCommands,
-		provideAllResources,
-		enqueueMessage,
-		crashWith,
-	} = runtime
+	const { bootModel, modelPubSub, fiberScope, runtimeContext, provideAllResources, enqueueMessage, crashWith } =
+		runtime
 
 	for (const [, entry] of Record.toEntries(subscriptions)) {
 		const { dependenciesSchema, modelToDependencies, keepAliveEquivalence, dependenciesToStream } = entry
@@ -258,7 +249,7 @@ function forkSubscriptionFibers<Model, Message, R>(
 			)
 		)
 
-		Effect.runForkWith(runtimeContextForCommands)(Effect.forkIn(fiber, fiberScope))
+		Effect.runForkWith(runtimeContext)(Effect.forkIn(fiber, fiberScope))
 	}
 }
 
@@ -271,6 +262,7 @@ export const make = <Model, Message, R = never>(
 	init: Update.Return<Model, Message, R>
 ): Effect.Effect<Store<Model, Message>, never, Scope.Scope> =>
 	Effect.gen(function* () {
+		const runtimeContext = Context.add(yield* Effect.context<never>(), Scheduler.Scheduler, browserScheduler)
 		const scope = yield* Scope.fork(yield* Scope.Scope, "sequential")
 		// Scopes close in reverse order: finish Commands and subscriptions before releasing services.
 		const layerScope = yield* Scope.fork(scope)
@@ -286,7 +278,9 @@ export const make = <Model, Message, R = never>(
 		)
 		const acquireResourceContext = Effect.flatMap(getBuild, Fiber.join)
 		return yield* Effect.acquireRelease(
-			Effect.sync(() => start(config, init, scope, fiberScope, modelPubSub, acquireResourceContext)),
+			Effect.sync(() =>
+				start(config, init, scope, fiberScope, modelPubSub, acquireResourceContext, runtimeContext)
+			),
 			(store, exit) => store.dispose(exit)
 		)
 	})
@@ -314,7 +308,8 @@ function start<Model, Message, R>(
 	storeScope: Scope.Closeable,
 	fiberScope: Scope.Scope,
 	modelPubSub: PubSub.PubSub<Model>,
-	acquireResourceContext: Effect.Effect<Context.Context<R>>
+	acquireResourceContext: Effect.Effect<Context.Context<R>>,
+	runtimeContext: Context.Context<never>
 ) {
 	const listeners = new Set<() => void>()
 	const crashListeners = new Set<() => void>()
@@ -353,10 +348,10 @@ function start<Model, Message, R>(
 		MutableList.clear(pendingMessages)
 		for (const listener of crashListeners) {
 			const exit = Effect.runSyncExit(Effect.sync(listener))
-			if (Exit.isFailure(exit)) Effect.runFork(Effect.logError(exit.cause))
+			if (Exit.isFailure(exit)) Effect.runForkWith(runtimeContext)(Effect.logError(exit.cause))
 		}
 		if (config.onCrash !== undefined) config.onCrash(cause, triggeringMessage)
-		else Effect.runFork(Effect.logError("[react-foldkit] Store crashed:", Cause.pretty(cause)))
+		else Effect.runForkWith(runtimeContext)(Effect.logError("[react-foldkit] Store crashed:", Cause.pretty(cause)))
 	}
 
 	function enqueueMessage(message: Message, command?: Update.Commands<Message, R>[number]): void {
@@ -419,7 +414,7 @@ function start<Model, Message, R>(
 				)
 			)
 		})
-		Effect.runForkWith(runtimeContextForCommands)(Effect.forkIn(effect, fiberScope))
+		Effect.runForkWith(runtimeContext)(Effect.forkIn(effect, fiberScope))
 	}
 
 	function processMessage({ message, command }: PendingMessage): void {
@@ -539,7 +534,7 @@ function start<Model, Message, R>(
 		bootModel: initialModel,
 		modelPubSub,
 		fiberScope,
-		runtimeContextForCommands,
+		runtimeContext,
 		provideAllResources,
 		enqueueMessage,
 		crashWith,
