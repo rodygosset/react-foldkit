@@ -1,4 +1,4 @@
-import { Array, Effect, Exit, Option, Result, Scope, Semaphore } from "effect"
+import { Array, type Cause, Effect, Exit, Option, Result, Scope, Semaphore } from "effect"
 import * as Store from "../store"
 import type * as Update from "../update"
 import * as InitCommand from "./init-command"
@@ -17,6 +17,8 @@ export type ReactStore<Model, Message> = Readonly<{
 	[ReactStoreTypeId]: ReactStoreTypeId
 	getModel: () => Model
 	getServerModel: () => Model
+	getCrash: () => Option.Option<Cause.Cause<unknown>>
+	subscribeCrash: (listener: () => void) => () => void
 	subscribe: (listener: () => void) => () => void
 	dispatch: (message: Message) => void
 	commit: (message: Message) => Result.Result<void, Store.CommitError>
@@ -48,14 +50,21 @@ export function make<Model, Message, R = never>(
 	init: Update.Return<Model, Message, R>
 ): ReactStore<Model, Message> {
 	const listeners = new Set<() => void>()
+	const crashListeners = new Set<() => void>()
 	const initCommandStates = (init.commands ?? []).map((command) => ({ command, isComplete: false }))
-	let inactiveModel = init.model
-	const serverModel = inactiveModel
+	let inactive = { model: init.model, crash: Option.none<Cause.Cause<unknown>>() }
+	const serverModel = inactive.model
 	let maybeActive: Option.Option<Activation<Model, Message>> = Option.none()
 	const gate = Semaphore.makeUnsafe(1)
 
 	function notifyListeners(): void {
 		for (const listener of listeners) listener()
+	}
+	function notifyCrashListeners(): void {
+		for (const listener of crashListeners) {
+			const exit = Effect.runSyncExit(Effect.sync(listener))
+			if (Exit.isFailure(exit)) Effect.runFork(Effect.logError(exit.cause))
+		}
 	}
 
 	const release = (activation: Activation<Model, Message>, exit: Exit.Exit<unknown, unknown>): Effect.Effect<void> =>
@@ -64,7 +73,8 @@ export function make<Model, Message, R = never>(
 				Effect.sync(function () {
 					activation.leases -= 1
 					if (activation.leases > 0) return false
-					inactiveModel = activation.store.getModel()
+					if (Option.isNone(maybeActive) || maybeActive.value !== activation) return false
+					inactive = { model: activation.store.getModel(), crash: activation.store.getCrash() }
 					maybeActive = Option.none()
 					return true
 				})
@@ -84,9 +94,17 @@ export function make<Model, Message, R = never>(
 		)
 		const scope = yield* Scope.make()
 		const store = yield* Effect.gen(function* () {
-			const store = yield* Store.make(config, { model: inactiveModel, commands })
+			const store = yield* Store.make(config, { model: inactive.model, commands })
 			yield* Effect.acquireRelease(
 				Effect.sync(() => store.subscribe(notifyListeners)),
+				(unsubscribe) => Effect.sync(unsubscribe)
+			)
+			yield* Effect.acquireRelease(
+				Effect.sync(() =>
+					store.subscribeCrash(function () {
+						if (Option.isSome(maybeActive) && maybeActive.value.store === store) notifyCrashListeners()
+					})
+				),
 				(unsubscribe) => Effect.sync(unsubscribe)
 			)
 			return store
@@ -101,7 +119,8 @@ export function make<Model, Message, R = never>(
 	const activate = Effect.acquireRelease(gate.withPermit(acquire), release).pipe(
 		Effect.tap((activation) =>
 			Effect.sync(function () {
-				if (activation.store.getModel() !== inactiveModel) notifyListeners()
+				notifyCrashListeners()
+				if (activation.store.getModel() !== inactive.model) notifyListeners()
 			})
 		),
 		Effect.asVoid
@@ -109,7 +128,14 @@ export function make<Model, Message, R = never>(
 
 	return {
 		[ReactStoreTypeId]: ReactStoreTypeId,
-		getModel: () => (Option.isNone(maybeActive) ? inactiveModel : maybeActive.value.store.getModel()),
+		getModel: () => (Option.isNone(maybeActive) ? inactive.model : maybeActive.value.store.getModel()),
+		getCrash: () => (Option.isNone(maybeActive) ? inactive.crash : maybeActive.value.store.getCrash()),
+		subscribeCrash(listener) {
+			crashListeners.add(listener)
+			return function () {
+				crashListeners.delete(listener)
+			}
+		},
 		getServerModel: () => serverModel,
 		subscribe(listener) {
 			listeners.add(listener)

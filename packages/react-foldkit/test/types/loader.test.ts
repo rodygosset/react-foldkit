@@ -16,7 +16,7 @@ class Reader extends Context.Service<Reader, { readonly value: Data }>()("Loader
 declare const router: AnyRouter
 declare const serviceful: Schema.Codec<Data, typeof Data.Encoded, Reader, Reader>
 declare const input: Effect.Effect<Data, "unavailable", Reader>
-declare const unmappable: Omit<Loader.Loader<Data, typeof Data.Encoded>, "toMessage">
+declare const structural: Loader.Loader<Data, typeof Data.Encoded, string>
 
 describe("Loader public types", function () {
 	it("exports the same declaration API from the root", function () {
@@ -25,9 +25,19 @@ describe("Loader public types", function () {
 	})
 
 	if (false) {
-		// @ts-expect-error Structural Loaders must expose their payload-to-Message mapping.
-		Loader.mapMessages(unmappable, (value) => value)
-		expectTypeOf(RecordLoader.toMessage).toEqualTypeOf<(data: Data, receipt: Loader.Receipt) => Data>()
+		const structuralMapped = Loader.mapMessages(structural, function (id, receipt) {
+			expectTypeOf(id).toEqualTypeOf<string>()
+			expectTypeOf(receipt).toEqualTypeOf<Loader.Receipt>()
+			return { id, receipt }
+		})
+		expectTypeOf(structuralMapped).toEqualTypeOf<
+			Loader.Loader<Data, typeof Data.Encoded, { id: string; receipt: Loader.Receipt }>
+		>()
+		expectTypeOf(structuralMapped.load(input)).toEqualTypeOf<
+			Effect.Effect<Loader.Envelope<typeof Data.Encoded>, "unavailable" | Schema.SchemaError, Reader>
+		>()
+		// @ts-expect-error Message mapping is exposed through decodeDelivery.
+		RecordLoader.toMessage
 		const program = input.pipe(RecordLoader.load)
 		expectTypeOf(program).toEqualTypeOf<
 			Effect.Effect<Loader.Envelope<typeof Data.Encoded>, "unavailable" | Schema.SchemaError, Reader>

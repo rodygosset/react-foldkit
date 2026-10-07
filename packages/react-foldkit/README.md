@@ -278,18 +278,26 @@ directly. Supply either `commitSource` or `createCommitSource`.
 
 Bootstrap Messages pass through update in snapshot order and preserve Commands.
 SSR/hydration reads the populated Model. Initial Messages do not replay on activation.
-`renderError` receives the complete Cause for bootstrap, setup and live failures.
-Its default renders a typed failure's message and a generic line for a defect, so
-a stack trace never reaches the DOM. `onError` observes client failures, including
-cleanup defects, and returns an `Effect<void, unknown>`. Observers can perform
-asynchronous work and are interrupted when their Provider lifetime ends. Observer
-failures combine with the original Cause; a delayed observer cannot restore a
-fallback after recovery. Cleanup failures are logged through Effect's logger.
+`renderError` receives the complete Cause for bootstrap, setup, source, and Store
+failures. Its default renders a typed failure's message and a generic line for a
+defect, so a stack trace never reaches the DOM. `onError` observes client failures,
+including cleanup defects, and returns an `Effect<void, unknown>`. A terminal Store
+crash reaches `onError` once for update, init Command, update Command, Subscription,
+dispatch, and commit failures. `Store.Config.onCrash` still runs once for that crash.
 
-Live failures keep the connection and successful delivery tokens. A later valid
-notification retries undelivered tokens and restores the children. Setup failures
+Source failures recover after a successful reconciliation only while the Store is
+healthy. A terminal Store crash stays visible until a fresh activation leaves the
+Store healthy. Live source failures keep the connection and successful delivery
+tokens. A later valid notification retries undelivered tokens. Setup failures
 release acquired resources; remount to retry initialization. Error callbacks do not
 run during SSR, but bootstrap failures render the fallback.
+
+Live `onError` observers belong to the running Provider lifetime and are canceled
+when it stops. Stopping closes resource scopes and logs cleanup defects before
+observing them with `onError`, with a five-second cooperative deadline.
+An observer Effect or finalizer that cannot be interrupted can keep cleanup waiting
+beyond that deadline. Observer failures combine with the original Cause; a delayed
+observer cannot restore a fallback after recovery.
 
 `useOptionalModel` and `useOptionalDispatch` return `Option` when a root or child
 Provider may be absent. Root applications also expose `useOptionalCommit`.
@@ -324,9 +332,10 @@ points need no router; `react-foldkit/tanstack` uses optional TanStack peers.
 
 Duplicate keys and reentrant notifications produce `CommitSourceError` in the
 `Result` failure channel. Reconciliation is synchronous. Snapshot and commit
-defects are captured at the notification boundary; live failures reach `onError`
-and keep the connection.
-`onError` fires once per failure. Catch-up failures release the connection;
+defects are captured at the notification boundary; source failures reach `onError`
+and keep the connection. A successful reconciliation clears a source failure only
+while the Store is healthy. A terminal Store crash remains visible across source
+notifications and reaches `onError` once. Catch-up failures release the connection;
 disconnected callbacks do nothing. SSR does not subscribe.
 
 `loader.decode(envelope)` returns `Result<Message, SchemaError>`. A schema
@@ -338,6 +347,8 @@ declarations.
 `loader.decodeDelivery(envelope)` returns `Result<Delivery<Message>, SchemaError>`.
 A Delivery contains the validated `receipt` and mapped `message`. The adapter
 uses this method to decode each envelope once. `decode` returns just its Message.
+`Loader.mapMessages` composes those mappings through `decodeDelivery` and preserves
+the Loader's name, data Codec, key, load function, and delivery receipt.
 Derived resource keys keep Schema encoding failures in the typed channel;
 exceptions from custom key callbacks remain defects.
 

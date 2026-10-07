@@ -225,7 +225,7 @@ const sourceResult = TanStackSource.make(router, [
 One registry and subscription serve all declarations. Payload types stay inferred;
 mapped values fit the root Message union. Duplicate names fail at construction.
 
-- Return `Result<CommitSource<RootMessage, SchemaError>, RegistryError>`; snapshots return Effect.
+- Return `Result<CommitSource<RootMessage, SchemaError>, RegistryError>`; snapshots return synchronous `Result` values.
 - Read successful active matches in order. Skip pending matches, preloads,
   unrelated data, and unregistered envelopes. Malformed registered envelopes fail.
 - Use a tuple of match ID, declaration name, and resource key. Matches can share
@@ -261,9 +261,13 @@ a Result and is captured with init. Direct `commitSource` is also captured once.
 Changing those props has no effect; remount with a new key to replace the source.
 Provider renders full Causes through `renderError` and reports client failures
 through `onError`. Snapshots and Loader.decode return Result. Notification
-boundaries capture snapshot and commit defects as Causes. A live failure reaches
-`onError` once and preserves successful tokens, recovering on the next valid
-notification. Asynchronous observers belong to the Provider lifetime; their
+boundaries capture snapshot and commit defects as Causes. Source failures preserve
+successful tokens and recover on a valid notification while the Store is healthy.
+Terminal Store crashes reach `onError` once, including update, Command, and
+Subscription failures, and remain visible until a fresh healthy activation.
+Live observers end with the Provider lifetime. Stopping closes resource scopes,
+logs defects, and gives its cleanup observer a five-second cooperative deadline. Explicitly
+uninterruptible observer Effects or finalizers can exceed that deadline. Observer
 failures combine with the original Cause without undoing newer recovery. Setup
 failures release resources. Reconnects read the latest snapshot.
 

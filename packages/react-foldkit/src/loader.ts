@@ -28,7 +28,6 @@ export interface Declaration<out Message> extends Pipeable.Pipeable {
 export interface Loader<A, I, out Message = A> extends Declaration<Message> {
 	readonly data: Schema.Codec<A, I>
 	readonly key: (data: A) => string
-	readonly toMessage: (data: A, receipt: Receipt) => Message
 	readonly load: <E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<Envelope<I>, E | Schema.SchemaError, R>
 }
 
@@ -45,7 +44,6 @@ class LoaderImpl<A, I, Message> extends Pipeable.Class implements Loader<A, I, M
 		readonly name: string,
 		readonly data: Schema.Codec<A, I>,
 		readonly key: (data: A) => string,
-		readonly toMessage: (data: A, receipt: Receipt) => Message,
 		readonly load: Loader<A, I, Message>["load"],
 		readonly decodeDelivery: Loader<A, I, Message>["decodeDelivery"]
 	) {
@@ -88,14 +86,7 @@ function make<A, I>(config: Config<A, I>, readKey: ReadKey<A>): Loader<A, I> {
 			}
 			return { receipt: { name, key, version }, message: payload }
 		})
-	return new LoaderImpl(
-		config.name,
-		config.data,
-		config.key,
-		Function.identity,
-		encodeLoad(config, readKey),
-		decodeDelivery
-	)
+	return new LoaderImpl(config.name, config.data, config.key, encodeLoad(config, readKey), decodeDelivery)
 }
 
 /** Declares a serializable payload without running its loading Effect. */
@@ -426,17 +417,11 @@ export const mapMessages: {
 		self: Loader<A, I, Message>,
 		f: (message: Message, receipt: Receipt) => Next
 	): Loader<A, I, Next> =>
-		new LoaderImpl(
-			self.name,
-			self.data,
-			self.key,
-			(data, receipt) => f(self.toMessage(data, receipt), receipt),
-			self.load,
-			(input) =>
-				Result.map(self.decodeDelivery(input), ({ receipt, message }) => ({
-					receipt,
-					message: f(message, receipt),
-				}))
+		new LoaderImpl(self.name, self.data, self.key, self.load, (input) =>
+			Result.map(self.decodeDelivery(input), ({ receipt, message }) => ({
+				receipt,
+				message: f(message, receipt),
+			}))
 		)
 )
 
