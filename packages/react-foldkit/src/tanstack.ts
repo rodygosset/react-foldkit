@@ -2,9 +2,16 @@ import type { AnyRouter } from "@tanstack/react-router"
 import type { Readable } from "@tanstack/react-store"
 import { HashMap, Option, Predicate, Result, Schema } from "effect"
 import type { CommitEntry, CommitSource } from "./commitSource"
-import { EnvelopeHeader } from "./loader/loader-envelope"
 import type { Declaration } from "./loader"
+import { EnvelopeHeader } from "./loader/envelope"
 
+/**
+ * Failure from creating a TanStack commit source with duplicate declaration names.
+ *
+ * @see {@link make} for building the registry
+ * @category errors
+ * @since 0.1.0
+ */
 export class RegistryError extends Schema.Error<RegistryError>("react-foldkit/TanStack/RegistryError")({
 	_tag: Schema.tag("RegistryError"),
 	declarationName: Schema.String,
@@ -19,7 +26,54 @@ type MessageOfDeclaration<D> = D extends Declaration<infer Message> ? Message : 
 const EntryKey = Schema.Tuple([Schema.String, Schema.String, Schema.String]).pipe(Schema.fromJsonString)
 const encodeEntryKey = Schema.encodeResult(EntryKey)
 
-/** Reads accepted matches through one synchronous router-store subscription. */
+/**
+ * Creates a commit source that turns TanStack Router loader data into application Messages.
+ * Pass the source as the application Provider's `commitSource` so loaded route data reaches update.
+ *
+ * Register the Loader declarations used by your routes. For each successful route match, the
+ * source decodes loader data with the declaration whose name matches the envelope. Other
+ * loader data and envelopes with unregistered names are ignored.
+ *
+ * **Details**
+ *
+ * Duplicate declaration names return `RegistryError` when you create the source. Malformed
+ * envelope names and validation failures for registered declarations return `SchemaError`
+ * from `getSnapshot`. Exceptions from your key or Message callbacks remain thrown exceptions.
+ *
+ * Creating the source does not load routes or subscribe to the router. The Provider owns the
+ * subscription and removes it on deactivation. Subscription requires a reactive matches store
+ * and throws if the router does not provide one.
+ *
+ * **Example** (Delivering a route's loaded project)
+ *
+ * ```ts
+ * import { createRootRoute, createRouter } from "@tanstack/react-router"
+ * import { Effect, Result, Schema } from "effect"
+ * import * as Loader from "react-foldkit/loader"
+ * import { defineMessageUnion } from "react-foldkit/message"
+ * import * as TanStack from "react-foldkit/tanstack"
+ *
+ * const Project = Schema.Struct({ id: Schema.String, title: Schema.String })
+ *
+ * const Message = defineMessageUnion({ LoadedProject: { project: Project } })
+ *
+ * const loader = Loader.define({ name: "Project", data: Project, key: (project) => project.id })
+ *
+ * const declaration = loader.pipe(Loader.mapMessages((project) => Message.LoadedProject({ project })))
+ *
+ * const route = createRootRoute({
+ * 	loader: () => Effect.runPromise(loader.load(Effect.succeed({ id: "p1", title: "Foldkit" }))),
+ * })
+ *
+ * const router = createRouter({ routeTree: route })
+ *
+ * export const commitSource = Result.getOrThrow(TanStack.make(router, [declaration]))
+ * ```
+ *
+ * @see {@link RegistryError} for duplicate declaration names
+ * @category constructors
+ * @since 0.1.0
+ */
 export function make<const D extends ReadonlyArray<Declaration<unknown>>>(
 	router: AnyRouter,
 	declarations: D
@@ -32,7 +86,11 @@ export function make(
 		let registry = HashMap.empty<string, Declaration<unknown>>()
 		for (const declaration of declarations) {
 			if (HashMap.has(registry, declaration.name)) {
-				return yield* Result.fail(new RegistryError({ declarationName: declaration.name }))
+				return yield* Result.fail(
+					new RegistryError({
+						declarationName: declaration.name,
+					})
+				)
 			}
 			registry = HashMap.set(registry, declaration.name, declaration)
 		}

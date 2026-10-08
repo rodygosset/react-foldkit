@@ -2,7 +2,7 @@ import { it } from "@effect/vitest"
 import { Array, Cause, Effect, Exit, Result } from "effect"
 import { afterEach, beforeEach, describe, expect, vi } from "vitest"
 import * as Store from "./store"
-import { controlledDrains } from "../test/fixtures/controlled-drains"
+import { controlledDrains } from "../test/fixtures/controlledDrains"
 import type * as Update from "./update"
 
 type Message = { readonly label: string; readonly burn?: number }
@@ -39,11 +39,14 @@ function boot(extra?: (model: Model, message: Message) => Update.Return<Model, M
 	stores.push(store)
 	return { store, onCrash }
 }
-function failReason(action: () => Result.Result<void, Store.CommitError>, reason: Store.CommitError["reason"]) {
+function failReason(
+	action: () => Result.Result<void, Store.CommitError>,
+	reason: Store.CommitError["details"]["reason"]
+) {
 	const result = action()
 	expect(Result.isFailure(result)).toBe(true)
 	if (Result.isSuccess(result)) return expect.fail("Expected commit failure")
-	expect(result.failure.reason).toBe(reason)
+	expect(result.failure.details.reason).toBe(reason)
 	return result.failure
 }
 
@@ -61,7 +64,7 @@ describe("synchronous commit", function () {
 		const exit = Effect.runSyncExit(commit)
 		expect(Exit.isFailure(exit)).toBe(true)
 		if (Exit.isFailure(exit)) {
-			expect(Result.getOrThrow(Cause.findError(exit.cause)).reason).toBe("Disposed")
+			expect(Result.getOrThrow(Cause.findError(exit.cause)).details.reason).toBe("Disposed")
 			expect(Cause.hasDies(exit.cause)).toBe(false)
 		}
 	})
@@ -129,7 +132,7 @@ describe("synchronous commit", function () {
 		})
 		store = made.store
 		const outerResult = store.commit({ label: "outer" })
-		expect(nestedResult).toEqual(Result.fail(new Store.CommitError({ reason: "Reentrant" })))
+		expect(nestedResult).toEqual(Result.fail(new Store.CommitError({ details: { reason: "Reentrant" } })))
 		Result.getOrThrow(outerResult)
 		Result.getOrThrow(store.commit({ label: "next" }))
 		expect(store.getModel()).toEqual(["outer", "next"])
@@ -143,7 +146,7 @@ describe("synchronous commit", function () {
 			if (store.getModel().at(-1) === "outer") nestedResult = store.commit({ label: "nested" })
 		})
 		const outerResult = store.commit({ label: "outer" })
-		expect(nestedResult).toEqual(Result.fail(new Store.CommitError({ reason: "Reentrant" })))
+		expect(nestedResult).toEqual(Result.fail(new Store.CommitError({ details: { reason: "Reentrant" } })))
 		Result.getOrThrow(outerResult)
 		Result.getOrThrow(store.commit({ label: "next" }))
 		expect(store.getModel()).toEqual(["outer", "next"])
@@ -161,7 +164,8 @@ describe("synchronous commit", function () {
 		expect(store.getModel()).toEqual(["burn"])
 		expect(drains.pending).toBeGreaterThan(0)
 		const error = failReason(() => store.commit({ label: "target" }), "Crashed")
-		expect(Cause.squash(error.cause!)).toBe(defect)
+		expect(error.details.reason).toBe("Crashed")
+		if (error.details.reason === "Crashed") expect(Cause.squash(error.details.cause)).toBe(defect)
 		expect(onCrash).toHaveBeenCalledTimes(1)
 		expect(store.getModel()).toEqual(["burn"])
 		failReason(() => store.commit({ label: "again" }), "Crashed")
@@ -178,16 +182,18 @@ describe("synchronous commit", function () {
 		expect(store.getModel()).toEqual([])
 	})
 
-	it("reports notification defects even after the target Model was installed", function () {
+	it("isolates notification defects after the target Model is installed", function () {
 		const { store, onCrash } = boot()
 		const defect = new Error("notification failed")
 		const unsubscribe = store.subscribe(function () {
 			throw defect
 		})
-		const error = failReason(() => store.commit({ label: "target" }), "Crashed")
-		expect(Cause.squash(error.cause!)).toBe(defect)
+		const notified = vi.fn()
+		store.subscribe(notified)
+		expect(store.commit({ label: "target" })).toEqual(Result.void)
+		expect(notified).toHaveBeenCalledTimes(1)
 		expect(store.getModel()).toEqual(["target"])
-		expect(onCrash).toHaveBeenCalledTimes(1)
+		expect(onCrash).not.toHaveBeenCalled()
 		unsubscribe()
 	})
 

@@ -1,20 +1,11 @@
-/** React applications, submodels, provider options, and commit sources. */
-export {
-	defineApplication,
-	defineSubmodel,
-	defineSubmodelProjection,
-	SubmodelProviderError,
-	CommitSourceError,
-} from "./react"
+export { CommitSourceError, defineApplication } from "./react"
 export type {
-	Config,
-	ErrorOptions,
-	SourceOptions,
-	ModelReader,
-	ModelSource,
-	OptionalSubmodelProjection,
-	SubmodelProjection,
+	Application,
 	CommitEntry,
 	CommitSource,
-	CommitSourceOptions,
+	Config,
+	ErrorOptions,
+	ModelHooks,
+	ProviderProps,
+	SourceOptions,
 } from "./react"

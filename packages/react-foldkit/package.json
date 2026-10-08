@@ -15,7 +15,8 @@
 	"scripts": {
 		"build": "NODE_OPTIONS=\"--import ../../eslint/ts6-register.mjs\" tsup && NODE_OPTIONS=\"--import ../../eslint/ts6-register.mjs\" tsup --config tsup.eslint.config.ts",
 		"prepack": "bun run build",
-		"lint": "NODE_OPTIONS=\"--import ../../eslint/ts6-register.mjs\" eslint",
+		"lint": "bun run check:filenames && bun run test:eslint && NODE_OPTIONS=\"--import ../../eslint/ts6-register.mjs\" eslint",
+		"check:filenames": "node scripts/checkFilenames.mjs",
 		"format": "prettier --write \"**/*.{ts,tsx}\"",
 		"typecheck": "tsc --noEmit",
 		"test": "vitest run",
@@ -25,8 +26,14 @@
 		"test:types:package": "tsc --project test/types/tsconfig.json",
 		"coverage": "vitest run --coverage",
 		"pack:dry": "bun run build && npm pack --dry-run",
-		"test:types:example": "tsc --project examples/project-cache/tsconfig.json && tsc --project examples/site-notice/tsconfig.json",
-		"test:package:built": "vitest run --config vitest.package.config.ts"
+		"test:types:example": "tsc --project examples/projectCache/tsconfig.json",
+		"test:package:built": "vitest run --config vitest.package.config.ts",
+		"test:eslint": "node --import ../../eslint/ts6-register.mjs --test eslint/test/rules.test.mjs",
+		"docs:generate": "node scripts/publicApi.mjs generate",
+		"check:docs": "node scripts/publicApi.mjs check",
+		"check:api": "node scripts/publicApi.mjs api",
+		"test:consumer": "node scripts/testConsumer.mjs",
+		"test:browser:cold": "node scripts/testBrowserCold.mjs"
 	},
 	"exports": {
 		".": {
@@ -61,6 +68,10 @@
 			"types": "./dist/struct.d.ts",
 			"import": "./dist/struct.js"
 		},
+		"./submodel": {
+			"types": "./dist/submodel.d.ts",
+			"import": "./dist/submodel.js"
+		},
 		"./subscription": {
 			"types": "./dist/subscription.d.ts",
 			"import": "./dist/subscription.js"
@@ -85,6 +96,10 @@
 		"./tanstack": {
 			"types": "./dist/tanstack.d.ts",
 			"import": "./dist/tanstack.js"
+		},
+		"./modelSource": {
+			"types": "./dist/modelSource.d.ts",
+			"import": "./dist/modelSource.js"
 		}
 	},
 	"main": "./dist/index.js",
@@ -95,8 +110,8 @@
 		"eslint/README.md",
 		"LICENSE",
 		"README.md",
-		"CHANGELOG.md",
-		"THIRD-PARTY-NOTICES.md"
+		"THIRD-PARTY-NOTICES.md",
+		"docs"
 	],
 	"peerDependencies": {
 		"effect": "4.0.0",

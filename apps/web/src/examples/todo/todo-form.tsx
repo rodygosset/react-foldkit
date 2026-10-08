@@ -4,8 +4,8 @@ import { Label } from "@workspace/ui/components/label"
 import { Schema } from "effect"
 import { PlusIcon } from "lucide-react"
 import { defineMessageUnion } from "react-foldkit/message"
-import { defineSubmodel } from "react-foldkit/react"
 import { modifyFields } from "react-foldkit/struct"
+import * as Submodel from "react-foldkit/submodel"
 import type * as Update from "react-foldkit/update"
 
 export const Model = Schema.Struct({
@@ -46,14 +46,14 @@ export const update = (model: Model, message: Message): UpdateReturn =>
 		ClickedSubmit: () => submit(model),
 	})
 
-const { useModel, useDispatch, Provider } = defineSubmodel<Model, Message>()
+const submodel = Submodel.define<Model, Message>()
 
-export { Provider }
+export const { Provider } = submodel
 
 /** Reads the child view context supplied by the parent. */
 export function View() {
-	const draft = useModel((model) => model.draft)
-	const dispatch = useDispatch()
+	const draft = submodel.useModel((model) => model.draft)
+	const dispatch = submodel.useDispatch()
 	function onSubmit(event: React.SubmitEvent<HTMLFormElement>) {
 		event.preventDefault()
 		dispatch(Message.ClickedSubmit())

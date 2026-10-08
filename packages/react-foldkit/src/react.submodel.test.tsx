@@ -1,20 +1,16 @@
 import { it } from "@effect/vitest"
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
-import { Context, Fiber, Deferred, Effect, Layer, Option, Result, Schema } from "effect"
+import { Context, Deferred, Effect, Fiber, Layer, Option, Result, Schema } from "effect"
 import React from "react"
 import { renderToString } from "react-dom/server"
 import { afterEach, describe, expect, vi } from "vitest"
-import { modifyFields } from "./struct"
-import { ChildMessage, ChildModel, createSubmodelFixture } from "../test/fixtures/react-submodel"
+import { ChildMessage, ChildModel, createSubmodelFixture } from "../test/fixtures/reactSubmodel"
 import * as Command from "./command"
 import { defineMessageUnion } from "./message"
-import {
-	defineApplication,
-	defineSubmodel,
-	defineSubmodelProjection,
-	SubmodelProviderError,
-	type ModelSource,
-} from "./react"
+import type { ModelSource } from "./modelSource"
+import { defineApplication } from "./react"
+import { modifyFields } from "./struct"
+import { define, lift, ProviderError } from "./submodel"
 import * as Update from "./update"
 
 const Model = Schema.Struct({ count: Schema.Finite })
@@ -49,7 +45,7 @@ const update = (model: Model, message: Message): UpdateReturn =>
 		}),
 	})
 
-const Submodel = defineSubmodel<Model, Message>()
+const Submodel = define<Model, Message>()
 
 afterEach(cleanup)
 
@@ -65,11 +61,11 @@ function View(props: { name: string }) {
 	)
 }
 
-describe("defineSubmodel", function () {
+describe("define", function () {
 	it("composes inline root, sibling, and nested Providers without parent subscriptions", function () {
 		const fixture = createSubmodelFixture()
-		const NumberView = defineSubmodel<number, string>()
-		const nestedProjection = defineSubmodelProjection({
+		const NumberView = define<number, string>()
+		const count = lift({
 			read: (model: ChildModel) => model.count,
 			toParentMessage: (_message: string) => ChildMessage.Increment(),
 		})
@@ -82,7 +78,7 @@ describe("defineSubmodel", function () {
 		function Nested() {
 			return (
 				<fixture.Child.SubmodelProvider
-					projection={nestedProjection}
+					lift={count}
 					render={({ source }) => (
 						<NumberView.Provider source={source}>
 							<Counter />
@@ -103,7 +99,7 @@ describe("defineSubmodel", function () {
 			<fixture.App.Provider init={{ model: { child: { count: 1, unrelated: 0 }, other: 0 } }}>
 				<Capture />
 				<fixture.App.SubmodelProvider
-					projection={fixture.projection}
+					lift={fixture.lift}
 					render={function ({ source }) {
 						sources.push(source)
 						return (
@@ -114,7 +110,7 @@ describe("defineSubmodel", function () {
 					}}
 				/>
 				<fixture.App.SubmodelProvider
-					projection={fixture.projection}
+					lift={fixture.lift}
 					render={function ({ source }) {
 						sources.push(source)
 						return (
@@ -226,10 +222,10 @@ describe("defineSubmodel", function () {
 		expect(selected.at(-1)).toEqual({ value: 9 })
 	})
 
-	it.live("composes nested projections and isolates sibling dispatchers under one root", () =>
+	it.live("composes nested lifts and isolates sibling dispatchers under one root", () =>
 		Effect.gen(function* () {
 			const fixture = createSubmodelFixture()
-			const NumberView = defineSubmodel<number, ChildMessage>()
+			const NumberView = define<number, ChildMessage>()
 			const left = {
 				read: (model: Model & { unrelated: number }) => model.count,
 				toParentMessage: (message: ChildMessage) => message,
@@ -279,15 +275,15 @@ describe("defineSubmodel", function () {
 		})
 	)
 
-	it.live("replaces both the snapshot and dispatcher when a projection changes", () =>
+	it.live("replaces both the snapshot and dispatcher when a lift changes", () =>
 		Effect.gen(function* () {
 			const fixture = createSubmodelFixture()
 			const alternate = {
-				...fixture.projection,
-				read: (model: Parameters<typeof fixture.projection.read>[0]) =>
+				...fixture.lift,
+				read: (model: Parameters<typeof fixture.lift.read>[0]) =>
 					modifyFields(model.child, { count: () => model.child.unrelated + 10 }),
 				toParentMessage: (_message: ChildMessage) =>
-					fixture.projection.toParentMessage(ChildMessage.IncrementOther()),
+					fixture.lift.toParentMessage(ChildMessage.IncrementOther()),
 			}
 			function Selected() {
 				const count = fixture.Child.useModel((model) => model.count)
@@ -295,7 +291,7 @@ describe("defineSubmodel", function () {
 				return <button onClick={() => dispatch(ChildMessage.Increment())}>{count}</button>
 			}
 			function Connection(props: { alternate: boolean }) {
-				const source = fixture.App.useSubmodel(props.alternate ? alternate : fixture.projection)
+				const source = fixture.App.useSubmodel(props.alternate ? alternate : fixture.lift)
 				// Public sources may use normal methods that depend on their receiver.
 				const receiver = React.useMemo(
 					() => ({
@@ -425,7 +421,7 @@ describe("defineSubmodel", function () {
 					<Missing />
 				</fixture.Tree>
 			)
-		).toThrow(SubmodelProviderError)
+		).toThrow(ProviderError)
 	})
 
 	it.live("reuses one child under different parents while the root runs Commands and folds OutMessages", () =>
@@ -520,7 +516,7 @@ describe("defineSubmodel", function () {
 				model: modifyFields(model, { child: () => child }),
 			}),
 		})
-		const projection = defineSubmodelProjection({
+		const child = lift({
 			read: (model: ParentModel) => model.child,
 			toParentMessage: (_message: Message) => ParentMessage.Set({ child: Option.none() }),
 		})
@@ -529,7 +525,7 @@ describe("defineSubmodel", function () {
 		function Connection() {
 			parentRenders += 1
 			commit = Option.some(App.useCommit())
-			const source = App.useOptionalSubmodel(projection)
+			const source = App.useOptionalSubmodel(child)
 			return Option.match(source, {
 				onNone: () => <span>absent</span>,
 				onSome: (source) => (
@@ -627,7 +623,7 @@ describe("defineSubmodel", function () {
 				return <View name="child" />
 			}
 			function ChildConnection(props: { instanceId: string }) {
-				const projection = React.useMemo(
+				const child = React.useMemo(
 					() => ({
 						read: (model: ParentModel) =>
 							model.child.pipe(
@@ -639,7 +635,7 @@ describe("defineSubmodel", function () {
 					}),
 					[props.instanceId]
 				)
-				const source = App.useOptionalSubmodel(projection)
+				const source = App.useOptionalSubmodel(child)
 				if (props.instanceId === "original" && Option.isSome(source)) departing = source
 				return Option.match(source, {
 					onNone: () => null,

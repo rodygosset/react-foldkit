@@ -12,14 +12,17 @@
 		"typecheck": "turbo typecheck",
 		"test": "turbo test",
 		"prepare": "effect-tsgo patch --typescript --oxlint",
-		"check": "bun run build --filter=react-foldkit && bun run typecheck && bun run test --filter=react-foldkit && bun run lint && bun run --filter=react-foldkit test:types:package && bun run --filter=react-foldkit test:types:example && bun run --filter=react-foldkit test:package:built",
-		"check:release": "bun run check && bun run --filter=react-foldkit test:browser && bun run --filter=web build"
+		"check": "bun run build --filter=react-foldkit && bun run typecheck && bun run test --filter=react-foldkit && bun run lint && bun run --filter=react-foldkit test:types:package && bun run --filter=react-foldkit test:types:example && bun run --filter=react-foldkit test:package:built && bun run --filter=react-foldkit check:docs && bun run --filter=react-foldkit check:api",
+		"check:release": "bun run check && bun run --filter=react-foldkit test:browser:cold && bun run --filter=react-foldkit test:consumer && bun run --filter=web build"
 	},
 	"devDependencies": {
 		"@effect/tsgo": "0.50.0",
+		"@types/node": "^26.6.4",
 		"@typescript-eslint/parser": "8.66.0",
 		"eslint": "9.39.5",
 		"eslint-plugin-react": "^7.37.5",
+		"eslint-plugin-react-hooks": "^7.1.1",
+		"fast-check": "^4.10.2",
 		"oxlint": "1.87.0",
 		"oxlint-tsgolint": "7.0.2003",
 		"prettier": "^3.9.6",

@@ -2,7 +2,9 @@
 import { Option, Schema } from "effect"
 import type React from "react"
 import { defineMessageUnion } from "react-foldkit/message"
-import { defineApplication, defineSubmodel, type ModelSource } from "react-foldkit/react"
+import { defineApplication } from "react-foldkit/react"
+import { define } from "react-foldkit/submodel"
+import type { ModelSource } from "react-foldkit/modelSource"
 import { describe, expectTypeOf, it } from "vitest"
 
 const Model = Schema.Struct({ count: Schema.Finite })
@@ -11,12 +13,12 @@ const Message = defineMessageUnion({ Load: {}, Loaded: { count: Schema.Finite } 
 type Message = typeof Message.Type
 
 type ForeignMessage = { readonly _tag: "Other" }
-const Submodel = defineSubmodel<Model, Message>()
+const Submodel = define<Model, Message>()
 const Root = defineApplication({ Model, update: (model: Model, _message: Message) => ({ model }) })
 declare const dispatch: ReturnType<typeof Submodel.useDispatch>
 declare const foreignDispatch: (message: ForeignMessage) => void
 
-describe("defineSubmodel public types", function () {
+describe("define public types", function () {
 	it("binds the hooks and Provider props to Model and Message through both exports", function () {
 		expectTypeOf<keyof typeof Submodel>().toEqualTypeOf<
 			| "Provider"
@@ -59,21 +61,21 @@ describe("defineSubmodel public types", function () {
 		expectTypeOf(source).toEqualTypeOf<ModelSource<Model, Message>>()
 		Submodel.Provider({ source })
 		Root.SubmodelProvider({
-			projection: { read: (model) => model, toParentMessage: (message: Message) => message },
+			lift: { read: (model) => model, toParentMessage: (message: Message) => message },
 			render({ source }) {
 				expectTypeOf(source).toEqualTypeOf<ModelSource<Model, Message>>()
 				return Submodel.Provider({ source })
 			},
 		})
 		Submodel.SubmodelProvider({
-			projection: { read: (model) => model.count, toParentMessage: (_message: string) => Message.Load() },
+			lift: { read: (model) => model.count, toParentMessage: (_message: string) => Message.Load() },
 			render({ source }) {
 				expectTypeOf(source).toEqualTypeOf<ModelSource<number, string>>()
 				return null
 			},
 		})
 		Root.SubmodelProvider({
-			projection: { read: (model) => model, toParentMessage: (message: Message) => message },
+			lift: { read: (model) => model, toParentMessage: (message: Message) => message },
 			// @ts-expect-error Render receives only source; children are closed over.
 			render: ({ children }) => children,
 		})
@@ -98,6 +100,6 @@ describe("defineSubmodel public types", function () {
 		// @ts-expect-error Optional projections must describe presence explicitly.
 		Root.useOptionalSubmodel({ read: (model) => model, toParentMessage: (message: Message) => message })
 		// @ts-expect-error The factory accepts no runtime configuration.
-		defineSubmodel<Model, Message>({ Model, Message })
+		define<Model, Message>({ Model, Message })
 	}
 })

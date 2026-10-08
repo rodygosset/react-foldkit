@@ -1,11 +1,20 @@
 // @ts-check
 
 import { recommendedConfig } from "./eslint/dist/index.js"
+import reactHooks from "eslint-plugin-react-hooks"
 import functionStyleConfig from "../../eslint/function-style.config.mjs"
 
 export default [
 	...recommendedConfig,
 	...functionStyleConfig,
+	{
+		files: ["src/**/*.{ts,tsx}", "examples/**/*.{ts,tsx}", "test/**/*.{ts,tsx}"],
+		plugins: { "react-hooks": reactHooks },
+		rules: {
+			"react-hooks/rules-of-hooks": "error",
+			"react-hooks/exhaustive-deps": "error",
+		},
+	},
 	{
 		settings: {
 			"react-foldkit": {
@@ -16,6 +25,7 @@ export default [
 					"**/*.test.{ts,tsx}",
 					"**/vitest.setup.ts",
 					"**/test/**",
+					"**/scripts/**",
 					"**/src/react/**",
 					"**/src/store/**",
 					"**/src/commitSource/**",
@@ -34,6 +44,7 @@ export default [
 		ignores: [
 			"**/routeTree.gen.ts",
 			"dist/**",
+			"test/docs/.generated/**",
 			"eslint/**",
 			"vitest.config.ts",
 			"vitest.browser.config.ts",

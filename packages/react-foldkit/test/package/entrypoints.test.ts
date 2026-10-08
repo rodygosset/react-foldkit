@@ -6,6 +6,7 @@ import * as CommitSource from "react-foldkit/commitSource"
 import * as Loader from "react-foldkit/loader"
 import * as Query from "foldkit/experimental/query"
 import * as ReactFoldkit from "react-foldkit/react"
+import * as Submodel from "react-foldkit/submodel"
 import * as Store from "react-foldkit/store"
 import * as Struct from "react-foldkit/struct"
 import { describe, expect, it } from "vitest"
@@ -34,9 +35,11 @@ describe("built package entry points", function () {
 		expect(ReactFoldkit.CommitSourceError).toBe(CommitSource.CommitSourceError)
 		expect(Foldkit.Loader.define).toBe(Loader.define)
 		expect(Foldkit.Store.CommitError).toBe(Store.CommitError)
-		expect(Foldkit.ReactFoldkit.SubmodelProviderError).toBe(ReactFoldkit.SubmodelProviderError)
+		expect(Foldkit.Submodel.ProviderError).toBe(Submodel.ProviderError)
+		expect(Foldkit.Submodel.define).toBe(Submodel.define)
+		expect(Foldkit.Submodel.lift).toBe(Submodel.lift)
 
-		const error = new ReactFoldkit.CommitSourceError({ reason: "Reentrant" })
+		const error = new ReactFoldkit.CommitSourceError({ details: { reason: "Reentrant" } })
 		expect(error).toBeInstanceOf(CommitSource.CommitSourceError)
 		expect(error).toBeInstanceOf(Foldkit.CommitSource.CommitSourceError)
 	})
@@ -53,7 +56,7 @@ describe("built package entry points", function () {
 		if (Result.isFailure(committed)) {
 			expect(committed.failure).toBeInstanceOf(Store.CommitError)
 			expect(committed.failure).toBeInstanceOf(Foldkit.Store.CommitError)
-			expect(committed.failure.reason).toBe("Disposed")
+			expect(committed.failure.details.reason).toBe("Disposed")
 		}
 	})
 })

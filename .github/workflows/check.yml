@@ -1,0 +1,39 @@
+name: Check
+on:
+    push:
+    pull_request:
+permissions:
+    contents: read
+jobs:
+    release:
+        runs-on: ubuntu-latest
+        defaults:
+            run:
+                working-directory: react-foldkit
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  path: react-foldkit
+            - uses: actions/checkout@v4
+              with:
+                  repository: rodygosset/foldkit
+                  ref: feat/query-httpapi
+                  path: foldkit
+            - uses: oven-sh/setup-bun@v2
+              with:
+                  bun-version: 1.3.14
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 24
+            - uses: pnpm/action-setup@v4
+              with:
+                  version: 11.8.0
+            - name: Build the required Foldkit fork
+              working-directory: foldkit
+              run: |
+                  pnpm install --frozen-lockfile
+                  pnpm --filter foldkit build
+            - run: bun install --frozen-lockfile
+            - run: bun x --no-install playwright install --with-deps chromium
+            - run: bun run check:release
+            - run: bun run --filter=react-foldkit coverage

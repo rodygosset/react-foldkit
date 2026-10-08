@@ -5,9 +5,10 @@ import React from "react"
 import { hydrateRoot } from "react-dom/client"
 import { renderToString } from "react-dom/server"
 import { afterEach, expect, vi } from "vitest"
-import { entry, fakeSource, Message } from "../test/fixtures/commit-source"
-import { createSourceFixture } from "../test/fixtures/react-commit-source"
-import { defineApplication, defineSubmodel } from "./react"
+import { entry, fakeSource, Message } from "../test/fixtures/commitSource"
+import { createSourceFixture } from "../test/fixtures/reactCommitSource"
+import { defineApplication } from "./react"
+import { define } from "./submodel"
 import { CommitSourceError } from "./commitSource"
 
 afterEach(function () {
@@ -304,7 +305,7 @@ it("preserves setup failure and cleanup defect in the Provider's reported Cause"
 	expect(onError).toHaveBeenCalledTimes(1)
 	const cause = onError.mock.calls[0]![0]
 	expect(Result.getOrThrow(Cause.findError(cause))).toEqual(
-		new CommitSourceError({ reason: "DuplicateKey", key: "a" })
+		new CommitSourceError({ details: { reason: "DuplicateKey", key: "a" } })
 	)
 	expect(Result.getOrThrow(Cause.findDefect(cause))).toBe(defect)
 	expect(source.listeners).toBe(0)
@@ -419,13 +420,13 @@ it("uses the latest error observer and fallback after rerendering", function () 
 	const mounted = render(tree(firstObserver, "first"))
 	act(() => f.source.publish([entry("a", 1), entry("a", 2)]))
 	expect(firstObserver).toHaveBeenCalledExactlyOnceWith(
-		Cause.fail(new CommitSourceError({ reason: "DuplicateKey", key: "a" }))
+		Cause.fail(new CommitSourceError({ details: { reason: "DuplicateKey", key: "a" } }))
 	)
 	mounted.rerender(tree(latestObserver, "latest"))
 	expect(mounted.getByRole("alert").textContent).toContain("latest: ")
 	act(() => f.source.publish([entry("b", 1), entry("b", 2)]))
 	expect(latestObserver).toHaveBeenCalledExactlyOnceWith(
-		Cause.fail(new CommitSourceError({ reason: "DuplicateKey", key: "b" }))
+		Cause.fail(new CommitSourceError({ details: { reason: "DuplicateKey", key: "b" } }))
 	)
 	expect(firstObserver).toHaveBeenCalledTimes(1)
 	expect(mounted.getByRole("alert").textContent).toContain("Duplicate source key: b")
@@ -436,7 +437,7 @@ it("optional root and child hooks return absence and subscribe when provided", f
 		Model: Schema.Finite,
 		update: (model: number, _message: Message) => ({ model: model + 1 }),
 	})
-	const Child = defineSubmodel<number, Message>()
+	const Child = define<number, Message>()
 	const values: Array<Option.Option<number>> = []
 	let commit: Option.Option<ReturnType<typeof App.useCommit>> = Option.none()
 	function View() {
@@ -540,7 +541,7 @@ it("retains tokens for committed Messages when rejecting a reentrant notificatio
 		</App.Provider>
 	)
 	act(() => source.publish([entry("a", 1)]))
-	expect(onError).toHaveBeenCalledWith(Cause.fail(new CommitSourceError({ reason: "Reentrant" })))
+	expect(onError).toHaveBeenCalledWith(Cause.fail(new CommitSourceError({ details: { reason: "Reentrant" } })))
 	act(() => source.notify())
 	expect(mounted.getByTestId("model").textContent).toBe("1")
 })
@@ -552,8 +553,8 @@ it.live("hydrates optional root and child hooks with stable server snapshots", (
 			Model: Schema.Finite,
 			update: (model: number, _message: Message) => ({ model: model + 1 }),
 		})
-		const Child = defineSubmodel<number, Message>()
-		const projection = { read: (model: number) => model, toParentMessage: (message: Message) => message }
+		const Child = define<number, Message>()
+		const child = { read: (model: number) => model, toParentMessage: (message: Message) => message }
 		let commit: Option.Option<ReturnType<typeof App.useCommit>> = Option.none()
 		function Read() {
 			commit = App.useOptionalCommit()
@@ -567,7 +568,7 @@ it.live("hydrates optional root and child hooks with stable server snapshots", (
 		}
 		function Content() {
 			return (
-				<Child.Provider source={App.useSubmodel(projection)}>
+				<Child.Provider source={App.useSubmodel(child)}>
 					<Read />
 				</Child.Provider>
 			)

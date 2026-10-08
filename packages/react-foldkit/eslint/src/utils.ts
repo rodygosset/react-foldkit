@@ -1,9 +1,5 @@
-/**
- * Shared helpers for react-foldkit ESLint rules.
- */
-
 import type { Rule } from "eslint"
-import type { Identifier, Node as ESTreeNode, Pattern, Program } from "estree"
+import type { Identifier, Node as ESTreeNode, Pattern } from "estree"
 import picomatch from "picomatch"
 
 export type AstNode = ESTreeNode & {
@@ -75,30 +71,12 @@ export function getReactFoldkitSettings(context: Rule.RuleContext): ReactFoldkit
 	return {}
 }
 
-/**
- * True when node is nested under a property keyed execute
- * (Command.define execute bodies).
- */
-export function isInsideExecute(node: AstNode): boolean {
-	let current = node.parent
-	while (current) {
-		if (current.type === "Property" && isKeyNamed(current.key, "execute")) {
-			return true
-		}
-		current = current.parent
-	}
-	return false
-}
-
 export function isKeyNamed(key: ESTreeNode, name: string): boolean {
 	if (key.type === "Identifier") return key.name === name
 	if (key.type === "Literal") return key.value === name
 	return false
 }
 
-/**
- * Name of the nearest enclosing function (declaration, variable, or property).
- */
 export function getEnclosingFunctionName(node: AstNode): string | null {
 	let current = node.parent
 	while (current) {
@@ -125,53 +103,15 @@ export function getEnclosingFunctionName(node: AstNode): string | null {
 	return null
 }
 
-const VIEW_FILENAME_GLOBS = ["**/View*.tsx", "**/*View.tsx", "**/*-view.tsx", "**/*_view.tsx"]
+const VIEW_FILENAME_GLOBS = ["**/view.tsx", "**/View*.tsx", "**/*View.tsx", "**/*-view.tsx", "**/*_view.tsx"]
 
 export const isViewFilename = (filename: string): boolean => matchesGlob(filename, VIEW_FILENAME_GLOBS)
 
-/** `View`, `TodoView`, `ElapsedDisplayView`, etc. */
 export function isViewFunctionName(name: string | null): boolean {
 	if (name == null) return false
 	return name === "View" || name.endsWith("View")
 }
 
-/**
- * True when the identifier is a binding/import name, not a use-site reference.
- */
-export function isIdentifierDefinition(node: IdentifierWithTs): boolean {
-	const parent = node.parent
-	if (!parent) return false
-
-	if (parent.type === "ImportSpecifier" && (parent.imported === node || parent.local === node)) {
-		return true
-	}
-	if (
-		parent.type === "ImportDefaultSpecifier" ||
-		parent.type === "ImportNamespaceSpecifier" ||
-		parent.type === "ImportDeclaration"
-	) {
-		return true
-	}
-	if (parent.type === "FunctionDeclaration" && parent.id === node) return true
-	if (parent.type === "VariableDeclarator" && parent.id === node) return true
-	if (parent.type === "Property" && parent.key === node && !parent.computed && parent.shorthand) {
-		// Shorthand property in an ObjectPattern is a definition.
-		return parent.parent != null && parent.parent.type === "ObjectPattern"
-	}
-	if (parent.type === "Property" && parent.key === node && !parent.computed && !parent.shorthand) {
-		return false
-	}
-	if (parent.type === "ArrayPattern") return true
-	if (parent.type === "RestElement") return true
-	if (parent.type === "AssignmentPattern" && parent.left === node) return true
-
-	return false
-}
-
-/**
- * Whether a function parameter introduces a dispatch binding (destructured
- * or typed props object with a dispatch field).
- */
 export function paramHasDispatch(param: Pattern): boolean {
 	if (param.type === "Identifier" && param.name === "dispatch") return true
 
@@ -233,36 +173,129 @@ function tsTypeHasDispatchProp(typeNode: TsTypeNode): boolean {
 	return false
 }
 
-/**
- * Scan a Program for an exported binding named update.
- */
-export function programExportsUpdate(program: Program): boolean {
-	for (const statement of program.body) {
-		if (statement.type === "ExportNamedDeclaration") {
-			if (statement.declaration) {
-				const decl = statement.declaration
-				if (decl.type === "FunctionDeclaration" && decl.id && decl.id.name === "update") {
-					return true
-				}
-				if (decl.type === "VariableDeclaration") {
-					for (const d of decl.declarations) {
-						if (d.id.type === "Identifier" && d.id.name === "update") return true
-					}
-				}
-			}
-			for (const spec of statement.specifiers || []) {
-				if (spec.exported.type === "Identifier" && spec.exported.name === "update") {
-					return true
-				}
-			}
+interface Origin {
+	readonly module: string
+	readonly path: ReadonlyArray<string>
+}
+
+function importedOrigin(module: string, path: ReadonlyArray<string>): Origin {
+	const namespaces: Record<string, string> = {
+		"effect/Effect": "Effect",
+		"react-foldkit/react": "ReactFoldkit",
+		"react-foldkit/submodel": "Submodel",
+		"react-foldkit/store": "Store",
+		"react-foldkit/command": "Command",
+		"foldkit/command": "Command",
+	}
+	const namespace = namespaces[module]
+	if (namespace !== undefined)
+		return { module: module.startsWith("effect/") ? "effect" : "react-foldkit", path: [namespace, ...path] }
+	return { module: module === "foldkit" ? "react-foldkit" : module, path }
+}
+
+export function origin(context: Rule.RuleContext, node: ESTreeNode, seen = new Set<object>()): Origin | undefined {
+	if (node.type === "MemberExpression" && !node.computed && node.property.type === "Identifier") {
+		const parent = origin(context, node.object, seen)
+		return parent === undefined ? undefined : { ...parent, path: [...parent.path, node.property.name] }
+	}
+	if (node.type === "CallExpression") {
+		const callee = origin(context, node.callee, seen)
+		if (callee === undefined) return undefined
+		return { ...callee, path: [...callee.path.slice(0, -1), callee.path[callee.path.length - 1] + "()"] }
+	}
+	if (node.type !== "Identifier") return undefined
+	return bindingOrigin(context, node, node.name, seen)
+}
+
+export function bindingOrigin(
+	context: Rule.RuleContext,
+	at: ESTreeNode,
+	name: string,
+	seen = new Set<object>()
+): Origin | undefined {
+	let scope: ReturnType<typeof context.sourceCode.getScope> | null = context.sourceCode.getScope(at)
+	while (scope !== null) {
+		const variable = scope.set.get(name)
+		if (variable === undefined) {
+			scope = scope.upper
+			continue
 		}
-		if (statement.type === "ExportDefaultDeclaration") {
-			const decl = statement.declaration
-			if (decl.type === "FunctionDeclaration" && decl.id && decl.id.name === "update") {
+		if (seen.has(variable)) return undefined
+		seen.add(variable)
+		if (variable.references.some((reference) => reference.isWrite() && !reference.init)) return undefined
+		const definition = variable.defs[0]
+		if (definition?.type === "ImportBinding") {
+			const declaration = definition.parent
+			if (declaration.type !== "ImportDeclaration" || typeof declaration.source.value !== "string")
+				return undefined
+			const specifier = definition.node
+			const path =
+				specifier.type === "ImportSpecifier"
+					? [
+							specifier.imported.type === "Identifier"
+								? specifier.imported.name
+								: String(specifier.imported.value),
+						]
+					: specifier.type === "ImportDefaultSpecifier" && declaration.source.value !== "react"
+						? ["default"]
+						: []
+			return importedOrigin(declaration.source.value, path)
+		}
+		if (
+			definition?.type !== "Variable" ||
+			definition.node.type !== "VariableDeclarator" ||
+			definition.node.init == null
+		)
+			return undefined
+		const source = origin(context, definition.node.init, seen)
+		if (source === undefined || definition.node.id.type !== "ObjectPattern") return source
+		for (const property of definition.node.id.properties) {
+			if (property.type !== "Property" || property.computed) continue
+			const local = property.value.type === "Identifier" ? property.value.name : undefined
+			if (local !== name) continue
+			const key =
+				property.key.type === "Identifier"
+					? property.key.name
+					: property.key.type === "Literal"
+						? String(property.key.value)
+						: undefined
+			return key === undefined ? undefined : { ...source, path: [...source.path, key] }
+		}
+		return undefined
+	}
+	return undefined
+}
+
+export const isApi = (value: Origin | undefined, module: string, ...path: string[]): boolean =>
+	value?.module === module &&
+	value.path.length === path.length &&
+	value.path.every((part, index) => part === path[index])
+
+export function isInsideCommandExecute(context: Rule.RuleContext, node: AstNode): boolean {
+	let current = node.parent
+	while (current) {
+		if (current.type === "Property" && isKeyNamed(current.key, "execute")) {
+			const object = current.parent
+			const call = object?.parent
+			if (
+				object?.type === "ObjectExpression" &&
+				call?.type === "CallExpression" &&
+				isApi(origin(context, call.callee), "react-foldkit", "Command", "define")
+			)
 				return true
-			}
-			if (decl.type === "Identifier" && decl.name === "update") return true
 		}
+		current = current.parent
 	}
 	return false
+}
+
+export function applicationMember(value: Origin | undefined): string | undefined {
+	if (value?.module !== "react-foldkit") return undefined
+	const path = value.path
+	if (path.length === 3) {
+		if (path[0] === "ReactFoldkit" && (path[1] === "defineApplication()" || path[1] === "defineSubmodel()"))
+			return path[2]
+		if (path[0] === "Submodel" && path[1] === "define()") return path[2]
+	}
+	return undefined
 }

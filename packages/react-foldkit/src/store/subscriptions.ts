@@ -11,12 +11,6 @@ type SubscriptionRuntime<Model, Message, R> = {
 	readonly crashWith: (cause: Cause.Cause<unknown>, triggeringMessage: Option.Option<Message>) => void
 }
 
-/**
- * Forks one fiber per subscription entry. Seeds deps with a boot-time snapshot
- * via `Stream.concat` (Foldkit), then follows PubSub model changes. Ref updates
- * run upstream of `changesWith` so `readDependencies` stays current even when
- * equivalence filters drop an emission.
- */
 export function forkSubscriptionFibers<Model, Message, R>(
 	subscriptions: Subscription.Subscriptions<Model, Message, R> | undefined,
 	runtime: SubscriptionRuntime<Model, Message, R>

@@ -19,3 +19,6 @@ __unconfig*
 packages/react-foldkit/TODO.md
 
 .pnpm-store
+packages/react-foldkit/test/docs/.generated/
+
+packages/react-foldkit/coverage/
