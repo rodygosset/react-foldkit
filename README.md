@@ -54,19 +54,9 @@ The development server is available at <http://localhost:3000>.
 
 ## Verification
 
-Run the same checks used before sharing changes:
+Run `bun run check` for local verification. Run `bun run check:release` to include browser tests and the web production build. The [maintenance guide](docs/maintaining.md) describes each command and browser setup.
 
-```bash
-bun run build --filter=react-foldkit
-bun run typecheck
-bun run test --filter=react-foldkit
-bun run lint
-bun run build --filter=web
-```
-
-Function syntax is enforced across source, tests, examples, shared UI, and tooling.
-See [the function syntax rules](eslint/README.md) for the conventions.
-Run their regression tests separately with `bun run test:lint`.
+Function syntax is enforced across source, tests, examples, shared UI, and tooling. See [the function syntax rules](eslint/README.md) for the conventions. Their regression tests run as part of `check`, or separately with `bun run test:lint`.
 
 ## Repository layout
 
@@ -74,5 +64,7 @@ Run their regression tests separately with `bun run test:lint`.
 - `apps/web` — examples that exercise React Foldkit in a TanStack Start application.
 - `packages/ui` — shared UI components used by the example application.
 - `repos/foldkit` and `repos/effect` — vendored upstream source snapshots kept as read-only references for development agents. They are not part of this repository's workspace task graph or review scope.
+
+The [architecture guide](docs/architecture.md) describes module boundaries and lifecycle ownership. Historical proposals and validation records live in [docs/history](docs/history/README.md).
 
 When reviewing the project, focus on `packages/react-foldkit` and `apps/web`. See the [package README](packages/react-foldkit/README.md) for usage examples and API details.

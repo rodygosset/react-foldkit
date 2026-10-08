@@ -1,7 +1,7 @@
 import { Array, type Cause, Effect, Exit, Option, Result, Scope, Semaphore } from "effect"
-import * as Store from "../store"
+import * as Store from "../store/store"
 import type * as Update from "../update"
-import * as InitCommand from "./init-command"
+import * as InitCommand from "../internal/init-command"
 
 const ReactStoreTypeId: unique symbol = Symbol.for("react-foldkit/ReactStoreTypeId")
 export type ReactStoreTypeId = typeof ReactStoreTypeId

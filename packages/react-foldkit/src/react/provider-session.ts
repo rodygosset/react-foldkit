@@ -1,5 +1,5 @@
 import { Cause, Context, Deferred, Duration, Effect, Exit, Option, Scope, Semaphore } from "effect"
-import type { Connection } from "./commit-source"
+import type { Connection } from "../commitSource/connection"
 import type { ModelReader } from "./model-source"
 import type { ReactStore } from "./react-store"
 

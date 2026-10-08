@@ -5,7 +5,7 @@ import { Cause, Deferred, Effect, Exit, Fiber, Layer, Logger, Option, Result, St
 import { TestClock } from "effect/testing"
 import * as Subscription from "../subscription"
 import { CommitSourceError, type CommitEntry, type CommitSource } from "../commitSource"
-import * as Connection from "./commit-source"
+import * as Connection from "../commitSource/connection"
 import * as ReactStore from "./react-store"
 import * as Session from "./provider-session"
 

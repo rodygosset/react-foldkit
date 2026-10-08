@@ -8,14 +8,14 @@ import { defineConfig } from "tsup"
 export default defineConfig({
 	entry: {
 		index: "src/index.ts",
-		react: "src/react.tsx",
+		react: "src/react/public.ts",
 		asyncData: "src/asyncData.ts",
 		command: "src/command.ts",
-		commitSource: "src/commitSource.ts",
-		loader: "src/loader.ts",
+		commitSource: "src/commitSource/public.ts",
+		loader: "src/loader/public.ts",
 		message: "src/message.ts",
 		schema: "src/schema.ts",
-		store: "src/store.ts",
+		store: "src/store/public.ts",
 		struct: "src/struct.ts",
 		subscription: "src/subscription.ts",
 		tanstack: "src/tanstack.ts",

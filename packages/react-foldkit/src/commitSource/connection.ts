@@ -1,10 +1,10 @@
 import { Cause, Effect, Exit, HashMap, Option, Result, type Scope } from "effect"
 import type { CommitError } from "../store"
 
-import { CommitSourceError, type CommitEntry, type CommitSource, type CommitSourceOptions } from "../commitSource"
+import { CommitSourceError, type CommitEntry, type CommitSource, type CommitSourceOptions } from "./public"
 
-export { CommitSourceError } from "../commitSource"
-export type { CommitEntry, CommitSource, CommitSourceOptions } from "../commitSource"
+export { CommitSourceError } from "./public"
+export type { CommitEntry, CommitSource, CommitSourceOptions } from "./public"
 
 type Versions = HashMap.HashMap<string, string | number>
 export type ConnectionError<E> = E | CommitSourceError | CommitError
