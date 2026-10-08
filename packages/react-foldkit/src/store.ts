@@ -97,7 +97,7 @@ export const commit = <Model, Message>(
 /**
  * Succeeds with the first Model for which `pick` returns `Option.some`.
  * Fails with {@link Disposed} if the store is disposed first.
- * Interrupting the Effect unsubscribes.
+ * A defect in `pick` fails only this waiter. Interrupting the Effect unsubscribes.
  */
 export const takeWhen = <Model, Message, A>(
 	store: Store<Model, Message>,
@@ -115,7 +115,13 @@ export const takeWhen = <Model, Message, A>(
 				return true
 			}
 
-			const maybeValue = pick(store.getModel())
+			const picked = Effect.runSyncExit(Effect.sync(() => pick(store.getModel())))
+			if (Exit.isFailure(picked)) {
+				isSettled = true
+				resume(Effect.failCause(picked.cause))
+				return true
+			}
+			const maybeValue = picked.value
 			if (Option.isSome(maybeValue)) {
 				isSettled = true
 				resume(Effect.succeed(maybeValue.value))
@@ -214,12 +220,15 @@ function forkSubscriptionFibers<Model, Message, R>(
 	for (const [, entry] of Record.toEntries(subscriptions)) {
 		const { dependenciesSchema, modelToDependencies, keepAliveEquivalence, dependenciesToStream } = entry
 
+		const modelSubscription = Effect.runSyncWith(runtimeContext)(
+			PubSub.subscribe(modelPubSub).pipe(Effect.provideService(Scope.Scope, fiberScope))
+		)
 		const fiber = Effect.gen(function* () {
 			const equivalence = keepAliveEquivalence ?? Schema.toEquivalence(dependenciesSchema)
 			const initDependencies = modelToDependencies(bootModel)
 			const latestDependenciesRef = yield* Ref.make(initDependencies)
 
-			const modelChangesStream = Stream.fromPubSub(modelPubSub).pipe(
+			const modelChangesStream = Stream.fromSubscription(modelSubscription).pipe(
 				Stream.mapEffect((nextModel) =>
 					Effect.gen(function* () {
 						const dependencies = modelToDependencies(nextModel)
@@ -267,8 +276,8 @@ export const make = <Model, Message, R = never>(
 		// Scopes close in reverse order: finish Commands and subscriptions before releasing services.
 		const layerScope = yield* Scope.fork(scope)
 		const fiberScope = yield* Scope.fork(scope, "parallel")
-		// Replay retains a model published before subscription fibers attach.
-		const modelPubSub = yield* PubSub.unbounded<Model>({ replay: 1 })
+		// Readers attach before the boot barrier opens.
+		const modelPubSub = yield* PubSub.unbounded<Model>()
 		const layer = resolveLayer((config as { readonly layer?: Layer.Layer<R, never, never> }).layer)
 		// Joining the shared build lets a waiter leave without interrupting other waiters.
 		const getBuild = yield* Effect.cached(
@@ -520,8 +529,12 @@ function start<Model, Message, R>(
 					listeners.clear()
 					crashListeners.clear()
 					cancelDeferredDrain()
-					for (const listener of notify) listener()
 				}).pipe(
+					Effect.andThen(Effect.forEach(notify, (listener) => Effect.exit(Effect.sync(listener)))),
+					Effect.flatMap(function (exits) {
+						const result = Exit.asVoidAll(exits)
+						return Exit.isFailure(result) ? Effect.failCause(result.cause) : Effect.void
+					}),
 					Effect.ensuring(Scope.close(storeScope, exit)),
 					Effect.onExit((result) => Deferred.done(disposal, result))
 				)

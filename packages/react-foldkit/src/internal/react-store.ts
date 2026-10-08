@@ -27,7 +27,7 @@ export type ReactStore<Model, Message> = Readonly<{
 	 * that is already running. Delivery programs join the same Scope, so they live and die with it.
 	 * The last lease released ends the activation.
 	 */
-	activate: Effect.Effect<void, never, Scope.Scope>
+	activate: Effect.Effect<void, Store.CommitError, Scope.Scope>
 }>
 
 const trackCompletion = <Message, R>(state: InitCommandState<Message, R>): InitCommand<Message, R> =>
@@ -45,14 +45,23 @@ type Activation<Model, Message> = {
 	leases: number
 }
 
+export type Config<Model, Message, R = never> = Store.Config<Model, Message, R> & {
+	/** Produces a Message once per replacement activation. Use Update to restart pending reads. */
+	readonly onReactivate?: () => Message
+}
+
 export function make<Model, Message, R = never>(
-	config: Store.Config<Model, Message, R>,
+	config: Config<Model, Message, R>,
 	init: Update.Return<Model, Message, R>
 ): ReactStore<Model, Message> {
 	const listeners = new Set<() => void>()
 	const crashListeners = new Set<() => void>()
 	const initCommandStates = (init.commands ?? []).map((command) => ({ command, isComplete: false }))
-	let inactive = { model: init.model, crash: Option.none<Cause.Cause<unknown>>() }
+	let inactive: {
+		readonly _tag: "Initial" | "Replacement"
+		readonly model: Model
+		readonly crash: Option.Option<Cause.Cause<unknown>>
+	} = { _tag: "Initial", model: init.model, crash: Option.none() }
 	const serverModel = inactive.model
 	let maybeActive: Option.Option<Activation<Model, Message>> = Option.none()
 	const gate = Semaphore.makeUnsafe(1)
@@ -74,7 +83,11 @@ export function make<Model, Message, R = never>(
 					activation.leases -= 1
 					if (activation.leases > 0) return false
 					if (Option.isNone(maybeActive) || maybeActive.value !== activation) return false
-					inactive = { model: activation.store.getModel(), crash: activation.store.getCrash() }
+					inactive = {
+						_tag: "Replacement",
+						model: activation.store.getModel(),
+						crash: activation.store.getCrash(),
+					}
 					maybeActive = Option.none()
 					return true
 				})
@@ -107,6 +120,11 @@ export function make<Model, Message, R = never>(
 				),
 				(unsubscribe) => Effect.sync(unsubscribe)
 			)
+			if (inactive._tag === "Replacement" && config.onReactivate !== undefined) {
+				const message = yield* Effect.sync(config.onReactivate)
+				const committed = store.commit(message)
+				if (Result.isFailure(committed) && Option.isNone(store.getCrash())) return yield* committed.failure
+			}
 			return store
 		}).pipe(
 			Scope.provide(scope),
