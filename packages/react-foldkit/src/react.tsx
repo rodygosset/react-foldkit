@@ -17,7 +17,7 @@ export type { CommitEntry, CommitSource, CommitSourceOptions } from "./commitSou
 
 type ModelCodec = Schema.Codec<unknown, unknown, unknown, unknown>
 
-export type Config<ModelSchema extends ModelCodec, Message, R = never> = Store.Config<
+export type Config<ModelSchema extends ModelCodec, Message, R = never> = ReactStore.Config<
 	Schema.Schema.Type<ModelSchema>,
 	Message,
 	R
@@ -173,6 +173,19 @@ function projectionHooks<ParentModel, ParentMessage>(
 	return { useSubmodel, useOptionalSubmodel, SubmodelProvider }
 }
 
+function SessionLifecycle({ session }: { readonly session: ProviderSession.ProviderSession }) {
+	React.useLayoutEffect(
+		function manageSession() {
+			Effect.runFork(session.start)
+			return function () {
+				Effect.runFork(session.stop)
+			}
+		},
+		[session]
+	)
+	return null
+}
+
 /**
  * Defines Provider and hooks around a Foldkit-shaped store.
  *
@@ -229,19 +242,17 @@ export function defineApplication<ModelSchema extends ModelCodec, Message, R = n
 		)
 		const [session] = React.useState(() => ProviderSession.make(bootstrap, observeFailure))
 		const { cause } = React.useSyncExternalStore(session.subscribe, session.getSnapshot, session.getServerSnapshot)
-		React.useLayoutEffect(
-			function manageSession() {
-				Effect.runFork(session.start)
-				return function () {
-					Effect.runFork(session.stop)
-				}
-			},
-			[session]
+		const content = Option.isSome(cause) ? (
+			(props.renderError ?? renderFailure)(cause.value)
+		) : Exit.isFailure(bootstrap) ? null : (
+			<StoreContext.Provider value={bootstrap.value.store}>{props.children}</StoreContext.Provider>
 		)
-
-		if (Option.isSome(cause)) return (props.renderError ?? renderFailure)(cause.value)
-		if (Exit.isFailure(bootstrap)) return null
-		return <StoreContext.Provider value={bootstrap.value.store}>{props.children}</StoreContext.Provider>
+		return (
+			<>
+				<SessionLifecycle session={session} />
+				{content}
+			</>
+		)
 	}
 
 	/** Completes a Message's Model transition synchronously; Commands remain asynchronous. */

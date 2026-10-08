@@ -150,8 +150,12 @@ one string token. Building the Effect does no work; logging, tracing, recovery,
 and timeouts can be composed before running it.
 
 The versioned envelope contains a marker, declaration name, resource key, token,
-and encoded payload. Native Schema encoding handles AsyncData, Date, Option,
-and HashMap. Caching, transport, decoding, and mapping preserve the token.
+and a `Schema.Json` payload. Loader derives its wire codec with
+`data.pipe(Schema.toCodecJson)`. Consumers provide native schemas, including
+AsyncData, Date, Option, and HashMap. Supplied schemas must support JSON codec
+conversion, including nested Query argument, success, and error schemas.
+Decoding restores application values. Caching, transport, decoding, and mapping
+preserve the token.
 
 An input failure produces no envelope. `Query.run` succeeds with AsyncData
 Success or Failure; both are valid payloads. Update decides whether to install them.
@@ -264,12 +268,31 @@ through `onError`. Snapshots and Loader.decode return Result. Notification
 boundaries capture snapshot and commit defects as Causes. Source failures preserve
 successful tokens and recover on a valid notification while the Store is healthy.
 Terminal Store crashes reach `onError` once, including update, Command, and
-Subscription failures, and remain visible until a fresh healthy activation.
-Live observers end with the Provider lifetime. Stopping closes resource scopes,
+Subscription failures, and remain visible while inactive. A fresh healthy
+activation clears the fallback; a failed replacement setup publishes its own
+Cause instead of retaining the previous crash.
+Live observers have a two-second cooperative deadline and end with the Provider
+lifetime. Four transient observers may run concurrently; overflow transient
+reports are dropped. Terminal Store crashes use a separate observer and cannot
+be dropped because transient observers are busy. Stopping closes resource scopes,
 logs defects, and gives its cleanup observer a five-second cooperative deadline. Explicitly
 uninterruptible observer Effects or finalizers can exceed that deadline. Observer
-failures combine with the original Cause without undoing newer recovery. Setup
-failures release resources. Reconnects read the latest snapshot.
+failures are logged without changing the Cause passed to `renderError` or undoing
+newer recovery. A fresh healthy activation clears crash deduplication, so a later
+crash using the same Cause is rendered and reported again. Setup failures release
+resources. Reconnects read the latest snapshot.
+
+The session activates before descendant layout effects and ref attachments.
+Ending an activation interrupts Commands while retaining the Model. Incomplete
+init Commands restart on reconnect; completed init Commands and update-started
+Commands are not replayed. Optional `onReactivate: () => Message` sends an
+application reconciliation Message on a replacement activation. Update can restart
+pending reads with Query `replace`. The handler must account for init Commands
+that already restart and choose operations that are safe to repeat.
+If the callback throws, activation fails and acquired resources close. If its
+Message crashes update, the replacement Store follows the ordinary terminal
+crash lifecycle, preserving the original Cause and releasing resources when the
+activation ends.
 
 ## SubmodelProvider
 

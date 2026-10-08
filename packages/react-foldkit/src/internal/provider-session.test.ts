@@ -433,3 +433,49 @@ it.effect("replays failures published while readers were detached before a healt
 		yield* session.stop
 	})
 )
+
+it.effect.each([false, true])("reports a replacement callback failure after previous crash %s", (previousCrash) =>
+	Effect.gen(function* () {
+		const previous = new Error("previous update defect")
+		const current = new Error("replacement callback defect")
+		let shouldFail = true
+		const store = ReactStore.make<number, number>(
+			{
+				update(model, message) {
+					if (message === 9) throw previous
+					return { model: model + message }
+				},
+				onReactivate() {
+					if (shouldFail) throw current
+					return 1
+				},
+				onCrash() {},
+			},
+			{ model: 0 }
+		)
+		const reports: Cause.Cause<unknown>[] = []
+		const session = Session.make(Exit.succeed({ store }), (cause) =>
+			Effect.sync(function () {
+				reports.push(cause)
+			})
+		)
+		yield* session.start
+		if (previousCrash) store.dispatch(9)
+		yield* session.stop
+		expect(session.getSnapshot().cause).toEqual(previousCrash ? Option.some(Cause.die(previous)) : Option.none())
+		expect(store.getCrash()).toEqual(previousCrash ? Option.some(Cause.die(previous)) : Option.none())
+		yield* session.start
+		expect(session.getSnapshot().cause).toEqual(Option.some(Cause.die(current)))
+		const expected = previousCrash ? [Cause.die(previous), Cause.die(current)] : [Cause.die(current)]
+		expect(reports).toEqual(expected)
+		yield* session.stop
+		yield* session.stop
+		expect(reports).toEqual(expected)
+		shouldFail = false
+		yield* session.start
+		expect(store.getModel()).toBe(1)
+		expect(session.getSnapshot().cause).toEqual(Option.none())
+		expect(reports).toEqual(expected)
+		yield* session.stop
+	})
+)

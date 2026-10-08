@@ -25,12 +25,12 @@ interface Lifetime {
 	readonly setup: Deferred.Deferred<Exit.Exit<void, unknown>>
 }
 
-/** Bounds accepted live observers; overflow reports drop immediately. */
+/** Cooperative deadline for each live observer. */
 const liveReportDeadline: Duration.Input = "2 seconds" as const
 /** Shutdown keeps the established five-second bound. */
 const shutdownReportDeadline: Duration.Input = "5 seconds" as const
-/** Maximum concurrent live observers. */
-const maxConcurrentLiveReports = 4
+/** Maximum concurrent transient observers; overflow reports drop immediately. */
+const maxConcurrentTransientReports = 4
 
 type Phase =
 	| { readonly _tag: "Stopped"; readonly close: Effect.Effect<void> }
@@ -58,6 +58,7 @@ export function make<Model, Message>(
 		publish(Option.some(cause))
 	}
 	function recover(): void {
+		observedCrash = Option.none()
 		publish(healthy)
 	}
 	const isRunning = (lifetime: Lifetime) => phase._tag === "Running" && phase.lifetime === lifetime
@@ -89,6 +90,18 @@ export function make<Model, Message>(
 		Effect.runForkWith(lifetime.context)(reportToObservers(lifetime, cause))
 	}
 
+	// A terminal crash must reach its observer even when transient reports occupy every permit.
+	function scheduleTerminalReport(lifetime: Lifetime, cause: Cause.Cause<unknown>): void {
+		Effect.runForkWith(lifetime.context)(
+			report(cause).pipe(
+				Effect.timeoutOption(liveReportDeadline),
+				Effect.asVoid,
+				Effect.forkIn(lifetime.observers, { startImmediately: true, uninterruptible: false }),
+				Effect.asVoid
+			)
+		)
+	}
+
 	function observeCrash(lifetime: Lifetime): boolean {
 		if (!isRunning(lifetime)) return false
 		const current = crash()
@@ -96,7 +109,7 @@ export function make<Model, Message>(
 		if (Option.isSome(observedCrash) && observedCrash.value === current.value) return true
 		observedCrash = current
 		fail(current.value)
-		scheduleReport(lifetime, current.value)
+		scheduleTerminalReport(lifetime, current.value)
 		return true
 	}
 
@@ -113,6 +126,7 @@ export function make<Model, Message>(
 	const setup = (lifetime: Lifetime): Effect.Effect<void> =>
 		Effect.uninterruptibleMask((restore) =>
 			Effect.gen(function* () {
+				let activationSucceeded = false
 				const exit = yield* Effect.exit(
 					restore(
 						Effect.gen(function* () {
@@ -122,6 +136,7 @@ export function make<Model, Message>(
 								(unsubscribe) => Effect.sync(unsubscribe)
 							)
 							yield* store.activate
+							activationSucceeded = true
 							if (isRunning(lifetime) && !observeCrash(lifetime)) recover()
 							if (connection !== undefined)
 								yield* connection.connect(store.commit, (exit) => reconcile(lifetime, exit))
@@ -129,7 +144,7 @@ export function make<Model, Message>(
 					)
 				)
 				if (Exit.isSuccess(exit)) return
-				const terminal = observeCrash(lifetime)
+				const terminal = activationSucceeded && observeCrash(lifetime)
 				if (isRunning(lifetime) && !terminal) fail(exit.cause)
 				const cleanup = yield* Effect.exit(Scope.close(lifetime.resources, exit))
 				const finalized = Exit.asVoidAll([exit, cleanup])
@@ -175,7 +190,7 @@ export function make<Model, Message>(
 			context: yield* Effect.context<never>(),
 			resources: yield* Scope.make(),
 			observers: yield* Scope.make(),
-			reportGate: yield* Semaphore.make(maxConcurrentLiveReports),
+			reportGate: yield* Semaphore.make(maxConcurrentTransientReports),
 			setup: yield* Deferred.make<Exit.Exit<void, unknown>>(),
 		}
 		const closing: Effect.Effect<void> = yield* Effect.cached(

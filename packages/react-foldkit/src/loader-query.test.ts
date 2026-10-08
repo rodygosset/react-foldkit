@@ -155,7 +155,7 @@ describe("derived Query Loaders", function () {
 
 	it.effect("keeps key encoding failures typed and allocates no delivery token", () =>
 		Effect.gen(function* () {
-			const tokens = vi.spyOn(crypto, "randomUUID")
+			const tokens = vi.spyOn(crypto, "getRandomValues")
 			const query = Query.define({
 				name: "Unknown",
 				args: { value: Schema.Unknown },
@@ -168,6 +168,12 @@ describe("derived Query Loaders", function () {
 			assert.strictEqual(result._tag, "Failure")
 			if (result._tag === "Failure") assert.isTrue(Schema.isSchemaError(result.failure))
 			assert.strictEqual(tokens.mock.calls.length, 0)
+			const success = yield* loader.loadQuery({ value: "valid" })
+			assert.deepStrictEqual(Result.getOrThrow(loader.decode(success)), {
+				args: { value: "valid" },
+				result: AsyncData.Success({ data: "ok" }),
+			})
+			assert.strictEqual(tokens.mock.calls.length, 1)
 		})
 	)
 
@@ -245,7 +251,10 @@ describe("derived Query Loaders", function () {
 			)
 			assert.strictEqual(success.key, '{"params":{"id":"a"}}')
 			assert.strictEqual(failure.key, success.key)
-			assert.deepStrictEqual(success.payload.result, { _tag: "Success", data: at.toISOString() })
+			assert.deepStrictEqual(success.payload, {
+				args: { params: { id: "a" } },
+				result: { _tag: "Success", data: at.toISOString() },
+			})
 			assert.deepStrictEqual(Result.getOrThrow(loader.decode(failure)), {
 				args: { params: { id: "a" } },
 				result: AsyncData.Failure({ error: ApiError.make({ at }) }),

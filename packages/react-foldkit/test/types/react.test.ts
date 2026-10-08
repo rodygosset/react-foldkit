@@ -11,6 +11,7 @@ const Message = defineMessageUnion({ Increment: {} })
 type Message = typeof Message.Type
 const App = defineApplication({
 	Model,
+	onReactivate: () => Message.Increment(),
 	update: (model: Model, _message: Message): Update.Return<Model, Message> => ({ model }),
 })
 declare const commit: ReturnType<typeof App.useCommit>
@@ -27,6 +28,13 @@ describe("React public types", function () {
 	})
 
 	if (false) {
+		defineApplication({
+			Model,
+			update: (model: Model, _message: Message) => ({ model }),
+			// @ts-expect-error Reactivation must produce the application's Message.
+			onReactivate: () => ({ _tag: "Other" }),
+		})
+
 		App.Provider({ init: { model: { count: 0 } }, children: null })
 		App.Provider({ init: { model: { count: 0 } }, children: null, onError: () => Effect.fail("observer failure") })
 		App.Provider({ init: { model: { count: 0 } }, children: null, onError: () => Effect.sleep("1 millis") })

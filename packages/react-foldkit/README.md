@@ -180,8 +180,14 @@ operations. The cache demos prune post-detail entries through `retainOnly`.
 `Loader.fromQuery(query)` derives its payload Codec from the Foldkit Query's
 Model. Keyed `Load` payloads contain `{ args, result }`; plain Queries contain
 `{ result }`. Arguments keep their own namespace, so names such as `args` and
-`result` remain valid. Transformed success and error codecs retain their encoded types.
+`result` remain valid. Loader derives a JSON codec with `Schema.toCodecJson` from
+the supplied schema. Pass native schemas such as `Schema.Option` and
+`Schema.HashMap` directly. The supplied schema must support that conversion,
+including nested Query argument, success, and error schemas. Transformed codecs
+keep their declared JSON representation. Envelopes carry `Schema.Json` payloads;
+decoding restores the schema's application values.
 `loadQuery` executes and encodes the bound Query in the host's Effect runtime.
+Constructing a keyed loading Effect does not invoke the Query's execute callback.
 
 ```ts
 const loader = Loader.fromQuery(query)
@@ -286,18 +292,25 @@ crash reaches `onError` once for update, init Command, update Command, Subscript
 dispatch, and commit failures. `Store.Config.onCrash` still runs once for that crash.
 
 Source failures recover after a successful reconciliation only while the Store is
-healthy. A terminal Store crash stays visible until a fresh activation leaves the
-Store healthy. Live source failures keep the connection and successful delivery
-tokens. A later valid notification retries undelivered tokens. Setup failures
+healthy. A terminal Store crash stays visible while inactive. A fresh healthy
+activation clears it; a failed replacement setup publishes its own Cause instead
+of retaining the previous crash. Live source failures keep the connection and
+successful delivery tokens. A later valid notification retries undelivered tokens. Setup failures
 release acquired resources; remount to retry initialization. Error callbacks do not
 run during SSR, but bootstrap failures render the fallback.
 
-Live `onError` observers belong to the running Provider lifetime and are canceled
-when it stops. Stopping closes resource scopes and logs cleanup defects before
-observing them with `onError`, with a five-second cooperative deadline.
+Live `onError` observers have a two-second cooperative deadline and belong to the
+running Provider lifetime. At most four transient observers run concurrently;
+overflow transient reports are dropped. A terminal Store crash starts a separate
+observer, so busy transient observers cannot suppress its report. All live
+observers are canceled when the lifetime stops. Stopping closes resource scopes
+and logs cleanup defects before observing them with `onError`, with a five-second
+cooperative deadline.
 An observer Effect or finalizer that cannot be interrupted can keep cleanup waiting
-beyond that deadline. Observer failures combine with the original Cause; a delayed
-observer cannot restore a fallback after recovery.
+beyond that deadline. Observer failures are logged and do not change the Cause
+passed to `renderError`. A delayed observer cannot restore a fallback after recovery.
+A fresh healthy activation clears crash deduplication, so a later crash using the
+same Cause is rendered and reported again.
 
 `useOptionalModel` and `useOptionalDispatch` return `Option` when a root or child
 Provider may be absent. Root applications also expose `useOptionalCommit`.
@@ -362,6 +375,12 @@ point for imperative hosts and owns its own Scope; dispose it with
 can finish. React activation uses `Store.make` through the
 Provider's Scope.
 
+Disposal notifies every listener even if an earlier listener throws. Listener
+defects join the disposal result after resource cleanup. `Store.takeWhen(store,
+pick)` succeeds with the first selected value or fails with `Disposed` when the
+Store ends. A throwing `pick` fails the waiting Effect with a defect and
+unsubscribes without crashing the Store. Interrupting the waiter also unsubscribes.
+
 Use `Effect.runFork(store.dispose())` inside a synchronous notification callback.
 A reentrant disposal waits for the cleanup already in progress and cannot use
 `Effect.runSync` while that cleanup is pending.
@@ -375,8 +394,29 @@ activation. Disconnected dispatches are ignored.
 Interrupted init Commands restart on reconnect; completed ones do not repeat.
 Subscriptions and Layer resources restart with each activation.
 
-`defineApplication` takes `Store.Config` plus `Model: Schema.Codec`. Preload data
-through init or a Provider-owned commit source.
+Commands returned by later updates are interrupted when the activation ends and
+are not replayed. Their Model transitions survive. Use the optional
+`onReactivate: () => Message` configuration to reconcile pending work through
+update when a replacement activation starts. It does not run on the first
+activation or when another lease joins the current activation.
+
+If `onReactivate` throws, activation fails and its acquired resources close. If
+its Message crashes update, the replacement Store follows the ordinary terminal
+crash lifecycle: `renderError` and `onError` receive the original Cause, and its
+resources close when the activation ends.
+
+For pending Query reads, the reconciliation handler can call `replace` to start
+a new generation. Restart only operations that are safe to repeat. Account for
+incomplete init Commands that already restart, so the handler does not start the
+same read twice. The project-cache example reconciles its update-started reads.
+To keep Commands running while a view is hidden, put its application Provider
+outside `React.Activity` instead.
+
+The client session activates before child layout effects and ref attachments,
+so those callbacks can dispatch and commit Messages on their first mount.
+
+`defineApplication` takes `Store.Config`, `Model: Schema.Codec`, and optional
+`onReactivate`. Preload data through init or a Provider-owned commit source.
 
 ## ESLint
 

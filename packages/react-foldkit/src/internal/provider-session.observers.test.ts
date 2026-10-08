@@ -411,6 +411,66 @@ it.effect("drops overflow reports and releases capacity when observers finish", 
 	})
 )
 
+it.effect("reports a terminal crash through saturated observers and interrupts it on stop", () =>
+	Effect.gen(function* () {
+		const f = fixture()
+		const defect = new Error("terminal update crash")
+		const store = ReactStore.make<number, Message>(
+			{
+				update() {
+					throw defect
+				},
+				onCrash() {},
+			},
+			{ model: 0 }
+		)
+		const gate = yield* Deferred.make<void>()
+		const drained = yield* Deferred.make<void>()
+		const interrupted = yield* Deferred.make<void>()
+		const seen: Cause.Cause<unknown>[] = []
+		const logged: unknown[] = []
+		const logger = Logger.make(function (options) {
+			logged.push(options.message)
+		})
+		let completed = 0
+		const session = Session.make(Exit.succeed({ ...f.bootstrap, store }), function (cause) {
+			seen.push(cause)
+			if (Cause.hasDies(cause))
+				return Effect.logInfo("terminal-context").pipe(
+					Effect.andThen(Effect.never),
+					Effect.onInterrupt(() => Deferred.succeed(interrupted, undefined))
+				)
+			return Deferred.await(gate).pipe(
+				Effect.andThen(
+					Effect.suspend(function () {
+						completed += 1
+						return completed === 4 ? Deferred.succeed(drained, undefined) : Effect.void
+					})
+				)
+			)
+		})
+		yield* session.start.pipe(Effect.provide(Logger.layer([logger])))
+		for (let i = 0; i < 4; i++) f.source.publish([entry(String(i), 1), entry(String(i), 2)])
+		expect(seen).toEqual([duplicate("0"), duplicate("1"), duplicate("2"), duplicate("3")])
+		store.dispatch(Message.Edited())
+		const terminal = Option.getOrThrow(store.getCrash())
+		expect(terminal).toEqual(Cause.die(defect))
+		expect(session.getSnapshot().cause).toEqual(Option.some(terminal))
+		expect(seen).toHaveLength(5)
+		expect(seen[4]).toBe(terminal)
+		expect(logged).toEqual([["terminal-context"]])
+		yield* Deferred.succeed(gate, undefined)
+		yield* Deferred.await(drained)
+		yield* Effect.yieldNow
+		f.source.publish([])
+		expect(session.getSnapshot().cause).toEqual(Option.some(terminal))
+		expect(seen).toHaveLength(5)
+		yield* session.stop
+		expect(yield* Deferred.isDone(interrupted)).toBe(true)
+		expect(f.source.listeners).toBe(0)
+	})
+)
+
 it.effect("preserves the start logger for live and shutdown observers", () =>
 	Effect.gen(function* () {
 		const f = fixture()

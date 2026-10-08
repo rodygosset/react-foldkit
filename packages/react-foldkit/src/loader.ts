@@ -70,11 +70,12 @@ function encodeLoad<A, I>(config: Config<A, I>, readKey: ReadKey<A>): Loader<A, 
 	})
 }
 
-function make<A, I>(config: Config<A, I>, readKey: ReadKey<A>): Loader<A, I> {
+function make<A, I>(input: Config<A, I>, readKey: ReadKey<A>): Loader<A, Schema.Json> {
+	const config = { ...input, data: input.data.pipe(Schema.toCodecJson) }
 	const decode = Schema.decodeUnknownResult(
 		Envelope(config.data).pipe(Schema.fieldsAssign({ name: Schema.Literal(config.name) }))
 	)
-	const decodeDelivery: Loader<A, I>["decodeDelivery"] = (input) =>
+	const decodeDelivery: Loader<A, Schema.Json>["decodeDelivery"] = (input) =>
 		Result.gen(function* () {
 			const { name, key, version, payload } = yield* decode(input)
 			const expected = yield* readKey(payload)
@@ -90,8 +91,8 @@ function make<A, I>(config: Config<A, I>, readKey: ReadKey<A>): Loader<A, I> {
 	return new LoaderImpl(config.name, config.data, config.key, encodeLoad(config, readKey), decodeDelivery)
 }
 
-/** Declares a serializable payload without running its loading Effect. */
-export const define = <A, I>(config: Config<A, I>): Loader<A, I> =>
+/** Declares a payload using a schema compatible with Schema.toCodecJson, without running its loading Effect. */
+export const define = <A, I>(config: Config<A, I>): Loader<A, Schema.Json> =>
 	make(config, (data) => Result.succeed(config.key(data)))
 
 /** Keyed Loader payload: nested Query arguments and an AsyncData outcome. */
@@ -118,11 +119,9 @@ export interface KeyedQueryLoader<
 	R,
 	LoadSchema extends Schema.Top,
 	Interrupt extends boolean = boolean,
-> extends WithLoadSchema<KeyedLoadType<Fields, A, E>, Schema.Codec.Encoded<LoadSchema>, LoadSchema> {
+> extends WithLoadSchema<KeyedLoadType<Fields, A, E>, Schema.Json, LoadSchema> {
 	readonly query: KeyedQuery<Name, A, AI, E, EI, Fields, R, Interrupt>
-	readonly loadQuery: (
-		args: KeyedArgs<Fields>
-	) => Effect.Effect<Envelope<Schema.Codec.Encoded<LoadSchema>>, Schema.SchemaError, R>
+	readonly loadQuery: (args: KeyedArgs<Fields>) => Effect.Effect<Envelope<Schema.Json>, Schema.SchemaError, R>
 }
 
 /** Loader derived from a Query (no args). */
@@ -135,9 +134,9 @@ export interface QueryLoader<
 	R,
 	LoadSchema extends Schema.Top,
 	Interrupt extends boolean = boolean,
-> extends WithLoadSchema<LoadType<A, E>, Schema.Codec.Encoded<LoadSchema>, LoadSchema> {
+> extends WithLoadSchema<LoadType<A, E>, Schema.Json, LoadSchema> {
 	readonly query: Query<Name, A, AI, E, EI, R, Interrupt>
-	readonly loadQuery: Effect.Effect<Envelope<Schema.Codec.Encoded<LoadSchema>>, Schema.SchemaError, R>
+	readonly loadQuery: Effect.Effect<Envelope<Schema.Json>, Schema.SchemaError, R>
 }
 
 interface KeyedLoadProgram<Args, I, R> {
@@ -226,7 +225,7 @@ export function fromQuery<Name extends string, A, AI, E, EI, Fields extends Sync
 			Load,
 			query,
 			loadQuery: (args: KeyedArgs<Fields>) =>
-				query.run(args).pipe(
+				Effect.suspend(() => query.run(args)).pipe(
 					Effect.map((result) => ({ args, result })),
 					loader.load
 				),

@@ -1,4 +1,17 @@
-import { DateTime, Context, Deferred, Effect, Exit, Layer, ManagedRuntime, Result, Schema } from "effect"
+import { toJSON, fromJSON } from "seroval"
+import {
+	DateTime,
+	HashMap,
+	Option,
+	Context,
+	Deferred,
+	Effect,
+	Exit,
+	Layer,
+	ManagedRuntime,
+	Result,
+	Schema,
+} from "effect"
 import { describe, it } from "@effect/vitest"
 import { afterEach, expect, vi } from "vitest"
 import * as AsyncData from "./asyncData"
@@ -13,6 +26,62 @@ const RecordLoader = Loader.define({ name: "Record", data: Data, key: ({ id }) =
 afterEach(() => vi.restoreAllMocks())
 
 describe("Loader declarations", function () {
+	it.effect("transports native Option and HashMap values through JSON and Seroval", () =>
+		Effect.gen(function* () {
+			const Data = Schema.Struct({
+				id: Schema.Option(Schema.String),
+				values: Schema.HashMap(Schema.String, Schema.Finite),
+			})
+			const value = {
+				id: Option.some("a"),
+				values: HashMap.make(["count", 2]),
+			}
+			const loader = Loader.define({
+				name: "Native",
+				data: Data,
+				key: ({ id }) => Option.getOrElse(id, () => "none"),
+			}).pipe(Loader.mapMessages((data, receipt) => ({ data, receipt })))
+			const envelope = yield* loader.load(Effect.succeed(value))
+			const Json = Schema.fromJsonString(Schema.Json)
+			const transportedJson = yield* Schema.decodeEffect(Json)(yield* Schema.encodeEffect(Json)(envelope))
+			for (const transported of [transportedJson, fromJSON(toJSON(envelope))]) {
+				const delivery = Result.getOrThrow(loader.decodeDelivery(transported))
+				expect(delivery.message.data.id).toEqual(Option.some("a"))
+				expect(Array.from(delivery.message.data.values)).toEqual([["count", 2]])
+				expect(delivery.receipt).toEqual({
+					name: "Native",
+					key: "a",
+					version: envelope.version,
+				})
+			}
+			expect(
+				Result.isFailure(
+					loader.decode({
+						...envelope,
+						payload: { id: { _tag: "Some", value: 42 }, values: [] },
+					})
+				)
+			).toBe(true)
+		})
+	)
+
+	it.effect("reports schemas without a compatible JSON representation as encoding failures", () =>
+		Effect.gen(function* () {
+			const loader = Loader.define({
+				name: "Unknown",
+				data: Schema.Unknown,
+				key: () => "one",
+			})
+			const result = yield* Effect.result(loader.load(Effect.succeed(() => "not JSON")))
+			expect(Result.isFailure(result)).toBe(true)
+			if (Result.isFailure(result)) expect(Schema.isSchemaError(result.failure)).toBe(true)
+			const envelope = yield* loader.load(Effect.succeed({ value: "JSON" }))
+			expect(Result.getOrThrow(loader.decode(envelope))).toEqual({
+				value: "JSON",
+			})
+		})
+	)
+
 	it.effect("keeps a SchemaError thrown by a custom key callback as a defect", () =>
 		Effect.gen(function* () {
 			const invalid = Schema.decodeUnknownResult(Schema.Finite)("invalid")
@@ -50,7 +119,7 @@ describe("Loader declarations", function () {
 					receipt,
 					message: message.id,
 				}))
-			const structural: Loader.Loader<Data, typeof Data.Encoded, string> = {
+			const structural: Loader.Loader<Data, Schema.Json, string> = {
 				name: RecordLoader.name,
 				data: RecordLoader.data,
 				key: RecordLoader.key,
@@ -185,6 +254,78 @@ describe("Loader declarations", function () {
 })
 
 describe("Loader.fromQuery", function () {
+	it.effect("derives JSON transport for native query arguments, successes, and failures", () =>
+		Effect.gen(function* () {
+			const query = Query.define({
+				name: "NativeQuery",
+				args: { id: Schema.Option(Schema.String) },
+				data: Schema.HashMap(Schema.String, Schema.Finite),
+				error: Schema.Option(Schema.String),
+				execute: ({ id }) =>
+					Option.isSome(id)
+						? Effect.succeed(HashMap.make(["count", 2]))
+						: Effect.fail(Option.some("missing")),
+			})
+			const loader = Loader.fromQuery(query)
+			const success = yield* loader.loadQuery({ id: Option.some("a") })
+			const failure = yield* loader.loadQuery({ id: Option.none() })
+			for (const transport of [
+				(input: unknown) => JSON.parse(JSON.stringify(input)),
+				(input: unknown) => fromJSON(toJSON(input)),
+			]) {
+				const decoded = Result.getOrThrow(loader.decode(transport(success)))
+				expect(decoded.args.id).toEqual(Option.some("a"))
+				expect(AsyncData.isSuccess(decoded.result)).toBe(true)
+				if (AsyncData.isSuccess(decoded.result)) expect(Array.from(decoded.result.data)).toEqual([["count", 2]])
+				expect(Result.getOrThrow(loader.decode(transport(failure)))).toEqual({
+					args: { id: Option.none() },
+					result: AsyncData.Failure({ error: Option.some("missing") }),
+				})
+			}
+		})
+	)
+
+	it.effect("defers keyed query construction until each execution and captures throws as defects", () =>
+		Effect.gen(function* () {
+			let calls = 0
+			const query = Query.define({
+				name: "Lazy",
+				args: { id: Schema.String },
+				data: Schema.Finite,
+				error: Schema.String,
+				execute() {
+					calls += 1
+					return Effect.succeed(calls)
+				},
+			})
+			const loader = Loader.fromQuery(query)
+			const program = loader.loadQuery({ id: "a" })
+			expect(calls).toBe(0)
+			expect(Result.getOrThrow(loader.decode(yield* program))).toEqual({
+				args: { id: "a" },
+				result: AsyncData.Success({ data: 1 }),
+			})
+			expect(Result.getOrThrow(loader.decode(yield* program))).toEqual({
+				args: { id: "a" },
+				result: AsyncData.Success({ data: 2 }),
+			})
+			const defect = new Error("execute callback defect")
+			const throwing = Loader.fromQuery(
+				Query.define({
+					name: "Throwing",
+					args: { id: Schema.String },
+					data: Schema.String,
+					error: Schema.String,
+					execute() {
+						throw defect
+					},
+				})
+			)
+			const failed = throwing.loadQuery({ id: "a" })
+			expect(yield* Effect.exit(failed)).toEqual(Exit.die(defect))
+		})
+	)
+
 	const keyed = Query.define({
 		name: "Project",
 		args: { projectId: Schema.String },

@@ -1,5 +1,19 @@
 import { it } from "@effect/vitest"
-import { Deferred, Effect, Exit, Fiber, Latch, Layer, Option, Result, Scheduler, Schema, Scope, Stream } from "effect"
+import {
+	Cause,
+	Deferred,
+	Effect,
+	Exit,
+	Fiber,
+	Latch,
+	Layer,
+	Option,
+	Result,
+	Scheduler,
+	Schema,
+	Scope,
+	Stream,
+} from "effect"
 import { describe, expect, vi } from "vitest"
 import { modifyFields } from "../struct"
 import type * as Command from "../command"
@@ -498,3 +512,133 @@ describe("crash projection", function () {
 		)
 	)
 })
+
+it("sends reactivation only for replacement activations, sharing it across leases", function () {
+	const store = ReactStore.make<number, number>(
+		{
+			update: (model, message) => ({ model: model + message }),
+			onReactivate: () => 10,
+		},
+		{ model: 1 }
+	)
+	const initial = activate(store)
+	expect(store.getModel()).toBe(1)
+	Result.getOrThrow(store.commit(2))
+	initial()
+	const replacement = activate(store)
+	const lease = activate(store)
+	expect(store.getModel()).toBe(13)
+	replacement()
+	Result.getOrThrow(store.commit(3))
+	expect(store.getModel()).toBe(16)
+	lease()
+	const next = activate(store)
+	expect(store.getModel()).toBe(26)
+	next()
+})
+
+it.each(["callback", "update"] as const)(
+	"distinguishes setup failure from a terminal replacement when %s throws",
+	function (failure) {
+		let shouldFail = true
+		const defect = new Error(`reactivation ${failure} failed`)
+		const store = ReactStore.make<number, number>(
+			{
+				update(model, message) {
+					if (shouldFail && failure === "update") throw defect
+					return { model: model + message }
+				},
+				onReactivate() {
+					if (shouldFail && failure === "callback") throw defect
+					return 10
+				},
+				onCrash() {},
+			},
+			{ model: 1 }
+		)
+		activate(store)()
+		const failedScope = Scope.makeUnsafe()
+		const exit = Effect.runSyncExit(store.activate.pipe(Scope.provide(failedScope)))
+		if (failure === "callback") {
+			expect(exit).toEqual(Exit.die(defect))
+			expect(store.getCrash()).toEqual(Option.none())
+			expect(store.commit(2)).toEqual(Result.fail(new CommitError({ reason: "Inactive" })))
+		} else {
+			expect(exit).toEqual(Exit.void)
+			expect(store.getCrash()).toEqual(Option.some(Cause.die(defect)))
+			expect(store.commit(2)).toEqual(
+				Result.fail(new CommitError({ reason: "Crashed", cause: Cause.die(defect) }))
+			)
+		}
+		Effect.runSync(Scope.close(failedScope, Exit.void))
+		expect(store.commit(2)).toEqual(Result.fail(new CommitError({ reason: "Inactive" })))
+		shouldFail = false
+		const replacement = activate(store)
+		expect(store.getModel()).toBe(11)
+		Result.getOrThrow(store.commit(2))
+		expect(store.getModel()).toBe(13)
+		replacement()
+	}
+)
+
+it.live("releases a failed reactivation scope before its queued resources can start", () =>
+	Effect.gen(function* () {
+		const started = Deferred.makeUnsafe<void>()
+		const restarted = Deferred.makeUnsafe<void>()
+		let starts = 0
+		let acquisitions = 0
+		let releases = 0
+		let shouldFail = true
+		const store = ReactStore.make<number, number>(
+			{
+				update: (model, message) => ({ model: model + message }),
+				onReactivate() {
+					if (shouldFail) throw new Error("resume failed")
+					return 10
+				},
+				layer: Layer.effectDiscard(
+					Effect.acquireRelease(
+						Effect.sync(function () {
+							acquisitions += 1
+						}),
+						() =>
+							Effect.sync(function () {
+								releases += 1
+							})
+					)
+				),
+			},
+			{
+				model: 1,
+				commands: [
+					{
+						name: "PendingInit",
+						effect: Effect.gen(function* () {
+							starts += 1
+							yield* Deferred.succeed(starts === 1 ? started : restarted, undefined)
+							return yield* Effect.never
+						}),
+					},
+				],
+			}
+		)
+		const first = yield* Scope.make()
+		yield* store.activate.pipe(Scope.provide(first))
+		yield* Deferred.await(started)
+		yield* Scope.close(first, Exit.void)
+		const failed = yield* Scope.make()
+		const exit = yield* Effect.exit(store.activate.pipe(Scope.provide(failed)))
+		expect(Exit.isFailure(exit)).toBe(true)
+		yield* Scope.close(failed, Exit.void)
+		shouldFail = false
+		const last = yield* Scope.make()
+		yield* store.activate.pipe(Scope.provide(last))
+		yield* Deferred.await(restarted)
+		yield* Scope.close(last, Exit.void)
+		expect({ acquisitions, releases, model: store.getModel() }).toEqual({
+			acquisitions: 2,
+			releases: 2,
+			model: 11,
+		})
+	})
+)

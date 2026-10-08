@@ -16,12 +16,12 @@ class Reader extends Context.Service<Reader, { readonly value: Data }>()("Loader
 declare const router: AnyRouter
 declare const serviceful: Schema.Codec<Data, typeof Data.Encoded, Reader, Reader>
 declare const input: Effect.Effect<Data, "unavailable", Reader>
-declare const structural: Loader.Loader<Data, typeof Data.Encoded, string>
+declare const structural: Loader.Loader<Data, Schema.Json, string>
 
 describe("Loader public types", function () {
 	it("exports the same declaration API from the root", function () {
 		expectTypeOf(RootLoader.define).toEqualTypeOf<typeof Loader.define>()
-		expectTypeOf(RecordLoader).toEqualTypeOf<Loader.Loader<Data, typeof Data.Encoded>>()
+		expectTypeOf(RecordLoader).toEqualTypeOf<Loader.Loader<Data, Schema.Json>>()
 	})
 
 	if (false) {
@@ -31,16 +31,16 @@ describe("Loader public types", function () {
 			return { id, receipt }
 		})
 		expectTypeOf(structuralMapped).toEqualTypeOf<
-			Loader.Loader<Data, typeof Data.Encoded, { id: string; receipt: Loader.Receipt }>
+			Loader.Loader<Data, Schema.Json, { id: string; receipt: Loader.Receipt }>
 		>()
 		expectTypeOf(structuralMapped.load(input)).toEqualTypeOf<
-			Effect.Effect<Loader.Envelope<typeof Data.Encoded>, "unavailable" | Schema.SchemaError, Reader>
+			Effect.Effect<Loader.Envelope<Schema.Json>, "unavailable" | Schema.SchemaError, Reader>
 		>()
 		// @ts-expect-error Message mapping is exposed through decodeDelivery.
 		RecordLoader.toMessage
 		const program = input.pipe(RecordLoader.load)
 		expectTypeOf(program).toEqualTypeOf<
-			Effect.Effect<Loader.Envelope<typeof Data.Encoded>, "unavailable" | Schema.SchemaError, Reader>
+			Effect.Effect<Loader.Envelope<Schema.Json>, "unavailable" | Schema.SchemaError, Reader>
 		>()
 		// @ts-expect-error Required services are preserved until host provisioning.
 		void Effect.runPromise(program)
@@ -65,7 +65,7 @@ describe("Loader public types", function () {
 		expectTypeOf(mapped).toEqualTypeOf<
 			Loader.Loader<
 				Data,
-				typeof Data.Encoded,
+				Schema.Json,
 				{
 					_tag: "Project"
 					data: Data
@@ -129,6 +129,7 @@ describe("Loader public types", function () {
 			execute: () => Effect.fail(DateTime.toDateUtc(DateTime.nowUnsafe())),
 		})
 		const transformedLoader = Loader.fromQuery(transformed)
+		expectTypeOf(transformedLoader.data.Encoded).toEqualTypeOf<Schema.Json>()
 		const settlement = Loader.settleQueryIf(
 			transformed,
 			transformed.init(),
@@ -197,7 +198,7 @@ describe("Loader public types", function () {
 			readonly result: AsyncData.AsyncData<Date, Query.HttpApi.HttpApiClientError>
 		}>()
 		expectTypeOf(httpLoader.loadQuery({ params: { id: "a" } })).toEqualTypeOf<
-			Effect.Effect<Loader.Envelope<typeof httpLoader.Load.Encoded>, Schema.SchemaError, Client>
+			Effect.Effect<Loader.Envelope<Schema.Json>, Schema.SchemaError, Client>
 		>()
 		// @ts-expect-error HttpApi-derived Queries preserve required client services.
 		void Effect.runPromise(httpLoader.loadQuery({ params: { id: "a" } }))
@@ -206,7 +207,7 @@ describe("Loader public types", function () {
 		httpLoader.query.init("request")
 		const httpPlain = Loader.fromQuery(Client.query("HttpHome", "projects", "home"))
 		expectTypeOf(httpPlain.loadQuery).toEqualTypeOf<
-			Effect.Effect<Loader.Envelope<typeof httpPlain.Load.Encoded>, Schema.SchemaError, Client>
+			Effect.Effect<Loader.Envelope<Schema.Json>, Schema.SchemaError, Client>
 		>()
 
 		const unrestricted = Query.define({

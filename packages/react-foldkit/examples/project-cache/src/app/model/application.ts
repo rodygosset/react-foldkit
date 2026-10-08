@@ -1,10 +1,11 @@
 import * as Project from "@/entities/project"
 import * as Loader from "react-foldkit/loader"
 import * as Command from "react-foldkit/command"
-import { Schema } from "effect"
+import { Array, HashMap, Schema } from "effect"
+import * as AsyncData from "react-foldkit/asyncData"
 import { defineMessageUnion } from "react-foldkit/message"
 import { defineApplication, defineSubmodelProjection } from "react-foldkit/react"
-import type * as Update from "react-foldkit/update"
+import * as Update from "react-foldkit/update"
 
 export const Model = Schema.Struct({ projects: Project.Model })
 export type Model = typeof Model.Type
@@ -12,6 +13,7 @@ export type Model = typeof Model.Type
 export const Message = defineMessageUnion({
 	GotProjectMessage: { message: Project.Message },
 	CompletedLoadProject: { load: Project.loader.Load },
+	ResumedApplication: {},
 	ClickedRefreshProject: { projectId: Schema.String },
 })
 export type Message = typeof Message.Type
@@ -25,6 +27,18 @@ const projects = Project.query.lift<Model, Message>({
 
 export const update = (model: Model, message: Message) =>
 	Message.match<Update.Return<Model, Message>>(message, {
+		ResumedApplication: () =>
+			Update.combine(
+				model,
+				Array.map(
+					Array.filter(Array.fromIterable(HashMap.values(model.projects.entries)), (entry) =>
+						AsyncData.isPending(entry.data)
+					),
+					({ args }) =>
+						(current: Model) =>
+							projects.replace(current, args)
+				)
+			),
 		GotProjectMessage: ({ message }) => projects.fold(model, message),
 		CompletedLoadProject({ load }) {
 			const { args, result } = load
@@ -48,4 +62,8 @@ export const projectsProjection = defineSubmodelProjection({
 	toParentMessage: toProjectMessage,
 })
 
-export const { Provider, useModel, useDispatch, SubmodelProvider } = defineApplication({ Model, update })
+export const { Provider, useModel, useDispatch, SubmodelProvider } = defineApplication({
+	Model,
+	update,
+	onReactivate: () => Message.ResumedApplication(),
+})
