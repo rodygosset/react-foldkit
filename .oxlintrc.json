@@ -17,7 +17,7 @@
 	],
 	"overrides": [
 		{
-			"files": ["packages/react-foldkit/src/store.ts"],
+			"files": ["packages/react-foldkit/src/store/store.ts"],
 			"rules": {
 				// Intentional nested Effect: makeAcquireResourceContext declares
 				// Effect<Effect<Context<R>>> (lazy acquisition separates
@@ -27,8 +27,8 @@
 		},
 		{
 			"files": [
-				"packages/react-foldkit/src/internal/provider-session.ts",
-				"packages/react-foldkit/src/react.tsx"
+				"packages/react-foldkit/src/react/provider-session.ts",
+				"packages/react-foldkit/src/react/react.tsx"
 			],
 			"rules": {
 				// Crash-reporting boundary: observers receive Cause<unknown>

@@ -5,7 +5,7 @@ import { expect } from "vitest"
 import { entry, fakeSource, Message } from "../../test/fixtures/commit-source"
 import { CommitSourceError } from "../commitSource"
 import { CommitError } from "../store"
-import * as Connection from "./commit-source"
+import * as Connection from "../commitSource/connection"
 import * as Session from "./provider-session"
 import * as ReactStore from "./react-store"
 

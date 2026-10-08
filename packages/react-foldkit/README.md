@@ -152,7 +152,7 @@ Carry the ID in Messages, guard the parent fold's read, and use it as the React
 key. This rejects stale handlers and Command results. Update handles cancellation;
 unmounting alone does not cancel Commands.
 
-See `REACT_SUBMODEL_API_SPEC.md` and TodoForm for composition and OutMessages.
+See [the architecture guide](../../docs/architecture.md) for lifecycle ownership and the module map. Historical design notes are kept in [docs/history](../../docs/history/). TodoForm demonstrates composition and OutMessages.
 
 ## Queries
 
@@ -219,7 +219,7 @@ Parent updates embed the returned Query Model and map those Commands to parent
 Messages. See `examples/project-cache` for the complete composition.
 
 Delivery tokens, resource keys, and domain revisions are separate layers; see
-[COMMIT_SOURCE_COMPOSITION_SPEC.md](../../COMMIT_SOURCE_COMPOSITION_SPEC.md).
+[the architecture guide](../../docs/architecture.md) and the historical [commit/source composition spec](../../docs/history/COMMIT_SOURCE_COMPOSITION_SPEC.md).
 
 ## Commit and external sources
 

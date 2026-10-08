@@ -1,6 +1,7 @@
 /**
  * Model-gated subscriptions (Foldkit vocabulary).
- * Apps import `react-foldkit/subscription` — never `foldkit`.
+ * Apps use `react-foldkit/subscription` for this curated subscription surface.
+ * Query APIs remain available directly from `foldkit/experimental/query`.
  *
  * v1 surface: `make` / `entry` (via `make`) only. Foldkit helpers such as
  * `persistent`, `aggregate`, `lift`, and `fromEvent` are intentionally omitted

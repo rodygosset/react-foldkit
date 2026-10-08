@@ -4,7 +4,7 @@ import { Cause, Effect, Exit, Function, Option, Result, Scope } from "effect"
 import { describe, expect, it, vi } from "vitest"
 import { entry, fakeSource, Message } from "../../test/fixtures/commit-source"
 import { CommitError } from "../store"
-import * as CommitSource from "./commit-source"
+import * as CommitSource from "./connection"
 
 type ReconcileObserver<E = never> = Parameters<CommitSource.Connection<Message, E>["connect"]>[1]
 

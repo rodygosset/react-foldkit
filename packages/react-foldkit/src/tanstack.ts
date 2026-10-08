@@ -2,7 +2,7 @@ import type { AnyRouter } from "@tanstack/react-router"
 import type { Readable } from "@tanstack/react-store"
 import { HashMap, Option, Predicate, Result, Schema } from "effect"
 import type { CommitEntry, CommitSource } from "./commitSource"
-import { EnvelopeHeader } from "./internal/loader-envelope"
+import { EnvelopeHeader } from "./loader/loader-envelope"
 import type { Declaration } from "./loader"
 
 export class RegistryError extends Schema.Error<RegistryError>("react-foldkit/TanStack/RegistryError")({
