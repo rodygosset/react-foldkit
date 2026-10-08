@@ -1,64 +1,21 @@
-# Function syntax
+# Repository lint conventions
 
-The shared configuration defines the project's function-style rules, plus the hook and
-React component declaration rules. Unrelated architecture rules are not included.
+The shared ESLint rules keep function syntax consistent across maintained source, tests, and tooling. These repository conventions are separate from the published [React Foldkit architecture presets](../packages/react-foldkit/eslint/README.md).
 
-- Expression-only helpers and callbacks use expression-bodied arrows.
-- Helpers with block bodies use `function name() { … }` declarations.
-- Inline block callbacks use anonymous `function () { … }` expressions.
-- Block callbacks to `useEffect`, `useLayoutEffect`, and `useInsertionEffect`
-  use named function expressions.
-- Object functions use arrow properties for expression-only returns and method
-  shorthand for block bodies. Class methods keep method syntax.
-- React components and custom hooks use function declarations with block bodies.
-- Generator functions keep generator syntax.
-- Accessors and functions that use their own `this`, `arguments`, or `new.target`
-  keep function/method syntax so conversions preserve receiver and call behavior.
-  These are narrow correctness exceptions to the expression-return
-  rule; they are covered by regression tests.
+## Function syntax
 
-`bun run lint` checks all maintained JavaScript and TypeScript, including tests,
-examples, shared UI, the ESLint implementation, and build configuration, then runs
-the workspace's existing lint checks. Workspace lint commands also load the
-shared rules. Vendored repositories, dependencies, generated router trees, and
-build/cache/coverage output are excluded. Shared UI has no function-style waiver.
+- Use expression-bodied arrows for expression-only helpers and callbacks.
+- Use function declarations for helpers, React components, and hooks with block bodies.
+- Use anonymous function expressions for inline callbacks with block bodies. Name the callbacks passed to React effect hooks.
+- Use method syntax for object functions with block bodies. Keep generators and accessors in their existing syntax.
+- Preserve function syntax when `this`, `arguments`, or `new.target` requires it.
 
-Run the rule regression tests separately with `bun run test:lint`. The full lint
-command also runs them before checking repository code.
+The rules live in `function-style.mjs` and `function-style.config.mjs`. Run `bun run test:lint` for their regression tests.
 
-The rules live in `function-style.mjs`; the shared configuration is
-`function-style.config.mjs`. Keep repository conventions here rather than in the
-published React Foldkit ESLint recommendations.
+## Effect checks
 
-## Relationship to oxlint
+`bun run lint` runs the shared rules, Oxlint, and workspace lint commands. Oxlint treats warnings as failures. Dependencies, vendored repositories, generated route trees, and build output are excluded.
 
-Effect-native linting lives in oxlint (`.oxlintrc.json`, `@effect/tsgo`
-recommended and effect-native presets). All 22 Effect-native rules also run in
-the editor through each workspace's TypeScript plugin configuration. The root
-lint command checks all maintained files and fails on warnings. oxlint cannot
-run custom JS rules, so the six
-function-shape rules above stay in this minimal ESLint setup while oxlint owns
-everything else. Per-file Effect rule waivers also live in `.oxlintrc.json`
-`overrides`, each with a reason; inline `@effect-diagnostics` and
-`eslint-disable` comments do not suppress `effecttsgo` rules under oxlint.
+`@effect/tsgo` supplies Effect diagnostics in TypeScript and Oxlint. `bun run prepare` reapplies their installation patches. Run `bun run lint:effect` to inspect package diagnostics directly.
 
-Negative type fixtures disable `floatingEffect` and `missingEffectContext` in
-their TypeScript config because the examples intentionally leave Effects unused
-or omit required services. All Effect-native rules remain enabled there.
-
-## TypeScript side-by-side
-
-The workspace compiler is TypeScript 7 (required by `@effect/tsgo`), but
-`@typescript-eslint/parser` hard-crashes on TS >= 7, which ships no JS compiler
-API. `ts6-register.mjs` preloads the `typescript6` alias (TypeScript 6.0.3) into
-the parser via the require cache; lint scripts opt in with
-`NODE_OPTIONS="--import ./eslint/ts6-register.mjs"` (relative to the package
-directory), including the `tsup` DTS build. Delete the shim and the alias when
-typescript-eslint supports TS >= 7.1.
-
-## Patching after install
-
-`effect-tsgo patch --typescript --oxlint` (the `scripts.prepare` hook) enables
-the Effect rules in TypeScript and oxlint. Bun runs this hook during installation.
-To reapply the patch manually, run `bun run prepare`; without the oxlint patch,
-linting fails closed with `Unknown plugin: 'effecttsgo'`.
+The workspace uses TypeScript 7. `ts6-register.mjs` supplies the TypeScript 6 compiler API needed by the ESLint parser and declaration bundler. Relevant scripts load that shim with `NODE_OPTIONS`. Keep the alias until those tools support the workspace compiler.

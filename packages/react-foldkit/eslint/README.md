@@ -1,56 +1,50 @@
-# `react-foldkit/eslint`
+# React Foldkit ESLint presets
 
-Flat ESLint presets that encode react-foldkit TEA boundaries.
+These presets catch side effects and Store ownership mistakes in React Foldkit code. They use ESLint's flat configuration and ship with `react-foldkit`.
 
-## Install
+## Configure ESLint
 
-```bash
-bun add -d eslint@^9
-```
-
-Peer: `eslint` `^9`. Import the preset from the same package — no separate plugin install.
-
-## Usage
+Install ESLint 9, then add the preset to `eslint.config.js`.
 
 ```js
-// eslint.config.js
 import { recommendedConfig } from "react-foldkit/eslint"
-// or: import { strictConfig } from 'react-foldkit/eslint'
+
+export default [...recommendedConfig]
+```
+
+Use `strictConfig` instead to add warnings about local React state in Views.
+
+## Rules
+
+The recommended preset enables these rules as errors.
+
+| Rule                             | Reports                                                                |
+| -------------------------------- | ---------------------------------------------------------------------- |
+| `no-navigate-outside-commands`   | Navigation outside Command execution or an allowed URL bridge          |
+| `no-nested-store`                | Store construction or application Providers inside Views               |
+| `no-effect-run-outside-commands` | Effect runners outside Command execution or allowed host files         |
+| `no-store-hooks-in-child-view`   | Store hooks in child Views that already receive dispatch through props |
+
+The strict preset also warns with `no-domain-use-state` when View components use `useState` or `useReducer`. Keep application state in the Model. Use a local disable with a reason for component-only UI state.
+
+Rules follow imports and aliases within a module. They do not infer ownership through arbitrary local reexports. Configure React hook rules separately.
+
+## Allow host files
+
+Use settings for files that intentionally run Effects or bridge browser navigation. `commandPaths` replaces the default allowlist, so include test and Store paths you still need.
+
+```js
+import { recommendedConfig } from "react-foldkit/eslint"
 
 export default [
-	...recommendedConfig,
-	// ...your other configs
-]
-```
-
-### `recommendedConfig` (errors)
-
-Fails CI on:
-
-| Rule                             | Catches                                                                       |
-| -------------------------------- | ----------------------------------------------------------------------------- |
-| `no-navigate-outside-commands`   | `useNavigate`, `.navigate(`, `history.push` / `replace` outside `execute`     |
-| `no-nested-store`                | `Store.boot` / `boot(` in Views; `<Provider>` inside `function View`          |
-| `no-effect-run-outside-commands` | `Effect.run*` in `.tsx` / `update` exports outside `execute`                  |
-| `no-store-hooks-in-child-view`   | `useDispatch` / `useModel` / `useStore` when props already include `dispatch` |
-
-### `strictConfig` (recommended + warn)
-
-Adds `no-domain-use-state` — `useState` / `useReducer` in View-named files (`**/View*.tsx`, `**/*View.tsx`, …) or functions named `View` / `*View`. Domain state belongs in the Model; disable only for local UI ephemera and leave a reason.
-
-## Settings
-
-```js
-{
-  settings: {
-    'react-foldkit': {
-      // Allow navigation APIs in these files (URL bridge modules).
-      urlBridgePaths: ['**/router.tsx', '**/url-bridge.ts'],
-      // Extra allowlist for Effect.run* (defaults already cover store + tests).
-      commandPaths: ['**/store.ts', '**/store.*.ts', '**/*.test.ts', '**/vitest.setup.ts'],
+  ...recommendedConfig,
+  {
+    settings: {
+      "react-foldkit": {
+        urlBridgePaths: ["**/router.tsx"],
+        commandPaths: ["**/host.ts", "**/store.ts", "**/store.*.ts", "**/*.test.ts", "**/vitest.setup.ts"],
+      },
     },
   },
-}
+]
 ```
-
-Prefer adding a path glob to `urlBridgePaths` / `commandPaths` over `eslint-disable`. If you need a disable, you probably need a new glob.

@@ -1,9 +1,9 @@
 import type { ESLint } from "eslint"
-import noDomainUseState from "./rules/no-domain-use-state.js"
-import noEffectRunOutsideCommands from "./rules/no-effect-run-outside-commands.js"
-import noNavigateOutsideCommands from "./rules/no-navigate-outside-commands.js"
-import noNestedStore from "./rules/no-nested-store.js"
-import noStoreHooksInChildView from "./rules/no-store-hooks-in-child-view.js"
+import noDomainUseState from "./rules/noDomainUseState.js"
+import noEffectRunOutsideCommands from "./rules/noEffectRunOutsideCommands.js"
+import noNavigateOutsideCommands from "./rules/noNavigateOutsideCommands.js"
+import noNestedStore from "./rules/noNestedStore.js"
+import noStoreHooksInChildView from "./rules/noStoreHooksInChildView.js"
 
 const plugin: ESLint.Plugin = {
 	meta: {

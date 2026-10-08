@@ -9,8 +9,9 @@ import { Trash2Icon } from "lucide-react"
 import * as AsyncData from "react-foldkit/asyncData"
 import * as Command from "react-foldkit/command"
 import { defineMessageUnion } from "react-foldkit/message"
-import { defineApplication, defineSubmodelProjection } from "react-foldkit/react"
+import { defineApplication } from "react-foldkit/react"
 import { modifyFields } from "react-foldkit/struct"
+import * as Submodel from "react-foldkit/submodel"
 import * as Update from "react-foldkit/update"
 import { ExampleShell } from "../../components/example-shell"
 import { getRouter } from "../../router"
@@ -187,16 +188,16 @@ const init = (flags: Flags): UpdateReturn => ({
 	commands: [FetchTodos()],
 })
 
-const formProjection = defineSubmodelProjection({
+const form = Submodel.lift({
 	read: (parent: Model) => parent.form,
 	toParentMessage: (message: TodoForm.Message) => Message.GotFormMessage({ message }),
 })
 
 const foldForm = Update.foldChild({
 	update: TodoForm.update,
-	read: (parent: Model) => Option.some(formProjection.read(parent)),
+	read: (parent: Model) => Option.some(form.read(parent)),
 	write: (parent, form) => modifyFields(parent, { form: () => form }),
-	toParentMessage: formProjection.toParentMessage,
+	toParentMessage: form.toParentMessage,
 	foldOutMessage: (out) => (nextModel) =>
 		Match.value(out).pipe(
 			Match.withReturnType<UpdateReturn>(),
@@ -259,7 +260,7 @@ const visibleItems = (items: ReadonlyArray<TodoItem>, filter: Filter): ReadonlyA
 function View() {
 	const model = useModel()
 	const dispatch = useDispatch()
-	const formSource = useSubmodel(formProjection)
+	const formSource = useSubmodel(form)
 
 	return (
 		<ExampleShell

@@ -11,6 +11,7 @@ export default [
 			"**/.tanstack/**",
 			"**/.turbo/**",
 			"**/coverage/**",
+			"packages/react-foldkit/test/docs/.generated/**",
 			"**/routeTree.gen.ts",
 		],
 	},

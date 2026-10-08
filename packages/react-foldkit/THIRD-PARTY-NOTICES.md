@@ -1,10 +1,6 @@
 # Third-party notices
 
-ReactFoldkit reexports [Foldkit](https://github.com/foldkit/foldkit) `0.166.0` from the local `feat/query-httpapi` checkout:
-`asyncData`, `command`, `message`, `schema`, `struct`, `subscription`
-(`make`/`entry`), and `update` through `react-foldkit/*`.
-
-Foldkit is an external dependency, excluded from `dist/`. Its license follows.
+React Foldkit depends on [Foldkit](https://github.com/foldkit/foldkit) and reexports selected APIs. Foldkit is excluded from the bundled output. Its MIT license is reproduced below.
 
 ## Foldkit
 

@@ -1,10 +1,10 @@
 import { Cause, Effect, Exit, HashMap, Option, Result, type Scope } from "effect"
 import type { CommitError } from "../store"
 
-import { CommitSourceError, type CommitEntry, type CommitSource, type CommitSourceOptions } from "./public"
+import { CommitSourceError, type CommitEntry, type CommitSource } from "./public"
 
 export { CommitSourceError } from "./public"
-export type { CommitEntry, CommitSource, CommitSourceOptions } from "./public"
+export type { CommitEntry, CommitSource } from "./public"
 
 type Versions = HashMap.HashMap<string, string | number>
 export type ConnectionError<E> = E | CommitSourceError | CommitError
@@ -20,25 +20,23 @@ export interface Connection<Message, E = never> {
 function versions<Message>(snapshot: ReadonlyArray<CommitEntry<Message>>): Result.Result<Versions, CommitSourceError> {
 	let result = HashMap.empty<string, string | number>()
 	for (const { key, version } of snapshot) {
-		if (HashMap.has(result, key)) return Result.fail(new CommitSourceError({ reason: "DuplicateKey", key }))
+		if (HashMap.has(result, key))
+			return Result.fail(new CommitSourceError({ details: { reason: "DuplicateKey", key } }))
 		result = HashMap.set(result, key, version)
 	}
 	return Result.succeed(result)
 }
 
-const reentrant: Result.Result<void, CommitSourceError> = Result.fail(new CommitSourceError({ reason: "Reentrant" }))
+const reentrant: Result.Result<void, CommitSourceError> = Result.fail(
+	new CommitSourceError({ details: { reason: "Reentrant" } })
+)
 
-/**
- * Reconciliation runs synchronously inside a source notification, so a nested publication is a
- * contract violation rather than a queueable event. `Notifying` marks that window and `Reentered`
- * records that a publication arrived inside it, which is what reentrancy means here.
- */
 type Phase = "Subscribing" | "Notifying" | "Reentered" | "Connected" | "Released"
 
-/** Retains only successfully delivered tokens across scoped connection lifetimes. */
-export const make = <Message, E>(
-	options: CommitSourceOptions<Message, E>
-): Result.Result<Connection<Message, E>, CommitSourceError> =>
+export const make = <Message, E>(options: {
+	readonly source: CommitSource<Message, E>
+	readonly initialSnapshot: ReadonlyArray<CommitEntry<Message>>
+}): Result.Result<Connection<Message, E>, CommitSourceError> =>
 	Result.map(versions(options.initialSnapshot), function (baseline) {
 		const { source } = options
 		let previous = baseline

@@ -1,5 +1,5 @@
 import { describe, it } from "@effect/vitest"
-import { Array, Effect, Fiber, Schema } from "effect"
+import { Array, Context, Deferred, Effect, Fiber, Layer, Option, Schema } from "effect"
 import { expect, vi } from "vitest"
 import * as Command from "./command"
 import {
@@ -314,3 +314,52 @@ describe("store interrupt registry wiring", function () {
 		})
 	)
 })
+
+it.live("isolates the same upstream interrupt key across two Stores", () =>
+	Effect.gen(function* () {
+		const events: string[] = []
+		const firstStarted = yield* Deferred.make<void>()
+		const secondStarted = yield* Deferred.make<void>()
+		class Work extends Context.Service<
+			Work,
+			{ readonly name: string; readonly started: Deferred.Deferred<void> }
+		>()("InterruptIsolationWork") {}
+		const Run = Command.define("SharedInterruptKey", {
+			messages: [Message.CompletedWork],
+			interrupt: true,
+			execute: Effect.flatMap(Work, ({ name, started }) =>
+				Deferred.succeed(started, undefined).pipe(
+					Effect.andThen(Effect.never),
+					Effect.ensuring(Effect.sync(() => events.push(name)))
+				)
+			),
+		})
+		type IsolationMessage =
+			{ readonly _tag: "Cancel" } | { readonly _tag: "Outcome"; readonly tag: string } | typeof Message.Type
+		const update = (model: string, message: IsolationMessage): Update.Return<string, IsolationMessage, Work> =>
+			message._tag === "Cancel"
+				? {
+						model,
+						commands: [
+							Run.Interrupt((outcome): IsolationMessage => ({ _tag: "Outcome", tag: outcome._tag })),
+						],
+					}
+				: { model: message._tag === "Outcome" ? message.tag : "Completed" }
+		const first = yield* Store.make(
+			{ update, layer: Layer.succeed(Work, { name: "first", started: firstStarted }) },
+			{ model: "Running", commands: [Run()] }
+		)
+		const second = yield* Store.make(
+			{ update, layer: Layer.succeed(Work, { name: "second", started: secondStarted }) },
+			{ model: "Running", commands: [Run()] }
+		)
+		yield* Deferred.await(firstStarted)
+		yield* Deferred.await(secondStarted)
+		first.dispatch({ _tag: "Cancel" })
+		yield* Store.takeWhen(first, (model) => (model === "Interrupted" ? Option.some(model) : Option.none()))
+		expect(events).toEqual(["first"])
+		expect(second.getModel()).toBe("Running")
+		yield* second.dispose()
+		expect(events).toEqual(["first", "second"])
+	})
+)

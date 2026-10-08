@@ -1,0 +1,944 @@
+[
+	{
+		"entryPoint": "react-foldkit",
+		"name": "AsyncData",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit",
+		"name": "Command",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit",
+		"name": "CommitSource",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit",
+		"name": "Loader",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit",
+		"name": "Message",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit",
+		"name": "ModelSource",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit",
+		"name": "ReactFoldkit",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit",
+		"name": "Schema",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit",
+		"name": "Store",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit",
+		"name": "Struct",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit",
+		"name": "Submodel",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit",
+		"name": "Subscription",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit",
+		"name": "Update",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/react",
+		"name": "Application",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/react",
+		"name": "CommitEntry",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/react",
+		"name": "CommitSource",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/react",
+		"name": "CommitSourceError",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/react",
+		"name": "Config",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/react",
+		"name": "ErrorOptions",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/react",
+		"name": "ModelHooks",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/react",
+		"name": "ProviderProps",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/react",
+		"name": "SourceOptions",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/react",
+		"name": "defineApplication",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/asyncData",
+		"name": "AsyncData",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/asyncData",
+		"name": "AsyncDataEncoded",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/asyncData",
+		"name": "AsyncDataSchema",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/asyncData",
+		"name": "Failure",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/asyncData",
+		"name": "Idle",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/asyncData",
+		"name": "Loading",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/asyncData",
+		"name": "Refreshing",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/asyncData",
+		"name": "Schema",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/asyncData",
+		"name": "Stale",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/asyncData",
+		"name": "Success",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/asyncData",
+		"name": "all",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/asyncData",
+		"name": "fail",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/asyncData",
+		"name": "flatMap",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/asyncData",
+		"name": "fromOptionOrIdle",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/asyncData",
+		"name": "getData",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/asyncData",
+		"name": "getError",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/asyncData",
+		"name": "getOrElse",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/asyncData",
+		"name": "hasData",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/asyncData",
+		"name": "hasError",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/asyncData",
+		"name": "isAsyncData",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/asyncData",
+		"name": "isFailure",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/asyncData",
+		"name": "isIdle",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/asyncData",
+		"name": "isLoading",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/asyncData",
+		"name": "isPending",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/asyncData",
+		"name": "isRefreshing",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/asyncData",
+		"name": "isStale",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/asyncData",
+		"name": "isSuccess",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/asyncData",
+		"name": "loadIfMissing",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/asyncData",
+		"name": "map",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/asyncData",
+		"name": "mapBoth",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/asyncData",
+		"name": "mapError",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/asyncData",
+		"name": "match",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/asyncData",
+		"name": "matchData",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/asyncData",
+		"name": "matchDataSplitEmpty",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/asyncData",
+		"name": "orElse",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/asyncData",
+		"name": "revalidate",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/asyncData",
+		"name": "revalidateOrLoad",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/asyncData",
+		"name": "settle",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/asyncData",
+		"name": "succeed",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/asyncData",
+		"name": "zipWith",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/command",
+		"name": "Command",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/command",
+		"name": "CommandDefinition",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/command",
+		"name": "CommandDefinitionNoArgs",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/command",
+		"name": "CommandDefinitionTypeId",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/command",
+		"name": "CommandDefinitionWithArgs",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/command",
+		"name": "InterruptOption",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/command",
+		"name": "Interruptible",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/command",
+		"name": "define",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/command",
+		"name": "mapEffect",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/command",
+		"name": "mapMessage",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/command",
+		"name": "mapMessages",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/message",
+		"name": "MessageUnion",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/message",
+		"name": "defineMessageUnion",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/schema",
+		"name": "CallableTaggedStruct",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/schema",
+		"name": "TaggedUnion",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/schema",
+		"name": "defineTaggedUnion",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/schema",
+		"name": "taggedStruct",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/store",
+		"name": "CommitError",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/store",
+		"name": "Config",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/store",
+		"name": "Crashed",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/store",
+		"name": "Disposed",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/store",
+		"name": "Program",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/store",
+		"name": "Store",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/store",
+		"name": "StoreTypeId",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/store",
+		"name": "boot",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/store",
+		"name": "commit",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/store",
+		"name": "make",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/store",
+		"name": "takeWhen",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/struct",
+		"name": "makeModifyFieldsFor",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/struct",
+		"name": "modifyFields",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/submodel",
+		"name": "Lift",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/submodel",
+		"name": "OptionalLift",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/submodel",
+		"name": "ProviderError",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/submodel",
+		"name": "Submodel",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/submodel",
+		"name": "define",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/submodel",
+		"name": "lift",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/subscription",
+		"name": "EntryBuilder",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/subscription",
+		"name": "EntryWithoutKeepAlive",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/subscription",
+		"name": "Subscription",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/subscription",
+		"name": "Subscriptions",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/subscription",
+		"name": "make",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/update",
+		"name": "ChildFold",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/update",
+		"name": "ChildFoldWithDerivedParentOutMessage",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/update",
+		"name": "ChildFoldWithOutMessage",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/update",
+		"name": "ChildFoldWithParentOutMessage",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/update",
+		"name": "ChildStepFold",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/update",
+		"name": "ChildStepFoldWithDerivedParentOutMessage",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/update",
+		"name": "ChildStepFoldWithOutMessage",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/update",
+		"name": "ChildStepFoldWithParentOutMessage",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/update",
+		"name": "Commands",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/update",
+		"name": "Fold",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/update",
+		"name": "FoldContext",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/update",
+		"name": "FoldWithOutMessage",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/update",
+		"name": "Refreshable",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/update",
+		"name": "Return",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/update",
+		"name": "ReturnWithOutMessage",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/update",
+		"name": "Step",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/update",
+		"name": "StepWithOutMessage",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/update",
+		"name": "combine",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/update",
+		"name": "foldChild",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/update",
+		"name": "foldChildInit",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/update",
+		"name": "foldChildInits",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/update",
+		"name": "foldChildStep",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/update",
+		"name": "identity",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/update",
+		"name": "refresh",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/update",
+		"name": "withOutMessage",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/eslint",
+		"name": "default",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/eslint",
+		"name": "recommendedConfig",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/eslint",
+		"name": "strictConfig",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/commitSource",
+		"name": "CommitEntry",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/commitSource",
+		"name": "CommitSource",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/commitSource",
+		"name": "CommitSourceError",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/loader",
+		"name": "Config",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/loader",
+		"name": "Declaration",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/loader",
+		"name": "Delivery",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/loader",
+		"name": "Envelope",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/loader",
+		"name": "FromKeyedQueryOptions",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/loader",
+		"name": "FromQueryOptions",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/loader",
+		"name": "KeyedQueryLoader",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/loader",
+		"name": "LoadPayload",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/loader",
+		"name": "Loader",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/loader",
+		"name": "QueryLoader",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/loader",
+		"name": "Receipt",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/loader",
+		"name": "SettleQueryIfOptions",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/loader",
+		"name": "define",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/loader",
+		"name": "fromQuery",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/loader",
+		"name": "load",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/loader",
+		"name": "loadQuery",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/loader",
+		"name": "mapMessages",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/loader",
+		"name": "settleQueryIf",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/tanstack",
+		"name": "RegistryError",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/tanstack",
+		"name": "make",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/modelSource",
+		"name": "ModelReader",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/modelSource",
+		"name": "ModelSource",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	}
+]

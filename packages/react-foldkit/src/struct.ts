@@ -1,1 +1,1 @@
-export * from "foldkit/struct"
+export { modifyFields, makeModifyFieldsFor } from "foldkit/struct"

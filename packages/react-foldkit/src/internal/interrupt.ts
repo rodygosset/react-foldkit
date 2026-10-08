@@ -3,14 +3,6 @@ import { Interruptible } from "foldkit/command"
 
 type InterruptOutcome = Interruptible.Outcome
 
-/**
- * Runtime side of Foldkit's interruptible Command protocol.
- *
- * Foldkit intentionally keeps this registry out of its public API. Its
- * Commands locate the registry through this stable Context reference key, so
- * React Foldkit can provide a registry per Store without importing private
- * Foldkit source.
- */
 export type InterruptRegistry = Readonly<{
 	lookup: (key: string) => ReadonlyArray<Fiber.Fiber<unknown, unknown>>
 	register: (key: string, fiber: Fiber.Fiber<unknown, unknown>) => void

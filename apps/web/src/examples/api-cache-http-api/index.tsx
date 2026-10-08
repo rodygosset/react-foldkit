@@ -111,17 +111,17 @@ type Message = typeof Message.Type
 
 type UpdateReturn = Update.Return<Model, Message, BlogClient>
 
-const postsChild = postsQuery.lift<Model, Message>({
+const posts = postsQuery.lift<Model, Message>({
 	parentField: "posts",
 	toParentMessage: (message) => Message.GotPostsMessage({ message }),
 })
 
-const statsChild = statsQuery.lift<Model, Message>({
+const stats = statsQuery.lift<Model, Message>({
 	parentField: "stats",
 	toParentMessage: (message) => Message.GotStatsMessage({ message }),
 })
 
-const postDetailChild = postDetailQuery.lift<Model, Message>({
+const postDetail = postDetailQuery.lift<Model, Message>({
 	parentField: "postDetailById",
 	toParentMessage: (message) => Message.GotPostDetailMessage({ message }),
 })
@@ -131,35 +131,35 @@ function activateTab(model: Model, tab: Tab): UpdateReturn {
 
 	return Match.value(tab).pipe(
 		Match.withReturnType<UpdateReturn>(),
-		Match.when("Posts", () => postsChild.loadIfMissing(modelWithActiveTab)),
-		Match.when("Stats", () => statsChild.loadIfMissing(modelWithActiveTab)),
+		Match.when("Posts", () => posts.loadIfMissing(modelWithActiveTab)),
+		Match.when("Stats", () => stats.loadIfMissing(modelWithActiveTab)),
 		Match.exhaustive
 	)
 }
 
 const update = (model: Model, message: Message): UpdateReturn =>
 	Message.match<UpdateReturn>(message, {
-		GotPostsMessage: (value) => postsChild.fold(model, value.message),
-		GotStatsMessage: (value) => statsChild.fold(model, value.message),
-		GotPostDetailMessage: (value) => postDetailChild.fold(model, value.message),
+		GotPostsMessage: (value) => posts.fold(model, value.message),
+		GotStatsMessage: (value) => stats.fold(model, value.message),
+		GotPostDetailMessage: (value) => postDetail.fold(model, value.message),
 		ClickedTab: ({ tab }) => activateTab(model, tab),
 		ClickedPost: ({ postId }) =>
 			Update.combine(modifyFields(model, { maybeSelectedPostId: () => Option.some(postId) }), [
-				postDetailChild.retainOnly([{ params: { postId } }]),
-				postDetailChild.loadIfMissing({ params: { postId } }),
+				postDetail.retainOnly([{ params: { postId } }]),
+				postDetail.loadIfMissing({ params: { postId } }),
 			]),
 		ClickedBackToPosts: () =>
-			postDetailChild.retainOnly(modifyFields(model, { maybeSelectedPostId: () => Option.none() }), []),
-		ClickedInvalidatePosts: () => postsChild.revalidateOrLoad(model),
-		ClickedRetryPosts: () => postsChild.revalidateOrLoad(model),
-		ClickedRetryPostDetail: ({ postId }) => postDetailChild.revalidateOrLoad(model, { params: { postId } }),
-		ClickedRefreshStats: () => statsChild.revalidateOrLoad(model),
-		ClickedRetryStats: () => statsChild.revalidateOrLoad(model),
-		TickedRevalidateStats: () => statsChild.revalidate(model),
+			postDetail.retainOnly(modifyFields(model, { maybeSelectedPostId: () => Option.none() }), []),
+		ClickedInvalidatePosts: () => posts.revalidateOrLoad(model),
+		ClickedRetryPosts: () => posts.revalidateOrLoad(model),
+		ClickedRetryPostDetail: ({ postId }) => postDetail.revalidateOrLoad(model, { params: { postId } }),
+		ClickedRefreshStats: () => stats.revalidateOrLoad(model),
+		ClickedRetryStats: () => stats.revalidateOrLoad(model),
+		TickedRevalidateStats: () => stats.revalidate(model),
 	})
 
 const init = (): UpdateReturn =>
-	postsChild.revalidateOrLoad({
+	posts.revalidateOrLoad({
 		activeTab: "Posts",
 		posts: postsQuery.init(),
 		postDetailById: postDetailQuery.init("postDetail"),
