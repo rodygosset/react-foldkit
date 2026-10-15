@@ -1,8 +1,9 @@
-import { Cause, Deferred, Effect, Exit, Fiber, Layer, Option, Schema, Stream } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Function, Layer, Option, Schema, Stream } from "effect"
 import { describe, expect } from "vitest"
 import { it } from "@effect/vitest"
 import * as Store from "./store"
 import * as Subscription from "foldkit/subscription"
+import { makeLogCapture } from "../test/fixtures/logCapture"
 
 describe("store observers", function () {
 	it.live("buffers every model while subscription resources are acquiring", () =>
@@ -78,6 +79,90 @@ describe("store observers", function () {
 			} finally {
 				yield* store.dispose()
 			}
+		})
+	)
+
+	// `Program.onCrash` is application code. If it throws, React's crash listener must still run,
+	// or the Provider never shows its crash view.
+	it.effect("notifies crash listeners and logs the defect when onCrash throws", () =>
+		Effect.gen(function* () {
+			const updateDefect = new Error("update failed")
+			const onCrashDefect = new Error("onCrash failed")
+			const logs = makeLogCapture()
+			const store = yield* Store.make<number, number>(
+				{
+					update() {
+						throw updateDefect
+					},
+					onCrash() {
+						throw onCrashDefect
+					},
+				},
+				{ model: 0 }
+			).pipe(Effect.provide(logs.layer))
+			let notified = false
+			store.subscribeCrash(function () {
+				notified = true
+			})
+
+			store.dispatch(1)
+			yield* Effect.yieldNow
+
+			expect(notified).toBe(true)
+			expect(logs.causes()).toEqual([Cause.die(onCrashDefect)])
+		})
+	)
+
+	// A crash listener can unsubscribe another listener while the Store notifies them.
+	// Notification works from a copy of the listener set, so every listener registered at crash
+	// time still runs once.
+	it.effect("notifies every crash listener registered at crash time when one unsubscribes another", () =>
+		Effect.gen(function* () {
+			const store = yield* Store.make<number, number>(
+				{
+					update() {
+						throw new Error("update failed")
+					},
+					onCrash: Function.constVoid,
+				},
+				{ model: 0 }
+			)
+			const notified: Array<string> = []
+			let unsubscribeSecond = Function.constVoid
+			store.subscribeCrash(function () {
+				notified.push("first")
+				unsubscribeSecond()
+			})
+			unsubscribeSecond = store.subscribeCrash(function () {
+				notified.push("second")
+			})
+
+			store.dispatch(1)
+
+			expect(notified).toEqual(["first", "second"])
+		})
+	)
+
+	// Without `onCrash`, the log is the only place a crash shows up outside React.
+	it.effect("logs the crash Cause when the Program has no onCrash", () =>
+		Effect.gen(function* () {
+			const defect = new Error("update failed")
+			const logs = makeLogCapture()
+			const store = yield* Store.make<number, number>(
+				{
+					update() {
+						throw defect
+					},
+				},
+				{ model: 0 }
+			).pipe(Effect.provide(logs.layer))
+
+			store.dispatch(1)
+			yield* Effect.yieldNow
+
+			expect(logs.entries.map(({ message }) => message)).toEqual([
+				["[react-foldkit] Store crashed:", Cause.pretty(Cause.die(defect))],
+			])
 		})
 	)
 

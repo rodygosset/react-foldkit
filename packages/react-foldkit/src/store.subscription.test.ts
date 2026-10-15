@@ -1,5 +1,5 @@
 import { it } from "@effect/vitest"
-import { Array, Effect, Queue, Schema, Stream } from "effect"
+import { Array, Effect, Equivalence, Queue, Schema, Stream } from "effect"
 import { afterEach, describe, expect, vi } from "vitest"
 import { modifyFields } from "foldkit/struct"
 import { defineMessageUnion } from "foldkit/message"
@@ -255,6 +255,40 @@ describe("subscriptions", function () {
 			} finally {
 				yield* store.dispose()
 			}
+		})
+	)
+
+	// `keepAliveEquivalence` lets a Subscription read changing dependencies through
+	// `readDependencies` without restarting its Stream. The Store must compare with it instead of
+	// the dependency Schema, or every change restarts the Stream.
+	it.live("keeps a Stream running while keepAliveEquivalence reports equal dependencies", () =>
+		Effect.gen(function* () {
+			const startedWith = yield* Queue.unbounded<number>()
+			const GateDependencies = Schema.Struct({ enabled: Schema.Boolean, unrelated: Schema.Finite })
+			const subscriptions = Subscription.make<Model, Message>()((entry) => ({
+				gate: entry(GateDependencies.fields, {
+					modelToDependencies: ({ enabled, unrelated }) => ({ enabled, unrelated }),
+					keepAliveEquivalence: Equivalence.mapInput(
+						Equivalence.Boolean,
+						({ enabled }: typeof GateDependencies.Type) => enabled
+					),
+					dependenciesToStream: ({ enabled, unrelated }: typeof GateDependencies.Type) =>
+						enabled
+							? Stream.fromEffect(Queue.offer(startedWith, unrelated)).pipe(Stream.drain)
+							: Stream.empty,
+				}),
+			}))
+			const store = yield* Store.make(
+				{ update, subscriptions },
+				{ model: { enabled: true, unrelated: 0, emissions: [] } }
+			)
+			expect(yield* Queue.take(startedWith)).toBe(0)
+
+			yield* Store.commit(store, Message.BumpedUnrelated())
+			// Give a wrongly restarted Stream time to start and report.
+			yield* Effect.sleep("30 millis")
+
+			expect(yield* Queue.size(startedWith)).toBe(0)
 		})
 	)
 
