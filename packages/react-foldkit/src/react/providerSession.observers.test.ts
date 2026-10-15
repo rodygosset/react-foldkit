@@ -1,8 +1,9 @@
 import { it } from "@effect/vitest"
-import { Cause, Deferred, Effect, Exit, Fiber, Layer, Logger, Option, Result } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Function, Layer, Logger, Option, Result } from "effect"
 import { TestClock } from "effect/testing"
 import { expect } from "vitest"
 import { entry, fakeSource, Message } from "../../test/fixtures/commitSource"
+import { makeLogCapture } from "../../test/fixtures/logCapture"
 import { CommitSourceError, DuplicateKey } from "../commitSource"
 import * as Connection from "../commitSource/connection"
 import { CommitError, Inactive } from "../store"
@@ -232,9 +233,7 @@ it.effect("reports asynchronous cleanup when stop interrupts pending activation"
 		expect(stopping.pollUnsafe()).toBeUndefined()
 		yield* Deferred.succeed(observerGate, undefined)
 		expect(yield* Fiber.await(stopping)).toEqual(Exit.void)
-		expect(f.store.commit(Message.Edited())).toEqual(
-			Result.fail(new CommitError({ reason: new Inactive() }))
-		)
+		expect(f.store.commit(Message.Edited())).toEqual(Result.fail(new CommitError({ reason: new Inactive() })))
 	})
 )
 
@@ -498,5 +497,130 @@ it.effect("preserves the start logger for live and shutdown observers", () =>
 		])
 		expect(Option.isSome(session.getSnapshot().cause)).toBe(true)
 		expect(f.source.listeners).toBe(0)
+	})
+)
+
+// A terminal crash report skips the transient report limit so it always runs. It still needs a
+// deadline, or a stalled `crash.report` keeps its fiber alive until the Provider unmounts.
+it.effect("interrupts a stalled terminal crash report after its deadline", () =>
+	Effect.gen(function* () {
+		const f = fixture()
+		const interrupted = yield* Deferred.make<void>()
+		const store = ReactStore.make<number, Message>(
+			{
+				update() {
+					throw new Error("update failed")
+				},
+				onCrash: Function.constVoid,
+			},
+			{ model: 0 }
+		)
+		const session = Session.make(Exit.succeed({ ...f.bootstrap, store }), () =>
+			Effect.never.pipe(Effect.onInterrupt(() => Deferred.succeed(interrupted, undefined)))
+		)
+		yield* session.start
+		store.dispatch(Message.Edited())
+
+		yield* TestClock.adjust("2 seconds")
+
+		expect(yield* Deferred.isDone(interrupted)).toBe(true)
+		yield* session.stop
+	})
+)
+
+// `crash.report` failures never reach the crash view, so the log is the only place they show up.
+it.effect("logs a failing report", () =>
+	Effect.gen(function* () {
+		const f = fixture()
+		const reportDefect = new Error("report failed")
+		const logs = makeLogCapture()
+		const session = Session.make(Exit.succeed(f.bootstrap), () => Effect.die(reportDefect))
+		yield* session.start.pipe(Effect.provide(logs.layer))
+
+		f.source.publish([entry("a", 1), entry("a", 2)])
+		yield* Effect.yieldNow
+
+		expect(logs.causes()).toEqual([Cause.die(reportDefect)])
+		yield* session.stop
+	})
+)
+
+// Cleanup failures during shutdown go to the crash view and to `crash.report`. The log keeps a
+// record when the report itself is missing or fails.
+it.effect("logs a cleanup failure when the session stops", () =>
+	Effect.gen(function* () {
+		const f = fixture()
+		const cleanupDefect = new Error("unsubscribe failed")
+		const logs = makeLogCapture()
+		f.source.onUnsubscribe(function () {
+			throw cleanupDefect
+		})
+		const session = Session.make(Exit.succeed(f.bootstrap), () => Effect.void)
+		yield* session.start.pipe(Effect.provide(logs.layer))
+
+		yield* session.stop
+
+		expect(logs.causes().map(Cause.squash)).toEqual([cleanupDefect])
+	})
+)
+
+// `stop` can run again while the first shutdown is still releasing resources. The second call
+// must wait for that shutdown to finish, so no caller sees a stopped session that still holds
+// resources.
+it.effect("makes a concurrent stop wait for the running shutdown", () =>
+	Effect.gen(function* () {
+		const f = fixture()
+		const releasing = yield* Deferred.make<void>()
+		const finishRelease = yield* Deferred.make<void>()
+		const bootstrap: Session.Bootstrap<number, Message> = {
+			...f.bootstrap,
+			store: {
+				...f.store,
+				activate: f.store.activate.pipe(
+					Effect.tap(() =>
+						Effect.addFinalizer(() =>
+							Deferred.succeed(releasing, undefined).pipe(Effect.andThen(Deferred.await(finishRelease)))
+						)
+					)
+				),
+			},
+		}
+		const session = Session.make(Exit.succeed(bootstrap), () => Effect.void)
+		yield* session.start
+
+		const first = yield* Effect.forkChild(session.stop)
+		yield* Deferred.await(releasing)
+		const second = yield* Effect.forkChild(session.stop, { startImmediately: true })
+		yield* Effect.yieldNow
+
+		expect(second.pollUnsafe()).toBeUndefined()
+		yield* Deferred.succeed(finishRelease, undefined)
+		expect(yield* Fiber.await(first)).toEqual(Exit.void)
+		expect(yield* Fiber.await(second)).toEqual(Exit.void)
+	})
+)
+
+// When setup fails, the resources it acquired close with that failure. Finalizers that
+// distinguish success from failure, such as a transaction that rolls back, depend on it.
+it.effect("gives setup finalizers the setup failure", () =>
+	Effect.gen(function* () {
+		const f = fixture()
+		const released = yield* Deferred.make<Exit.Exit<unknown, unknown>>()
+		const bootstrap: Session.Bootstrap<number, Message> = {
+			...f.bootstrap,
+			store: {
+				...f.store,
+				activate: f.store.activate.pipe(
+					Effect.tap(() => Effect.addFinalizer((exit) => Deferred.succeed(released, exit)))
+				),
+			},
+		}
+		f.source.onSubscribe(() => f.source.publish([entry("a", 1), entry("a", 2)]))
+		const session = Session.make(Exit.succeed(bootstrap), () => Effect.void)
+
+		yield* session.start
+
+		expect(yield* Deferred.await(released)).toEqual(Exit.failCause(duplicate("a")))
+		yield* session.stop
 	})
 )

@@ -1,5 +1,19 @@
 import { describe, it } from "@effect/vitest"
-import { Array, Cause, Context, Deferred, Effect, Exit, Fiber, Layer, Option, Result, Schema, Scope } from "effect"
+import {
+	Array,
+	Cause,
+	Context,
+	Deferred,
+	Effect,
+	Exit,
+	Fiber,
+	Function,
+	Layer,
+	Option,
+	Result,
+	Schema,
+	Scope,
+} from "effect"
 import { afterEach, expect, vi } from "vitest"
 import { modifyFields } from "foldkit/struct"
 import * as Command from "foldkit/command"
@@ -457,6 +471,30 @@ describe("resources", function () {
 		})
 	)
 
+	// `Config.resources` promises a lazy build. React creates a Store for every Provider, so an
+	// eager build would acquire services for Providers that never run a Command.
+	it.effect("builds the Layer only when a Command first needs it", () =>
+		Effect.gen(function* () {
+			const built = yield* Deferred.make<void>()
+			const live = Layer.effect(
+				ResourceService,
+				Deferred.succeed(built, undefined).pipe(Effect.as<ResourceShape>({ value: "built" }))
+			)
+			const store = yield* Store.make({ update: resourceUpdate, resources: live }, { model: { label: "start" } })
+
+			yield* Store.commit(store, ResourceMessage.SucceededReadValue({ value: "cached" }))
+			yield* Effect.yieldNow
+			expect(yield* Deferred.isDone(built)).toBe(false)
+
+			yield* Store.commit(store, ResourceMessage.ClickedReadValue())
+			yield* Deferred.await(built)
+			const label = yield* Store.takeWhen(store, ({ label }) =>
+				label === "reading built" ? Option.some(label) : Option.none()
+			)
+			expect(label).toBe("reading built")
+		})
+	)
+
 	it.live("reports the crash once when the Layer fails to build for an init Command", () =>
 		Effect.gen(function* () {
 			const crashes: Array<Cause.Cause<unknown>> = []
@@ -783,6 +821,29 @@ describe("command message mappers", function () {
 			yield* store.dispose()
 			const error = yield* Effect.flip(Fiber.join(fiber))
 			expect(error).toBeInstanceOf(Store.Disposed)
+		})
+	)
+
+	// A crashed Store is also disposed once its Scope closes. The waiter needs the crash Cause to
+	// explain the failure, so `Crashed` wins over `Disposed`, and both win over a matching Model.
+	it.effect("takeWhen fails with Crashed when a crashed Store has been disposed", () =>
+		Effect.gen(function* () {
+			const defect = new Error("update failed")
+			const store = yield* Store.make<number, number>(
+				{
+					update() {
+						throw defect
+					},
+					onCrash: Function.constVoid,
+				},
+				{ model: 0 }
+			)
+			store.dispatch(1)
+			yield* store.dispose()
+
+			const error = yield* Effect.flip(Store.takeWhen(store, Option.some))
+
+			expect(error).toEqual(new Store.Crashed({ cause: Cause.die(defect) }))
 		})
 	)
 })

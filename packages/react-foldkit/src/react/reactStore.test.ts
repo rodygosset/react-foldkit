@@ -5,9 +5,11 @@ import {
 	Effect,
 	Exit,
 	Fiber,
+	Function,
 	Latch,
 	Layer,
 	Option,
+	Queue,
 	Result,
 	Scheduler,
 	Schema,
@@ -117,6 +119,27 @@ describe("React store lifecycle", function () {
 			expect(store.getModel()).toHaveLength(1000)
 			expect(store.getModel()[0]).toBe(2)
 			yield* Scope.close(scope, Exit.void)
+		})
+	)
+
+	// An inactive Provider that keeps receiving Messages drops them one at a time. A warning per
+	// dropped Message would flood the console, so the Store warns on the first drop only.
+	it.live("warns once when inactive dispatches overflow", () =>
+		Effect.gen(function* () {
+			const consoleLog = vi.spyOn(console, "log").mockImplementation(Function.constVoid)
+			yield* Effect.addFinalizer(() => Effect.sync(() => consoleLog.mockRestore()))
+			const store = ReactStore.make<number, number>(
+				{ update: (_model, message) => ({ model: message }) },
+				{ model: 0 }
+			)
+
+			for (let message = 0; message < 1005; message++) store.dispatch(message)
+			yield* Effect.yieldNow
+
+			const warnings = consoleLog.mock.calls.filter((args) =>
+				args.some((arg) => String(arg).includes("Dropping Messages dispatched while the Provider is inactive"))
+			)
+			expect(warnings).toHaveLength(1)
 		})
 	)
 
@@ -697,6 +720,111 @@ describe("retainInactive", function () {
 			yield* Effect.sleep("80 millis")
 			expect(interrupted).toBe(true)
 			expect(store.commit(1)).toEqual(Result.fail(new CommitError({ reason: new Inactive() })))
+		})
+	)
+
+	// Deactivation starts a timer that disposes the Store when the window ends. Reactivating
+	// within the window must cancel that timer. Otherwise the timer disposes a Store that a
+	// mounted Provider is using.
+	it.live("keeps a Store reactivated within the window running after the window ends", () =>
+		Effect.gen(function* () {
+			const interrupted = yield* Deferred.make<void>()
+			const store = ReactStore.make<number, number>(
+				{ update: (model, message) => ({ model: model + message }), retainInactive: "20 millis" },
+				{
+					model: 0,
+					commands: [
+						{
+							name: "Forever",
+							effect: Effect.never.pipe(
+								Effect.onInterrupt(() => Deferred.succeed(interrupted, undefined))
+							),
+						},
+					],
+				}
+			)
+			const first = yield* Scope.make()
+			yield* store.activate.pipe(Scope.provide(first))
+			yield* Scope.close(first, Exit.void)
+			const second = yield* Scope.make()
+			yield* store.activate.pipe(Scope.provide(second))
+
+			yield* Effect.sleep("80 millis")
+
+			expect(yield* Deferred.isDone(interrupted)).toBe(false)
+			expect(store.commit(1)).toEqual(Result.void)
+			yield* Scope.close(second, Exit.void)
+		})
+	)
+
+	// A retained Store can crash after its last lease ends, such as when a Command fails during
+	// the window. The next activation must start a healthy replacement instead of resuming the
+	// crashed Store.
+	it.live("replaces a retained Store that crashed during the window", () =>
+		Effect.gen(function* () {
+			const defect = new Error("late Command failed")
+			const fail = yield* Deferred.make<void>()
+			const reactivations = yield* Queue.unbounded<number>()
+			const store = ReactStore.make<number, number>(
+				{
+					update: (model, message) => ({ model: model + message }),
+					retainInactive: "1 minute",
+					onCrash: Function.constVoid,
+					onReactivate({ model }) {
+						Queue.offerUnsafe(reactivations, model)
+						return 0
+					},
+				},
+				{
+					model: 0,
+					commands: [
+						{ name: "FailLater", effect: Deferred.await(fail).pipe(Effect.andThen(Effect.die(defect))) },
+					],
+				}
+			)
+			const first = yield* Scope.make()
+			yield* store.activate.pipe(Scope.provide(first))
+			yield* Scope.close(first, Exit.void)
+			yield* Deferred.succeed(fail, undefined)
+			yield* Effect.yieldNow
+			expect(Option.map(store.getCrash(), Cause.squash)).toEqual(Option.some(defect))
+
+			const second = yield* Scope.make()
+			yield* store.activate.pipe(Scope.provide(second))
+
+			expect(store.getCrash()).toEqual(Option.none())
+			expect(yield* Queue.take(reactivations)).toBe(0)
+			expect(store.commit(1)).toEqual(Result.void)
+			yield* Scope.close(second, Exit.void)
+		})
+	)
+
+	// Without a window, resource finalizers receive the Exit of the last lease. A window delays
+	// the release but must not replace that Exit.
+	it.live("gives resource finalizers the last lease's Exit when the window ends", () =>
+		Effect.gen(function* () {
+			const acquired = yield* Deferred.make<void>()
+			const released = yield* Deferred.make<Exit.Exit<unknown, unknown>>()
+			const store = ReactStore.make<number, number>(
+				{
+					update: (_model, message) => ({ model: message }),
+					retainInactive: "20 millis",
+					resources: Layer.effectDiscard(
+						Effect.acquireRelease(Deferred.succeed(acquired, undefined), (_, exit) =>
+							Deferred.succeed(released, exit)
+						)
+					),
+				},
+				{ model: 0, commands: [{ name: "BuildResources", effect: Effect.succeed(1) }] }
+			)
+			const scope = yield* Scope.make()
+			yield* store.activate.pipe(Scope.provide(scope))
+			yield* Deferred.await(acquired)
+			const leaseExit = Exit.fail("unmounted with an error")
+
+			yield* Scope.close(scope, leaseExit)
+
+			expect(yield* Deferred.await(released)).toEqual(leaseExit)
 		})
 	)
 })

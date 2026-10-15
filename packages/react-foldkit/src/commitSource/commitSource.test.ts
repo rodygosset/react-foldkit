@@ -174,6 +174,56 @@ describe("commit source reconciliation and failures", function () {
 		again()
 	})
 
+	// The reentrancy contract covers every notification during reconciliation, including one
+	// that the source sends while the connection reads its snapshot.
+	it("reports reentrancy when the source notifies while its snapshot is read", function () {
+		const source = fakeSource<Message>()
+		let notifyOnRead = false
+		const connection = Result.getOrThrow(
+			CommitSource.make({
+				source: {
+					...source.source,
+					getSnapshot() {
+						if (notifyOnRead) {
+							notifyOnRead = false
+							source.notify()
+						}
+						return source.source.getSnapshot()
+					},
+				},
+				initialSnapshot: [],
+			})
+		)
+		const onReconcile = vi.fn<ReconcileObserver>()
+		const { stop } = connect(connection, succeed, onReconcile)
+		try {
+			notifyOnRead = true
+			source.notify()
+			expect(onReconcile).toHaveBeenCalledExactlyOnceWith(
+				Exit.fail(new CommitSource.CommitSourceError({ reason: new CommitSource.ReentrantNotification() }))
+			)
+		} finally {
+			stop()
+		}
+	})
+
+	// A commit can unmount the Provider, which releases the connection mid-snapshot. Entries after
+	// that point must not reach a Store the Provider no longer owns.
+	it("stops delivering a snapshot once a commit releases the connection", function () {
+		const source = fakeSource<Message>()
+		const connection = Result.getOrThrow(CommitSource.make({ source: source.source, initialSnapshot: [] }))
+		const committed: Array<Message> = []
+		const { stop } = connect(connection, function (message) {
+			committed.push(message)
+			stop()
+			return Result.void
+		})
+
+		source.publish([entry("a", 1), entry("b", 1)])
+
+		expect(committed).toEqual([Message.Received({ value: "a" })])
+	})
+
 	it("reports a failing reporter once, never feeding its own failure back to it", function () {
 		const source = fakeSource<Message>()
 		const connection = Result.getOrThrow(CommitSource.make({ source: source.source, initialSnapshot: [] }))
@@ -330,7 +380,11 @@ describe("commit source reconciliation and failures", function () {
 			source.notify()
 			expect(onReconcile.mock.calls).toEqual([
 				[Exit.void],
-				[Exit.fail(new CommitSource.CommitSourceError({ reason: new CommitSource.DuplicateKey({ key: "a" }) }))],
+				[
+					Exit.fail(
+						new CommitSource.CommitSourceError({ reason: new CommitSource.DuplicateKey({ key: "a" }) })
+					),
+				],
 				[Exit.void],
 				[Exit.void],
 			])
