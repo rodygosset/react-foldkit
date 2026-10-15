@@ -540,6 +540,37 @@ describe("resources", function () {
 })
 
 describe("dispose", function () {
+	// A crash starts closing the Store's resources before the next dispose can. Finalizers must
+	// receive the crash Exit, not the success Exit that dispose passes.
+	it.effect("gives finalizers the crash Exit when dispose follows the crash in the same tick", () =>
+		Effect.gen(function* () {
+			const defect = new Error("update failed")
+			const released = yield* Deferred.make<Exit.Exit<unknown, unknown>>()
+			const store = yield* Store.make<number, number>(
+				{
+					update(_model, message) {
+						if (message === 2) throw defect
+						return { model: message }
+					},
+					onCrash: Function.constVoid,
+					resources: Layer.effectDiscard(
+						Effect.acquireRelease(Effect.void, (_, exit) => Deferred.succeed(released, exit))
+					),
+				},
+				{ model: 0, commands: [{ name: "BuildResources", effect: Effect.succeed(1) }] }
+			)
+			yield* Store.takeWhen(store, (model) => (model === 1 ? Option.some(model) : Option.none()))
+			// takeWhen resumes inside the delivery that matched. Leave it so the next commit can run.
+			yield* Effect.yieldNow
+
+			// commit, unlike dispatch, processes the Message now even when the drain budget is spent.
+			expect(Result.isFailure(store.commit(2))).toBe(true)
+			yield* store.dispose()
+
+			expect(yield* Deferred.await(released)).toEqual(Exit.die(defect))
+		})
+	)
+
 	it.effect("shares pending disposal and its cleanup defect across callers", () =>
 		Effect.gen(function* () {
 			const started = Deferred.makeUnsafe<void>()
