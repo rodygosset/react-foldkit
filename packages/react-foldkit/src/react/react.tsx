@@ -404,7 +404,7 @@ export function defineApplication<ModelSchema extends ModelCodec, Message, R = n
 	type Model = Type<ModelSchema>
 	const StoreContext = React.createContext<ReactStore.ReactStore<Model, Message> | null>(null)
 	const validateInit = config.validateInit ?? isDevelopment
-	const checkModel = Schema.decodeUnknownExit(Schema.toType(config.Model) as Schema.Codec<unknown, unknown>)
+	const checkModel = Schema.decodeUnknownExit(Schema.toType(config.Model))
 
 	function ProviderInstance<E, FactoryError>({
 		restart,
