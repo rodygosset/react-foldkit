@@ -1,6 +1,6 @@
 import { Option, Schema } from "effect"
 import React from "react"
-import { modelHooks, type ModelHooks } from "../react/react"
+import { makeSourceContext, modelHooks, type ModelHooks } from "../react/react"
 import type { ModelSource } from "../modelSource"
 import type { Lift } from "./lift"
 
@@ -100,7 +100,7 @@ export class ProviderError extends Schema.Error<ProviderError>("react-foldkit/Su
  * @since 0.1.0
  */
 export function define<Model, Message>(): Submodel<Model, Message> {
-	const Context = React.createContext<Option.Option<ModelSource<Model, Message>>>(Option.none())
+	const Context = makeSourceContext<Model, Message>()
 
 	function SourceProvider({
 		source,
@@ -138,7 +138,10 @@ export function define<Model, Message>(): Submodel<Model, Message> {
 		props: ProviderProps<Model, Message, ParentModel, ParentMessage>
 	) {
 		return props.source === undefined ? (
-			<LiftedProvider from={props.from} lift={props.lift}>
+			<LiftedProvider
+				from={props.from}
+				lift={props.lift}
+			>
 				{props.children}
 			</LiftedProvider>
 		) : (
@@ -146,12 +149,5 @@ export function define<Model, Message>(): Submodel<Model, Message> {
 		)
 	}
 
-	function useSource(): ModelSource<Model, Message> {
-		return Option.getOrThrowWith(React.useContext(Context), () => new ProviderError({}))
-	}
-
-	function useOptionalSource() {
-		return React.useContext(Context)
-	}
-	return { Provider, ...modelHooks(useSource, useOptionalSource) }
+	return { Provider, ...modelHooks(Context, () => new ProviderError({})) }
 }

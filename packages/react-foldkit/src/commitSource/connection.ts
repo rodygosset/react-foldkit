@@ -1,4 +1,4 @@
-import { Cause, Effect, Exit, HashMap, Option, Result, type Scope } from "effect"
+import { Effect, Exit, HashMap, MutableRef, Option, Result, type Scope } from "effect"
 import type { CommitError } from "../store"
 
 import { CommitSourceError, DuplicateKey, ReentrantNotification, type CommitEntry, type CommitSource } from "./public"
@@ -30,7 +30,8 @@ const reentrant: Result.Result<void, CommitSourceError> = Result.fail(
 	new CommitSourceError({ reason: new ReentrantNotification() })
 )
 
-type Phase = "Subscribing" | "Notifying" | "Reentered" | "Connected" | "Released"
+/** Whether a reconciliation is running, and whether the source notified during it. */
+type Delivery = "Idle" | "Delivering" | "Reentered"
 
 export const make = <Message, E>(options: {
 	readonly source: CommitSource<Message, E>
@@ -38,77 +39,65 @@ export const make = <Message, E>(options: {
 }): Result.Result<Connection<Message, E>, CommitSourceError> =>
 	Result.map(versions(options.initialSnapshot), function (baseline) {
 		const { source } = options
-		let previous = baseline
+		// Delivered versions outlive each connection, so a reconnect does not deliver them again.
+		let delivered = baseline
 
 		const connect: Connection<Message, E>["connect"] = (commit, onReconcile) =>
 			Effect.gen(function* () {
-				// Held in a cell so reads inside the reconcile loops stay widened: a nested
-				// publication writes it from outside the current control flow.
-				const cell: { phase: Phase } = { phase: "Subscribing" }
-				const phase = (): Phase => cell.phase
-				let setup: Exit.Exit<void, ConnectionError<E>> = Exit.void
+				// MutableRef reads stay fresh after a commit runs a nested notification.
+				const delivery = MutableRef.make<Delivery>("Idle")
+				const released = MutableRef.make(false)
+				// Collects notifications that arrive before subscribe returns. They fail setup instead.
+				let setupExits: Array<Exit.Exit<void, ConnectionError<E>>> | undefined = []
 
 				const deliver = (): Result.Result<void, ConnectionError<E>> =>
 					Result.gen(function* () {
 						const snapshot = yield* source.getSnapshot()
-						if (phase() === "Reentered") return yield* reentrant
+						if (MutableRef.get(delivery) === "Reentered") return yield* reentrant
 						const next = yield* versions(snapshot)
-						previous = HashMap.filter(previous, (_, key) => HashMap.has(next, key))
+						delivered = HashMap.filter(delivered, (_, key) => HashMap.has(next, key))
 						for (const entry of snapshot) {
-							if (phase() === "Released") return undefined
-							const version = HashMap.get(previous, entry.key)
+							if (MutableRef.get(released)) return undefined
+							const version = HashMap.get(delivered, entry.key)
 							if (Option.isSome(version) && Object.is(version.value, entry.version)) continue
 							yield* commit(entry.message)
 							// A delivered Message stays delivered even if it reentered the source.
-							previous = HashMap.set(previous, entry.key, entry.version)
-							if (phase() === "Reentered") return yield* reentrant
+							delivered = HashMap.set(delivered, entry.key, entry.version)
+							if (MutableRef.get(delivery) === "Reentered") return yield* reentrant
 						}
 						return undefined
 					})
 
-				function reconcile(): Result.Result<void, ConnectionError<E>> {
-					if (phase() === "Notifying" || phase() === "Reentered") return reentrant
-					const resume = phase()
-					cell.phase = "Notifying"
-					try {
-						return deliver()
-					} finally {
-						if (phase() === "Notifying" || phase() === "Reentered") cell.phase = resume
-					}
-				}
+				const reconcile = Effect.suspend(() =>
+					MutableRef.get(delivery) === "Idle"
+						? Effect.acquireUseRelease(
+								Effect.sync(() => MutableRef.set(delivery, "Delivering")),
+								() => Effect.suspend(() => Effect.fromResult(deliver())),
+								() => Effect.sync(() => MutableRef.set(delivery, "Idle"))
+							)
+						: Effect.fromResult(reentrant)
+				)
 
 				yield* Effect.acquireRelease(
 					Effect.sync(() =>
 						source.subscribe(function () {
-							const current = phase()
-							if (current === "Notifying" || current === "Reentered") {
-								cell.phase = "Reentered"
-								return
-							}
-							if (current === "Released") return
-							const exit = Effect.runSyncExit(Effect.suspend(() => Effect.fromResult(reconcile())))
-							if (current === "Subscribing") {
-								// Subscribe must return its cleanup handle before a notification can fail setup.
-								if (Exit.isFailure(exit)) {
-									setup = Exit.isFailure(setup)
-										? Exit.failCause(Cause.combine(setup.cause, exit.cause))
-										: exit
-								}
-								return
-							}
-							onReconcile(exit)
+							if (MutableRef.get(delivery) !== "Idle") return void MutableRef.set(delivery, "Reentered")
+							if (MutableRef.get(released)) return
+							const exit = Effect.runSyncExit(reconcile)
+							if (setupExits === undefined) onReconcile(exit)
+							else setupExits.push(exit)
 						})
 					),
 					(unsubscribe) =>
 						Effect.sync(function () {
-							cell.phase = "Released"
+							MutableRef.set(released, true)
 							unsubscribe()
 						})
 				)
-				yield* setup
-				cell.phase = "Connected"
+				yield* Exit.asVoidAll(setupExits)
+				setupExits = undefined
 				// Catch up on anything published after subscribe returned its handle.
-				yield* Effect.suspend(() => Effect.fromResult(reconcile()))
+				yield* reconcile
 			})
 
 		return { source, connect }

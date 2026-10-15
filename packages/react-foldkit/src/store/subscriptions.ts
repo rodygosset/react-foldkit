@@ -1,66 +1,46 @@
-import { Cause, Context, Effect, Option, PubSub, Record, Ref, Schema, Scope, Stream } from "effect"
+import { type Cause, Effect, Option, PubSub, Record, Schema, Scope, Stream } from "effect"
 import type * as Subscription from "foldkit/subscription"
 
-type SubscriptionRuntime<Model, Message, R> = {
-	readonly bootModel: Model
+/** What one activation gives its Subscription fibers. */
+interface SubscriptionHost<Model, Message, R> {
+	/** The Model when the activation starts. Each Subscription derives its first dependencies from it. */
+	readonly initialModel: Model
 	readonly modelPubSub: PubSub.PubSub<Model>
 	readonly fiberScope: Scope.Scope
-	readonly runtimeContext: Context.Context<never>
-	readonly provideAllResources: <A, E>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E>
-	readonly enqueueMessage: (message: Message) => void
-	readonly crashWith: (cause: Cause.Cause<unknown>, triggeringMessage: Option.Option<Message>) => void
+	readonly provideServices: <A, E>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E>
+	readonly deliver: (message: Message) => void
+	readonly crash: (cause: Cause.Cause<unknown>, message: Option.Option<Message>) => void
 }
 
-export function forkSubscriptionFibers<Model, Message, R>(
+/**
+ * Forks one fiber per Subscription into the host's fiber Scope. The fibers inherit the calling
+ * fiber's Context, so run this with the activation's Context.
+ */
+export const forkSubscriptionFibers = <Model, Message, R>(
 	subscriptions: Subscription.Subscriptions<Model, Message, R> | undefined,
-	runtime: SubscriptionRuntime<Model, Message, R>
-): void {
-	if (subscriptions === undefined) return
-
-	const { bootModel, modelPubSub, fiberScope, runtimeContext, provideAllResources, enqueueMessage, crashWith } =
-		runtime
-
-	for (const [, entry] of Record.toEntries(subscriptions)) {
-		const { dependenciesSchema, modelToDependencies, keepAliveEquivalence, dependenciesToStream } = entry
-
-		const modelSubscription = Effect.runSyncWith(runtimeContext)(
-			PubSub.subscribe(modelPubSub).pipe(Effect.provideService(Scope.Scope, fiberScope))
-		)
-		const fiber = Effect.gen(function* () {
-			const equivalence = keepAliveEquivalence ?? Schema.toEquivalence(dependenciesSchema)
-			const initDependencies = modelToDependencies(bootModel)
-			const latestDependenciesRef = yield* Ref.make(initDependencies)
-
-			const modelChangesStream = Stream.fromSubscription(modelSubscription).pipe(
-				Stream.mapEffect((nextModel) =>
-					Effect.gen(function* () {
-						const dependencies = modelToDependencies(nextModel)
-						yield* Ref.set(latestDependenciesRef, dependencies)
-						return dependencies
-					})
-				)
-			)
-
-			yield* Stream.concat(Stream.make(initDependencies), modelChangesStream).pipe(
-				Stream.changesWith(equivalence),
-				Stream.switchMap((dependencies) =>
-					dependenciesToStream(dependencies, () => Ref.getUnsafe(latestDependenciesRef))
-				),
-				Stream.runForEach((message) =>
-					Effect.sync(function () {
-						enqueueMessage(message)
-					})
-				),
-				provideAllResources
-			)
-		}).pipe(
-			Effect.catchCause((cause) =>
-				Effect.sync(function () {
-					crashWith(cause, Option.none())
-				})
-			)
-		)
-
-		Effect.runForkWith(runtimeContext)(Effect.forkIn(fiber, fiberScope))
-	}
-}
+	host: SubscriptionHost<Model, Message, R>
+): Effect.Effect<void> =>
+	Effect.forEach(
+		subscriptions === undefined ? [] : Record.values(subscriptions),
+		({ dependenciesSchema, modelToDependencies, keepAliveEquivalence, dependenciesToStream }) =>
+			Effect.gen(function* () {
+				// Subscribe now, so the fiber sees every Model published after this activation starts.
+				const modelChanges = yield* PubSub.subscribe(host.modelPubSub).pipe(Scope.provide(host.fiberScope))
+				const fiber = Effect.suspend(function () {
+					let latestDependencies = modelToDependencies(host.initialModel)
+					// Record dependencies before changesWith, so readDependencies sees every Model.
+					return Stream.fromSubscription(modelChanges).pipe(
+						Stream.map((model) => (latestDependencies = modelToDependencies(model))),
+						Stream.prepend([latestDependencies]),
+						Stream.changesWith(keepAliveEquivalence ?? Schema.toEquivalence(dependenciesSchema)),
+						Stream.switchMap((dependencies) =>
+							dependenciesToStream(dependencies, () => latestDependencies)
+						),
+						Stream.runForEach((message) => Effect.sync(() => host.deliver(message))),
+						host.provideServices
+					)
+				}).pipe(Effect.catchCause((cause) => Effect.sync(() => host.crash(cause, Option.none()))))
+				yield* Effect.forkIn(fiber, host.fiberScope)
+			}),
+		{ discard: true }
+	)

@@ -60,6 +60,28 @@ describe("getRunningCommands", function () {
 		})
 	)
 
+	// React reads this list in the same tick that it deactivates a Provider. A Command forked by a
+	// Message in that tick has not started yet, but it must still count as interrupted.
+	it.live("lists a Command from the moment it is forked", () =>
+		Effect.gen(function* () {
+			const started = yield* Queue.unbounded<string>()
+			const release = yield* Deferred.make<void>()
+			const fetch = awaitingCommand("Fetch", started, release)
+			const store = yield* Store.make(
+				{
+					update: (model: number, message: Message) =>
+						message._tag === "RequestedFetch" ? { model, commands: [fetch] } : { model },
+				},
+				{ model: 0 }
+			)
+
+			yield* Store.commit(store, Message.RequestedFetch())
+
+			expect(yield* Queue.size(started)).toBe(0)
+			expect(store.getRunningCommands()).toEqual([fetch])
+		})
+	)
+
 	it.live("lists each start of the same Command value separately", () =>
 		Effect.gen(function* () {
 			const started = yield* Queue.unbounded<string>()

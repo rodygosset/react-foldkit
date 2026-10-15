@@ -607,6 +607,38 @@ it.live("passes Commands interrupted by deactivation to onReactivate, excluding 
 	})
 )
 
+// A Message dispatched just before React deactivates the Provider forks its Command in the same
+// tick. That Command never started, so reactivation must still hand it to onReactivate.
+it.live("passes a Command forked in the deactivating tick to onReactivate", () =>
+	Effect.gen(function* () {
+		const interrupted = yield* Queue.unbounded<ReadonlyArray<string>>()
+		const save: Command.Command<number> = { name: "Save", effect: Effect.never }
+		const store = ReactStore.make<number, number>(
+			{
+				update: (model, message) => ({ model: model + message, commands: message === 1 ? [save] : [] }),
+				onReactivate(context) {
+					Queue.offerUnsafe(
+						interrupted,
+						context.interrupted.map((command) => command.name)
+					)
+					return 0
+				},
+			},
+			{ model: 0 }
+		)
+		const first = yield* Scope.make()
+		yield* store.activate.pipe(Scope.provide(first))
+
+		store.dispatch(1)
+		yield* Scope.close(first, Exit.void)
+		const second = yield* Scope.make()
+		yield* store.activate.pipe(Scope.provide(second))
+
+		expect(yield* Queue.take(interrupted)).toEqual(["Save"])
+		yield* Scope.close(second, Exit.void)
+	})
+)
+
 it.live("restarts interrupted Commands chosen by restartInterrupted", () =>
 	Effect.gen(function* () {
 		const starts: Array<string> = []

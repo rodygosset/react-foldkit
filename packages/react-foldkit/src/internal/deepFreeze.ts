@@ -1,4 +1,4 @@
-import { Option, Predicate, Record } from "effect"
+import { Option, Predicate, Record, Result } from "effect"
 
 // Adapted from Foldkit's runtime/deepFreeze.ts, which Foldkit does not export.
 
@@ -8,13 +8,10 @@ declare const process: { readonly env: { readonly NODE_ENV?: string } }
  * True outside production builds. Bundlers replace `process.env.NODE_ENV`; without a
  * replacement in a browser the lookup throws and the build counts as production.
  */
-export const isDevelopment: boolean = (function () {
-	try {
-		return process.env.NODE_ENV !== "production"
-	} catch {
-		return false
-	}
-})()
+export const isDevelopment: boolean = Result.getOrElse(
+	Result.try(() => process.env.NODE_ENV !== "production"),
+	() => false
+)
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
 	if (!Predicate.isObject(value)) return false
