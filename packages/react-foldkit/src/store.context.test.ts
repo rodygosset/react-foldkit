@@ -3,7 +3,7 @@ import { Deferred, Effect, Logger, Option, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { expect } from "vitest"
 import * as Store from "./store"
-import * as Subscription from "./subscription"
+import * as Subscription from "foldkit/subscription"
 
 it.effect("preserves the acquisition logger and clock in commands and subscriptions", () =>
 	Effect.scoped(

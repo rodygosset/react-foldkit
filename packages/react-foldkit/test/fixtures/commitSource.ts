@@ -1,5 +1,5 @@
 import { Result, Schema } from "effect"
-import { defineMessageUnion } from "../../src/message"
+import { defineMessageUnion } from "foldkit/message"
 import type { CommitEntry, CommitSource } from "../../src/react"
 
 export const Message = defineMessageUnion({ Received: { value: Schema.String }, Edited: {} })

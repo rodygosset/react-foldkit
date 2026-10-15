@@ -15,13 +15,13 @@ import {
 	Stream,
 } from "effect"
 import { describe, expect, vi } from "vitest"
-import type * as Command from "../command"
-import { defineMessageUnion } from "../message"
+import type * as Command from "foldkit/command"
+import { defineMessageUnion } from "foldkit/message"
 import * as Store from "../store"
-import { CommitError } from "../store"
-import { modifyFields } from "../struct"
-import * as Subscription from "../subscription"
-import type * as Update from "../update"
+import { CommitError, Inactive, Crashed } from "../store"
+import { modifyFields } from "foldkit/struct"
+import * as Subscription from "foldkit/subscription"
+import type * as Update from "foldkit/update"
 import * as ReactStore from "./reactStore"
 
 /** Activation owns a Scope, so closing it is the whole deactivation story. */
@@ -60,7 +60,7 @@ describe("React store lifecycle", function () {
 				const store = ReactStore.make<number, number>(
 					{
 						update: (_model, message) => ({ model: message }),
-						layer: Layer.effectDiscard(
+						resources: Layer.effectDiscard(
 							Effect.acquireRelease(Deferred.succeed(acquired, undefined), (_resource, exit) =>
 								Effect.sync(function () {
 									resourceExit = exit
@@ -78,28 +78,47 @@ describe("React store lifecycle", function () {
 			})
 		)
 	)
-	it("rejects inactive commits, drops inactive dispatches, and preserves the Model across reactivation", function () {
+	it("rejects inactive commits, delivers inactive dispatches on activation, and preserves the Model", function () {
 		const store = ReactStore.make({ update }, { model: { value: "initial" } })
 
 		expect(store.commit(Message.SetValue({ value: "before activation" }))).toEqual(
-			Result.fail(new CommitError({ details: { reason: "Inactive" } }))
+			Result.fail(new CommitError({ reason: new Inactive() }))
 		)
 		store.dispatch(Message.SetValue({ value: "before activation" }))
 		expect(store.getModel()).toEqual({ value: "initial" })
 
 		const deactivateFirst = activate(store)
+		expect(store.getModel()).toEqual({ value: "before activation" })
 		Result.getOrThrow(store.commit(Message.SetValue({ value: "live" })))
 		expect(store.getModel()).toEqual({ value: "live" })
 		deactivateFirst()
 
 		expect(store.commit(Message.SetValue({ value: "while inactive" }))).toEqual(
-			Result.fail(new CommitError({ details: { reason: "Inactive" } }))
+			Result.fail(new CommitError({ reason: new Inactive() }))
 		)
 		store.dispatch(Message.SetValue({ value: "while inactive" }))
-		const deactivateSecond = activate(store)
 		expect(store.getModel()).toEqual({ value: "live" })
+		const deactivateSecond = activate(store)
+		expect(store.getModel()).toEqual({ value: "while inactive" })
 		deactivateSecond()
 	})
+
+	it.live("keeps only the newest inactive dispatches", () =>
+		Effect.gen(function* () {
+			const store = ReactStore.make<ReadonlyArray<number>, number>(
+				{ update: (model, message) => ({ model: [...model, message] }) },
+				{ model: [] }
+			)
+			for (let message = 0; message < 1002; message++) store.dispatch(message)
+			const scope = yield* Scope.make()
+			yield* store.activate.pipe(Scope.provide(scope))
+			// Delivery can yield after its time budget; wait for the deferred drain.
+			while (store.getModel().length < 1000) yield* Effect.sleep("5 millis")
+			expect(store.getModel()).toHaveLength(1000)
+			expect(store.getModel()[0]).toBe(2)
+			yield* Scope.close(scope, Exit.void)
+		})
+	)
 
 	it("ignores stale and repeated cleanup calls without deactivating a newer lifetime", function () {
 		const store = ReactStore.make({ update }, { model: { value: "initial" } })
@@ -116,7 +135,7 @@ describe("React store lifecycle", function () {
 		deactivateSecond()
 		expect(store.getModel()).toEqual({ value: "new lifetime" })
 		expect(store.commit(Message.SetValue({ value: "after cleanup" }))).toEqual(
-			Result.fail(new CommitError({ details: { reason: "Inactive" } }))
+			Result.fail(new CommitError({ reason: new Inactive() }))
 		)
 	})
 
@@ -264,7 +283,7 @@ describe("React store lifecycle", function () {
 					}
 				),
 			}))
-			const store = ReactStore.make({ update, subscriptions, layer }, { model: { value: "initial" } })
+			const store = ReactStore.make({ update, subscriptions, resources: layer }, { model: { value: "initial" } })
 
 			const deactivateFirst = activate(store)
 			yield* Effect.promise(() =>
@@ -305,7 +324,7 @@ describe("React store lifecycle", function () {
 		second()
 		second()
 		expect(store.commit(Message.SetValue({ value: "inactive" }))).toEqual(
-			Result.fail(new Store.CommitError({ details: { reason: "Inactive" } }))
+			Result.fail(new Store.CommitError({ reason: new Store.Inactive() }))
 		)
 	})
 })
@@ -322,7 +341,7 @@ describe("activation leases", function () {
 				const store = ReactStore.make(
 					{
 						update,
-						layer: Layer.effectDiscard(
+						resources: Layer.effectDiscard(
 							Effect.acquireRelease(
 								Effect.sync(function () {
 									acquires += 1
@@ -387,7 +406,7 @@ describe("activation leases", function () {
 				{
 					update,
 					subscriptions,
-					layer: Layer.effectDiscard(
+					resources: Layer.effectDiscard(
 						Effect.acquireRelease(Effect.void, () =>
 							Effect.sync(function () {
 								releases += 1
@@ -480,7 +499,7 @@ describe("crash projection", function () {
 							return { model: message }
 						},
 						onCrash() {},
-						layer: Layer.effectDiscard(
+						resources: Layer.effectDiscard(
 							Effect.acquireRelease(Deferred.succeed(acquired, undefined), () =>
 								Effect.sync(function () {
 									releases += 1
@@ -537,6 +556,151 @@ it("sends reactivation only for replacement activations, sharing it across lease
 	next()
 })
 
+it.live("passes Commands interrupted by deactivation to onReactivate, excluding init Commands", () =>
+	Effect.gen(function* () {
+		const contexts: Array<ReactStore.ReactivationContext<number, number>> = []
+		const save: Command.Command<number> = { name: "Save", effect: Effect.never }
+		const store = ReactStore.make<number, number>(
+			{
+				update: (model, message) => ({ model: model + message, commands: message === 1 ? [save] : [] }),
+				onReactivate(context) {
+					contexts.push(context)
+					return 0
+				},
+			},
+			{ model: 0, commands: [{ name: "Init", effect: Effect.never }] }
+		)
+		const first = yield* Scope.make()
+		yield* store.activate.pipe(Scope.provide(first))
+		store.dispatch(1)
+		yield* Effect.yieldNow
+		yield* Scope.close(first, Exit.void)
+		const second = yield* Scope.make()
+		yield* store.activate.pipe(Scope.provide(second))
+		expect(contexts).toHaveLength(1)
+		expect(contexts[0]?.model).toBe(1)
+		expect(contexts[0]?.interrupted.map((command) => command.name)).toEqual(["Save"])
+		yield* Scope.close(second, Exit.void)
+	})
+)
+
+it.live("restarts interrupted Commands chosen by restartInterrupted", () =>
+	Effect.gen(function* () {
+		const starts: Array<string> = []
+		const run = (name: string): Command.Command<number> => ({
+			name,
+			effect: Effect.sync(() => starts.push(name)).pipe(Effect.andThen(Effect.never)),
+		})
+		const interrupted: Array<ReadonlyArray<string>> = []
+		const store = ReactStore.make<number, number>(
+			{
+				update: (model, message) => ({
+					model: model + message,
+					commands: message === 1 ? [run("Fetch"), run("Save")] : [],
+				}),
+				restartInterrupted: (command) => command.name === "Fetch",
+				onReactivate(context) {
+					interrupted.push(context.interrupted.map((command) => command.name))
+					return 0
+				},
+			},
+			{ model: 0 }
+		)
+		const first = yield* Scope.make()
+		yield* store.activate.pipe(Scope.provide(first))
+		store.dispatch(1)
+		yield* Effect.yieldNow
+		yield* Scope.close(first, Exit.void)
+		const second = yield* Scope.make()
+		yield* store.activate.pipe(Scope.provide(second))
+		yield* Effect.yieldNow
+		expect(starts).toEqual(["Fetch", "Save", "Fetch"])
+		expect(interrupted).toEqual([["Save"]])
+		yield* Scope.close(second, Exit.void)
+	})
+)
+
+describe("retainInactive", function () {
+	it.live("resumes the same Store within the window without interrupting its Commands", () =>
+		Effect.gen(function* () {
+			const gate = yield* Deferred.make<void>()
+			let interrupted = false
+			let reactivations = 0
+			const store = ReactStore.make<number, number>(
+				{
+					update: (model, message) => ({ model: model + message }),
+					retainInactive: "1 minute",
+					onReactivate() {
+						reactivations += 1
+						return 0
+					},
+				},
+				{
+					model: 0,
+					commands: [
+						{
+							name: "Slow",
+							effect: Deferred.await(gate).pipe(
+								Effect.as(5),
+								Effect.onInterrupt(() =>
+									Effect.sync(function () {
+										interrupted = true
+									})
+								)
+							),
+						},
+					],
+				}
+			)
+			const first = yield* Scope.make()
+			yield* store.activate.pipe(Scope.provide(first))
+			yield* Scope.close(first, Exit.void)
+			// The retained Store still accepts work while no lease is held.
+			expect(Result.isSuccess(store.commit(1))).toBe(true)
+			yield* Deferred.succeed(gate, undefined)
+			yield* Effect.yieldNow
+			yield* Effect.yieldNow
+			expect(store.getModel()).toBe(6)
+			const second = yield* Scope.make()
+			yield* store.activate.pipe(Scope.provide(second))
+			expect(interrupted).toBe(false)
+			expect(reactivations).toBe(0)
+			yield* Scope.close(second, Exit.void)
+		})
+	)
+
+	it.live("disposes the retained Store once the window ends", () =>
+		Effect.gen(function* () {
+			let interrupted = false
+			const store = ReactStore.make<number, number>(
+				{ update: (model, message) => ({ model: model + message }), retainInactive: "20 millis" },
+				{
+					model: 0,
+					commands: [
+						{
+							name: "Forever",
+							effect: Effect.never.pipe(
+								Effect.onInterrupt(() =>
+									Effect.sync(function () {
+										interrupted = true
+									})
+								)
+							),
+						},
+					],
+				}
+			)
+			const scope = yield* Scope.make()
+			yield* store.activate.pipe(Scope.provide(scope))
+			yield* Scope.close(scope, Exit.void)
+			expect(interrupted).toBe(false)
+			yield* Effect.sleep("80 millis")
+			expect(interrupted).toBe(true)
+			expect(store.commit(1)).toEqual(Result.fail(new CommitError({ reason: new Inactive() })))
+		})
+	)
+})
+
 it.each(["callback", "update"] as const)(
 	"distinguishes setup failure from a terminal replacement when %s throws",
 	function (failure) {
@@ -562,16 +726,16 @@ it.each(["callback", "update"] as const)(
 		if (failure === "callback") {
 			expect(exit).toEqual(Exit.die(defect))
 			expect(store.getCrash()).toEqual(Option.none())
-			expect(store.commit(2)).toEqual(Result.fail(new CommitError({ details: { reason: "Inactive" } })))
+			expect(store.commit(2)).toEqual(Result.fail(new CommitError({ reason: new Inactive() })))
 		} else {
 			expect(exit).toEqual(Exit.void)
 			expect(store.getCrash()).toEqual(Option.some(Cause.die(defect)))
 			expect(store.commit(2)).toEqual(
-				Result.fail(new CommitError({ details: { reason: "Crashed", cause: Cause.die(defect) } }))
+				Result.fail(new CommitError({ reason: new Crashed({ cause: Cause.die(defect) }) }))
 			)
 		}
 		Effect.runSync(Scope.close(failedScope, Exit.void))
-		expect(store.commit(2)).toEqual(Result.fail(new CommitError({ details: { reason: "Inactive" } })))
+		expect(store.commit(2)).toEqual(Result.fail(new CommitError({ reason: new Inactive() })))
 		shouldFail = false
 		const replacement = activate(store)
 		expect(store.getModel()).toBe(11)
@@ -596,7 +760,7 @@ it.live("releases a failed reactivation scope before its queued resources can st
 					if (shouldFail) throw new Error("resume failed")
 					return 10
 				},
-				layer: Layer.effectDiscard(
+				resources: Layer.effectDiscard(
 					Effect.acquireRelease(
 						Effect.sync(function () {
 							acquisitions += 1

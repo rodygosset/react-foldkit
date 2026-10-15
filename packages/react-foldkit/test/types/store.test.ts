@@ -22,7 +22,7 @@ describe("Store public types", function () {
 		})
 		const layer = Layer.succeed(Service, { value: 1 })
 		// Store.make allocates in the caller's Scope, so a host closes it to dispose the store.
-		expectTypeOf(Store.make({ update, layer }, { model: { count: 0 } })).toEqualTypeOf<
+		expectTypeOf(Store.make({ update, resources: layer }, { model: { count: 0 } })).toEqualTypeOf<
 			Effect.Effect<Store.Store<Model, Message>, never, Scope.Scope>
 		>()
 		expectTypeOf(Store.make({ update }, { model: { count: 0 } })).toEqualTypeOf<
@@ -32,7 +32,7 @@ describe("Store public types", function () {
 			// @ts-expect-error Ambient services must be provided before execution.
 			Effect.runSync(Effect.scoped(Store.make({ update }, { model: { count: 0 } })))
 			// @ts-expect-error An empty Layer cannot satisfy required Command services.
-			Store.make({ update, layer: Layer.empty }, { model: { count: 0 } })
+			Store.make({ update, resources: Layer.empty }, { model: { count: 0 } })
 		}
 	})
 
@@ -42,7 +42,7 @@ describe("Store public types", function () {
 		// @ts-expect-error The data-last adapter retains the store Message type.
 		Store.commit({ _tag: "Other" })(store)
 		// @ts-expect-error Crash data is mandatory.
-		new Store.CommitError({ details: { reason: "Crashed" } })
+		new Store.CommitError({ reason: new Store.Crashed() })
 		// @ts-expect-error The Effect adapter must not widen Message inference from the store.
 		Store.commit(store, { _tag: "Other" })
 	}

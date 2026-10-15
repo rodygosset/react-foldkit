@@ -184,7 +184,6 @@ function importedOrigin(module: string, path: ReadonlyArray<string>): Origin {
 		"react-foldkit/react": "ReactFoldkit",
 		"react-foldkit/submodel": "Submodel",
 		"react-foldkit/store": "Store",
-		"react-foldkit/command": "Command",
 		"foldkit/command": "Command",
 	}
 	const namespace = namespaces[module]

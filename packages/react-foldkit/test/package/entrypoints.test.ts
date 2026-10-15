@@ -1,21 +1,25 @@
 import { Effect, Result, Schema } from "effect"
 import * as Foldkit from "react-foldkit"
-import * as AsyncData from "react-foldkit/asyncData"
-import * as Command from "react-foldkit/command"
+import * as AsyncData from "foldkit/asyncData"
 import * as CommitSource from "react-foldkit/commitSource"
 import * as Loader from "react-foldkit/loader"
 import * as Query from "foldkit/experimental/query"
 import * as ReactFoldkit from "react-foldkit/react"
 import * as Submodel from "react-foldkit/submodel"
 import * as Store from "react-foldkit/store"
-import * as Struct from "react-foldkit/struct"
 import { describe, expect, it } from "vitest"
 
 describe("built package entry points", function () {
-	it("preserves Foldkit reexports and loads a Foldkit Query through the built Loader", function () {
-		expect(Foldkit.AsyncData.Success).toBe(AsyncData.Success)
-		expect(Foldkit.Command.define).toBe(Command.define)
-		expect(Foldkit.Struct.modifyFields).toBe(Struct.modifyFields)
+	it("exports only React Foldkit modules and loads a Foldkit Query through the built Loader", function () {
+		// Foldkit vocabulary is imported from foldkit itself.
+		expect(Object.keys(Foldkit).sort()).toEqual([
+			"CommitSource",
+			"Loader",
+			"ModelSource",
+			"ReactFoldkit",
+			"Store",
+			"Submodel",
+		])
 
 		const query = Query.define({
 			name: "Package",
@@ -26,7 +30,7 @@ describe("built package entry points", function () {
 		const loader = Loader.fromQuery(query)
 		const envelope = Effect.runSync(loader.loadQuery)
 		expect(Result.getOrThrow(loader.decode(envelope))).toEqual({
-			result: Foldkit.AsyncData.Success({ data: "fetch" }),
+			result: AsyncData.Success({ data: "fetch" }),
 		})
 	})
 
@@ -39,7 +43,7 @@ describe("built package entry points", function () {
 		expect(Foldkit.Submodel.define).toBe(Submodel.define)
 		expect(Foldkit.Submodel.lift).toBe(Submodel.lift)
 
-		const error = new ReactFoldkit.CommitSourceError({ details: { reason: "Reentrant" } })
+		const error = new ReactFoldkit.CommitSourceError({ reason: new CommitSource.ReentrantNotification() })
 		expect(error).toBeInstanceOf(CommitSource.CommitSourceError)
 		expect(error).toBeInstanceOf(Foldkit.CommitSource.CommitSourceError)
 	})
@@ -56,7 +60,7 @@ describe("built package entry points", function () {
 		if (Result.isFailure(committed)) {
 			expect(committed.failure).toBeInstanceOf(Store.CommitError)
 			expect(committed.failure).toBeInstanceOf(Foldkit.Store.CommitError)
-			expect(committed.failure.details.reason).toBe("Disposed")
+			expect(committed.failure.reason._tag).toBe("Disposed")
 		}
 	})
 })

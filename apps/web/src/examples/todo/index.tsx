@@ -6,13 +6,13 @@ import { Label } from "@workspace/ui/components/label"
 import { Separator } from "@workspace/ui/components/separator"
 import { Effect, Match, Option, Result, Schema } from "effect"
 import { Trash2Icon } from "lucide-react"
-import * as AsyncData from "react-foldkit/asyncData"
-import * as Command from "react-foldkit/command"
-import { defineMessageUnion } from "react-foldkit/message"
+import * as AsyncData from "foldkit/asyncData"
+import * as Command from "foldkit/command"
+import { defineMessageUnion } from "foldkit/message"
 import { defineApplication } from "react-foldkit/react"
-import { modifyFields } from "react-foldkit/struct"
+import { modifyFields } from "foldkit/struct"
 import * as Submodel from "react-foldkit/submodel"
-import * as Update from "react-foldkit/update"
+import type * as Update from "foldkit/update"
 import { ExampleShell } from "../../components/example-shell"
 import { getRouter } from "../../router"
 import { TodoItem } from "./model"
@@ -43,6 +43,8 @@ const Message = defineMessageUnion({
 	RemovedItem: { id: Schema.Finite },
 	ClickedClearCompleted: {},
 	ClickedRetryLoad: {},
+	/** The route search changed, e.g. through a filter link or browser history. */
+	ChangedFilter: { filter: Filter },
 	/** Silent ack from the NavigateFilter Command — Model already updated in update. */
 	NavigationDone: {},
 	SettledFetchTodos: {
@@ -177,7 +179,7 @@ const PersistClearCompleted = Command.define("PersistClearCompleted", {
 	),
 })
 
-/** Seed from route search (and later other Flags). Called when Provider boots. */
+/** Seeds the filter from the route search. Later search changes arrive as `ChangedFilter`. */
 const init = (flags: Flags): UpdateReturn => ({
 	model: {
 		form: TodoForm.init(),
@@ -188,16 +190,9 @@ const init = (flags: Flags): UpdateReturn => ({
 	commands: [FetchTodos()],
 })
 
-const form = Submodel.lift({
-	read: (parent: Model) => parent.form,
-	toParentMessage: (message: TodoForm.Message) => Message.GotFormMessage({ message }),
-})
-
-const foldForm = Update.foldChild({
+const form = Submodel.field<Model>()("form", {
 	update: TodoForm.update,
-	read: (parent: Model) => Option.some(form.read(parent)),
-	write: (parent, form) => modifyFields(parent, { form: () => form }),
-	toParentMessage: form.toParentMessage,
+	toParentMessage: (message: TodoForm.Message) => Message.GotFormMessage({ message }),
 	foldOutMessage: (out) => (nextModel) =>
 		Match.value(out).pipe(
 			Match.withReturnType<UpdateReturn>(),
@@ -214,12 +209,13 @@ const foldForm = Update.foldChild({
 
 const update = (model: Model, message: Message): UpdateReturn =>
 	Message.match<UpdateReturn>(message, {
-		GotFormMessage: ({ message: formMessage }) => foldForm(model, formMessage),
+		GotFormMessage: ({ message: formMessage }) => form.fold(model, formMessage),
+		ChangedFilter: ({ filter }) => ({ model: modifyFields(model, { filter: () => filter }) }),
 		ToggledItem: ({ id }) => withRevalidate(model, PersistToggle({ id })),
 		RemovedItem: ({ id }) => withRevalidate(model, PersistRemove({ id })),
 		ClickedClearCompleted: () => withRevalidate(model, PersistClearCompleted()),
 		ClickedRetryLoad: () => startFetch(model),
-		NavigationDone: () => Update.identity(model),
+		NavigationDone: () => ({ model }),
 		SettledFetchTodos: ({ result }) => ({ model: applySettledItems(model, result) }),
 		SettledWriteTodos: ({ result }) => ({ model: applySettledItems(model, result) }),
 		SettledClearCompleted({ result }) {
@@ -234,11 +230,12 @@ const update = (model: Model, message: Message): UpdateReturn =>
 		},
 	})
 
-const { Provider, useModel, useDispatch, useSubmodel } = defineApplication({
+const Application = defineApplication({
 	Model,
 	update,
-	layer: TodoRepository.layer,
+	resources: TodoRepository.layer,
 })
+const { Provider, useModel, useDispatch, useInbound } = Application
 
 const filterLinks = [
 	{ filter: "all" as const, label: "All" },
@@ -260,7 +257,6 @@ const visibleItems = (items: ReadonlyArray<TodoItem>, filter: Filter): ReadonlyA
 function View() {
 	const model = useModel()
 	const dispatch = useDispatch()
-	const formSource = useSubmodel(form)
 
 	return (
 		<ExampleShell
@@ -268,7 +264,10 @@ function View() {
 			description="List state is AsyncData: load/refresh via Commands, settle Results back into the Model."
 		>
 			<div className="mx-auto flex w-full max-w-lg flex-1 flex-col px-6 pt-10 pb-16">
-				<TodoForm.Provider source={formSource}>
+				<TodoForm.Provider
+					from={Application}
+					lift={form}
+				>
 					<TodoForm.View />
 				</TodoForm.Provider>
 
@@ -430,14 +429,18 @@ function View() {
 	)
 }
 
+/** Sends route search changes to update, so changing the filter keeps the loaded list. */
+function SyncFilter({ filter }: { readonly filter: Filter }) {
+	useInbound(filter, (next) => Message.ChangedFilter({ filter: next }))
+	return null
+}
+
 export function Todo() {
 	const { filter } = todoRoute.useSearch()
 
 	return (
-		<Provider
-			key={filter}
-			init={init({ filter })}
-		>
+		<Provider init={() => init({ filter })}>
+			<SyncFilter filter={filter} />
 			<View />
 		</Provider>
 	)

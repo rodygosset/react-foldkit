@@ -10,8 +10,7 @@ const tester = new RuleTester({ languageOptions: { parser, parserOptions: { ecma
 const rules = recommendedConfig[0].plugins["react-foldkit"].rules
 const app = 'import { defineApplication as define } from "react-foldkit/react"; const App = define(config); '
 const command = 'import { Command } from "react-foldkit"; import { Effect as Fx } from "effect"; '
-const submodelApp =
-	'import * as Submodel from "react-foldkit/submodel"; const Child = Submodel.define(); '
+const submodelApp = 'import * as Submodel from "react-foldkit/submodel"; const Child = Submodel.define(); '
 const file = "/app/src/view.tsx"
 const valid = (code) => ({ code, filename: file })
 const invalid = (code, messageId, data) => ({
@@ -64,8 +63,8 @@ tester.run("no-store-hooks-in-child-view", rules["no-store-hooks-in-child-view"]
 	],
 	invalid: [
 		invalid(app + "function View({dispatch}) { App.useModel() }", "storeHook", { hook: "useModel" }),
-		invalid(app + "const { useCommit: commit } = App; function View({dispatch}) { commit() }", "storeHook", {
-			hook: "useCommit",
+		invalid(app + "const { useInbound: sync } = App; function View({dispatch}) { sync() }", "storeHook", {
+			hook: "useInbound",
 		}),
 		invalid(app + "function View(props: {dispatch: Function}) { App.useOptionalModel() }", "storeHook", {
 			hook: "useOptionalModel",
@@ -110,7 +109,35 @@ tester.run("no-navigate-outside-commands", rules["no-navigate-outside-commands"]
 		invalid('history.pushState({}, "", "/")', "historyCall", { method: "pushState" }),
 	],
 })
-it("publishes all five rules and keeps local-state policy opt-in", function () {
-	if (Object.keys(rules).length !== 5 || strictConfig[1].rules["react-foldkit/no-domain-use-state"] !== "warn")
+it("publishes all six rules and keeps local-state policy opt-in", function () {
+	if (
+		Object.keys(rules).length !== 6 ||
+		strictConfig[1].rules["react-foldkit/no-domain-use-state"] !== "warn" ||
+		recommendedConfig[0].rules["react-foldkit/no-inline-submodel-lift"] !== "warn"
+	)
 		throw new Error("Preset drift")
+})
+tester.run("no-inline-submodel-lift", rules["no-inline-submodel-lift"], {
+	valid: [
+		valid(app + "const child = lift(config); function View() { App.useSubmodel(child) }"),
+		valid(app + "function View() { const child = useMemo(() => lift(config), []); App.useSubmodel(child) }"),
+		valid(
+			submodelApp +
+				"const form = Submodel.field()('form', options); function View() { return <Child.Provider from={App} lift={form}/> }"
+		),
+		valid("function View() { other({ read }) }"),
+	],
+	invalid: [
+		invalid(app + "function View() { App.useSubmodel({ read, toParentMessage }) }", "inlineLift"),
+		invalid(app + "function View() { App.useOptionalSubmodel(Submodel.lift(config)) }", "inlineLift"),
+		invalid(
+			submodelApp + "function View() { return <Child.Provider from={App} lift={{ read, toParentMessage }}/> }",
+			"inlineLift"
+		),
+		invalid(
+			submodelApp +
+				"function View() { return <Child.Provider from={App} lift={Submodel.field()('form', options)}/> }",
+			"inlineLift"
+		),
+	],
 })

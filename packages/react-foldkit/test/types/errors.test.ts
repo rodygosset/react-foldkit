@@ -1,15 +1,26 @@
-import type { Cause } from "effect"
-import { CommitSourceError } from "react-foldkit/commitSource"
-import { CommitError } from "react-foldkit/store"
+import { type Cause, Effect } from "effect"
+import { CommitSourceError, DuplicateKey } from "react-foldkit/commitSource"
+import { CommitError, Crashed, type Inactive } from "react-foldkit/store"
 import { expectTypeOf } from "vitest"
 
-expectTypeOf<Extract<CommitError["details"], { reason: "Crashed" }>["cause"]>().toEqualTypeOf<Cause.Cause<unknown>>()
-expectTypeOf<Extract<CommitSourceError["details"], { reason: "DuplicateKey" }>["key"]>().toEqualTypeOf<string>()
+expectTypeOf<Extract<CommitError["reason"], { _tag: "Crashed" }>["cause"]>().toEqualTypeOf<Cause.Cause<unknown>>()
+expectTypeOf<Extract<CommitSourceError["reason"], { _tag: "DuplicateKey" }>["key"]>().toEqualTypeOf<string>()
+
+declare const committing: Effect.Effect<void, CommitError>
+// Effect 4 reason handling narrows to the named reason and leaves the rest typed.
+const recovered = committing.pipe(
+	Effect.catchReason("CommitError", "Inactive", function (reason) {
+		expectTypeOf(reason).toEqualTypeOf<Inactive>()
+		return Effect.void
+	})
+)
+expectTypeOf(recovered).toEqualTypeOf<Effect.Effect<void, CommitError>>()
+
 if (false) {
 	// @ts-expect-error A crashed commit requires its Cause.
-	new CommitError({ details: { reason: "Crashed" } })
+	new CommitError({ reason: new Crashed() })
 	// @ts-expect-error Duplicate keys must identify the key.
-	new CommitSourceError({ details: { reason: "DuplicateKey" } })
+	new CommitSourceError({ reason: new DuplicateKey() })
 	// @ts-expect-error Source violations do not accept Store reasons.
-	new CommitSourceError({ details: { reason: "Disposed" } })
+	new CommitSourceError({ reason: { _tag: "Disposed" } })
 }

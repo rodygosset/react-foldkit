@@ -3,7 +3,7 @@ import { DateTime, Effect, Exit, Result, Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup } from "effect/http-api"
 import * as Query from "foldkit/experimental/query"
 import { afterEach, vi } from "vitest"
-import * as AsyncData from "./asyncData"
+import * as AsyncData from "foldkit/asyncData"
 import * as Loader from "./loader"
 
 const at = DateTime.toDateUtc(DateTime.makeUnsafe("2026-10-01T12:00:00.000Z"))

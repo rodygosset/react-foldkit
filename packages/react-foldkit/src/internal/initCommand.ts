@@ -13,3 +13,5 @@ export function complete(command: object): void {
 	const onComplete = (command as TrackedCommand)[CompletionTypeId]
 	if (onComplete !== undefined) onComplete()
 }
+
+export const isTracked = (command: object): boolean => (command as TrackedCommand)[CompletionTypeId] !== undefined

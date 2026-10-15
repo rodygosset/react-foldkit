@@ -6,7 +6,7 @@ import { createRequestHandler, renderRouterToString, RouterServer } from "@tanst
 import { act } from "@testing-library/react"
 import { hydrateRoot, type Root } from "react-dom/client"
 import { afterEach, describe, expect, vi } from "vitest"
-import * as AsyncData from "../../src/asyncData"
+import * as AsyncData from "foldkit/asyncData"
 import { createFixture, response } from "../fixtures/routeLoader"
 
 afterEach(function () {

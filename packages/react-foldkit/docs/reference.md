@@ -4,15 +4,8 @@ Generated from the public exports. See the [counter tutorial](examples.md) for u
 
 - [react-foldkit](#react-foldkit)
 - [react-foldkit/react](#react-foldkitreact)
-- [react-foldkit/asyncData](#react-foldkitasyncData)
-- [react-foldkit/command](#react-foldkitcommand)
-- [react-foldkit/message](#react-foldkitmessage)
-- [react-foldkit/schema](#react-foldkitschema)
 - [react-foldkit/store](#react-foldkitstore)
-- [react-foldkit/struct](#react-foldkitstruct)
 - [react-foldkit/submodel](#react-foldkitsubmodel)
-- [react-foldkit/subscription](#react-foldkitsubscription)
-- [react-foldkit/update](#react-foldkitupdate)
 - [react-foldkit/eslint](#react-foldkiteslint)
 - [react-foldkit/commitSource](#react-foldkitcommitSource)
 - [react-foldkit/loader](#react-foldkitloader)
@@ -20,14 +13,6 @@ Generated from the public exports. See the [counter tutorial](examples.md) for u
 - [react-foldkit/modelSource](#react-foldkitmodelSource)
 
 ## react-foldkit
-
-### AsyncData
-
-Foldkit states and operations for asynchronously loaded data.
-
-### Command
-
-Foldkit Command definitions, Message mapping, and interruption.
 
 ### CommitSource
 
@@ -37,10 +22,6 @@ External Message snapshots and delivery identities for application Providers.
 
 Loader declarations, Query adapters, and envelope transport.
 
-### Message
-
-Foldkit Message unions, constructors, and exhaustive matchers.
-
 ### ModelSource
 
 Model snapshots, subscriptions, and dispatch contracts shared by React bindings.
@@ -49,29 +30,13 @@ Model snapshots, subscriptions, and dispatch contracts shared by React bindings.
 
 Application Providers, Model hooks, and child lifts.
 
-### Schema
-
-Foldkit callable tagged Schemas and union constructors.
-
 ### Store
 
 Scoped Model ownership, Message delivery, and lifecycle errors.
 
-### Struct
-
-Foldkit helpers for updating immutable records.
-
 ### Submodel
 
 Child Model Providers, hooks, and lifts.
-
-### Subscription
-
-Foldkit Model-derived Subscription definitions.
-
-### Update
-
-Pure update composition and child Model folding.
 
 ## react-foldkit/react
 
@@ -88,23 +53,10 @@ independent Model and the Commands and Subscriptions that update it.
   <E = never, FactoryError = never>(props: ProviderProps<Model, Message, R, E, FactoryError>) => React.ReactNode
   ```
 
-- `useCommit` Returns a function that processes the queue through the submitted Message before returning.
-  Use its Result to check delivery failures. It does not wait for Commands.
-  Throws outside the matching Provider.
-
-  ```ts
-  () => (message: Message) => Result.Result<void, Store.CommitError>
-  ```
-
-- `useOptionalCommit` Returns `Some(commit)` inside the matching Provider and `None` outside it.
-
-  ```ts
-  () => Option.Option<(message: Message) => Result.Result<void, Store.CommitError>>
-  ```
-
 - `useModel` Subscribes the view to the Model or a selected value. Pass a selector to read only the
-  value the view needs. Whole Models use `Object.is`; selections use `Equal.equals` unless
-  you supply `isEqual`. Throws outside the matching Provider.
+  value the view needs. Whole Models use `Object.is`. Selections use `Equal.equals`, which
+  compares plain objects and arrays structurally on every Model change; pass `isEqual` when
+  a selection is large or already reference-stable. Throws outside the matching Provider.
 
   ```ts
   { (): Model; <Selected>(selector: (model: Model) => Selected, isEqual?: ((a: Selected, b: Selected) => boolean) | undefined): Selected; }
@@ -129,9 +81,18 @@ independent Model and the Commands and Subscriptions that update it.
   () => Option.Option<(message: Message) => void>
   ```
 
+- `useInbound` Sends a Message whenever an external value changes, such as a route parameter or prop.
+  The first value is not sent; include it in `init`. Values are compared with `isEqual`,
+  which defaults to `Equal.equals`. Throws outside the matching Provider.
+
+  ```ts
+  <A>(value: A, toMessage: (value: A) => Message, isEqual?: ((previous: A, next: A) => boolean) | undefined) => void
+  ```
+
 - `useSubmodel` Creates a source for a child Submodel from this Provider's Model. The lift reads the child
   Model and wraps its Messages for the parent. The child shares the parent Store and
-  subscription. Throws outside the matching Provider.
+  subscription. Declare the lift outside render, or memoize it: a new `read` or
+  `toParentMessage` creates a new source. Throws outside the matching Provider.
 
   ```ts
   <ChildModel, ChildMessage>(projection: Lift<Model, Message, ChildModel, ChildMessage>) => ModelSource<ChildModel, ChildMessage>
@@ -143,14 +104,6 @@ independent Model and the Commands and Subscriptions that update it.
 
   ```ts
   <ChildModel, ChildMessage>(projection: OptionalLift<Model, Message, ChildModel, ChildMessage>) => Option.Option<ModelSource<ChildModel, ChildMessage>>
-  ```
-
-- `SubmodelProvider` Passes a child Model source to `render`, where you can supply it to a Submodel Provider.
-  `lift` reads the child Model and wraps its Messages for the parent. The child shares the
-  parent Store. Throws outside the matching Provider.
-
-  ```ts
-  <ChildModel, ChildMessage>(props: { readonly lift: Lift<Model, Message, ChildModel, ChildMessage>; readonly render: (props: { readonly source: ModelSource<ChildModel, ChildMessage>; }) => React.ReactNode; }) => React.ReactNode
   ```
 
 ### CommitEntry
@@ -215,15 +168,17 @@ publish another snapshot.
 ### CommitSourceError
 
 Failure caused by duplicate snapshot keys or a source notification during reconciliation.
+Handle one reason with `Effect.catchReason("CommitSourceError", "DuplicateKey", ...)`.
 
 ### Config
 
 The Model Schema and Program used to create a React application with `defineApplication`.
 Define a pure update function here and return Commands for side effects. Provide services
-needed by Commands or Subscriptions through `layer`.
+needed by Commands or Subscriptions through `resources`.
 
 The Layer must require no additional services and have no typed failures. The Model Schema
-supplies the TypeScript type. The Provider does not use it to validate Models at runtime.
+supplies the TypeScript type. Outside production builds, the Provider also checks its initial
+Model against the Schema and freezes published Models.
 
 - `update` Applies a Message to the Model without running side effects. Return Commands for work that
   runs after the transition.
@@ -240,61 +195,127 @@ supplies the TypeScript type. The Provider does not use it to validate Models at
   ```
 
 - `onCrash` Called once on terminal failure, with the original Cause and a Message when one triggered
-  the failure. Observer defects are logged.
+  the failure. Runs before `subscribeCrash` listeners. Observer defects are logged.
 
   ```ts
   ((cause: Cause.Cause<unknown>, triggeringMessage: Option.Option<Message>) => void) | undefined
   ```
 
-- `layer` Supplies all required services. Live work finishes before the Layer releases its
+- `resources` Supplies all required services. Live work finishes before the Layer releases its
   resources.
 
   ```ts
   import("effect/Layer").Layer<never, never, never> | import("effect/Layer").Layer<NoInfer<R>, never, never> | undefined
   ```
 
-- `onReactivate` Creates a Message when the Provider reactivates after deactivation. Use it to clear pending
-  state or restart work stopped by React Activity. It is not called on the initial activation.
+- `onReactivate` Creates a Message when the Provider reactivates with a replacement Store. Use it to retry
+  interrupted work or clear pending state. It is not called on the initial activation or when
+  `retainInactive` kept the previous Store running.
 
   ```ts
-  (() => Message) | undefined
+  ((context: ReactStore.ReactivationContext<Schema.Schema.Type<ModelSchema>, Message, R>) => Message) | undefined
   ```
 
-- `Model` Supplies the Model type. The Provider does not decode or validate Models with this codec.
+- `retainInactive` Keeps the Store, its Layer, Commands, and Subscriptions running for this long after the
+  last activation ends. Reactivating within the window resumes the same Store without
+  interrupting anything. Defaults to zero, which disposes the Store on deactivation.
+  
+  Work started before an unmount can still finish during the window, so keep it short when
+  Commands perform writes or navigation.
+
+  ```ts
+  import("effect/Duration").Input | undefined
+  ```
+
+- `restartInterrupted` Starts Commands interrupted by deactivation again when a replacement Store activates. Pass
+  `true` for all of them or a predicate to choose. Restart only idempotent work, such as
+  Query fetches: an interrupted write may already have reached its server.
+
+  ```ts
+  boolean | ((command: import("foldkit/command").Command<Message, never, R>) => boolean) | undefined
+  ```
+
+- `freezeModel` Freezes every Model the Provider publishes so accidental mutation throws where it happens.
+  Plain objects and arrays are frozen; Effect values and class instances are not. Defaults to
+  `true` outside production builds.
+
+  ```ts
+  boolean | undefined
+  ```
+
+- `Model` Supplies the Model type and checks the initial Model when `validateInit` is on.
 
   ```ts
   ModelSchema
   ```
 
-### ErrorOptions
-
-Options for displaying and reporting application failures.
-Use `renderError` to show an error view and `onError` to report the Cause to a logging service.
-Both options belong to the application Provider.
-
-- `renderError` Renders an error view in place of the Provider's children. Receives the full Cause.
-  The default view shows an Error's message or a generic failure message.
+- `crash` Default failure view and reporting for every Provider of this application.
 
   ```ts
-  ((cause: Cause.Cause<unknown>) => React.ReactNode) | undefined
+  CrashConfig<Schema.Schema.Type<ModelSchema>, Message> | undefined
   ```
 
-- `onError` Observes failures asynchronously. Observer failures are logged and do not replace the
-  rendered Cause. Reports are interrupted on timeout or Provider shutdown.
+- `validateInit` Checks the initial Model, after the commit-source snapshot, against `Model`. A mismatch
+  fails the Provider with a `SchemaError`. Defaults to `true` outside production builds.
 
   ```ts
-  ((cause: Cause.Cause<unknown>) => Effect.Effect<void, unknown>) | undefined
+  boolean | undefined
+  ```
+
+### CrashConfig
+
+How an application shows and reports failures. Mirrors Foldkit's crash configuration.
+Set it on `defineApplication`, and override either callback on a Provider.
+
+- `view` Renders in place of the Provider's children. Call `restart` to remount the Provider with
+  a fresh Store from `init`. The default view shows an Error's message.
+
+  ```ts
+  ((context: CrashContext<Model, Message> & { readonly restart: () => void; }) => React.ReactNode) | undefined
+  ```
+
+- `report` Observes client failures asynchronously, such as by sending them to a logging service.
+  Report failures are logged and never replace the view. Reports are interrupted on
+  timeout or Provider shutdown.
+
+  ```ts
+  ((context: CrashContext<Model, Message>) => Effect.Effect<void, unknown>) | undefined
+  ```
+
+### CrashContext
+
+What the Provider knows about a failure it shows or reports.
+
+- `cause` The full failure, with its annotations preserved.
+
+  ```ts
+  Cause.Cause<unknown>
+  ```
+
+- `model` The Model when the failure happened. `None` when the Provider failed before it had a Model,
+  such as a commit source that could not be created.
+
+  ```ts
+  Option.Option<Model>
+  ```
+
+- `message` The Message whose update or Command crashed the Store. `None` for other failures, such as
+  Subscriptions, init Commands, or commit sources.
+
+  ```ts
+  Option.Option<Message>
   ```
 
 ### ModelHooks
 
-The hooks and child-source helper shared by applications and Submodels.
+The hooks shared by applications and Submodels.
 Use them inside the matching Provider to read its Model, send Messages, or give a child
 Submodel access to part of that Model.
 
 - `useModel` Subscribes the view to the Model or a selected value. Pass a selector to read only the
-  value the view needs. Whole Models use `Object.is`; selections use `Equal.equals` unless
-  you supply `isEqual`. Throws outside the matching Provider.
+  value the view needs. Whole Models use `Object.is`. Selections use `Equal.equals`, which
+  compares plain objects and arrays structurally on every Model change; pass `isEqual` when
+  a selection is large or already reference-stable. Throws outside the matching Provider.
 
   ```ts
   { (): Model; <Selected>(selector: (model: Model) => Selected, isEqual?: (a: Selected, b: Selected) => boolean): Selected; }
@@ -319,9 +340,18 @@ Submodel access to part of that Model.
   () => Option.Option<(message: Message) => void>
   ```
 
+- `useInbound` Sends a Message whenever an external value changes, such as a route parameter or prop.
+  The first value is not sent; include it in `init`. Values are compared with `isEqual`,
+  which defaults to `Equal.equals`. Throws outside the matching Provider.
+
+  ```ts
+  <A>(value: A, toMessage: (value: A) => Message, isEqual?: (previous: A, next: A) => boolean) => void
+  ```
+
 - `useSubmodel` Creates a source for a child Submodel from this Provider's Model. The lift reads the child
   Model and wraps its Messages for the parent. The child shares the parent Store and
-  subscription. Throws outside the matching Provider.
+  subscription. Declare the lift outside render, or memoize it: a new `read` or
+  `toParentMessage` creates a new source. Throws outside the matching Provider.
 
   ```ts
   <ChildModel, ChildMessage>(projection: Lift<Model, Message, ChildModel, ChildMessage>) => ModelSource<ChildModel, ChildMessage>
@@ -335,34 +365,33 @@ Submodel access to part of that Model.
   <ChildModel, ChildMessage>(projection: OptionalLift<Model, Message, ChildModel, ChildMessage>) => Option.Option<ModelSource<ChildModel, ChildMessage>>
   ```
 
-- `SubmodelProvider` Passes a child Model source to `render`, where you can supply it to a Submodel Provider.
-  `lift` reads the child Model and wraps its Messages for the parent. The child shares the
-  parent Store. Throws outside the matching Provider.
-
-  ```ts
-  <ChildModel, ChildMessage>(props: { readonly lift: Lift<Model, Message, ChildModel, ChildMessage>; readonly render: (props: { readonly source: ModelSource<ChildModel, ChildMessage>; }) => React.ReactNode; }) => React.ReactNode
-  ```
-
 ### ProviderProps
 
 Props for the application Provider that supplies the Model and Message handlers to its views.
 `init` supplies the initial Model and Commands. A commit source can supply additional Messages,
-and the error options control how failures are shown and reported.
+and `crash` overrides how this Provider shows and reports failures.
 
 The Provider captures `init` and its source on initialization. Changing those props later
-does not replace them. Children and error callbacks follow subsequent renders.
+does not replace them. Children and crash callbacks follow subsequent renders. Use
+`useInbound` to send later prop changes to update.
 
-- `init` Initial Model and Commands captured during initialization. Remount the Provider to replace
-  them.
+- `init` Initial Model and Commands, or a function that creates them. The Provider calls a function
+  once per initialization, including after a crash view's `restart`.
 
   ```ts
-  Readonly<{ model: Model; commands?: Update.Commands<Message, R> | undefined; outMessage?: never; }>
+  Readonly<{ model: Model; commands?: Update.Commands<Message, R> | undefined; outMessage?: never; }> | (() => Update.Return<Model, Message, R>)
   ```
 
 - `children`
 
   ```ts
   React.ReactNode
+  ```
+
+- `crash` Overrides the application's crash view or report for this Provider.
+
+  ```ts
+  CrashConfig<Model, Message> | undefined
   ```
 
 - `commitSource` Source captured during Provider initialization. Mutually exclusive with
@@ -379,18 +408,21 @@ does not replace them. Children and error callbacks follow subsequent renders.
   (() => Result.Result<CommitConnection.CommitSource<Message, E>, FactoryError>) | undefined
   ```
 
-- `renderError` Renders an error view in place of the Provider's children. Receives the full Cause.
-  The default view shows an Error's message or a generic failure message.
+### ReactivationContext
+
+What the Provider knows when it replaces a Store that deactivation disposed.
+
+- `model` The Model retained from the disposed Store.
 
   ```ts
-  ((cause: Cause.Cause<unknown>) => React.ReactNode) | undefined
+  Model
   ```
 
-- `onError` Observes failures asynchronously. Observer failures are logged and do not replace the
-  rendered Cause. Reports are interrupted on timeout or Provider shutdown.
+- `interrupted` Commands returned by update that deactivation interrupted and `restartInterrupted` did not
+  restart, in start order. Init Commands are excluded because they restart automatically.
 
   ```ts
-  ((cause: Cause.Cause<unknown>) => Effect.Effect<void, unknown>) | undefined
+  Update.Commands<Message, R>
   ```
 
 ### SourceOptions
@@ -400,7 +432,7 @@ Pass a commit source directly or provide a factory that creates it during Provid
 
 Choose either `commitSource` or `createCommitSource`. The Provider keeps that source for its
 mounted lifetime. Remount it to use another source. Factory failures use the Provider's
-error view and reporting options.
+crash view and reporting.
 
 - `commitSource` Source captured during Provider initialization. Mutually exclusive with
   `createCommitSource`.
@@ -426,25 +458,27 @@ state with `useModel` and send Messages with `useDispatch`.
 
 The Provider renders the initial Model and applies the initial commit-source snapshot during
 render, including SSR. Commands and Subscriptions start when React activates the Provider.
-Deactivation stops them and retains the Model for reactivation.
+Deactivation stops them and retains the Model for reactivation, unless `retainInactive`
+keeps the Store running for a while.
 
-Completed init Commands do not run again after reactivation. Interrupted init Commands can
-restart. Commands returned by update do not restart automatically. Use `onReactivate` to
-send a Message that reconciles pending state or restarts work.
+Completed init Commands do not run again after reactivation. Interrupted init Commands
+restart. Interrupted update Commands restart when `restartInterrupted` selects them, and the
+rest reach `onReactivate`.
 
 **Gotchas**
 
 React may repeat or abandon initialization. Keep update and source construction pure.
-The Model Schema supplies types but does not validate runtime Models. Remount the Provider
-to replace `init` or its commit source.
+Remount the Provider to replace `init` or its commit source, or use `useInbound` to send
+changing values to update.
 
 **Example** (Connecting a counter to React)
 
 ```tsx
 import { Schema } from "effect"
-import { defineMessageUnion } from "react-foldkit/message"
+import { defineMessageUnion } from "foldkit/message"
 import { defineApplication } from "react-foldkit/react"
-import { modifyFields } from "react-foldkit/struct"
+import { modifyFields } from "foldkit/struct"
+import type * as Update from "foldkit/update"
 
 const Model = Schema.Struct({ count: Schema.Finite })
 type Model = typeof Model.Type
@@ -453,7 +487,7 @@ const Message = defineMessageUnion({ ClickedIncrement: {} })
 type Message = typeof Message.Type
 
 const update = (model: Model, message: Message) =>
-  Message.match(message, {
+  Message.match<Update.Return<Model, Message>>(message, {
     ClickedIncrement: () => ({ model: modifyFields(model, { count: (count) => count + 1 }) }),
   })
 
@@ -477,37 +511,13 @@ export function App() {
 
 The button starts at `0`. Each click sends `ClickedIncrement` and updates the displayed count.
 
-## react-foldkit/asyncData
-
-Foldkit reexports inherit their upstream contracts. See [Foldkit documentation](https://foldkit.dev) and the original editor JSDoc.
-
-`AsyncData`, `AsyncDataEncoded`, `AsyncDataSchema`, `Failure`, `Idle`, `Loading`, `Refreshing`, `Schema`, `Stale`, `Success`, `all`, `fail`, `flatMap`, `fromOptionOrIdle`, `getData`, `getError`, `getOrElse`, `hasData`, `hasError`, `isAsyncData`, `isFailure`, `isIdle`, `isLoading`, `isPending`, `isRefreshing`, `isStale`, `isSuccess`, `loadIfMissing`, `map`, `mapBoth`, `mapError`, `match`, `matchData`, `matchDataSplitEmpty`, `orElse`, `revalidate`, `revalidateOrLoad`, `settle`, `succeed`, `zipWith`.
-
-## react-foldkit/command
-
-Foldkit reexports inherit their upstream contracts. See [Foldkit documentation](https://foldkit.dev) and the original editor JSDoc.
-
-`Command`, `CommandDefinition`, `CommandDefinitionNoArgs`, `CommandDefinitionTypeId`, `CommandDefinitionWithArgs`, `InterruptOption`, `Interruptible`, `define`, `mapEffect`, `mapMessage`, `mapMessages`.
-
-## react-foldkit/message
-
-Foldkit reexports inherit their upstream contracts. See [Foldkit documentation](https://foldkit.dev) and the original editor JSDoc.
-
-`MessageUnion`, `defineMessageUnion`.
-
-## react-foldkit/schema
-
-Foldkit reexports inherit their upstream contracts. See [Foldkit documentation](https://foldkit.dev) and the original editor JSDoc.
-
-`CallableTaggedStruct`, `TaggedUnion`, `defineTaggedUnion`, `taggedStruct`.
-
 ## react-foldkit/store
 
 ### CommitError
 
 A Message delivery failure returned by `commit`.
-Inspect `details.reason` to distinguish an inactive, reentrant, disposed, or crashed Store.
-For `Crashed`, `details.cause` contains the original crash Cause.
+`reason` is `Inactive`, `Reentrant`, `Disposed`, or `Crashed`; a `Crashed` reason carries the
+original crash Cause. Handle one reason with `Effect.catchReason("CommitError", "Inactive", ...)`.
 
 A failure does not undo Model changes already applied while processing Messages.
 
@@ -535,13 +545,13 @@ when the Program requires no services. The Store builds it when live work first 
   ```
 
 - `onCrash` Called once on terminal failure, with the original Cause and a Message when one triggered
-  the failure. Observer defects are logged.
+  the failure. Runs before `subscribeCrash` listeners. Observer defects are logged.
 
   ```ts
   ((cause: Cause.Cause<unknown>, triggeringMessage: Option.Option<Message>) => void) | undefined
   ```
 
-- `layer` Supplies all required services. Live work finishes before the Layer releases its
+- `resources` Supplies all required services. Live work finishes before the Layer releases its
   resources.
 
   ```ts
@@ -556,6 +566,11 @@ The failure returned by `takeWhen` when its Store has crashed.
 ### Disposed
 
 The failure returned by `takeWhen` when its Store has been disposed.
+
+### Inactive
+
+The `CommitError` reason when the Store has not started delivering Messages, or React has
+deactivated its Provider.
 
 ### Program
 
@@ -578,11 +593,16 @@ surrounding Effect. Use `Config` when the Store should build its own service Lay
   ```
 
 - `onCrash` Called once on terminal failure, with the original Cause and a Message when one triggered
-  the failure. Observer defects are logged.
+  the failure. Runs before `subscribeCrash` listeners. Observer defects are logged.
 
   ```ts
   ((cause: Cause.Cause<unknown>, triggeringMessage: Option.Option<Message>) => void) | undefined
   ```
+
+### Reentrant
+
+The `CommitError` reason when `commit` is called while the Store is already delivering a
+Message, such as from a Model listener.
 
 ### Store
 
@@ -650,6 +670,13 @@ remain available after a crash or disposal.
   () => boolean
   ```
 
+- `getRunningCommands` Lists the Commands that have started and not yet finished, in start order. Disposal
+  interrupts these Commands. Their services are unknown outside the Program that returned them.
+
+  ```ts
+  () => Update.Commands<Message, unknown>
+  ```
+
 ### StoreTypeId
 
 Identifies Store instances across package entry points.
@@ -679,16 +706,16 @@ Creates a Store synchronously, with cleanup managed by the caller.
 Use it when the host creates the Store outside a scoped Effect. Run `store.dispose()` when
 the host no longer needs it, including when the host's work fails.
 
-Provide required services through `config.layer`. Unlike `make`, `boot` cannot receive
+Provide required services through `config.resources`. Unlike `make`, `boot` cannot receive
 services from a surrounding Effect Context.
 
 **Example** (Using a Store with explicit cleanup)
 
 ```ts
 import { Effect, Result } from "effect"
-import { defineMessageUnion } from "react-foldkit/message"
+import { defineMessageUnion } from "foldkit/message"
 import * as Store from "react-foldkit/store"
-import { modifyFields } from "react-foldkit/struct"
+import { modifyFields } from "foldkit/struct"
 
 type Model = { readonly count: number }
 
@@ -729,16 +756,16 @@ Creates a Store managed by an Effect Scope.
 Use it in `Effect.scoped` or another scoped Effect so cleanup runs when that work ends.
 
 Closing the Scope stops Commands and Subscriptions before releasing their services. Without
-a `layer`, the Store uses services from the calling Effect's Context. A supplied Layer is
+`resources`, the Store uses services from the calling Effect's Context. A supplied Layer is
 built when live work first needs it.
 
 **Example** (Sending a Message and reading the updated Model)
 
 ```ts
 import { Effect } from "effect"
-import { defineMessageUnion } from "react-foldkit/message"
+import { defineMessageUnion } from "foldkit/message"
 import * as Store from "react-foldkit/store"
-import { modifyFields } from "react-foldkit/struct"
+import { modifyFields } from "foldkit/struct"
 
 type Model = { readonly count: number }
 
@@ -778,9 +805,9 @@ take priority even if the last Model matches. Exceptions from the selector becom
 
 ```ts
 import { Effect, Option, Schema } from "effect"
-import { defineMessageUnion } from "react-foldkit/message"
+import { defineMessageUnion } from "foldkit/message"
 import * as Store from "react-foldkit/store"
-import { modifyFields } from "react-foldkit/struct"
+import { modifyFields } from "foldkit/struct"
 
 type Model = { readonly projectTitle: Option.Option<string> }
 
@@ -810,13 +837,44 @@ const program = Effect.scoped(
 await Effect.runPromise(program)
 ```
 
-## react-foldkit/struct
-
-Foldkit reexports inherit their upstream contracts. See [Foldkit documentation](https://foldkit.dev) and the original editor JSDoc.
-
-`makeModifyFieldsFor`, `modifyFields`.
-
 ## react-foldkit/submodel
+
+### Field
+
+A child stored in one field of its parent Model, described once for both halves of the
+Submodel. Pass it to a Submodel Provider or `useSubmodel` as a `Lift`, and call `fold`
+from the parent update to run the child update and write the result back.
+
+- `key` The parent field that holds the child Model.
+
+  ```ts
+  string
+  ```
+
+- `write` Replaces the child Model, returning the same parent when the child is unchanged.
+
+  ```ts
+  (model: ParentModel, child: Model) => ParentModel
+  ```
+
+- `fold` Runs the child update and folds its Model, Commands, and OutMessage into the parent.
+  Call as `fold(model, message)` or `fold(message)` for a Step.
+
+  ```ts
+  FoldResult
+  ```
+
+- `read` Projects a child Model. Keep this function pure and its declaration stable across renders.
+
+  ```ts
+  (model: ParentModel) => Model
+  ```
+
+- `toParentMessage` Converts a child Message into the Message handled by the parent update.
+
+  ```ts
+  (message: Message) => ParentMessage
+  ```
 
 ### Lift
 
@@ -856,21 +914,51 @@ Description of a child that may be absent from a parent Model. Use it with
 
 Thrown when a required Submodel hook is called outside its matching Provider.
 
+### ProviderProps
+
+Props for a Submodel Provider. Pass the parent hooks and a lift to derive the child source,
+or pass a source you already derived.
+
+- `children`
+
+  ```ts
+  React.ReactNode
+  ```
+
+- `from` The parent application or Submodel whose Model holds this child.
+
+  ```ts
+  Pick<ModelHooks<ParentModel, ParentMessage>, "useSubmodel"> | undefined
+  ```
+
+- `lift` Reads the child from the parent Model and lifts its Messages. Declare it outside render.
+
+  ```ts
+  Lift<ParentModel, ParentMessage, Model, Message> | undefined
+  ```
+
+- `source` A child source derived with `useSubmodel` or `useOptionalSubmodel`.
+
+  ```ts
+  ModelSource<Model, Message> | undefined
+  ```
+
 ### Submodel
 
 React binding for a child Model owned by its parent, returned by `define`. Use
 its Provider to give child views a lifted source without starting another Store.
 
-- `Provider` Supplies the parent-owned source to child hooks. Source changes are observed without
-  acquiring services or starting Commands.
+- `Provider` Supplies the parent-owned child to child hooks, from a parent and lift or from a source.
+  It does not acquire services or start Commands.
 
   ```ts
-  (props: { readonly source: ModelSource<Model, Message>; readonly children?: React.ReactNode; }) => React.ReactNode
+  <ParentModel = never, ParentMessage = never>(props: ProviderProps<Model, Message, ParentModel, ParentMessage>) => React.ReactNode
   ```
 
 - `useModel` Subscribes the view to the Model or a selected value. Pass a selector to read only the
-  value the view needs. Whole Models use `Object.is`; selections use `Equal.equals` unless
-  you supply `isEqual`. Throws outside the matching Provider.
+  value the view needs. Whole Models use `Object.is`. Selections use `Equal.equals`, which
+  compares plain objects and arrays structurally on every Model change; pass `isEqual` when
+  a selection is large or already reference-stable. Throws outside the matching Provider.
 
   ```ts
   { (): Model; <Selected>(selector: (model: Model) => Selected, isEqual?: ((a: Selected, b: Selected) => boolean) | undefined): Selected; }
@@ -895,12 +983,21 @@ its Provider to give child views a lifted source without starting another Store.
   () => Option.Option<(message: Message) => void>
   ```
 
-- `useSubmodel` Creates a source for a child Submodel from this Provider's Model. The lift reads the child
-  Model and wraps its Messages for the parent. The child shares the parent Store and
-  subscription. Throws outside the matching Provider.
+- `useInbound` Sends a Message whenever an external value changes, such as a route parameter or prop.
+  The first value is not sent; include it in `init`. Values are compared with `isEqual`,
+  which defaults to `Equal.equals`. Throws outside the matching Provider.
 
   ```ts
-  <ChildModel, ChildMessage>(projection: import("./lift").Lift<Model, Message, ChildModel, ChildMessage>) => ModelSource<ChildModel, ChildMessage>
+  <A>(value: A, toMessage: (value: A) => Message, isEqual?: ((previous: A, next: A) => boolean) | undefined) => void
+  ```
+
+- `useSubmodel` Creates a source for a child Submodel from this Provider's Model. The lift reads the child
+  Model and wraps its Messages for the parent. The child shares the parent Store and
+  subscription. Declare the lift outside render, or memoize it: a new `read` or
+  `toParentMessage` creates a new source. Throws outside the matching Provider.
+
+  ```ts
+  <ChildModel, ChildMessage>(projection: Lift<Model, Message, ChildModel, ChildMessage>) => ModelSource<ChildModel, ChildMessage>
   ```
 
 - `useOptionalSubmodel` Returns `None` while the child Model is absent. A previously created source retains its
@@ -909,14 +1006,6 @@ its Provider to give child views a lifted source without starting another Store.
 
   ```ts
   <ChildModel, ChildMessage>(projection: import("./lift").OptionalLift<Model, Message, ChildModel, ChildMessage>) => Option.Option<ModelSource<ChildModel, ChildMessage>>
-  ```
-
-- `SubmodelProvider` Passes a child Model source to `render`, where you can supply it to a Submodel Provider.
-  `lift` reads the child Model and wraps its Messages for the parent. The child shares the
-  parent Store. Throws outside the matching Provider.
-
-  ```ts
-  <ChildModel, ChildMessage>(props: { readonly lift: import("./lift").Lift<Model, Message, ChildModel, ChildMessage>; readonly render: (props: { readonly source: ModelSource<ChildModel, ChildMessage>; }) => React.ReactNode; }) => React.ReactNode
   ```
 
 ### define
@@ -931,7 +1020,7 @@ outside this Provider; optional hooks return `None`.
 
 ```tsx
 import { Schema } from "effect"
-import { defineMessageUnion } from "react-foldkit/message"
+import { defineMessageUnion } from "foldkit/message"
 import * as Submodel from "react-foldkit/submodel"
 
 export const Model = Schema.Struct({ count: Schema.Finite })
@@ -949,6 +1038,51 @@ export function View() {
 }
 ```
 
+### field
+
+Describes a child stored in one field of the parent Model. The result reads and writes that
+field, lifts child Messages, and folds the child update, so the view and update halves share
+one declaration. Supply the parent Model type first.
+
+**Example** (Embedding a form in a parent Model)
+
+```ts
+// form.ts owns the child Model, Message, and update.
+import { Schema } from "effect"
+import { defineMessageUnion } from "foldkit/message"
+import { modifyFields } from "foldkit/struct"
+
+export const Model = Schema.Struct({ draft: Schema.String })
+export type Model = typeof Model.Type
+
+export const Message = defineMessageUnion({ ChangedDraft: { text: Schema.String } })
+export type Message = typeof Message.Type
+
+export const update = (model: Model, message: Message) => ({
+  model: modifyFields(model, { draft: () => message.text }),
+})
+
+// app.ts embeds the form and folds its Messages.
+import * as Form from "./form"
+import { Schema } from "effect"
+import { defineMessageUnion } from "foldkit/message"
+import * as Submodel from "react-foldkit/submodel"
+
+const Model = Schema.Struct({ form: Form.Model })
+type Model = typeof Model.Type
+
+const Message = defineMessageUnion({ GotFormMessage: { message: Form.Message } })
+type Message = typeof Message.Type
+
+export const form = Submodel.field<Model>()("form", {
+  update: Form.update,
+  toParentMessage: (message: Form.Message) => Message.GotFormMessage({ message }),
+})
+
+export const update = (model: Model, message: Message) =>
+  Message.match(message, { GotFormMessage: ({ message }) => form.fold(model, message) })
+```
+
 ### lift
 
 Declares a child Model read and Message lift while preserving their inferred types.
@@ -961,7 +1095,7 @@ imported below as `Counter`.
 ```ts
 // counter.ts owns the child Model and Message.
 import { Schema } from "effect"
-import { defineMessageUnion } from "react-foldkit/message"
+import { defineMessageUnion } from "foldkit/message"
 
 export const Model = Schema.Struct({ count: Schema.Finite })
 export type Model = typeof Model.Type
@@ -972,7 +1106,7 @@ export type Message = typeof Message.Type
 // app.ts lifts counter messages into its own Message.
 import * as Counter from "./counter"
 import { Schema } from "effect"
-import { defineMessageUnion } from "react-foldkit/message"
+import { defineMessageUnion } from "foldkit/message"
 import * as Submodel from "react-foldkit/submodel"
 
 const Model = Schema.Struct({ counter: Counter.Model })
@@ -986,27 +1120,6 @@ export const counter = Submodel.lift({
 })
 ```
 
-## react-foldkit/subscription
-
-### EntryBuilder
-
-Callback type supplied by `Subscription.make` for defining named entries. Use it when
-extracting a typed helper that builds Subscription entries.
-
-Foldkit reexports inherit their upstream contracts. See [Foldkit documentation](https://foldkit.dev) and the original editor JSDoc.
-
-`EntryWithoutKeepAlive`, `Subscription`, `Subscriptions`, `make`.
-
-## react-foldkit/update
-
-### identity
-
-Returns the same Model with no Commands or OutMessage.
-
-Foldkit reexports inherit their upstream contracts. See [Foldkit documentation](https://foldkit.dev) and the original editor JSDoc.
-
-`ChildFold`, `ChildFoldWithDerivedParentOutMessage`, `ChildFoldWithOutMessage`, `ChildFoldWithParentOutMessage`, `ChildStepFold`, `ChildStepFoldWithDerivedParentOutMessage`, `ChildStepFoldWithOutMessage`, `ChildStepFoldWithParentOutMessage`, `Commands`, `Fold`, `FoldContext`, `FoldWithOutMessage`, `Refreshable`, `Return`, `ReturnWithOutMessage`, `Step`, `StepWithOutMessage`, `combine`, `foldChild`, `foldChildInit`, `foldChildInits`, `foldChildStep`, `refresh`, `withOutMessage`.
-
 ## react-foldkit/eslint
 
 ### default
@@ -1014,16 +1127,16 @@ Foldkit reexports inherit their upstream contracts. See [Foldkit documentation](
 Flat ESLint configuration for Command execution, Store ownership, navigation, and child
 Views that receive Model data through props.
 
-Enables the four architecture rules as errors. Local React state remains unrestricted by
-this preset.
+Enables the four architecture rules as errors and warns about Submodel lifts built during
+render. Local React state remains unrestricted by this preset.
 
 ### recommendedConfig
 
 Flat ESLint configuration for Command execution, Store ownership, navigation, and child
 Views that receive Model data through props.
 
-Enables the four architecture rules as errors. Local React state remains unrestricted by
-this preset.
+Enables the four architecture rules as errors and warns about Submodel lifts built during
+render. Local React state remains unrestricted by this preset.
 
 ### strictConfig
 
@@ -1094,6 +1207,16 @@ publish another snapshot.
 ### CommitSourceError
 
 Failure caused by duplicate snapshot keys or a source notification during reconciliation.
+Handle one reason with `Effect.catchReason("CommitSourceError", "DuplicateKey", ...)`.
+
+### DuplicateKey
+
+The `CommitSourceError` reason when a snapshot contains more than one entry for a key.
+
+### ReentrantNotification
+
+The `CommitSourceError` reason when a source notifies while the Provider is still reconciling
+its previous notification.
 
 ## react-foldkit/loader
 
@@ -1509,10 +1632,11 @@ Use a data revision or timestamp to reject older results. Choose whether an inco
 should replace the current Query state.
 
 - `fresher` Compares an incoming success with existing data. Return `false` to keep the Model. A
-  success without existing data is accepted without calling this function.
+  success without existing data is accepted without calling this function. Defaults to
+  accepting every incoming success, which suits data without a revision or timestamp.
 
   ```ts
-  (incoming: A, current: A) => boolean
+  ((incoming: A, current: A) => boolean) | undefined
   ```
 
 - `acceptFailure` Decides whether to accept a failure. Defaults to accepting only when the current state has
@@ -1550,7 +1674,7 @@ unless you supply `key`. These delivery keys are separate from the Query's cache
 import { Effect, Schema } from "effect"
 import * as Query from "foldkit/experimental/query"
 import * as Loader from "react-foldkit/loader"
-import { defineMessageUnion } from "react-foldkit/message"
+import { defineMessageUnion } from "foldkit/message"
 
 const Project = Schema.Struct({ id: Schema.String, title: Schema.String })
 
@@ -1618,7 +1742,7 @@ value to call `loadQuery` or use its `Load` Schema.
 ```ts
 import { Schema } from "effect"
 import * as Loader from "react-foldkit/loader"
-import { defineMessageUnion } from "react-foldkit/message"
+import { defineMessageUnion } from "foldkit/message"
 
 const Project = Schema.Struct({ id: Schema.String, title: Schema.String })
 
@@ -1636,7 +1760,8 @@ Use it in update to reconcile route loader data with data already held by the Qu
 
 **Details**
 
-A success is accepted when there is no current data or `fresher` returns true. Failures follow
+A success is accepted when there is no current data, no `fresher` is given, or `fresher`
+returns true. Failures follow
 `acceptFailure`. By default, a failure is accepted only when the Query has no data and no
 pending request. Initial and pending results are ignored. Rejected results leave the Model unchanged.
 
@@ -1650,7 +1775,7 @@ not start a fetch.
 ```ts
 import { Effect, Schema } from "effect"
 import * as Query from "foldkit/experimental/query"
-import * as AsyncData from "react-foldkit/asyncData"
+import * as AsyncData from "foldkit/asyncData"
 import * as Loader from "react-foldkit/loader"
 
 const Project = Schema.Struct({ title: Schema.String, revision: Schema.Finite })
@@ -1672,6 +1797,39 @@ export const settled = Loader.settleQueryIf(
 
 ## react-foldkit/tanstack
 
+### DecodeFailure
+
+A route's loader data that looked like a Loader envelope but could not be decoded.
+
+- `error` The validation failure.
+
+  ```ts
+  Schema.SchemaError
+  ```
+
+- `matchId` The TanStack route match whose loader data failed.
+
+  ```ts
+  string
+  ```
+
+- `declarationName` The envelope's declaration name, or `None` when the name itself was malformed.
+
+  ```ts
+  Option.Option<string>
+  ```
+
+### MakeOptions
+
+Options for a TanStack commit source.
+
+- `onDecodeError` Turns undecodable loader data into a Message for update, so one bad route payload does not
+  fail the whole Provider. Without it, decode failures fail the snapshot with `SchemaError`.
+
+  ```ts
+  ((failure: DecodeFailure) => Message) | undefined
+  ```
+
 ### RegistryError
 
 Failure from creating a TanStack commit source with duplicate declaration names.
@@ -1689,7 +1847,8 @@ loader data and envelopes with unregistered names are ignored.
 
 Duplicate declaration names return `RegistryError` when you create the source. Malformed
 envelope names and validation failures for registered declarations return `SchemaError`
-from `getSnapshot`. Exceptions from your key or Message callbacks remain thrown exceptions.
+from `getSnapshot`, unless `onDecodeError` turns each failure into a Message for update.
+Exceptions from your key or Message callbacks remain thrown exceptions.
 
 Creating the source does not load routes or subscribe to the router. The Provider owns the
 subscription and removes it on deactivation. Subscription requires a reactive matches store
@@ -1701,7 +1860,7 @@ and throws if the router does not provide one.
 import { createRootRoute, createRouter } from "@tanstack/react-router"
 import { Effect, Result, Schema } from "effect"
 import * as Loader from "react-foldkit/loader"
-import { defineMessageUnion } from "react-foldkit/message"
+import { defineMessageUnion } from "foldkit/message"
 import * as TanStack from "react-foldkit/tanstack"
 
 const Project = Schema.Struct({ id: Schema.String, title: Schema.String })

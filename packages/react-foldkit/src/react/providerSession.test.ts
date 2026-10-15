@@ -3,9 +3,9 @@
 import { expect, it } from "@effect/vitest"
 import { Cause, Deferred, Effect, Exit, Fiber, Layer, Logger, Option, Result, Stream } from "effect"
 import { TestClock } from "effect/testing"
-import { CommitSourceError, type CommitEntry, type CommitSource } from "../commitSource"
+import { CommitSourceError, type CommitEntry, type CommitSource, DuplicateKey } from "../commitSource"
 import * as Connection from "../commitSource/connection"
-import * as Subscription from "../subscription"
+import * as Subscription from "foldkit/subscription"
 import * as Session from "./providerSession"
 import * as ReactStore from "./reactStore"
 
@@ -197,7 +197,7 @@ const cleanupStore = (acquired: Deferred.Deferred<void>, finalize: Effect.Effect
 	ReactStore.make<number, number>(
 		{
 			update: (_model, message) => ({ model: message }),
-			layer: Layer.effectDiscard(Effect.acquireRelease(Effect.void, () => finalize)),
+			resources: Layer.effectDiscard(Effect.acquireRelease(Effect.void, () => finalize)),
 		},
 		{
 			model: 0,
@@ -324,7 +324,7 @@ it.effect("reports independent cleanup defects during terminal source catchup wi
 					throw runtimeDefect
 				},
 				onCrash() {},
-				layer: Layer.effectDiscard(Effect.acquireRelease(Effect.void, () => Effect.die(cleanupDefect))),
+				resources: Layer.effectDiscard(Effect.acquireRelease(Effect.void, () => Effect.die(cleanupDefect))),
 			},
 			{
 				model: 0,
@@ -396,7 +396,7 @@ it.effect("logs nonterminal setup cleanup failure once before observing the comb
 			yield* session.stop
 		}).pipe(Effect.provide(Logger.layer([logger])))
 		const combined = Cause.combine(
-			Cause.fail(new CommitSourceError({ details: { reason: "DuplicateKey", key: "duplicate" } })),
+			Cause.fail(new CommitSourceError({ reason: new DuplicateKey({ key: "duplicate" }) })),
 			Cause.die(defect)
 		)
 		expect(events).toEqual([

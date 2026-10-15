@@ -3,9 +3,9 @@ import { Cause, Deferred, Effect, Exit, Fiber, Layer, Logger, Option, Result } f
 import { TestClock } from "effect/testing"
 import { expect } from "vitest"
 import { entry, fakeSource, Message } from "../../test/fixtures/commitSource"
-import { CommitSourceError } from "../commitSource"
+import { CommitSourceError, DuplicateKey } from "../commitSource"
 import * as Connection from "../commitSource/connection"
-import { CommitError } from "../store"
+import { CommitError, Inactive } from "../store"
 import * as Session from "./providerSession"
 import * as ReactStore from "./reactStore"
 
@@ -26,7 +26,7 @@ function fixture() {
 	return { source, handled, store, bootstrap }
 }
 
-const duplicate = (key: string) => Cause.fail(new CommitSourceError({ details: { reason: "DuplicateKey", key } }))
+const duplicate = (key: string) => Cause.fail(new CommitSourceError({ reason: new DuplicateKey({ key }) }))
 
 it.effect("publishes bootstrap failure before its observer settles and keeps it when the observer fails", () =>
 	Effect.gen(function* () {
@@ -233,7 +233,7 @@ it.effect("reports asynchronous cleanup when stop interrupts pending activation"
 		yield* Deferred.succeed(observerGate, undefined)
 		expect(yield* Fiber.await(stopping)).toEqual(Exit.void)
 		expect(f.store.commit(Message.Edited())).toEqual(
-			Result.fail(new CommitError({ details: { reason: "Inactive" } }))
+			Result.fail(new CommitError({ reason: new Inactive() }))
 		)
 	})
 )
@@ -278,7 +278,7 @@ it.effect("closes store resources before cleanup observation and awaits both", (
 		const store = ReactStore.make<number, Message>(
 			{
 				update: (model) => ({ model }),
-				layer: Layer.effectDiscard(
+				resources: Layer.effectDiscard(
 					Effect.acquireRelease(Deferred.succeed(acquired, undefined), () =>
 						Deferred.succeed(released, undefined).pipe(
 							Effect.andThen(Deferred.await(cleanupGate)),
@@ -328,7 +328,7 @@ it.effect("keeps a healthy reconnect after an older cleanup observer fails", () 
 		const store = ReactStore.make<number, Message>(
 			{
 				update: (model) => ({ model: model + 1 }),
-				layer: Layer.effectDiscard(
+				resources: Layer.effectDiscard(
 					Effect.acquireRelease(
 						Effect.suspend(() =>
 							Deferred.succeed(++acquisitions === 1 ? firstAcquired : secondAcquired, undefined)

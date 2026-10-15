@@ -17,8 +17,8 @@ import {
 } from "effect"
 import * as InitCommand from "../internal/initCommand"
 import { CurrentInterruptRegistry, type InterruptRegistry, makeInterruptRegistry } from "../internal/interrupt"
-import type * as Subscription from "../subscription"
-import type * as Update from "../update"
+import type * as Subscription from "foldkit/subscription"
+import type * as Update from "foldkit/update"
 import { browserScheduler } from "./scheduler"
 import { forkSubscriptionFibers } from "./subscriptions"
 
@@ -44,7 +44,7 @@ export type Program<Model, Message, R = never> = {
 	subscriptions?: Subscription.Subscriptions<Model, Message, R>
 	/**
 	 * Called once on terminal failure, with the original Cause and a Message when one triggered
-	 * the failure. Observer defects are logged.
+	 * the failure. Runs before `subscribeCrash` listeners. Observer defects are logged.
 	 */
 	onCrash?: (cause: Cause.Cause<unknown>, triggeringMessage: Option.Option<Message>) => void
 }
@@ -67,14 +67,14 @@ export type Config<Model, Message, R = never> = [R] extends [never]
 			 * Supplies all required services. Live work finishes before the Layer releases its
 			 * resources.
 			 */
-			layer?: Layer.Layer<never, never, never>
+			resources?: Layer.Layer<never, never, never>
 		}
 	: Program<Model, Message, R> & {
 			/**
 			 * Supplies all required services. Live work finishes before the Layer releases its
 			 * resources.
 			 */
-			layer: Layer.Layer<NoInfer<R>, never, never>
+			resources: Layer.Layer<NoInfer<R>, never, never>
 		}
 
 /**
@@ -146,6 +146,11 @@ export type Store<Model, Message> = Readonly<{
 	 * disposed.
 	 */
 	isDisposed: () => boolean
+	/**
+	 * Lists the Commands that have started and not yet finished, in start order. Disposal
+	 * interrupts these Commands. Their services are unknown outside the Program that returned them.
+	 */
+	getRunningCommands: () => Update.Commands<Message, unknown>
 }>
 
 /**
@@ -173,9 +178,33 @@ export class Crashed extends Schema.Error<Crashed>("react-foldkit/Store/Crashed"
 }) {}
 
 /**
+ * The `CommitError` reason when the Store has not started delivering Messages, or React has
+ * deactivated its Provider.
+ *
+ * @see {@link CommitError} for the failure that carries it
+ * @category errors
+ * @since 0.1.0
+ */
+export class Inactive extends Schema.Error<Inactive>("react-foldkit/Store/Inactive")({
+	_tag: Schema.tag("Inactive"),
+}) {}
+
+/**
+ * The `CommitError` reason when `commit` is called while the Store is already delivering a
+ * Message, such as from a Model listener.
+ *
+ * @see {@link CommitError} for the failure that carries it
+ * @category errors
+ * @since 0.1.0
+ */
+export class Reentrant extends Schema.Error<Reentrant>("react-foldkit/Store/Reentrant")({
+	_tag: Schema.tag("Reentrant"),
+}) {}
+
+/**
  * A Message delivery failure returned by `commit`.
- * Inspect `details.reason` to distinguish an inactive, reentrant, disposed, or crashed Store.
- * For `Crashed`, `details.cause` contains the original crash Cause.
+ * `reason` is `Inactive`, `Reentrant`, `Disposed`, or `Crashed`; a `Crashed` reason carries the
+ * original crash Cause. Handle one reason with `Effect.catchReason("CommitError", "Inactive", ...)`.
  *
  * A failure does not undo Model changes already applied while processing Messages.
  *
@@ -185,18 +214,10 @@ export class Crashed extends Schema.Error<Crashed>("react-foldkit/Store/Crashed"
  */
 export class CommitError extends Schema.Error<CommitError>("react-foldkit/Store/CommitError")({
 	_tag: Schema.tag("CommitError"),
-	details: Schema.Union([
-		Schema.Struct({
-			reason: Schema.Literals(["Inactive", "Reentrant", "Disposed"]),
-		}),
-		Schema.Struct({
-			reason: Schema.Literal("Crashed"),
-			cause: Schema.declare<Cause.Cause<unknown>>(Cause.isCause),
-		}),
-	]),
+	reason: Schema.Union([Inactive, Reentrant, Disposed, Crashed]),
 }) {
 	get message(): string {
-		return "Cannot commit: store is " + this.details.reason.toLowerCase()
+		return "Cannot commit: store is " + this.reason._tag.toLowerCase()
 	}
 }
 
@@ -238,9 +259,9 @@ export const commit: {
  *
  * ```ts
  * import { Effect, Option, Schema } from "effect"
- * import { defineMessageUnion } from "react-foldkit/message"
+ * import { defineMessageUnion } from "foldkit/message"
  * import * as Store from "react-foldkit/store"
- * import { modifyFields } from "react-foldkit/struct"
+ * import { modifyFields } from "foldkit/struct"
  *
  * type Model = { readonly projectTitle: Option.Option<string> }
  *
@@ -351,16 +372,16 @@ const makeProvideAllResources =
  * Use it in `Effect.scoped` or another scoped Effect so cleanup runs when that work ends.
  *
  * Closing the Scope stops Commands and Subscriptions before releasing their services. Without
- * a `layer`, the Store uses services from the calling Effect's Context. A supplied Layer is
+ * `resources`, the Store uses services from the calling Effect's Context. A supplied Layer is
  * built when live work first needs it.
  *
  * **Example** (Sending a Message and reading the updated Model)
  *
  * ```ts
  * import { Effect } from "effect"
- * import { defineMessageUnion } from "react-foldkit/message"
+ * import { defineMessageUnion } from "foldkit/message"
  * import * as Store from "react-foldkit/store"
- * import { modifyFields } from "react-foldkit/struct"
+ * import { modifyFields } from "foldkit/struct"
  *
  * type Model = { readonly count: number }
  *
@@ -392,12 +413,12 @@ export function make<Model, Message, R = never>(
 	init: Update.Return<Model, Message, R>
 ): Effect.Effect<Store<Model, Message>, never, Scope.Scope>
 export function make<Model, Message, R = never>(
-	config: Program<Model, Message, R> & { readonly layer?: never },
+	config: Program<Model, Message, R> & { readonly resources?: never },
 	init: Update.Return<Model, Message, R>
 ): Effect.Effect<Store<Model, Message>, never, R | Scope.Scope>
 // eslint-disable-next-line foldkit-style/prefer-arrow-for-expression-return -- Overloads distinguish provided and ambient services.
 export function make<Model, Message, R = never>(
-	config: Program<Model, Message, R> & { readonly layer?: Layer.Layer<NoInfer<R>, never, never> },
+	config: Program<Model, Message, R> & { readonly resources?: Layer.Layer<NoInfer<R>, never, never> },
 	init: Update.Return<Model, Message, R>
 ): Effect.Effect<Store<Model, Message>, never, R | Scope.Scope> {
 	return Effect.gen(function* () {
@@ -408,7 +429,7 @@ export function make<Model, Message, R = never>(
 		const layerScope = yield* Scope.fork(scope)
 		const fiberScope = yield* Scope.fork(scope, "parallel")
 		const modelPubSub = yield* PubSub.unbounded<Model>()
-		const layer = config.layer
+		const layer = config.resources
 		const getBuild = yield* Effect.cached(
 			Effect.forkIn(
 				layer === undefined ? Effect.succeed(ambient) : Layer.buildWithScope(layer, layerScope),
@@ -440,16 +461,16 @@ export function make<Model, Message, R = never>(
  * Use it when the host creates the Store outside a scoped Effect. Run `store.dispose()` when
  * the host no longer needs it, including when the host's work fails.
  *
- * Provide required services through `config.layer`. Unlike `make`, `boot` cannot receive
+ * Provide required services through `config.resources`. Unlike `make`, `boot` cannot receive
  * services from a surrounding Effect Context.
  *
  * **Example** (Using a Store with explicit cleanup)
  *
  * ```ts
  * import { Effect, Result } from "effect"
- * import { defineMessageUnion } from "react-foldkit/message"
+ * import { defineMessageUnion } from "foldkit/message"
  * import * as Store from "react-foldkit/store"
- * import { modifyFields } from "react-foldkit/struct"
+ * import { modifyFields } from "foldkit/struct"
  *
  * type Model = { readonly count: number }
  *
@@ -505,6 +526,7 @@ function start<Model, Message, R>(
 		readonly command?: Update.Commands<Message, R>[number]
 	}
 	const pendingMessages = MutableList.make<PendingMessage>()
+	const runningCommands = new Set<{ readonly command: Update.Commands<Message, R>[number] }>()
 	let phase: Phase = {
 		_tag: "Booting",
 	}
@@ -542,16 +564,17 @@ function start<Model, Message, R>(
 		Effect.runForkWith(runtimeContext)(
 			closeResources(Exit.failCause(cause)).pipe(Effect.catchCause(Effect.logError))
 		)
-		const observers = [...crashListeners]
-		for (const listener of observers) {
-			const exit = Effect.runSyncExit(Effect.sync(listener))
-			if (Exit.isFailure(exit)) Effect.runForkWith(runtimeContext)(Effect.logError(exit.cause))
-		}
+		// onCrash runs first so crash listeners observe everything it records.
 		if (config.onCrash !== undefined) {
 			const exit = Effect.runSyncExit(Effect.sync(() => config.onCrash?.(cause, triggeringMessage)))
 			if (Exit.isFailure(exit)) Effect.runForkWith(runtimeContext)(Effect.logError(exit.cause))
 		} else
 			Effect.runForkWith(runtimeContext)(Effect.logError("[react-foldkit] Store crashed:", Cause.pretty(cause)))
+		const observers = [...crashListeners]
+		for (const listener of observers) {
+			const exit = Effect.runSyncExit(Effect.sync(listener))
+			if (Exit.isFailure(exit)) Effect.runForkWith(runtimeContext)(Effect.logError(exit.cause))
+		}
 	}
 
 	function enqueueMessage(message: Message, command?: Update.Commands<Message, R>[number]): void {
@@ -599,8 +622,11 @@ function start<Model, Message, R>(
 		command: Update.Commands<Message, R>[number],
 		triggeringMessage: Option.Option<Message>
 	): void {
+		// Each start gets its own entry; the same Command value can run more than once.
+		const running = { command }
 		const effect = Effect.suspend(function () {
 			if (isTerminal(phase)) return Effect.void
+			runningCommands.add(running)
 
 			// Foldkit Command accepts a Schema or its Type; this runtime dispatches values.
 			return (command.effect as Effect.Effect<Message, never, R>).pipe(
@@ -616,6 +642,11 @@ function start<Model, Message, R>(
 				Effect.catchCause((cause) =>
 					Effect.sync(function () {
 						crashWith(cause, triggeringMessage)
+					})
+				),
+				Effect.ensuring(
+					Effect.sync(function () {
+						runningCommands.delete(running)
 					})
 				)
 			)
@@ -697,40 +728,13 @@ function start<Model, Message, R>(
 	function canCommit(): Result.Result<void, CommitError> {
 		switch (phase._tag) {
 			case "Booting":
-				return Result.fail(
-					new CommitError({
-						details: {
-							reason: "Inactive",
-						},
-					})
-				)
+				return Result.fail(new CommitError({ reason: new Inactive() }))
 			case "Crashed":
-				return Result.fail(
-					new CommitError({
-						details: {
-							reason: "Crashed",
-							cause: phase.cause,
-						},
-					})
-				)
+				return Result.fail(new CommitError({ reason: new Crashed({ cause: phase.cause }) }))
 			case "Disposed":
-				return Result.fail(
-					new CommitError({
-						details: {
-							reason: "Disposed",
-						},
-					})
-				)
+				return Result.fail(new CommitError({ reason: new Disposed() }))
 			case "Live":
-				return phase.drain === "Sync"
-					? Result.fail(
-							new CommitError({
-								details: {
-									reason: "Reentrant",
-								},
-							})
-						)
-					: Result.void
+				return phase.drain === "Sync" ? Result.fail(new CommitError({ reason: new Reentrant() })) : Result.void
 		}
 	}
 
@@ -820,5 +824,6 @@ function start<Model, Message, R>(
 		commit,
 		dispose,
 		isDisposed: () => phase._tag === "Disposed",
+		getRunningCommands: () => Array.from(runningCommands, ({ command }) => command),
 	} satisfies Store<Model, Message>
 }

@@ -13,7 +13,7 @@ Read [the runtime explanation](docs/architecture.md) before changing lifecycle b
 
 ## Keep the package consistent
 
-Public barrels define the exports. Foldkit reexports retain their identity and documentation. Follow [the JSDoc playbook](../../docs/jsdocPlaybook.md) for owned exports.
+Public barrels define the exports. Do not reexport Foldkit vocabulary; applications import it from `foldkit`, a peer dependency. Follow [the JSDoc playbook](../../docs/jsdocPlaybook.md) for owned exports.
 
 Use camelCase implementation filenames and directories. Keep public ESLint rule IDs in dash-case. Do not rename web app files. `check:filenames` checks the package conventions.
 

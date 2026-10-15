@@ -2,7 +2,7 @@ import { it } from "@effect/vitest"
 import { Cause, Context, Deferred, Effect, Exit, Layer, Option, Stream } from "effect"
 import { describe, expect } from "vitest"
 import * as Store from "./store"
-import * as Subscription from "./subscription"
+import * as Subscription from "foldkit/subscription"
 
 class Resource extends Context.Service<Resource, { closed: boolean }>()("StoreLifecycle/Resource") {}
 
@@ -50,7 +50,7 @@ describe("store lifetime", function () {
 					),
 				}))
 				const store = yield* Store.make(
-					{ update: (_model: number, message: number) => ({ model: message }), layer, subscriptions },
+					{ update: (_model: number, message: number) => ({ model: message }), resources: layer, subscriptions },
 					{ model: 0, commands: [{ name: "Waiting", effect: work("command", commandStarted) }] }
 				)
 				yield* Deferred.await(commandStarted)

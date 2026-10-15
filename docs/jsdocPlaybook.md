@@ -6,7 +6,7 @@ This package follows Effect's [declaration structure](../repos/effect/.agents/sk
 
 ## Decide what needs a comment
 
-Document owned public exports. Let Foldkit reexports inherit their upstream comments. Do not copy those comments onto export specifiers or add JSDoc to internal helpers.
+Document owned public exports. Do not reexport Foldkit APIs or add JSDoc to internal helpers.
 
 Document public members when their meaning, default, timing, or constraint needs explanation. That includes members inherited from an internal base type. Omit comments that repeat the member's name or type.
 

@@ -7,8 +7,8 @@ import { afterEach, describe, expect, vi } from "vitest"
 import { entry, fakeSource, Message } from "../test/fixtures/commitSource"
 import { createSourceFixture } from "../test/fixtures/reactCommitSource"
 import { defineApplication, type CommitEntry, type CommitSource } from "./react"
-import type * as Command from "./command"
-import type * as Update from "./update"
+import type * as Command from "foldkit/command"
+import type * as Update from "foldkit/update"
 afterEach(function () {
 	cleanup()
 	vi.restoreAllMocks()

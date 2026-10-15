@@ -1,7 +1,6 @@
 // Check the built public API using Foldkit's Vitest type-test convention.
 import { Option, Schema } from "effect"
-import type React from "react"
-import { defineMessageUnion } from "react-foldkit/message"
+import { defineMessageUnion } from "foldkit/message"
 import { defineApplication } from "react-foldkit/react"
 import { define } from "react-foldkit/submodel"
 import type { ModelSource } from "react-foldkit/modelSource"
@@ -28,14 +27,10 @@ describe("define public types", function () {
 			| "useOptionalDispatch"
 			| "useSubmodel"
 			| "useOptionalSubmodel"
-			| "SubmodelProvider"
+			| "useInbound"
 		>()
 		expectTypeOf(Submodel.useModel).toEqualTypeOf<typeof Root.useModel>()
 		expectTypeOf(Submodel.useDispatch).returns.toEqualTypeOf<(message: Message) => void>()
-		expectTypeOf<React.ComponentProps<typeof Submodel.Provider>>().toEqualTypeOf<{
-			readonly source: ModelSource<Model, Message>
-			readonly children?: React.ReactNode
-		}>()
 	})
 
 	if (false) {
@@ -60,24 +55,20 @@ describe("define public types", function () {
 		const source = Root.useSubmodel({ read: (model) => model, toParentMessage: (message: Message) => message })
 		expectTypeOf(source).toEqualTypeOf<ModelSource<Model, Message>>()
 		Submodel.Provider({ source })
-		Root.SubmodelProvider({
-			lift: { read: (model) => model, toParentMessage: (message: Message) => message },
-			render({ source }) {
-				expectTypeOf(source).toEqualTypeOf<ModelSource<Model, Message>>()
-				return Submodel.Provider({ source })
-			},
+		Submodel.Provider({
+			from: Root,
+			lift: { read: (model: Model) => model, toParentMessage: (message: Message) => message },
 		})
-		Submodel.SubmodelProvider({
-			lift: { read: (model) => model.count, toParentMessage: (_message: string) => Message.Load() },
-			render({ source }) {
-				expectTypeOf(source).toEqualTypeOf<ModelSource<number, string>>()
-				return null
-			},
+		Submodel.Provider({
+			from: Root,
+			// @ts-expect-error The lift must produce this Submodel's Model.
+			lift: { read: (model: Model) => model.count, toParentMessage: (message: Message) => message },
 		})
-		Root.SubmodelProvider({
-			lift: { read: (model) => model, toParentMessage: (message: Message) => message },
-			// @ts-expect-error Render receives only source; children are closed over.
-			render: ({ children }) => children,
+		// @ts-expect-error A Provider takes a source or a parent and lift, not both.
+		Submodel.Provider({
+			source,
+			from: Root,
+			lift: { read: (model: Model) => model, toParentMessage: (message: Message) => message },
 		})
 		const optional = Submodel.useOptionalSubmodel({
 			read: (model) => Option.some(model.count),

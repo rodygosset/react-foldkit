@@ -1,7 +1,7 @@
 import { Crypto, Effect, Function, Option, Pipeable, Predicate, Result, Schema, SchemaIssue } from "effect"
 import * as AsyncData from "foldkit/asyncData"
 import type { KeyedQuery, Query } from "foldkit/experimental/query"
-import type * as Update from "../update"
+import type * as Update from "foldkit/update"
 import { layerWebCrypto } from "./crypto"
 import { Envelope, EnvelopeHeader, Receipt } from "./envelope"
 import { makeResourceKey, type ReadKey } from "./key"
@@ -400,7 +400,7 @@ const isKeyedQueryInput = <Name extends string, A, AI, E, EI, Fields extends Syn
  * import { Effect, Schema } from "effect"
  * import * as Query from "foldkit/experimental/query"
  * import * as Loader from "react-foldkit/loader"
- * import { defineMessageUnion } from "react-foldkit/message"
+ * import { defineMessageUnion } from "foldkit/message"
  *
  * const Project = Schema.Struct({ id: Schema.String, title: Schema.String })
  *
@@ -480,9 +480,10 @@ export function fromQuery<Name extends string, A, AI, E, EI, Fields extends Sync
 export interface SettleQueryIfOptions<A, E> {
 	/**
 	 * Compares an incoming success with existing data. Return `false` to keep the Model. A
-	 * success without existing data is accepted without calling this function.
+	 * success without existing data is accepted without calling this function. Defaults to
+	 * accepting every incoming success, which suits data without a revision or timestamp.
 	 */
-	readonly fresher: (incoming: A, current: A) => boolean
+	readonly fresher?: (incoming: A, current: A) => boolean
 	/**
 	 * Decides whether to accept a failure. Defaults to accepting only when the current state has
 	 * neither data nor a pending request.
@@ -494,7 +495,7 @@ type QuerySettlementInput<Name extends string, A, AI, E, EI, R, Interrupt extend
 	query: Query<Name, A, AI, E, EI, R, Interrupt>,
 	model: Query<Name, A, AI, E, EI, R, Interrupt>["Model"]["Type"],
 	result: AsyncData.AsyncData<A, E>,
-	options: SettleQueryIfOptions<A, E>,
+	options?: SettleQueryIfOptions<A, E>,
 ]
 
 type KeyedQuerySettlementInput<
@@ -511,8 +512,15 @@ type KeyedQuerySettlementInput<
 	model: KeyedQuery<Name, A, AI, E, EI, Fields, R, Interrupt>["Model"]["Type"],
 	args: KeyedArgs<Fields>,
 	result: AsyncData.AsyncData<A, E>,
-	options: SettleQueryIfOptions<A, E>,
+	options?: SettleQueryIfOptions<A, E>,
 ]
+
+// A keyed Query reads with args; optional options make argument counts ambiguous.
+const isKeyedSettlement = <Name extends string, A, AI, E, EI, Fields extends SyncFields, R, Interrupt extends boolean>(
+	input:
+		| KeyedQuerySettlementInput<Name, A, AI, E, EI, Fields, R, Interrupt>
+		| QuerySettlementInput<Name, A, AI, E, EI, R, Interrupt>
+): input is KeyedQuerySettlementInput<Name, A, AI, E, EI, Fields, R, Interrupt> => typeof input[0].run === "function"
 
 interface Settlement<Model, Message, A, E> {
 	readonly clear: (model: Model) => Update.Return<Model, Message>
@@ -530,7 +538,8 @@ function settle<Model, Message, A, E>(
 ): Update.Return<Model, Message> {
 	const maybeData = AsyncData.getData(current)
 	if (AsyncData.isSuccess(result)) {
-		if (Option.isSome(maybeData) && !options.fresher(result.data, maybeData.value)) return { model }
+		if (Option.isSome(maybeData) && options.fresher !== undefined && !options.fresher(result.data, maybeData.value))
+			return { model }
 	} else if (AsyncData.isFailure(result)) {
 		if (!(options.acceptFailure?.(current) ?? (!AsyncData.hasData(current) && !AsyncData.isPending(current))))
 			return { model }
@@ -556,7 +565,8 @@ function settle<Model, Message, A, E>(
  *
  * **Details**
  *
- * A success is accepted when there is no current data or `fresher` returns true. Failures follow
+ * A success is accepted when there is no current data, no `fresher` is given, or `fresher`
+ * returns true. Failures follow
  * `acceptFailure`. By default, a failure is accepted only when the Query has no data and no
  * pending request. Initial and pending results are ignored. Rejected results leave the Model unchanged.
  *
@@ -570,7 +580,7 @@ function settle<Model, Message, A, E>(
  * ```ts
  * import { Effect, Schema } from "effect"
  * import * as Query from "foldkit/experimental/query"
- * import * as AsyncData from "react-foldkit/asyncData"
+ * import * as AsyncData from "foldkit/asyncData"
  * import * as Loader from "react-foldkit/loader"
  *
  * const Project = Schema.Struct({ title: Schema.String, revision: Schema.Finite })
@@ -608,7 +618,7 @@ export function settleQueryIf<
 	model: KeyedQuery<Name, A, AI, E, EI, Fields, R, Interrupt>["Model"]["Type"],
 	args: KeyedArgs<Fields>,
 	result: AsyncData.AsyncData<A, E>,
-	options: SettleQueryIfOptions<A, E>
+	options?: SettleQueryIfOptions<A, E>
 ): Update.Return<
 	KeyedQuery<Name, A, AI, E, EI, Fields, R, Interrupt>["Model"]["Type"],
 	KeyedQuery<Name, A, AI, E, EI, Fields, R, Interrupt>["Message"]["Type"]
@@ -617,7 +627,7 @@ export function settleQueryIf<Name extends string, A, AI, E, EI, R, Interrupt ex
 	query: Query<Name, A, AI, E, EI, R, Interrupt>,
 	model: Query<Name, A, AI, E, EI, R, Interrupt>["Model"]["Type"],
 	result: AsyncData.AsyncData<A, E>,
-	options: SettleQueryIfOptions<A, E>
+	options?: SettleQueryIfOptions<A, E>
 ): Update.Return<
 	Query<Name, A, AI, E, EI, R, Interrupt>["Model"]["Type"],
 	Query<Name, A, AI, E, EI, R, Interrupt>["Message"]["Type"]
@@ -636,8 +646,8 @@ export function settleQueryIf<
 		| KeyedQuerySettlementInput<Name, A, AI, E, EI, Fields, R, Interrupt>
 		| QuerySettlementInput<Name, A, AI, E, EI, R, Interrupt>
 ) {
-	if (input.length === 5) {
-		const [query, model, args, result, options] = input
+	if (isKeyedSettlement(input)) {
+		const [query, model, args, result, options = {}] = input
 		type Model = typeof query.Model.Type
 		type Completed = Extract<typeof query.Message.Type, { readonly _tag: "CompletedFetch" }>
 		return settle(model, query.read(model, args), result, options, {
@@ -655,7 +665,7 @@ export function settleQueryIf<
 				} satisfies Completed).model,
 		})
 	}
-	const [query, model, result, options] = input
+	const [query, model, result, options = {}] = input
 	type Model = typeof query.Model.Type
 	type Completed = Extract<typeof query.Message.Type, { readonly _tag: "CompletedFetch" }>
 	return settle(model, query.read(model), result, options, {
@@ -688,7 +698,7 @@ export function settleQueryIf<
  * ```ts
  * import { Schema } from "effect"
  * import * as Loader from "react-foldkit/loader"
- * import { defineMessageUnion } from "react-foldkit/message"
+ * import { defineMessageUnion } from "foldkit/message"
  *
  * const Project = Schema.Struct({ id: Schema.String, title: Schema.String })
  *

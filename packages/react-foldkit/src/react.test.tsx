@@ -5,12 +5,12 @@ import React, { StrictMode } from "react"
 import { hydrateRoot, type Root } from "react-dom/client"
 import { renderToString } from "react-dom/server"
 import { afterEach, describe, expect, vi } from "vitest"
-import { modifyFields } from "./struct"
-import type * as Command from "./command"
-import { defineMessageUnion } from "./message"
+import { modifyFields } from "foldkit/struct"
+import type * as Command from "foldkit/command"
+import { defineMessageUnion } from "foldkit/message"
 import { defineApplication } from "./react"
-import * as Subscription from "./subscription"
-import type * as Update from "./update"
+import * as Subscription from "foldkit/subscription"
+import type * as Update from "foldkit/update"
 
 const Message = defineMessageUnion({
 	CompletedLoad: { value: Schema.String },
@@ -354,7 +354,7 @@ describe("React Provider", function () {
 					}
 				),
 			}))
-			const { Provider, useModel } = defineApplication({ Model, update, subscriptions, layer })
+			const { Provider, useModel } = defineApplication({ Model, update, subscriptions, resources: layer })
 
 			function View() {
 				return <span>{useModel().status}</span>

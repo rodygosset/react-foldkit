@@ -1,6 +1,6 @@
 import { createMemoryHistory, createRootRoute, createRoute, createRouter } from "@tanstack/react-router"
 import type { Readable } from "@tanstack/react-store"
-import { Effect, Result, Schema } from "effect"
+import { Effect, Option, Result, Schema } from "effect"
 import { describe, it } from "@effect/vitest"
 import { expect, vi } from "vitest"
 import * as Loader from "./loader"
@@ -122,6 +122,36 @@ describe("TanStack CommitSource adapter", function () {
 				expect(Result.isFailure(snapshot)).toBe(true)
 				if (Result.isFailure(snapshot)) expect(snapshot.failure).toBeInstanceOf(Schema.SchemaError)
 			}
+		})
+	)
+
+	it.live("turns undecodable entries into Messages with onDecodeError and keeps healthy entries", () =>
+		Effect.gen(function* () {
+			const count = yield* Count.load(Effect.succeed(2))
+			const project = yield* Project.load(Effect.succeed("a"))
+			const router = routerWith(count, { ...project, payload: 42 })
+			yield* Effect.promise(() => router.load())
+			const source = Result.getOrThrow(
+				TanStackSource.make(router, [Project, Count], {
+					onDecodeError: (failure) => ({ _tag: "LoaderFailed" as const, failure }),
+				})
+			)
+			const entries = Result.getOrThrow(source.getSnapshot())
+			expect(entries[0]?.message).toBe(2)
+			const failed = entries[1]?.message
+			expect(failed).toMatchObject({ _tag: "LoaderFailed", failure: { declarationName: Option.some("Project") } })
+			expect(entries[1]?.version).toBe(project.version)
+			if (typeof failed === "object" && failed !== null && "failure" in failed)
+				expect(failed.failure.error).toBeInstanceOf(Schema.SchemaError)
+
+			const malformedName = routerWith(null, { ...project, name: 7 })
+			yield* Effect.promise(() => malformedName.load())
+			const named = Result.getOrThrow(
+				Result.getOrThrow(
+					TanStackSource.make(malformedName, [Project], { onDecodeError: (failure) => failure.declarationName })
+				).getSnapshot()
+			)
+			expect(named.map(({ message }) => message)).toEqual([Option.none()])
 		})
 	)
 

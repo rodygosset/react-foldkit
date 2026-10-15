@@ -3,10 +3,10 @@ import { Input } from "@workspace/ui/components/input"
 import { Label } from "@workspace/ui/components/label"
 import { Schema } from "effect"
 import { PlusIcon } from "lucide-react"
-import { defineMessageUnion } from "react-foldkit/message"
-import { modifyFields } from "react-foldkit/struct"
+import { defineMessageUnion } from "foldkit/message"
+import { modifyFields } from "foldkit/struct"
 import * as Submodel from "react-foldkit/submodel"
-import type * as Update from "react-foldkit/update"
+import type * as Update from "foldkit/update"
 
 export const Model = Schema.Struct({
 	draft: Schema.String,

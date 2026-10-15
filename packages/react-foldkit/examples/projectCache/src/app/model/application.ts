@@ -1,13 +1,12 @@
 import * as Project from "@/entities/project"
-import { Array, HashMap, Schema } from "effect"
-import * as AsyncData from "react-foldkit/asyncData"
-import * as Command from "react-foldkit/command"
+import { Schema } from "effect"
+import * as Command from "foldkit/command"
 import * as Loader from "react-foldkit/loader"
-import { defineMessageUnion } from "react-foldkit/message"
+import { defineMessageUnion } from "foldkit/message"
 import { defineApplication } from "react-foldkit/react"
-import { modifyFields } from "react-foldkit/struct"
+import { modifyFields } from "foldkit/struct"
 import * as Submodel from "react-foldkit/submodel"
-import * as Update from "react-foldkit/update"
+import * as Update from "foldkit/update"
 
 export const Model = Schema.Struct({ projects: Project.Model })
 export type Model = typeof Model.Type
@@ -15,7 +14,6 @@ export type Model = typeof Model.Type
 export const Message = defineMessageUnion({
 	GotProjectMessage: { message: Project.Message },
 	CompletedLoadProject: { load: Project.loader.Load },
-	ResumedApplication: {},
 	ClickedRefreshProject: { projectId: Schema.String },
 })
 export type Message = typeof Message.Type
@@ -29,18 +27,6 @@ const project = Project.query.lift<Model, Message>({
 
 export const update = (model: Model, message: Message) =>
 	Message.match<Update.Return<Model, Message>>(message, {
-		ResumedApplication: () =>
-			Update.combine(
-				model,
-				Array.map(
-					Array.filter(Array.fromIterable(HashMap.values(model.projects.entries)), (entry) =>
-						AsyncData.isPending(entry.data)
-					),
-					({ args }) =>
-						(current: Model) =>
-							project.replace(current, args)
-				)
-			),
 		GotProjectMessage: ({ message }) => project.fold(model, message),
 		CompletedLoadProject({ load }) {
 			const { args, result } = load
@@ -64,8 +50,10 @@ export const projects = Submodel.lift({
 	toParentMessage: toProjectMessage,
 })
 
-export const { Provider, useModel, useDispatch, SubmodelProvider } = defineApplication({
+export const Application = defineApplication({
 	Model,
 	update,
-	onReactivate: () => Message.ResumedApplication(),
+	// Query fetches are idempotent reads, so retry any that React Activity interrupted.
+	restartInterrupted: true,
 })
+export const { Provider, useModel, useDispatch } = Application

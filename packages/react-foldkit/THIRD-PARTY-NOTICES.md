@@ -1,6 +1,6 @@
 # Third-party notices
 
-React Foldkit depends on [Foldkit](https://github.com/foldkit/foldkit) and reexports selected APIs. Foldkit is excluded from the bundled output. Its MIT license is reproduced below.
+React Foldkit depends on [Foldkit](https://github.com/foldkit/foldkit) as a peer dependency and adapts its model freezing. Foldkit is excluded from the bundled output. Its MIT license is reproduced below.
 
 ## Foldkit
 

@@ -2,9 +2,9 @@ import { afterEach, expect } from "vitest"
 import { it } from "@effect/vitest"
 import React from "react"
 import { cleanup, render, waitFor } from "@testing-library/react"
-import { Cause, Effect, Option, Result, Schema, Stream } from "effect"
+import { Cause, Effect, Schema, Stream } from "effect"
 import { defineApplication } from "./react"
-import * as Subscription from "./subscription"
+import * as Subscription from "foldkit/subscription"
 afterEach(cleanup)
 it.live("repeated subscription Cause after Activity reconnect", () =>
 	Effect.gen(function* () {
@@ -20,9 +20,9 @@ it.live("repeated subscription Cause after Activity reconnect", () =>
 			subscriptions,
 			onCrash: (cause) => crashes.push(cause),
 		})
-		let commit: ReturnType<typeof App.useCommit> | undefined
+		let dispatch: ReturnType<typeof App.useDispatch> | undefined
 		function View() {
-			commit = App.useCommit()
+			dispatch = App.useDispatch()
 			return <span>{App.useModel()}</span>
 		}
 		function Tree({ visible }: { visible: boolean }) {
@@ -30,12 +30,13 @@ it.live("repeated subscription Cause after Activity reconnect", () =>
 				<React.Activity mode={visible ? "visible" : "hidden"}>
 					<App.Provider
 						init={{ model: 0 }}
-						onError={(cause) =>
-							Effect.sync(function () {
-								reports.push(cause)
-							})
-						}
-						renderError={() => <span role="alert">crashed</span>}
+						crash={{
+							view: () => <span role="alert">crashed</span>,
+							report: ({ cause }) =>
+								Effect.sync(function () {
+									reports.push(cause)
+								}),
+						}}
 					>
 						<View />
 					</App.Provider>
@@ -52,6 +53,9 @@ it.live("repeated subscription Cause after Activity reconnect", () =>
 		yield* Effect.promise(() => waitFor(() => expect(reports.length).toBe(2)))
 		expect(mounted.getByRole("alert").textContent).toBe("crashed")
 		expect(mounted.container.textContent).toBe("crashed")
-		expect(Option.getOrThrow(Result.getFailure(commit!(3))).details.reason).toBe("Crashed")
+		// A crashed Store ignores further Messages.
+		dispatch!(3)
+		expect(crashes).toHaveLength(2)
+		expect(mounted.container.textContent).toBe("crashed")
 	})
 )

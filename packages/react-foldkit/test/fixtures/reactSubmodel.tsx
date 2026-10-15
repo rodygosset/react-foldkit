@@ -1,9 +1,9 @@
-import { Option, Result, Schema } from "effect"
+import { Option, Schema } from "effect"
 import React from "react"
-import { defineMessageUnion } from "../../src/message"
+import { defineMessageUnion } from "foldkit/message"
 import type { ModelSource } from "../../src/modelSource"
 import { defineApplication } from "../../src/react"
-import { modifyFields } from "../../src/struct"
+import { modifyFields } from "foldkit/struct"
 import { define, lift } from "../../src/submodel"
 
 export const ChildModel = Schema.Struct({ count: Schema.Finite, unrelated: Schema.Finite })
@@ -42,7 +42,7 @@ export function createSubmodelFixture() {
 		read: (model: Model) => ({ ...model.child }),
 		toParentMessage: (message: ChildMessage) => Message.Child({ message }),
 	})
-	let commit: Option.Option<ReturnType<typeof App.useCommit>> = Option.none()
+	let dispatch: Option.Option<ReturnType<typeof App.useDispatch>> = Option.none()
 	let source: Option.Option<ModelSource<ChildModel, ChildMessage>> = Option.none()
 	let parentRenders = 0
 	let listeners = 0
@@ -63,7 +63,7 @@ export function createSubmodelFixture() {
 			}),
 			[projected]
 		)
-		commit = Option.some(App.useCommit())
+		dispatch = Option.some(App.useDispatch())
 		source = Option.some(observed)
 		return <Child.Provider source={observed}>{children}</Child.Provider>
 	}
@@ -79,8 +79,8 @@ export function createSubmodelFixture() {
 		lift: child,
 		Child,
 		Tree,
-		set: (child: ChildModel) => Result.getOrThrow(Option.getOrThrow(commit)(Message.Set({ child }))),
-		other: () => Result.getOrThrow(Option.getOrThrow(commit)(Message.Other())),
+		set: (child: ChildModel) => Option.getOrThrow(dispatch)(Message.Set({ child })),
+		other: () => Option.getOrThrow(dispatch)(Message.Other()),
 		get source() {
 			return Option.getOrThrow(source)
 		},

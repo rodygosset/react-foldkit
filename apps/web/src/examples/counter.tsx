@@ -1,10 +1,10 @@
 import { Button } from "@workspace/ui/components/button"
 import { Schema } from "effect"
 import { MinusIcon, PlusIcon, RotateCcwIcon } from "lucide-react"
-import { defineMessageUnion } from "react-foldkit/message"
+import { defineMessageUnion } from "foldkit/message"
 import { defineApplication } from "react-foldkit/react"
-import { modifyFields } from "react-foldkit/struct"
-import type * as Update from "react-foldkit/update"
+import { modifyFields } from "foldkit/struct"
+import type * as Update from "foldkit/update"
 import { ExampleShell } from "../components/example-shell"
 
 const Model = Schema.Struct({

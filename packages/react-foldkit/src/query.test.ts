@@ -3,9 +3,9 @@ import { Effect, Layer, Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup } from "effect/http-api"
 import * as Query from "foldkit/experimental/query"
 import { describe, expect, vi } from "vitest"
-import { defineMessageUnion } from "./message"
+import { defineMessageUnion } from "foldkit/message"
 import * as Store from "./store"
-import * as Update from "./update"
+import * as Update from "foldkit/update"
 
 const Api = HttpApi.make("QueryStoreApi").add(
 	HttpApiGroup.make("notes").add(
@@ -44,7 +44,7 @@ describe("Foldkit HttpApi Query in the React store", function () {
 			const store = Store.boot(
 				{
 					update,
-					layer: Layer.succeed(
+					resources: Layer.succeed(
 						Client,
 						Client.of({
 							notes: {

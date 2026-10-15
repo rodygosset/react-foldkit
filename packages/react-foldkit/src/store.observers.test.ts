@@ -2,7 +2,7 @@ import { Cause, Deferred, Effect, Exit, Fiber, Layer, Option, Schema, Stream } f
 import { describe, expect } from "vitest"
 import { it } from "@effect/vitest"
 import * as Store from "./store"
-import * as Subscription from "./subscription"
+import * as Subscription from "foldkit/subscription"
 
 describe("store observers", function () {
 	it.live("buffers every model while subscription resources are acquiring", () =>
@@ -30,7 +30,7 @@ describe("store observers", function () {
 				{
 					update: (_model: number, message: number) => ({ model: message }),
 					subscriptions,
-					layer: Layer.effectDiscard(
+					resources: Layer.effectDiscard(
 						Deferred.succeed(acquiring, undefined).pipe(Effect.andThen(Deferred.await(ready)))
 					),
 				},
@@ -97,7 +97,7 @@ describe("store observers", function () {
 				)
 			)
 			const store = Store.boot(
-				{ update: (_model: number, message: number) => ({ model: message }), layer },
+				{ update: (_model: number, message: number) => ({ model: message }), resources: layer },
 				{ model: 0, commands: [{ name: "Wait", effect: Effect.never }] }
 			)
 			yield* Deferred.await(started)
