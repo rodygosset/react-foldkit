@@ -1,4 +1,4 @@
-import { Cause, Context, Deferred, Duration, Effect, Exit, Option, Scope, Semaphore } from "effect"
+import { Cause, Context, Duration, Effect, Exit, Option, Scope, Semaphore } from "effect"
 import type { Connection } from "../commitSource/connection"
 import type { ModelReader } from "../modelSource"
 import type { ReactStore } from "./reactStore"
@@ -22,7 +22,6 @@ interface Lifetime {
 	readonly resources: Scope.Closeable
 	readonly observers: Scope.Closeable
 	readonly reportGate: Semaphore.Semaphore
-	readonly setup: Deferred.Deferred<Exit.Exit<void, unknown>>
 }
 
 const liveReportDeadline: Duration.Input = "2 seconds" as const
@@ -164,10 +163,7 @@ export function make<Model, Message>(
 					return
 				}
 				return yield* finalized
-			}).pipe(
-				Effect.onExit((exit) => Deferred.succeed(lifetime.setup, exit)),
-				Effect.ignoreCause
-			)
+			}).pipe(Effect.ignoreCause)
 		)
 
 	const release = (lifetime: Lifetime): Effect.Effect<Exit.Exit<void, unknown>> =>
@@ -179,8 +175,7 @@ export function make<Model, Message>(
 				],
 				{ concurrency: "unbounded" }
 			)
-			const setup = yield* Deferred.await(lifetime.setup)
-			return Exit.asVoidAll([...closed, setup])
+			return Exit.asVoidAll(closed)
 		})
 
 	const start = Effect.gen(function* () {
@@ -190,18 +185,14 @@ export function make<Model, Message>(
 			resources: yield* Scope.make(),
 			observers: yield* Scope.make(),
 			reportGate: yield* Semaphore.make(maxConcurrentTransientReports),
-			setup: yield* Deferred.make<Exit.Exit<void, unknown>>(),
 		}
 		const closing: Effect.Effect<void> = yield* Effect.cached(
 			Effect.gen(function* () {
-				const exit = yield* Effect.gen(function* () {
-					const exit = yield* release(lifetime)
-					if (Exit.isFailure(exit) && !Cause.hasInterruptsOnly(exit.cause)) {
-						if (phase.close === closing) publish(Option.some(exit.cause))
-						yield* Effect.logError(exit.cause)
-					}
-					return exit
-				}).pipe(Effect.uninterruptible)
+				const exit = yield* release(lifetime)
+				if (Exit.isFailure(exit) && !Cause.hasInterruptsOnly(exit.cause)) {
+					if (phase.close === closing) publish(Option.some(exit.cause))
+					yield* Effect.logError(exit.cause)
+				}
 				if (Exit.isSuccess(exit) || Cause.hasInterruptsOnly(exit.cause)) return
 				yield* report(exit.cause).pipe(
 					Effect.timeoutOption(shutdownReportDeadline),

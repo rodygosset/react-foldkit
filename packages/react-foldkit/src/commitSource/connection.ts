@@ -20,8 +20,7 @@ export interface Connection<Message, E = never> {
 function versions<Message>(snapshot: ReadonlyArray<CommitEntry<Message>>): Result.Result<Versions, CommitSourceError> {
 	let result = HashMap.empty<string, string | number>()
 	for (const { key, version } of snapshot) {
-		if (HashMap.has(result, key))
-			return Result.fail(new CommitSourceError({ reason: new DuplicateKey({ key }) }))
+		if (HashMap.has(result, key)) return Result.fail(new CommitSourceError({ reason: new DuplicateKey({ key }) }))
 		result = HashMap.set(result, key, version)
 	}
 	return Result.succeed(result)
@@ -68,7 +67,6 @@ export const make = <Message, E>(options: {
 					})
 
 				function reconcile(): Result.Result<void, ConnectionError<E>> {
-					if (phase() === "Released") return Result.void
 					if (phase() === "Notifying" || phase() === "Reentered") return reentrant
 					const resume = phase()
 					cell.phase = "Notifying"

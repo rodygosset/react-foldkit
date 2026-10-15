@@ -163,7 +163,6 @@ export function make<Model, Message, R = never>(
 		gate
 			.withPermit(
 				Effect.sync(function () {
-					if (activation.leases > 0) return false
 					if (Option.isNone(maybeActive) || maybeActive.value !== activation) return false
 					retire(activation)
 					return true
@@ -189,7 +188,9 @@ export function make<Model, Message, R = never>(
 					return "Retain"
 				})
 			)
-			.pipe(Effect.flatMap((outcome) => (outcome === "Close" ? Scope.close(activation.scope, exit) : Effect.void)))
+			.pipe(
+				Effect.flatMap((outcome) => (outcome === "Close" ? Scope.close(activation.scope, exit) : Effect.void))
+			)
 
 	function flushInactiveMessages(store: Store.Store<Model, Message>): void {
 		const messages = inactiveMessages
@@ -210,7 +211,6 @@ export function make<Model, Message, R = never>(
 				return running
 			}
 			// A retained Store that crashed is replaced like a disposed one.
-			if (Option.isSome(running.expiry)) yield* Fiber.interrupt(running.expiry.value)
 			retire(running)
 			yield* closeQuietly(running.scope, Exit.void)
 		}
@@ -229,10 +229,7 @@ export function make<Model, Message, R = never>(
 		crashMessage = Option.none()
 		const store = yield* Effect.gen(function* () {
 			const store = yield* Store.make(config, { model: inactive.model, commands })
-			yield* Effect.acquireRelease(
-				Effect.sync(() => store.subscribe(notifyListeners)),
-				(unsubscribe) => Effect.sync(unsubscribe)
-			)
+			store.subscribe(notifyListeners)
 			yield* Effect.acquireRelease(
 				Effect.sync(() =>
 					store.subscribeCrash(function () {
@@ -247,17 +244,13 @@ export function make<Model, Message, R = never>(
 					interrupted: kept,
 				}
 				const message = yield* Effect.sync(() => config.onReactivate?.(context))
-				if (message !== undefined) {
-					const committed = store.commit(message)
-					if (Result.isFailure(committed) && Option.isNone(store.getCrash())) return yield* committed.failure
-				}
+				if (message !== undefined) store.commit(message)
 			}
 			return store
 		}).pipe(
 			Scope.provide(scope),
 			Effect.onExit((exit) => (Exit.isFailure(exit) ? Scope.close(scope, exit) : Effect.void))
 		)
-		inactive = { ...inactive, interrupted: [] }
 		const activation: Activation<Model, Message> = { store, scope, leases: 1, expiry: Option.none() }
 		maybeActive = Option.some(activation)
 		return activation

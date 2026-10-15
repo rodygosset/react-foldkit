@@ -569,8 +569,7 @@ The failure returned by `takeWhen` when its Store has been disposed.
 
 ### Inactive
 
-The `CommitError` reason when the Store has not started delivering Messages, or React has
-deactivated its Provider.
+The `CommitError` reason when React has deactivated the Provider that owns the Store.
 
 ### Program
 

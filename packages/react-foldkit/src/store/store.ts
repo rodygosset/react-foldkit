@@ -178,8 +178,7 @@ export class Crashed extends Schema.Error<Crashed>("react-foldkit/Store/Crashed"
 }) {}
 
 /**
- * The `CommitError` reason when the Store has not started delivering Messages, or React has
- * deactivated its Provider.
+ * The `CommitError` reason when React has deactivated the Provider that owns the Store.
  *
  * @see {@link CommitError} for the failure that carries it
  * @category errors
@@ -348,7 +347,6 @@ export const takeWhen: {
 const DRAIN_BUDGET_MS = 5
 
 type Phase =
-	| { readonly _tag: "Booting" }
 	| { readonly _tag: "Live"; readonly drain: "Idle" | "Sync" | "Deferred" }
 	| { readonly _tag: "Crashed"; readonly cause: Cause.Cause<unknown> }
 	| { readonly _tag: "Disposed"; readonly crash: Option.Option<Cause.Cause<unknown>> }
@@ -528,7 +526,8 @@ function start<Model, Message, R>(
 	const pendingMessages = MutableList.make<PendingMessage>()
 	const runningCommands = new Set<{ readonly command: Update.Commands<Message, R>[number] }>()
 	let phase: Phase = {
-		_tag: "Booting",
+		_tag: "Live",
+		drain: "Idle",
 	}
 	let syncWorkMsSinceYield = 0
 	let lastDrainEndedAt = 0
@@ -543,7 +542,6 @@ function start<Model, Message, R>(
 	const provideAllResources = makeProvideAllResources(acquireResourceContext, interruptRegistry)
 	function getCrash(): Option.Option<Cause.Cause<unknown>> {
 		switch (phase._tag) {
-			case "Booting":
 			case "Live":
 				return Option.none()
 			case "Crashed":
@@ -559,8 +557,6 @@ function start<Model, Message, R>(
 			_tag: "Crashed",
 			cause,
 		}
-		MutableList.clear(pendingMessages)
-		cancelDeferredDrain()
 		Effect.runForkWith(runtimeContext)(
 			closeResources(Exit.failCause(cause)).pipe(Effect.catchCause(Effect.logError))
 		)
@@ -580,7 +576,6 @@ function start<Model, Message, R>(
 	function enqueueMessage(message: Message, command?: Update.Commands<Message, R>[number]): void {
 		if (isTerminal(phase)) return
 		MutableList.append(pendingMessages, { message, command })
-		if (phase._tag === "Booting") return
 		drainPendingMessages()
 	}
 
@@ -625,7 +620,6 @@ function start<Model, Message, R>(
 		// Each start gets its own entry; the same Command value can run more than once.
 		const running = { command }
 		const effect = Effect.suspend(function () {
-			if (isTerminal(phase)) return Effect.void
 			runningCommands.add(running)
 
 			// Foldkit Command accepts a Schema or its Type; this runtime dispatches values.
@@ -689,12 +683,10 @@ function start<Model, Message, R>(
 			_tag: "Live",
 			drain: "Sync",
 		}
-		let currentMessage: Option.Option<Message> = Option.none()
 		try {
 			while (!isTerminal(phase)) {
 				const entry = MutableList.take(pendingMessages)
 				if (entry === MutableList.Empty) return
-				currentMessage = Option.some(entry.message)
 				processMessage(entry)
 
 				if (entry === until) {
@@ -710,8 +702,6 @@ function start<Model, Message, R>(
 					return
 				}
 			}
-		} catch (error) {
-			crashWith(Cause.die(error), currentMessage)
 		} finally {
 			const drainEndedAt = performance.now()
 			syncWorkMsSinceYield += drainEndedAt - drainStartedAt
@@ -727,8 +717,6 @@ function start<Model, Message, R>(
 
 	function canCommit(): Result.Result<void, CommitError> {
 		switch (phase._tag) {
-			case "Booting":
-				return Result.fail(new CommitError({ reason: new Inactive() }))
 			case "Crashed":
 				return Result.fail(new CommitError({ reason: new Crashed({ cause: phase.cause }) }))
 			case "Disposed":
@@ -770,8 +758,6 @@ function start<Model, Message, R>(
 				const notify = [...listeners]
 				return Effect.sync(function () {
 					MutableList.clear(pendingMessages)
-					listeners.clear()
-					crashListeners.clear()
 					cancelDeferredDrain()
 				}).pipe(
 					Effect.andThen(Effect.forEach(notify, (listener) => Effect.exit(Effect.sync(listener)))),
@@ -785,8 +771,8 @@ function start<Model, Message, R>(
 			})
 		)
 
-	// Foldkit: attach subscriptions before lifting the boot barrier so their
-	// init deps see the init Model, then fork init Commands, then go Live.
+	// Foldkit attaches subscriptions before forking init Commands, so their initial
+	// dependencies come from the init Model.
 	forkSubscriptionFibers(config.subscriptions, {
 		bootModel: initialModel,
 		modelPubSub,
@@ -799,14 +785,6 @@ function start<Model, Message, R>(
 
 	if (initCommands.length > 0) {
 		for (const command of initCommands) forkCommand(command, Option.none())
-	}
-
-	if (!isTerminal(phase)) {
-		phase = {
-			_tag: "Live",
-			drain: "Idle",
-		}
-		drainPendingMessages()
 	}
 
 	return {

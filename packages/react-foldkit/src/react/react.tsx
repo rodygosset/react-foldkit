@@ -417,7 +417,7 @@ export function defineApplication<ModelSchema extends ModelCodec, Message, R = n
 					const source: CommitSource.CommitSource<Message, E> | undefined =
 						props.createCommitSource === undefined
 							? props.commitSource
-							: yield* Effect.suspend(() => Effect.fromResult(props.createCommitSource()))
+							: yield* Effect.fromResult(props.createCommitSource())
 					if (source === undefined) {
 						if (validateInit) yield* checkModel(init.model)
 						return { store: ReactStore.make(config, init), connection: undefined }
@@ -479,7 +479,13 @@ export function defineApplication<ModelSchema extends ModelCodec, Message, R = n
 		const restart = React.useCallback(function () {
 			setGeneration((current) => current + 1)
 		}, [])
-		return <ProviderInstance key={generation} {...props} restart={restart} />
+		return (
+			<ProviderInstance
+				key={generation}
+				{...props}
+				restart={restart}
+			/>
+		)
 	}
 
 	function useOptionalSource(): Option.Option<ModelSource<Model, Message>> {
