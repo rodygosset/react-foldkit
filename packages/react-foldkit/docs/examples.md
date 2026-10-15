@@ -10,10 +10,10 @@ Create `App.tsx` with the following code. Render its `App` component from your R
 
 ```tsx
 import { Schema } from "effect"
-import { defineMessageUnion } from "react-foldkit/message"
+import { defineMessageUnion } from "foldkit/message"
 import { defineApplication } from "react-foldkit/react"
-import { modifyFields } from "react-foldkit/struct"
-import type * as Update from "react-foldkit/update"
+import { modifyFields } from "foldkit/struct"
+import type * as Update from "foldkit/update"
 
 const Model = Schema.Struct({ count: Schema.Number })
 type Model = typeof Model.Type
@@ -73,7 +73,7 @@ Replace the import from `effect` and add the Command import.
 
 ```ts
 import { Effect, Schema } from "effect"
-import * as Command from "react-foldkit/command"
+import * as Command from "foldkit/command"
 ```
 
 Replace the Model, Message, update, and `Counter` declarations with the following code. Keep the existing imports, `CounterView`, and `App`.
@@ -91,7 +91,6 @@ const Message = defineMessageUnion({
   ClickedReset: {},
   ClickedDelayedIncrement: {},
   CompletedDelay: {},
-  Reactivated: {},
 })
 type Message = typeof Message.Type
 
@@ -116,13 +115,12 @@ const update = (model: Model, message: Message) =>
     CompletedDelay: () => ({
       model: modifyFields(model, { count: (count) => count + 1, isWaiting: () => false }),
     }),
-    Reactivated: () => ({ model: modifyFields(model, { isWaiting: () => false }) }),
   })
 
 const Counter = defineApplication({
   Model,
   update,
-  onReactivate: () => Message.Reactivated(),
+  restartInterrupted: (command) => command.name === "WaitToIncrement",
 })
 ```
 
@@ -161,8 +159,45 @@ Click **Increment after one second**. The button shows **Waiting...** and become
 
 Other buttons still work during the delay. **Reset** changes the count but does not cancel the pending increment. Removing the application Provider stops its live work, including the delay.
 
-React Activity also stops the delay when it hides the Provider, but retains the Model. When Activity shows the Provider again, `onReactivate` sends `Reactivated` to clear `isWaiting` so you can start another increment.
+React Activity also stops the delay when it hides the Provider, but retains the Model. `restartInterrupted` starts the delay again when Activity shows the Provider, so `isWaiting` still ends with an increment. Only restart work that is safe to repeat. For anything else, `onReactivate` receives the interrupted Commands and returns a Message for update. To keep the delay running through short hides instead, set `retainInactive`.
 
 The view now handles an asynchronous interaction without running Effects itself. The Model records the pending state, and update handles both the click and completion.
+
+## Follow a changing prop
+
+The Provider reads `init` once. When a value from outside the application keeps changing, such as a route search parameter, send each change to update instead of remounting the Provider. Remounting would discard the Model and restart its Commands.
+
+```tsx
+const Message = defineMessageUnion({ ChangedStep: { step: Schema.Number } })
+
+function SyncStep({ step }: { readonly step: number }) {
+  Counter.useInbound(step, (step) => Message.ChangedStep({ step }))
+  return null
+}
+```
+
+Render `SyncStep` inside the Provider. `useInbound` skips the first value, which `init` already contains, and compares later values with `Equal.equals`.
+
+## Recover from a crash
+
+A Command or update that fails crashes the Store. The Provider then renders `crash.view` in place of its children. The view receives the failure, the Model at the time, the Message that triggered it, and `restart`, which remounts the Provider from `init`.
+
+```tsx
+const Counter = defineApplication({
+  Model,
+  update,
+  crash: {
+    view: ({ cause, restart }) => (
+      <div role="alert">
+        <pre>{Cause.pretty(cause)}</pre>
+        <button onClick={restart}>Start again</button>
+      </div>
+    ),
+    report: ({ cause, message }) => Effect.logError("Counter crashed", message, cause),
+  },
+})
+```
+
+A Provider's `crash` prop overrides either callback for that Provider.
 
 For child Models and route-loaded data, continue with the [project-cache example](../examples/projectCache/README.md). See [how the runtime works](architecture.md) for ownership and cancellation.

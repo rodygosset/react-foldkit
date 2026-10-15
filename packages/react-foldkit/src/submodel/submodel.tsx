@@ -2,6 +2,38 @@ import { Option, Schema } from "effect"
 import React from "react"
 import { modelHooks, type ModelHooks } from "../react/react"
 import type { ModelSource } from "../modelSource"
+import type { Lift } from "./lift"
+
+/**
+ * Props for a Submodel Provider. Pass the parent hooks and a lift to derive the child source,
+ * or pass a source you already derived.
+ *
+ * @category configuration
+ * @since 0.1.0
+ */
+export type ProviderProps<Model, Message, ParentModel = never, ParentMessage = never> = {
+	readonly children?: React.ReactNode
+} & (
+	| {
+			/**
+			 * The parent application or Submodel whose Model holds this child.
+			 */
+			readonly from: Pick<ModelHooks<ParentModel, ParentMessage>, "useSubmodel">
+			/**
+			 * Reads the child from the parent Model and lifts its Messages. Declare it outside render.
+			 */
+			readonly lift: Lift<ParentModel, ParentMessage, Model, Message>
+			readonly source?: never
+	  }
+	| {
+			/**
+			 * A child source derived with `useSubmodel` or `useOptionalSubmodel`.
+			 */
+			readonly source: ModelSource<Model, Message>
+			readonly from?: never
+			readonly lift?: never
+	  }
+)
 
 /**
  * React binding for a child Model owned by its parent, returned by `define`. Use
@@ -12,13 +44,12 @@ import type { ModelSource } from "../modelSource"
  */
 export interface Submodel<Model, Message> extends ModelHooks<Model, Message> {
 	/**
-	 * Supplies the parent-owned source to child hooks. Source changes are observed without
-	 * acquiring services or starting Commands.
+	 * Supplies the parent-owned child to child hooks, from a parent and lift or from a source.
+	 * It does not acquire services or start Commands.
 	 */
-	readonly Provider: (props: {
-		readonly source: ModelSource<Model, Message>
-		readonly children?: React.ReactNode
-	}) => React.ReactNode
+	readonly Provider: <ParentModel = never, ParentMessage = never>(
+		props: ProviderProps<Model, Message, ParentModel, ParentMessage>
+	) => React.ReactNode
 }
 
 /**
@@ -47,7 +78,7 @@ export class ProviderError extends Schema.Error<ProviderError>("react-foldkit/Su
  *
  * ```tsx
  * import { Schema } from "effect"
- * import { defineMessageUnion } from "react-foldkit/message"
+ * import { defineMessageUnion } from "foldkit/message"
  * import * as Submodel from "react-foldkit/submodel"
  *
  * export const Model = Schema.Struct({ count: Schema.Finite })
@@ -71,7 +102,7 @@ export class ProviderError extends Schema.Error<ProviderError>("react-foldkit/Su
 export function define<Model, Message>(): Submodel<Model, Message> {
 	const Context = React.createContext<Option.Option<ModelSource<Model, Message>>>(Option.none())
 
-	function Provider({
+	function SourceProvider({
 		source,
 		children,
 	}: {
@@ -89,6 +120,30 @@ export function define<Model, Message>(): Submodel<Model, Message> {
 			[source]
 		)
 		return <Context.Provider value={context}>{children}</Context.Provider>
+	}
+
+	function LiftedProvider<ParentModel, ParentMessage>({
+		from,
+		lift,
+		children,
+	}: {
+		readonly from: Pick<ModelHooks<ParentModel, ParentMessage>, "useSubmodel">
+		readonly lift: Lift<ParentModel, ParentMessage, Model, Message>
+		readonly children?: React.ReactNode
+	}) {
+		return <SourceProvider source={from.useSubmodel(lift)}>{children}</SourceProvider>
+	}
+
+	function Provider<ParentModel = never, ParentMessage = never>(
+		props: ProviderProps<Model, Message, ParentModel, ParentMessage>
+	) {
+		return props.source === undefined ? (
+			<LiftedProvider from={props.from} lift={props.lift}>
+				{props.children}
+			</LiftedProvider>
+		) : (
+			<SourceProvider source={props.source}>{props.children}</SourceProvider>
+		)
 	}
 
 	function useSource(): ModelSource<Model, Message> {

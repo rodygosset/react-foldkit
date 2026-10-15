@@ -4,8 +4,10 @@ export type {
 	CommitEntry,
 	CommitSource,
 	Config,
-	ErrorOptions,
+	CrashConfig,
+	CrashContext,
 	ModelHooks,
 	ProviderProps,
+	ReactivationContext,
 	SourceOptions,
 } from "./react"

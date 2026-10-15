@@ -3,13 +3,13 @@ import { Button } from "@workspace/ui/components/button"
 import { Separator } from "@workspace/ui/components/separator"
 import { DateTime, Array, Clock, Duration, Effect, Layer, Match, Option, pipe, Schema, Stream } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup } from "effect/http-api"
-import * as AsyncData from "react-foldkit/asyncData"
-import { defineMessageUnion } from "react-foldkit/message"
+import * as AsyncData from "foldkit/asyncData"
+import { defineMessageUnion } from "foldkit/message"
 import * as Query from "foldkit/experimental/query"
 import { defineApplication } from "react-foldkit/react"
-import { modifyFields } from "react-foldkit/struct"
-import * as Subscription from "react-foldkit/subscription"
-import * as Update from "react-foldkit/update"
+import { modifyFields } from "foldkit/struct"
+import * as Subscription from "foldkit/subscription"
+import * as Update from "foldkit/update"
 import { ExampleShell } from "../../components/example-shell"
 import { fetchPostDetail, fetchPosts, fetchStats, Post, PostDetail, Stats } from "../api-cache/data"
 
@@ -189,7 +189,7 @@ const { Provider, useModel, useDispatch } = defineApplication({
 	Model,
 	update,
 	subscriptions,
-	layer: BlogClient.layer,
+	resources: BlogClient.layer,
 })
 
 const formatFetchedAt = (fetchedAt: number): string =>

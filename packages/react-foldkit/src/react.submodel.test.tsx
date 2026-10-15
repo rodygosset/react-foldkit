@@ -1,17 +1,17 @@
 import { it } from "@effect/vitest"
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
-import { Context, Deferred, Effect, Fiber, Layer, Option, Result, Schema } from "effect"
+import { Context, Deferred, Effect, Fiber, Layer, Option, Schema } from "effect"
 import React from "react"
 import { renderToString } from "react-dom/server"
 import { afterEach, describe, expect, vi } from "vitest"
 import { ChildMessage, ChildModel, createSubmodelFixture } from "../test/fixtures/reactSubmodel"
-import * as Command from "./command"
-import { defineMessageUnion } from "./message"
+import * as Command from "foldkit/command"
+import { defineMessageUnion } from "foldkit/message"
 import type { ModelSource } from "./modelSource"
 import { defineApplication } from "./react"
-import { modifyFields } from "./struct"
+import { modifyFields } from "foldkit/struct"
 import { define, lift, ProviderError } from "./submodel"
-import * as Update from "./update"
+import * as Update from "foldkit/update"
 
 const Model = Schema.Struct({ count: Schema.Finite })
 type Model = typeof Model.Type
@@ -69,22 +69,25 @@ describe("define", function () {
 			read: (model: ChildModel) => model.count,
 			toParentMessage: (_message: string) => ChildMessage.Increment(),
 		})
-		let commit: ReturnType<typeof fixture.App.useCommit> | undefined
+		let dispatch: ReturnType<typeof fixture.App.useDispatch> | undefined
 		const sources: Array<ModelSource<{ readonly count: number; readonly unrelated: number }, ChildMessage>> = []
 		function Capture() {
-			commit = fixture.App.useCommit()
+			dispatch = fixture.App.useDispatch()
 			return null
+		}
+		function Lifted({ children }: { readonly children: React.ReactNode }) {
+			const source = fixture.App.useSubmodel(fixture.lift)
+			sources.push(source)
+			return <fixture.Child.Provider source={source}>{children}</fixture.Child.Provider>
 		}
 		function Nested() {
 			return (
-				<fixture.Child.SubmodelProvider
+				<NumberView.Provider
+					from={fixture.Child}
 					lift={count}
-					render={({ source }) => (
-						<NumberView.Provider source={source}>
-							<Counter />
-						</NumberView.Provider>
-					)}
-				/>
+				>
+					<Counter />
+				</NumberView.Provider>
 			)
 		}
 		function Counter() {
@@ -98,38 +101,22 @@ describe("define", function () {
 		render(
 			<fixture.App.Provider init={{ model: { child: { count: 1, unrelated: 0 }, other: 0 } }}>
 				<Capture />
-				<fixture.App.SubmodelProvider
-					lift={fixture.lift}
-					render={function ({ source }) {
-						sources.push(source)
-						return (
-							<fixture.Child.Provider source={source}>
-								<Nested />
-							</fixture.Child.Provider>
-						)
-					}}
-				/>
-				<fixture.App.SubmodelProvider
-					lift={fixture.lift}
-					render={function ({ source }) {
-						sources.push(source)
-						return (
-							<fixture.Child.Provider source={source}>
-								<Sibling />
-							</fixture.Child.Provider>
-						)
-					}}
-				/>
+				<Lifted>
+					<Nested />
+				</Lifted>
+				<Lifted>
+					<Sibling />
+				</Lifted>
 			</fixture.App.Provider>
 		)
 		act(function () {
-			Result.getOrThrow(commit!({ _tag: "Other" }))
+			dispatch!({ _tag: "Other" })
 		})
 		expect(sources).toHaveLength(2)
 		fireEvent.click(screen.getByRole("button"))
-		// Dispatch is queued; commit flushes it without subscribing the helpers.
+		// Sending another root Message flushes React without subscribing the helpers.
 		act(function () {
-			Result.getOrThrow(commit!({ _tag: "Other" }))
+			dispatch!({ _tag: "Other" })
 		})
 		expect(screen.getByRole("button").textContent).toBe("2")
 		expect(screen.getByRole("status").textContent).toBe("2")
@@ -450,19 +437,24 @@ describe("define", function () {
 			const First = defineApplication({
 				Model: FirstModel,
 				update: (model: FirstModel, { message }: ParentMessage) => foldFirst(model, message),
-				layer,
+				resources: layer,
 			})
 			const Second = defineApplication({
 				Model: SecondModel,
 				update: (model: SecondModel, { message }: ParentMessage) => foldSecond(model, message),
-				layer,
+				resources: layer,
+			})
+			const firstForm = lift({
+				read: (model: FirstModel) => model.form,
+				toParentMessage: (message: Message) => ParentMessage.GotChild({ message }),
+			})
+			const secondEditor = lift({
+				read: (model: SecondModel) => model.editor,
+				toParentMessage: (message: Message) => ParentMessage.GotChild({ message }),
 			})
 			function FirstView() {
 				const model = First.useModel()
-				const source = First.useSubmodel({
-					read: (model) => model.form,
-					toParentMessage: (message: Message) => ParentMessage.GotChild({ message }),
-				})
+				const source = First.useSubmodel(firstForm)
 				return (
 					<Submodel.Provider source={source}>
 						<View name="first" />
@@ -472,10 +464,7 @@ describe("define", function () {
 			}
 			function SecondView() {
 				const model = Second.useModel()
-				const source = Second.useSubmodel({
-					read: (model) => model.editor,
-					toParentMessage: (message: Message) => ParentMessage.GotChild({ message }),
-				})
+				const source = Second.useSubmodel(secondEditor)
 				return (
 					<Submodel.Provider source={source}>
 						<View name="second" />
@@ -520,11 +509,11 @@ describe("define", function () {
 			read: (model: ParentModel) => model.child,
 			toParentMessage: (_message: Message) => ParentMessage.Set({ child: Option.none() }),
 		})
-		let commit: Option.Option<ReturnType<typeof App.useCommit>> = Option.none()
+		let dispatch: Option.Option<ReturnType<typeof App.useDispatch>> = Option.none()
 		let parentRenders = 0
 		function Connection() {
 			parentRenders += 1
-			commit = Option.some(App.useCommit())
+			dispatch = Option.some(App.useDispatch())
 			const source = App.useOptionalSubmodel(child)
 			return Option.match(source, {
 				onNone: () => <span>absent</span>,
@@ -542,7 +531,7 @@ describe("define", function () {
 		)
 		expect(screen.getByText("absent")).toBeDefined()
 		const set = (child: Option.Option<Model>) =>
-			act(() => Result.getOrThrow(Option.getOrThrow(commit)(ParentMessage.Set({ child }))))
+			act(() => Option.getOrThrow(dispatch)(ParentMessage.Set({ child })))
 		set(Option.some({ count: 1 }))
 		expect(screen.getByTestId("optional").textContent).toBe("1")
 		const renders = parentRenders
@@ -596,7 +585,7 @@ describe("define", function () {
 				})
 			const App = defineApplication({
 				Model: ParentModel,
-				layer,
+				resources: layer,
 				update(model: ParentModel, message: ParentMessage): Update.Return<ParentModel, ParentMessage, Reader> {
 					seen(message)
 					return ParentMessage.match(message, {
@@ -648,24 +637,20 @@ describe("define", function () {
 			}
 			function ParentView() {
 				const model = App.useModel()
-				const commit = App.useCommit()
+				const dispatch = App.useDispatch()
 				return (
 					<>
 						<button
 							onClick={function () {
 								expect(Option.getOrThrow(departing).getServerSnapshot()).toEqual({ count: 0 })
-								Result.getOrThrow(commit(ParentMessage.Remove()))
+								dispatch(ParentMessage.Remove())
 								// Read after root removal, before React has flushed the unmount.
 								expect(Option.getOrThrow(departing).getSnapshot()).toEqual({ count: 1 })
 							}}
 						>
 							remove
 						</button>
-						<button
-							onClick={() =>
-								Result.getOrThrow(commit(ParentMessage.Recreate({ instanceId: "replacement" })))
-							}
-						>
+						<button onClick={() => dispatch(ParentMessage.Recreate({ instanceId: "replacement" }))}>
 							recreate
 						</button>
 						<output data-testid="reported">{model.reported}</output>

@@ -4,7 +4,7 @@ import { Effect } from "effect"
 import React from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, describe, expect } from "vitest"
-import * as AsyncData from "../../src/asyncData"
+import * as AsyncData from "foldkit/asyncData"
 import { createFixture, response } from "../fixtures/routeLoader"
 
 let root: Root | undefined

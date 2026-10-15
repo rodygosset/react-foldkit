@@ -1,4 +1,5 @@
 import { Option } from "effect"
+import * as Update from "foldkit/update"
 import { stabilize, type ModelReader, type ModelSource } from "../modelSource/modelSource"
 
 /**
@@ -30,7 +31,7 @@ export interface Lift<ParentModel, ParentMessage, Model, Message> {
  * ```ts
  * // counter.ts owns the child Model and Message.
  * import { Schema } from "effect"
- * import { defineMessageUnion } from "react-foldkit/message"
+ * import { defineMessageUnion } from "foldkit/message"
  *
  * export const Model = Schema.Struct({ count: Schema.Finite })
  * export type Model = typeof Model.Type
@@ -41,7 +42,7 @@ export interface Lift<ParentModel, ParentMessage, Model, Message> {
  * // app.ts lifts counter messages into its own Message.
  * import * as Counter from "./counter"
  * import { Schema } from "effect"
- * import { defineMessageUnion } from "react-foldkit/message"
+ * import { defineMessageUnion } from "foldkit/message"
  * import * as Submodel from "react-foldkit/submodel"
  *
  * const Model = Schema.Struct({ counter: Counter.Model })
@@ -61,6 +62,146 @@ export interface Lift<ParentModel, ParentMessage, Model, Message> {
 export const lift = <ParentModel, ParentMessage, Model, Message>(
 	input: Lift<ParentModel, ParentMessage, Model, Message>
 ): Lift<ParentModel, ParentMessage, Model, Message> => input
+
+/**
+ * A child stored in one field of its parent Model, described once for both halves of the
+ * Submodel. Pass it to a Submodel Provider or `useSubmodel` as a `Lift`, and call `fold`
+ * from the parent update to run the child update and write the result back.
+ *
+ * @category models
+ * @since 0.1.0
+ */
+export interface Field<ParentModel, ParentMessage, Model, Message, FoldResult>
+	extends Lift<ParentModel, ParentMessage, Model, Message> {
+	/**
+	 * The parent field that holds the child Model.
+	 */
+	readonly key: string
+	/**
+	 * Replaces the child Model, returning the same parent when the child is unchanged.
+	 */
+	readonly write: (model: ParentModel, child: Model) => ParentModel
+	/**
+	 * Runs the child update and folds its Model, Commands, and OutMessage into the parent.
+	 * Call as `fold(model, message)` or `fold(message)` for a Step.
+	 */
+	readonly fold: FoldResult
+}
+
+type FieldUpdate<Model, Message, R> = (model: Model, message: Message) => Update.Return<Model, Message, R>
+
+type FieldUpdateWithOutMessage<Model, Message, OutMessage, R> = (
+	model: Model,
+	message: Message
+) => Update.ReturnWithOutMessage<Model, Message, OutMessage, R>
+
+/**
+ * Describes a child stored in one field of the parent Model. The result reads and writes that
+ * field, lifts child Messages, and folds the child update, so the view and update halves share
+ * one declaration. Supply the parent Model type first.
+ *
+ * **Example** (Embedding a form in a parent Model)
+ *
+ * ```ts
+ * // form.ts owns the child Model, Message, and update.
+ * import { Schema } from "effect"
+ * import { defineMessageUnion } from "foldkit/message"
+ * import { modifyFields } from "foldkit/struct"
+ *
+ * export const Model = Schema.Struct({ draft: Schema.String })
+ * export type Model = typeof Model.Type
+ *
+ * export const Message = defineMessageUnion({ ChangedDraft: { text: Schema.String } })
+ * export type Message = typeof Message.Type
+ *
+ * export const update = (model: Model, message: Message) => ({
+ * 	model: modifyFields(model, { draft: () => message.text }),
+ * })
+ *
+ * // app.ts embeds the form and folds its Messages.
+ * import * as Form from "./form"
+ * import { Schema } from "effect"
+ * import { defineMessageUnion } from "foldkit/message"
+ * import * as Submodel from "react-foldkit/submodel"
+ *
+ * const Model = Schema.Struct({ form: Form.Model })
+ * type Model = typeof Model.Type
+ *
+ * const Message = defineMessageUnion({ GotFormMessage: { message: Form.Message } })
+ * type Message = typeof Message.Type
+ *
+ * export const form = Submodel.field<Model>()("form", {
+ * 	update: Form.update,
+ * 	toParentMessage: (message: Form.Message) => Message.GotFormMessage({ message }),
+ * })
+ *
+ * export const update = (model: Model, message: Message) =>
+ * 	Message.match(message, { GotFormMessage: ({ message }) => form.fold(model, message) })
+ * ```
+ *
+ * @see {@link lift} for a child read that is not a single field
+ * @category constructors
+ * @since 0.1.0
+ */
+export function field<ParentModel>() {
+	function build<
+		K extends keyof ParentModel & string,
+		ParentMessage,
+		Message,
+		OutMessage,
+		R = never,
+		StepR = R,
+		StepMessage = ParentMessage,
+	>(
+		key: K,
+		options: {
+			readonly update: FieldUpdateWithOutMessage<ParentModel[K], Message, OutMessage, R>
+			readonly toParentMessage: (message: Message) => ParentMessage
+			readonly foldOutMessage: (
+				outMessage: OutMessage,
+				context: Update.FoldContext<Message, ParentMessage>
+			) => Update.Step<NoInfer<ParentModel>, StepMessage, StepR>
+		}
+	): Field<
+		ParentModel,
+		ParentMessage,
+		ParentModel[K],
+		Message,
+		Update.Fold<ParentModel, ParentMessage | StepMessage, Message, R | StepR>
+	>
+	function build<K extends keyof ParentModel & string, ParentMessage, Message, R = never>(
+		key: K,
+		options: {
+			readonly update: FieldUpdate<ParentModel[K], Message, R>
+			readonly toParentMessage: (message: Message) => ParentMessage
+		}
+	): Field<ParentModel, ParentMessage, ParentModel[K], Message, Update.Fold<ParentModel, ParentMessage, Message, R>>
+	// eslint-disable-next-line foldkit-style/prefer-arrow-for-expression-return -- Overloads describe each foldChild shape.
+	function build(key: string, options: AnyFieldOptions): unknown {
+		return makeField(key, options)
+	}
+	return build
+}
+
+type AnyFieldOptions = {
+	readonly update: (model: never, message: never) => unknown
+	readonly toParentMessage: (message: never) => unknown
+	readonly foldOutMessage?: (outMessage: never, context: never) => unknown
+}
+
+function makeField(key: string, options: AnyFieldOptions) {
+	type Parent = Readonly<Record<string, unknown>>
+	const read = (model: Parent) => model[key]
+	const write = (model: Parent, child: unknown): Parent =>
+		Object.is(model[key], child) ? model : { ...model, [key]: child }
+	// foldChild picks its OutMessage behavior from the presence of foldOutMessage.
+	const fold = Update.foldChild({
+		...options,
+		read: (model: Parent) => Option.some(read(model)),
+		write,
+	} as Parameters<typeof Update.foldChild>[0])
+	return { key, read, write, toParentMessage: options.toParentMessage, fold }
+}
 
 /**
  * Description of a child that may be absent from a parent Model. Use it with

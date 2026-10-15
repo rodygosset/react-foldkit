@@ -1,8 +1,8 @@
 import { DateTime, Context, Effect, Schema } from "effect"
 import * as Query from "foldkit/experimental/query"
-import * as AsyncData from "react-foldkit/asyncData"
+import * as AsyncData from "foldkit/asyncData"
 import * as Loader from "react-foldkit/loader"
-import type * as Update from "react-foldkit/update"
+import type * as Update from "foldkit/update"
 import { describe, expectTypeOf, it } from "vitest"
 
 class Api extends Context.Service<Api, { readonly load: Effect.Effect<Date, string> }>()("QueryTypes/Api") {}

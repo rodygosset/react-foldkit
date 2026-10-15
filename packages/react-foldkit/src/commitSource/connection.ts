@@ -1,9 +1,9 @@
 import { Cause, Effect, Exit, HashMap, Option, Result, type Scope } from "effect"
 import type { CommitError } from "../store"
 
-import { CommitSourceError, type CommitEntry, type CommitSource } from "./public"
+import { CommitSourceError, DuplicateKey, ReentrantNotification, type CommitEntry, type CommitSource } from "./public"
 
-export { CommitSourceError } from "./public"
+export { CommitSourceError, DuplicateKey, ReentrantNotification } from "./public"
 export type { CommitEntry, CommitSource } from "./public"
 
 type Versions = HashMap.HashMap<string, string | number>
@@ -21,14 +21,14 @@ function versions<Message>(snapshot: ReadonlyArray<CommitEntry<Message>>): Resul
 	let result = HashMap.empty<string, string | number>()
 	for (const { key, version } of snapshot) {
 		if (HashMap.has(result, key))
-			return Result.fail(new CommitSourceError({ details: { reason: "DuplicateKey", key } }))
+			return Result.fail(new CommitSourceError({ reason: new DuplicateKey({ key }) }))
 		result = HashMap.set(result, key, version)
 	}
 	return Result.succeed(result)
 }
 
 const reentrant: Result.Result<void, CommitSourceError> = Result.fail(
-	new CommitSourceError({ details: { reason: "Reentrant" } })
+	new CommitSourceError({ reason: new ReentrantNotification() })
 )
 
 type Phase = "Subscribing" | "Notifying" | "Reentered" | "Connected" | "Released"

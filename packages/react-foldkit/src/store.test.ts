@@ -1,11 +1,11 @@
 import { describe, it } from "@effect/vitest"
 import { Array, Cause, Context, Deferred, Effect, Exit, Fiber, Layer, Option, Result, Schema, Scope } from "effect"
 import { afterEach, expect, vi } from "vitest"
-import { modifyFields } from "./struct"
-import * as Command from "./command"
-import { defineMessageUnion } from "./message"
+import { modifyFields } from "foldkit/struct"
+import * as Command from "foldkit/command"
+import { defineMessageUnion } from "foldkit/message"
 import * as Store from "./store"
-import type * as Update from "./update"
+import type * as Update from "foldkit/update"
 
 /**
  * Pins the message-processing / resources / dispose contract of Store.boot,
@@ -385,7 +385,7 @@ describe("resources", function () {
 			const store = Store.boot(
 				{
 					update: resourceUpdate,
-					layer: CountedResourceLive,
+					resources: CountedResourceLive,
 				},
 				{ model: { label: "start" }, commands: [ReadValue()] }
 			)
@@ -440,7 +440,7 @@ describe("resources", function () {
 				)
 			)
 			const store = yield* Store.make(
-				{ update: resourceUpdate, layer: live },
+				{ update: resourceUpdate, resources: live },
 				{ model: { label: "start" }, commands: [ReadValue(), ReadValue()] }
 			)
 			yield* Deferred.await(started)
@@ -464,7 +464,7 @@ describe("resources", function () {
 			const store = Store.boot(
 				{
 					update: resourceUpdate,
-					layer: FailingResourceLive,
+					resources: FailingResourceLive,
 					onCrash(cause) {
 						crashes.push(cause)
 					},
@@ -490,13 +490,13 @@ describe("resources", function () {
 
 		typeConfig({
 			update: resourceUpdate,
-			layer: Layer.succeed(ResourceService, { value: "ok" }),
+			resources: Layer.succeed(ResourceService, { value: "ok" }),
 		})
 
 		// @ts-expect-error Layer.empty does not provide ResourceService
-		typeConfig({ update: resourceUpdate, layer: Layer.empty })
+		typeConfig({ update: resourceUpdate, resources: Layer.empty })
 
-		// @ts-expect-error layer is required when update needs services
+		// @ts-expect-error resources is required when update needs services
 		typeConfig({ update: resourceUpdate })
 	})
 })
@@ -512,7 +512,7 @@ describe("dispose", function () {
 			const store = Store.boot<number, number>(
 				{
 					update: (_model, message) => ({ model: message }),
-					layer: Layer.effectDiscard(
+					resources: Layer.effectDiscard(
 						Effect.acquireRelease(Effect.void, () =>
 							Effect.gen(function* () {
 								releases += 1
@@ -570,7 +570,7 @@ describe("dispose", function () {
 			const store = yield* Store.make<number, number, SlowService>(
 				{
 					update: (model, message) => ({ model: message }),
-					layer: SlowLive,
+					resources: SlowLive,
 				},
 				{ model: 0, commands: [{ name: "Read", effect: Effect.map(SlowService, () => 1) }] }
 			)
@@ -816,7 +816,7 @@ describe("Effect store construction", function () {
 			const store = yield* Effect.scoped(
 				Effect.gen(function* () {
 					const store = yield* Store.make<number, number, Resource>(
-						{ layer, update: (_model, message) => ({ model: message }) },
+						{ resources: layer, update: (_model, message) => ({ model: message }) },
 						{ model: 0, commands: [{ name: "ReadResource", effect: Resource }] }
 					)
 					yield* Store.takeWhen(store, (model) => (model === 1 ? Option.some(model) : Option.none()))
@@ -825,7 +825,7 @@ describe("Effect store construction", function () {
 			)
 			expect(store.isDisposed()).toBe(true)
 			expect(releases).toBe(1)
-			expect(store.commit(2)).toEqual(Result.fail(new Store.CommitError({ details: { reason: "Disposed" } })))
+			expect(store.commit(2)).toEqual(Result.fail(new Store.CommitError({ reason: new Store.Disposed() })))
 			expect(store.getModel()).toBe(1)
 		})
 	)
@@ -840,7 +840,7 @@ describe("Effect store construction", function () {
 							const store = yield* Store.make<number, number>(
 								{
 									update: (_model, message) => ({ model: message }),
-									layer: Layer.effectDiscard(
+									resources: Layer.effectDiscard(
 										Effect.acquireRelease(Effect.void, (_resource, exit) =>
 											Effect.sync(function () {
 												resourceExit = exit
@@ -869,7 +869,7 @@ describe("Effect store construction", function () {
 			const store = yield* Store.make<number, number>(
 				{
 					update: (_model, message) => ({ model: message }),
-					layer: Layer.effectDiscard(
+					resources: Layer.effectDiscard(
 						Effect.acquireRelease(Effect.void, () =>
 							Effect.sync(function () {
 								releases += 1
@@ -927,7 +927,7 @@ it.effect("retains the authoritative crash after disposal and isolates crash obs
 		expect(modelNotifications).toBe(0)
 		store.dispatch(2)
 		expect(store.commit(3)).toEqual(
-			Result.fail(new Store.CommitError({ details: { reason: "Crashed", cause: original } }))
+			Result.fail(new Store.CommitError({ reason: new Store.Crashed({ cause: original }) }))
 		)
 		yield* store.dispose()
 		expect(Option.getOrThrow(store.getCrash())).toBe(original)

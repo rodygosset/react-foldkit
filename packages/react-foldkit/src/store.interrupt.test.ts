@@ -1,16 +1,16 @@
 import { describe, it } from "@effect/vitest"
 import { Array, Context, Deferred, Effect, Fiber, Layer, Option, Schema } from "effect"
 import { expect, vi } from "vitest"
-import * as Command from "./command"
+import * as Command from "foldkit/command"
 import {
 	CurrentInterruptRegistry as __CurrentRegistry,
 	makeInterruptRegistry as __makeRegistry,
 	type InterruptRegistry as __Registry,
 } from "./internal/interrupt"
-import { defineMessageUnion } from "./message"
+import { defineMessageUnion } from "foldkit/message"
 import * as Store from "./store"
-import { modifyFields } from "./struct"
-import type * as Update from "./update"
+import { modifyFields } from "foldkit/struct"
+import type * as Update from "foldkit/update"
 
 /**
  * Interrupt registry contract — mirrored from Foldkit's
@@ -346,11 +346,11 @@ it.live("isolates the same upstream interrupt key across two Stores", () =>
 					}
 				: { model: message._tag === "Outcome" ? message.tag : "Completed" }
 		const first = yield* Store.make(
-			{ update, layer: Layer.succeed(Work, { name: "first", started: firstStarted }) },
+			{ update, resources: Layer.succeed(Work, { name: "first", started: firstStarted }) },
 			{ model: "Running", commands: [Run()] }
 		)
 		const second = yield* Store.make(
-			{ update, layer: Layer.succeed(Work, { name: "second", started: secondStarted }) },
+			{ update, resources: Layer.succeed(Work, { name: "second", started: secondStarted }) },
 			{ model: "Running", commands: [Run()] }
 		)
 		yield* Deferred.await(firstStarted)

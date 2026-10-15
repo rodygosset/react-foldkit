@@ -1,12 +1,12 @@
 import type { AnyRouter } from "@tanstack/react-router"
 import { DateTime, Context, Effect, Layer, ManagedRuntime, Result, Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup } from "effect/http-api"
-import * as AsyncData from "react-foldkit/asyncData"
+import * as AsyncData from "foldkit/asyncData"
 import { Loader as RootLoader } from "react-foldkit"
 import * as Loader from "react-foldkit/loader"
 import * as Query from "foldkit/experimental/query"
 import * as TanStackSource from "react-foldkit/tanstack"
-import type * as Update from "react-foldkit/update"
+import type * as Update from "foldkit/update"
 import { describe, expectTypeOf, it } from "vitest"
 
 const Data = Schema.Struct({ id: Schema.String, at: Schema.DateFromString })

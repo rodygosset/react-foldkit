@@ -1,8 +1,8 @@
 import { Array, Option, Schema } from "effect"
 import React from "react"
 import { defineApplication, type CommitEntry } from "../../src/react"
-import { modifyFields } from "../../src/struct"
-import * as Update from "../../src/update"
+import { modifyFields } from "foldkit/struct"
+import * as Update from "foldkit/update"
 import { fakeSource, Message } from "./commitSource"
 
 const Model = Schema.Struct({ values: Schema.Array(Schema.String), edits: Schema.Finite })

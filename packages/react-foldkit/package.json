@@ -44,41 +44,13 @@
 			"types": "./dist/react.d.ts",
 			"import": "./dist/react.js"
 		},
-		"./asyncData": {
-			"types": "./dist/asyncData.d.ts",
-			"import": "./dist/asyncData.js"
-		},
-		"./command": {
-			"types": "./dist/command.d.ts",
-			"import": "./dist/command.js"
-		},
-		"./message": {
-			"types": "./dist/message.d.ts",
-			"import": "./dist/message.js"
-		},
-		"./schema": {
-			"types": "./dist/schema.d.ts",
-			"import": "./dist/schema.js"
-		},
 		"./store": {
 			"types": "./dist/store.d.ts",
 			"import": "./dist/store.js"
 		},
-		"./struct": {
-			"types": "./dist/struct.d.ts",
-			"import": "./dist/struct.js"
-		},
 		"./submodel": {
 			"types": "./dist/submodel.d.ts",
 			"import": "./dist/submodel.js"
-		},
-		"./subscription": {
-			"types": "./dist/subscription.d.ts",
-			"import": "./dist/subscription.js"
-		},
-		"./update": {
-			"types": "./dist/update.d.ts",
-			"import": "./dist/update.js"
 		},
 		"./eslint": {
 			"types": "./eslint/dist/index.d.ts",
@@ -115,6 +87,7 @@
 	],
 	"peerDependencies": {
 		"effect": "4.0.0",
+		"foldkit": ">=0.166.0",
 		"eslint": "^9",
 		"react": "^19.2.6",
 		"@tanstack/react-router": "^1.170.33",
@@ -136,7 +109,6 @@
 		}
 	},
 	"dependencies": {
-		"foldkit": "file:../../../foldkit/packages/foldkit",
 		"picomatch": "^4.0.5",
 		"use-sync-external-store": "1.6.0"
 	},
@@ -155,6 +127,7 @@
 		"@vitest/coverage-v8": "5.0.3",
 		"effect": "4.0.0",
 		"eslint": "^9",
+		"foldkit": "file:../../../foldkit/packages/foldkit",
 		"happy-dom": "^20.10.4",
 		"playwright": "^1.61.0",
 		"react": "^19.2.6",

@@ -3,7 +3,7 @@
 import { Cause, Effect, Exit, Function, Option, Result, Scope } from "effect"
 import { describe, expect, it, vi } from "vitest"
 import { entry, fakeSource, Message } from "../../test/fixtures/commitSource"
-import { CommitError } from "../store"
+import { CommitError, Disposed, Reentrant } from "../store"
 import * as CommitSource from "./connection"
 
 type ReconcileObserver<E = never> = Parameters<CommitSource.Connection<Message, E>["connect"]>[1]
@@ -91,7 +91,7 @@ describe("commit source reconciliation and failures", function () {
 		try {
 			source.publish([entry("fresh", 1), entry("a", 1), entry("a", 2)])
 			expect(onReconcile).toHaveBeenCalledWith(
-				Exit.fail(new CommitSource.CommitSourceError({ details: { reason: "DuplicateKey", key: "a" } }))
+				Exit.fail(new CommitSource.CommitSourceError({ reason: new CommitSource.DuplicateKey({ key: "a" }) }))
 			)
 			expect(committed).not.toHaveBeenCalled()
 			source.publish([entry("a", 1)])
@@ -120,7 +120,7 @@ describe("commit source reconciliation and failures", function () {
 		const source = fakeSource<Message>()
 		const result = CommitSource.make({ source: source.source, initialSnapshot: [entry("a", 1), entry("a", 2)] })
 		expect(result).toEqual(
-			Result.fail(new CommitSource.CommitSourceError({ details: { reason: "DuplicateKey", key: "a" } }))
+			Result.fail(new CommitSource.CommitSourceError({ reason: new CommitSource.DuplicateKey({ key: "a" }) }))
 		)
 		expect(source.subscriptions).toBe(0)
 	})
@@ -130,7 +130,7 @@ describe("commit source reconciliation and failures", function () {
 		const connection = Result.getOrThrow(CommitSource.make({ source: source.source, initialSnapshot: [] }))
 		source.set([entry("a", 1), entry("b", 1)])
 		const attempted: string[] = []
-		const error = new CommitError({ details: { reason: "Disposed" } })
+		const error = new CommitError({ reason: new Disposed() })
 		const { exit } = connect(connection, function (message) {
 			if (message._tag === "Received") attempted.push(message.value)
 			return message._tag === "Received" && message.value === "b" ? Result.fail(error) : Result.succeed(undefined)
@@ -165,7 +165,7 @@ describe("commit source reconciliation and failures", function () {
 		)
 		source.publish([entry("a", 1)])
 		expect(onReconcile).toHaveBeenCalledExactlyOnceWith(
-			Exit.fail(new CommitSource.CommitSourceError({ details: { reason: "Reentrant" } }))
+			Exit.fail(new CommitSource.CommitSourceError({ reason: new CommitSource.ReentrantNotification() }))
 		)
 		stop()
 		const committed = vi.fn(succeed)
@@ -184,7 +184,7 @@ describe("commit source reconciliation and failures", function () {
 		try {
 			expect(() => source.publish([entry("a", 1), entry("a", 2)])).toThrow("reporter defect")
 			expect(onReconcile).toHaveBeenCalledExactlyOnceWith(
-				Exit.fail(new CommitSource.CommitSourceError({ details: { reason: "DuplicateKey", key: "a" } }))
+				Exit.fail(new CommitSource.CommitSourceError({ reason: new CommitSource.DuplicateKey({ key: "a" }) }))
 			)
 		} finally {
 			stop()
@@ -229,7 +229,7 @@ describe("commit source reconciliation and failures", function () {
 		const connection = Result.getOrThrow(CommitSource.make({ source: source.source, initialSnapshot: [] }))
 		const attempted: string[] = []
 		let fail = true
-		const error = new CommitError({ details: { reason: "Reentrant" } })
+		const error = new CommitError({ reason: new Reentrant() })
 		const onReconcile = vi.fn<ReconcileObserver>()
 		const { stop } = connect(
 			connection,
@@ -288,7 +288,7 @@ describe("commit source reconciliation and failures", function () {
 	it("preserves setup failure and release defect in one Cause, even with immediate notification", function () {
 		const source = fakeSource<Message>()
 		const connection = Result.getOrThrow(CommitSource.make({ source: source.source, initialSnapshot: [] }))
-		const failure = new CommitError({ details: { reason: "Disposed" } })
+		const failure = new CommitError({ reason: new Disposed() })
 		const release = new Error("release failed")
 		source.set([entry("a", 1)])
 		source.onSubscribe(() => source.notify())
@@ -330,7 +330,7 @@ describe("commit source reconciliation and failures", function () {
 			source.notify()
 			expect(onReconcile.mock.calls).toEqual([
 				[Exit.void],
-				[Exit.fail(new CommitSource.CommitSourceError({ details: { reason: "DuplicateKey", key: "a" } }))],
+				[Exit.fail(new CommitSource.CommitSourceError({ reason: new CommitSource.DuplicateKey({ key: "a" }) }))],
 				[Exit.void],
 				[Exit.void],
 			])
@@ -406,7 +406,7 @@ describe("commit source reconciliation and failures", function () {
 		expect(Exit.isFailure(exit)).toBe(true)
 		if (Exit.isFailure(exit)) {
 			expect(Cause.findErrorOption(exit.cause)).toEqual(
-				Option.some(new CommitSource.CommitSourceError({ details: { reason: "DuplicateKey", key: "a" } }))
+				Option.some(new CommitSource.CommitSourceError({ reason: new CommitSource.DuplicateKey({ key: "a" }) }))
 			)
 		}
 		expect(source.listeners).toBe(0)

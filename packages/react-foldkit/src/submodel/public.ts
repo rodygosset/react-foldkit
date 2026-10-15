@@ -1,4 +1,4 @@
 export { define, ProviderError } from "./submodel"
-export type { Submodel } from "./submodel"
-export { lift } from "./lift"
-export type { Lift, OptionalLift } from "./lift"
+export type { ProviderProps, Submodel } from "./submodel"
+export { field, lift } from "./lift"
+export type { Field, Lift, OptionalLift } from "./lift"

@@ -1,4 +1,4 @@
-import { Match, Result, Schema } from "effect"
+import { type Result, Schema } from "effect"
 
 /**
  * One delivery in a commit-source snapshot. Sources use its key and version to identify an
@@ -57,38 +57,45 @@ export interface CommitSource<Message, E = never> {
 }
 
 /**
+ * The `CommitSourceError` reason when a snapshot contains more than one entry for a key.
+ *
+ * @see {@link CommitSourceError} for the failure that carries it
+ * @category errors
+ * @since 0.1.0
+ */
+export class DuplicateKey extends Schema.Error<DuplicateKey>("react-foldkit/CommitSource/DuplicateKey")({
+	_tag: Schema.tag("DuplicateKey"),
+	key: Schema.String,
+}) {}
+
+/**
+ * The `CommitSourceError` reason when a source notifies while the Provider is still reconciling
+ * its previous notification.
+ *
+ * @see {@link CommitSourceError} for the failure that carries it
+ * @category errors
+ * @since 0.1.0
+ */
+export class ReentrantNotification extends Schema.Error<ReentrantNotification>(
+	"react-foldkit/CommitSource/ReentrantNotification"
+)({
+	_tag: Schema.tag("ReentrantNotification"),
+}) {}
+
+/**
  * Failure caused by duplicate snapshot keys or a source notification during reconciliation.
+ * Handle one reason with `Effect.catchReason("CommitSourceError", "DuplicateKey", ...)`.
  *
  * @category errors
  * @since 0.1.0
  */
 export class CommitSourceError extends Schema.Error<CommitSourceError>("react-foldkit/React/CommitSourceError")({
 	_tag: Schema.tag("CommitSourceError"),
-	details: Schema.Union([
-		Schema.Struct({
-			reason: Schema.Literal("DuplicateKey"),
-			key: Schema.String,
-		}),
-		Schema.Struct({
-			reason: Schema.Literal("Reentrant"),
-		}),
-	]),
+	reason: Schema.Union([DuplicateKey, ReentrantNotification]),
 }) {
 	get message(): string {
-		return Match.value(this.details).pipe(
-			Match.when(
-				{
-					reason: "DuplicateKey",
-				},
-				(failure) => "Duplicate source key: " + failure.key
-			),
-			Match.when(
-				{
-					reason: "Reentrant",
-				},
-				() => "Commit source notification is reentrant"
-			),
-			Match.exhaustive
-		)
+		return this.reason._tag === "DuplicateKey"
+			? "Duplicate source key: " + this.reason.key
+			: "Commit source notification is reentrant"
 	}
 }

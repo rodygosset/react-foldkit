@@ -1,11 +1,11 @@
 import { it } from "@effect/vitest"
 import { Array, Effect, Queue, Schema, Stream } from "effect"
 import { afterEach, describe, expect, vi } from "vitest"
-import { modifyFields } from "./struct"
-import { defineMessageUnion } from "./message"
+import { modifyFields } from "foldkit/struct"
+import { defineMessageUnion } from "foldkit/message"
 import * as Store from "./store"
-import * as Subscription from "./subscription"
-import type * as Update from "./update"
+import * as Subscription from "foldkit/subscription"
+import type * as Update from "foldkit/update"
 
 /**
  * Subscription lifecycle: start / stop / restart / equivalence / dispose.

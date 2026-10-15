@@ -1,5 +1,5 @@
 import { Cause, Context, Effect, Option, PubSub, Record, Ref, Schema, Scope, Stream } from "effect"
-import type * as Subscription from "../subscription"
+import type * as Subscription from "foldkit/subscription"
 
 type SubscriptionRuntime<Model, Message, R> = {
 	readonly bootModel: Model

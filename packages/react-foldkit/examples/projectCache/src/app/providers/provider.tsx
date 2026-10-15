@@ -19,10 +19,12 @@ export function Provider({ children }: { children: React.ReactNode }) {
 				])
 			}
 		>
-			<Application.SubmodelProvider
+			<Project.Provider
+				from={Application.Application}
 				lift={Application.projects}
-				render={({ source }) => <Project.Provider source={source}>{children}</Project.Provider>}
-			/>
+			>
+				{children}
+			</Project.Provider>
 		</Application.Provider>
 	)
 }

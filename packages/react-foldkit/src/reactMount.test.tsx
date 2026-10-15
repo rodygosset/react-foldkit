@@ -1,15 +1,13 @@
 import { afterEach, expect, it } from "vitest"
 import React from "react"
 import { cleanup, render } from "@testing-library/react"
-import { Result, Schema } from "effect"
+import { Schema } from "effect"
 import { defineApplication } from "./react"
-import type { CommitError } from "./store"
 
 afterEach(cleanup)
 
 function fixture(kind: "layout" | "passive" | "ref") {
 	const handled: number[] = []
-	const commits: Result.Result<void, CommitError>[] = []
 	const App = defineApplication({
 		Model: Schema.Finite,
 		update(_model: number, message: number) {
@@ -20,13 +18,12 @@ function fixture(kind: "layout" | "passive" | "ref") {
 	function View() {
 		const model = App.useModel()
 		const dispatch = App.useDispatch()
-		const commit = App.useCommit()
 		const send = React.useCallback(
 			function () {
 				dispatch(1)
-				commits.push(commit(2))
+				dispatch(2)
 			},
-			[dispatch, commit]
+			[dispatch]
 		)
 		const attach = React.useCallback(
 			function (node: HTMLSpanElement | null) {
@@ -48,9 +45,9 @@ function fixture(kind: "layout" | "passive" | "ref") {
 		)
 		return <span ref={kind === "ref" ? attach : undefined}>{model}</span>
 	}
-	return { App, View, handled, commits }
+	return { App, View, handled }
 }
-it.each(["layout", "ref"] as const)("initial %s dispatch and commit succeed", function (kind) {
+it.each(["layout", "ref"] as const)("initial %s dispatches are delivered", function (kind) {
 	const f = fixture(kind)
 	const mounted = render(
 		<f.App.Provider init={{ model: 0 }}>
@@ -58,7 +55,6 @@ it.each(["layout", "ref"] as const)("initial %s dispatch and commit succeed", fu
 		</f.App.Provider>
 	)
 	expect(f.handled).toEqual([1, 2])
-	expect(f.commits[0]).toEqual(Result.void)
 	expect(mounted.container.textContent).toBe("2")
 })
 it("passive effect sends are accepted", function () {
@@ -73,7 +69,7 @@ it("passive effect sends are accepted", function () {
 })
 
 it.each(["layout", "ref"] as const)("accepts %s sends during StrictMode and Activity reconnect", function (kind) {
-	const { App, View, handled, commits } = fixture(kind)
+	const { App, View, handled } = fixture(kind)
 	function Tree({ visible }: { readonly visible: boolean }) {
 		return (
 			<React.StrictMode>
@@ -92,11 +88,10 @@ it.each(["layout", "ref"] as const)("accepts %s sends during StrictMode and Acti
 	mounted.rerender(<Tree visible />)
 	expect(mounted.container.textContent).toBe("2")
 	expect(handled).toEqual([1, 2, 1, 2, 1, 2])
-	expect(commits).toEqual([Result.void, Result.void, Result.void])
 })
 
 it.each(["layout", "ref"] as const)("accepts %s sends during root StrictMode replay", function (kind) {
-	const { App, View, handled, commits } = fixture(kind)
+	const { App, View, handled } = fixture(kind)
 	const mounted = render(
 		<React.StrictMode>
 			<App.Provider init={{ model: 0 }}>
@@ -106,5 +101,4 @@ it.each(["layout", "ref"] as const)("accepts %s sends during root StrictMode rep
 	)
 	expect(mounted.container.textContent).toBe("2")
 	expect(handled).toEqual([1, 2, 1, 2])
-	expect(commits).toEqual([Result.void, Result.void])
 })

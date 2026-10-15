@@ -36,6 +36,11 @@ export default [
 		},
 	},
 	{
+		files: ["test/types/**"],
+		// Type tests build lifts inline to check inference; nothing there renders.
+		rules: { "react-foldkit/no-inline-submodel-lift": "off" },
+	},
+	{
 		files: ["examples/*/src/app/routes/__root.tsx"],
 		// These layouts mount the application store at the root.
 		rules: { "react-foldkit/no-nested-store": "off" },

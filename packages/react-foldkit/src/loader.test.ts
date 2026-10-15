@@ -14,7 +14,7 @@ import {
 } from "effect"
 import { describe, it } from "@effect/vitest"
 import { afterEach, expect, vi } from "vitest"
-import * as AsyncData from "./asyncData"
+import * as AsyncData from "foldkit/asyncData"
 import * as Loader from "./loader"
 import * as Query from "foldkit/experimental/query"
 
@@ -579,6 +579,27 @@ describe("Loader.settleQueryIf", function () {
 			settled.model
 		)
 		expect(Loader.settleQueryIf(query, settled.model, AsyncData.Loading(), policy).model).toBe(settled.model)
+	})
+
+	it("accepts every incoming success when no fresher is given, for plain and keyed Queries", function () {
+		const loaded = Loader.settleQueryIf(query, query.init(), AsyncData.Success({ data: 5 }))
+		const older = Loader.settleQueryIf(query, loaded.model, AsyncData.Success({ data: 1 }))
+		expect(query.read(older.model)).toEqual(AsyncData.Success({ data: 1 }))
+
+		const keyed = Query.define({
+			name: "DefaultPolicySettlement",
+			args: { id: Schema.String },
+			data: Schema.Finite,
+			error: Schema.String,
+			execute: () => Effect.succeed(0),
+		})
+		const args = { id: "a" }
+		const first = Loader.settleQueryIf(keyed, keyed.init(), args, AsyncData.Success({ data: 5 }))
+		const second = Loader.settleQueryIf(keyed, first.model, args, AsyncData.Success({ data: 1 }))
+		expect(keyed.read(second.model, args)).toEqual(AsyncData.Success({ data: 1 }))
+		// The default failure policy still keeps cached data.
+		const failed = Loader.settleQueryIf(keyed, second.model, args, AsyncData.Failure({ error: "offline" }))
+		expect(failed.model).toBe(second.model)
 	})
 
 	it("keeps cached data on rejected failure and retains it as Stale when a custom failure policy accepts", function () {

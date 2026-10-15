@@ -5,8 +5,8 @@ import plugin from "./plugin.js"
  * Flat ESLint configuration for Command execution, Store ownership, navigation, and child
  * Views that receive Model data through props.
  *
- * Enables the four architecture rules as errors. Local React state remains unrestricted by
- * this preset.
+ * Enables the four architecture rules as errors and warns about Submodel lifts built during
+ * render. Local React state remains unrestricted by this preset.
  *
  * @see {@link strictConfig} for the optional local-state warning
  * @category configuration
@@ -21,6 +21,7 @@ export const recommendedConfig: Linter.Config[] = [
 			"react-foldkit/no-nested-store": "error",
 			"react-foldkit/no-effect-run-outside-commands": "error",
 			"react-foldkit/no-store-hooks-in-child-view": "error",
+			"react-foldkit/no-inline-submodel-lift": "warn",
 		},
 	},
 ]

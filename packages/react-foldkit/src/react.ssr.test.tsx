@@ -2,12 +2,12 @@
 import { Effect, Layer, Schema, Stream } from "effect"
 import { renderToString } from "react-dom/server"
 import { describe, expect, it } from "vitest"
-import type * as Command from "./command"
-import { defineMessageUnion } from "./message"
+import type * as Command from "foldkit/command"
+import { defineMessageUnion } from "foldkit/message"
 import { defineApplication } from "./react"
-import { modifyFields } from "./struct"
-import * as Subscription from "./subscription"
-import type * as Update from "./update"
+import { modifyFields } from "foldkit/struct"
+import * as Subscription from "foldkit/subscription"
+import type * as Update from "foldkit/update"
 
 const Message = defineMessageUnion({
 	CompletedLoad: { value: Schema.String },
@@ -56,7 +56,7 @@ describe("React server rendering", function () {
 				layerBuilds += 1
 			})
 		)
-		const { Provider, useModel } = defineApplication({ Model, update, subscriptions, layer })
+		const { Provider, useModel } = defineApplication({ Model, update, subscriptions, resources: layer })
 
 		function View() {
 			const status = useModel((model) => model.status)

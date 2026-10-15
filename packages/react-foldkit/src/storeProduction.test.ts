@@ -19,7 +19,7 @@ import * as Connection from "./commitSource/connection"
 import * as Loader from "./loader"
 import * as ReactStore from "./react/reactStore"
 import * as Store from "./store"
-import * as Subscription from "./subscription"
+import * as Subscription from "foldkit/subscription"
 
 it.live.each(["update", "command", "subscription"] as const)(
 	"closes work and fails waiters after a %s crash",
@@ -49,7 +49,7 @@ it.live.each(["update", "command", "subscription"] as const)(
 					},
 					subscriptions,
 					onCrash() {},
-					layer: Layer.effectDiscard(
+					resources: Layer.effectDiscard(
 						Effect.acquireRelease(Effect.void, () => Effect.sync(() => events.push("services")))
 					),
 				},

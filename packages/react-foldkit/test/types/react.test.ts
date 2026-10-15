@@ -1,8 +1,8 @@
+import React from "react"
 import { Context, Effect, Layer, Option, Result, Schema } from "effect"
-import { defineMessageUnion } from "react-foldkit/message"
+import { defineMessageUnion } from "foldkit/message"
 import { defineApplication, type CommitEntry, type CommitSource } from "react-foldkit/react"
-import type { CommitError } from "react-foldkit/store"
-import type * as Update from "react-foldkit/update"
+import type * as Update from "foldkit/update"
 import { describe, expectTypeOf, it } from "vitest"
 
 const Model = Schema.Struct({ count: Schema.Finite })
@@ -14,13 +14,14 @@ const App = defineApplication({
 	onReactivate: () => Message.Increment(),
 	update: (model: Model, _message: Message): Update.Return<Model, Message> => ({ model }),
 })
-declare const commit: ReturnType<typeof App.useCommit>
 declare const source: CommitSource<Message>
 declare const foreign: CommitSource<{ readonly _tag: "Other" }>
 
 describe("React public types", function () {
-	it("useCommit preserves the Message and typed failure", function () {
-		expectTypeOf(App.useCommit).returns.toEqualTypeOf<(message: Message) => Result.Result<void, CommitError>>()
+	it("useInbound maps external values to the app Message", function () {
+		expectTypeOf(App.useInbound<string>)
+			.parameter(1)
+			.toEqualTypeOf<(value: string) => Message>()
 	})
 
 	it("Provider commitSource binds to the app Message", function () {
@@ -36,8 +37,20 @@ describe("React public types", function () {
 		})
 
 		App.Provider({ init: { model: { count: 0 } }, children: null })
-		App.Provider({ init: { model: { count: 0 } }, children: null, onError: () => Effect.fail("observer failure") })
-		App.Provider({ init: { model: { count: 0 } }, children: null, onError: () => Effect.sleep("1 millis") })
+		App.Provider({ init: () => ({ model: { count: 0 } }), children: null })
+		App.Provider({
+			init: { model: { count: 0 } },
+			children: null,
+			crash: {
+				report: () => Effect.fail("observer failure"),
+				view: ({ restart }) => React.createElement("button", { onClick: restart }),
+			},
+		})
+		App.Provider({
+			init: { model: { count: 0 } },
+			children: null,
+			crash: { report: () => Effect.sleep("1 millis") },
+		})
 
 		App.Provider({ init: { model: { count: 0 } }, commitSource: source, children: null })
 		App.Provider({
@@ -46,9 +59,6 @@ describe("React public types", function () {
 			children: null,
 		})
 		expectTypeOf(App.useOptionalModel()).toEqualTypeOf<Option.Option<Model>>()
-		expectTypeOf(App.useOptionalCommit()).toEqualTypeOf<
-			Option.Option<(message: Message) => Result.Result<void, CommitError>>
-		>()
 		// @ts-expect-error A Provider has one source owner.
 		App.Provider({
 			init: { model: { count: 0 } },
@@ -72,7 +82,9 @@ describe("React public types", function () {
 		// @ts-expect-error Provider sources must contain the app's own Messages.
 		App.Provider({ init: { model: { count: 0 } }, commitSource: foreign, children: null })
 		// @ts-expect-error A consumer cannot widen the app's Message union.
-		commit({ _tag: "Other" })
+		App.useDispatch()({ _tag: "Other" })
+		// @ts-expect-error Commit is not part of the React API; use Store.commit outside React.
+		App.useCommit
 		// @ts-expect-error Manual useCommitSource is not part of the public API.
 		App.useCommitSource
 		const numericKey: CommitEntry<Message> = {
@@ -102,9 +114,9 @@ declare const servicefulModel: Schema.Codec<Model, typeof Model.Encoded, Resourc
 
 if (false) {
 	const update = (model: Model, _message: Message): Update.Return<Model, Message, Resource> => ({ model })
-	defineApplication({ Model, update, layer: Layer.succeed(Resource, { value: "ok" }) })
+	defineApplication({ Model, update, resources: Layer.succeed(Resource, { value: "ok" }) })
 	// @ts-expect-error The update's services must be provided.
-	defineApplication({ Model, update, layer: Layer.empty })
+	defineApplication({ Model, update, resources: Layer.empty })
 	// @ts-expect-error Services cannot be omitted from the application config.
 	defineApplication({ Model, update })
 	const idle = (model: Model, _message: Message) => ({ model })

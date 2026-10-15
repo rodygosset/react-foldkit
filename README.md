@@ -25,9 +25,10 @@ We'll start with a button that increments a counter. Create `App.tsx` and render
 
 ```tsx
 import { Schema } from "effect"
-import { defineMessageUnion } from "react-foldkit/message"
+import { defineMessageUnion } from "foldkit/message"
 import { defineApplication } from "react-foldkit/react"
-import { modifyFields } from "react-foldkit/struct"
+import { modifyFields } from "foldkit/struct"
+import type * as Update from "foldkit/update"
 
 const Model = Schema.Struct({ count: Schema.Finite })
 type Model = typeof Model.Type
@@ -36,7 +37,7 @@ const Message = defineMessageUnion({ ClickedIncrement: {} })
 type Message = typeof Message.Type
 
 const update = (model: Model, message: Message) =>
-  Message.match(message, {
+  Message.match<Update.Return<Model, Message>>(message, {
     ClickedIncrement: () => ({ model: modifyFields(model, { count: (count) => count + 1 }) }),
   })
 
@@ -70,10 +71,10 @@ Create `form.tsx`. The form handles editing and clears its draft after submissio
 
 ```tsx
 import { Schema } from "effect"
-import { defineMessageUnion } from "react-foldkit/message"
-import { modifyFields } from "react-foldkit/struct"
+import { defineMessageUnion } from "foldkit/message"
+import { modifyFields } from "foldkit/struct"
 import * as Submodel from "react-foldkit/submodel"
-import type * as Update from "react-foldkit/update"
+import type * as Update from "foldkit/update"
 
 export const Model = Schema.Struct({ draft: Schema.String })
 export type Model = typeof Model.Type
@@ -125,15 +126,15 @@ export function View() {
 }
 ```
 
-Replace `App.tsx` with the parent application below. `Submodel.lift` describes where the form's Model lives and how its Messages reach the parent. `Update.foldChild` runs the form update and handles its `Submitted` event.
+Replace `App.tsx` with the parent application below. `Submodel.field` describes the form once: it reads and writes the `form` field, wraps form Messages for the parent, and folds the form update, including its `Submitted` event.
 
 ```tsx
-import { Array, Option, Schema } from "effect"
-import { defineMessageUnion } from "react-foldkit/message"
+import { Array, Schema } from "effect"
+import { defineMessageUnion } from "foldkit/message"
+import { modifyFields } from "foldkit/struct"
+import type * as Update from "foldkit/update"
 import { defineApplication } from "react-foldkit/react"
-import { modifyFields } from "react-foldkit/struct"
 import * as Submodel from "react-foldkit/submodel"
-import * as Update from "react-foldkit/update"
 import * as Form from "./form"
 
 const Model = Schema.Struct({ form: Form.Model, todos: Schema.Array(Schema.String) })
@@ -142,23 +143,18 @@ type Model = typeof Model.Type
 const Message = defineMessageUnion({ GotFormMessage: { message: Form.Message } })
 type Message = typeof Message.Type
 
-const form = Submodel.lift({
-  read: (model: Model) => model.form,
-  toParentMessage: (message: Form.Message) => Message.GotFormMessage({ message }),
-})
-
-const foldChild = Update.foldChild({
+const form = Submodel.field<Model>()("form", {
   update: Form.update,
-  read: (model: Model) => Option.some(form.read(model)),
-  write: (model, form) => modifyFields(model, { form: () => form }),
-  toParentMessage: form.toParentMessage,
-  foldOutMessage: (out) => (model) => ({
+  toParentMessage: (message: Form.Message) => Message.GotFormMessage({ message }),
+  foldOutMessage: (out) => (model: Model) => ({
     model: modifyFields(model, { todos: (todos) => Array.append(todos, out.text) }),
   }),
 })
 
 const update = (model: Model, message: Message) =>
-  Message.match(message, { GotFormMessage: ({ message }) => foldChild(model, message) })
+  Message.match<Update.Return<Model, Message>>(message, {
+    GotFormMessage: ({ message }) => form.fold(model, message),
+  })
 
 const Application = defineApplication({ Model, update })
 
@@ -167,14 +163,9 @@ function View() {
 
   return (
     <>
-      <Application.SubmodelProvider
-        lift={form}
-        render={({ source }) => (
-          <Form.Provider source={source}>
-            <Form.View />
-          </Form.Provider>
-        )}
-      />
+      <Form.Provider from={Application} lift={form}>
+        <Form.View />
+      </Form.Provider>
       <ul>
         {todos.map((todo, index) => (
           <li key={index}>{todo}</li>
@@ -204,13 +195,13 @@ This example uses `@tanstack/react-router`, `@tanstack/router-core`, and `@tanst
 ```tsx
 import { Effect, Schema } from "effect"
 import * as Query from "foldkit/experimental/query"
-import * as AsyncData from "react-foldkit/asyncData"
-import * as Command from "react-foldkit/command"
+import * as AsyncData from "foldkit/asyncData"
+import * as Command from "foldkit/command"
 import * as Loader from "react-foldkit/loader"
-import { defineMessageUnion } from "react-foldkit/message"
+import { defineMessageUnion } from "foldkit/message"
 import { defineApplication } from "react-foldkit/react"
-import { modifyFields } from "react-foldkit/struct"
-import type * as Update from "react-foldkit/update"
+import { modifyFields } from "foldkit/struct"
+import type * as Update from "foldkit/update"
 
 const Profile = Schema.Struct({ name: Schema.String, revision: Schema.Finite })
 

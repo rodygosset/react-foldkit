@@ -1,11 +1,11 @@
 import { Button } from "@workspace/ui/components/button"
 import { Clock, Duration, Effect, Schema, Stream } from "effect"
-import * as Command from "react-foldkit/command"
-import { defineMessageUnion } from "react-foldkit/message"
+import * as Command from "foldkit/command"
+import { defineMessageUnion } from "foldkit/message"
 import { defineApplication } from "react-foldkit/react"
-import { modifyFields } from "react-foldkit/struct"
-import * as Subscription from "react-foldkit/subscription"
-import type * as Update from "react-foldkit/update"
+import { modifyFields } from "foldkit/struct"
+import * as Subscription from "foldkit/subscription"
+import type * as Update from "foldkit/update"
 import { ExampleShell } from "../components/example-shell"
 
 const TICK_INTERVAL_MS = 100

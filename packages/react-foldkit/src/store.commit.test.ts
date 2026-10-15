@@ -3,7 +3,7 @@ import { Array, Cause, Effect, Exit, Result } from "effect"
 import { afterEach, beforeEach, describe, expect, vi } from "vitest"
 import * as Store from "./store"
 import { controlledDrains } from "../test/fixtures/controlledDrains"
-import type * as Update from "./update"
+import type * as Update from "foldkit/update"
 
 type Message = { readonly label: string; readonly burn?: number }
 type Model = ReadonlyArray<string>
@@ -41,12 +41,12 @@ function boot(extra?: (model: Model, message: Message) => Update.Return<Model, M
 }
 function failReason(
 	action: () => Result.Result<void, Store.CommitError>,
-	reason: Store.CommitError["details"]["reason"]
+	reason: Store.CommitError["reason"]["_tag"]
 ) {
 	const result = action()
 	expect(Result.isFailure(result)).toBe(true)
 	if (Result.isSuccess(result)) return expect.fail("Expected commit failure")
-	expect(result.failure.details.reason).toBe(reason)
+	expect(result.failure.reason._tag).toBe(reason)
 	return result.failure
 }
 
@@ -64,7 +64,7 @@ describe("synchronous commit", function () {
 		const exit = Effect.runSyncExit(commit)
 		expect(Exit.isFailure(exit)).toBe(true)
 		if (Exit.isFailure(exit)) {
-			expect(Result.getOrThrow(Cause.findError(exit.cause)).details.reason).toBe("Disposed")
+			expect(Result.getOrThrow(Cause.findError(exit.cause)).reason._tag).toBe("Disposed")
 			expect(Cause.hasDies(exit.cause)).toBe(false)
 		}
 	})
@@ -132,7 +132,7 @@ describe("synchronous commit", function () {
 		})
 		store = made.store
 		const outerResult = store.commit({ label: "outer" })
-		expect(nestedResult).toEqual(Result.fail(new Store.CommitError({ details: { reason: "Reentrant" } })))
+		expect(nestedResult).toEqual(Result.fail(new Store.CommitError({ reason: new Store.Reentrant() })))
 		Result.getOrThrow(outerResult)
 		Result.getOrThrow(store.commit({ label: "next" }))
 		expect(store.getModel()).toEqual(["outer", "next"])
@@ -146,7 +146,7 @@ describe("synchronous commit", function () {
 			if (store.getModel().at(-1) === "outer") nestedResult = store.commit({ label: "nested" })
 		})
 		const outerResult = store.commit({ label: "outer" })
-		expect(nestedResult).toEqual(Result.fail(new Store.CommitError({ details: { reason: "Reentrant" } })))
+		expect(nestedResult).toEqual(Result.fail(new Store.CommitError({ reason: new Store.Reentrant() })))
 		Result.getOrThrow(outerResult)
 		Result.getOrThrow(store.commit({ label: "next" }))
 		expect(store.getModel()).toEqual(["outer", "next"])
@@ -164,8 +164,8 @@ describe("synchronous commit", function () {
 		expect(store.getModel()).toEqual(["burn"])
 		expect(drains.pending).toBeGreaterThan(0)
 		const error = failReason(() => store.commit({ label: "target" }), "Crashed")
-		expect(error.details.reason).toBe("Crashed")
-		if (error.details.reason === "Crashed") expect(Cause.squash(error.details.cause)).toBe(defect)
+		expect(error.reason._tag).toBe("Crashed")
+		if (error.reason._tag === "Crashed") expect(Cause.squash(error.reason.cause)).toBe(defect)
 		expect(onCrash).toHaveBeenCalledTimes(1)
 		expect(store.getModel()).toEqual(["burn"])
 		failReason(() => store.commit({ label: "again" }), "Crashed")
@@ -236,3 +236,15 @@ describe("synchronous commit", function () {
 		})
 	)
 })
+
+it.effect("lets Effect.catchReason handle one CommitError reason", () =>
+	Effect.gen(function* () {
+		const store = Store.boot({ update: (model: number, message: number) => ({ model: model + message }) }, { model: 0 })
+		yield* store.dispose()
+		const handled = yield* Store.commit(store, 1).pipe(
+			Effect.catchReason("CommitError", "Disposed", (reason) => Effect.succeed(reason._tag)),
+			Effect.catchReason("CommitError", "Inactive", () => Effect.succeed("unexpected"))
+		)
+		expect(handled).toBe("Disposed")
+	})
+)

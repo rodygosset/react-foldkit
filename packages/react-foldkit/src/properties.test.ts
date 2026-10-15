@@ -1,7 +1,7 @@
 import { Effect, Exit, Option, Result, Schema, Scope } from "effect"
 import fc from "fast-check"
 import { expect, it, vi } from "vitest"
-import * as AsyncData from "./asyncData"
+import * as AsyncData from "foldkit/asyncData"
 import * as Connection from "./commitSource/connection"
 import * as Loader from "./loader"
 import * as Query from "foldkit/experimental/query"

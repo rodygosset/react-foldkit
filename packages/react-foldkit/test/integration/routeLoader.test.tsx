@@ -3,7 +3,7 @@ import { RouterProvider } from "@tanstack/react-router"
 import { act, cleanup, render, waitFor } from "@testing-library/react"
 import { afterEach, describe, expect, vi } from "vitest"
 import { Deferred, Effect } from "effect"
-import * as AsyncData from "../../src/asyncData"
+import * as AsyncData from "foldkit/asyncData"
 import { controlledDrains } from "../fixtures/controlledDrains"
 import { createFixture, response, type SearchResponse } from "../fixtures/routeLoader"
 

@@ -1,12 +1,12 @@
 import { it } from "@effect/vitest"
-import { Cause, Deferred, Effect, Result, Schema, Stream } from "effect"
+import { Cause, Deferred, Effect, Schema, Stream } from "effect"
 import * as Query from "foldkit/experimental/query"
 import React from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, describe, expect } from "vitest"
-import * as AsyncData from "../../src/asyncData"
+import * as AsyncData from "foldkit/asyncData"
 import { defineApplication } from "../../src/react"
-import * as Subscription from "../../src/subscription"
+import * as Subscription from "foldkit/subscription"
 
 let root: Root | undefined
 let container: HTMLDivElement | undefined
@@ -29,7 +29,6 @@ afterEach(function () {
 describe("React activation with the native browser scheduler", function () {
 	it.live.each(["layout", "ref"] as const)("accepts %s Messages under Strict Mode", (phase) =>
 		Effect.gen(function* () {
-			const commits: Result.Result<void, unknown>[] = []
 			const App = defineApplication({
 				Model: Schema.Finite,
 				update: (_model: number, message: number) => ({ model: message }),
@@ -37,13 +36,12 @@ describe("React activation with the native browser scheduler", function () {
 			function View() {
 				const model = App.useModel()
 				const dispatch = App.useDispatch()
-				const commit = App.useCommit()
 				const send = React.useCallback(
 					function () {
 						dispatch(1)
-						commits.push(commit(2))
+						dispatch(2)
 					},
-					[dispatch, commit]
+					[dispatch]
 				)
 				const attach = React.useCallback(
 					function (node: HTMLSpanElement | null) {
@@ -67,7 +65,6 @@ describe("React activation with the native browser scheduler", function () {
 				</React.StrictMode>
 			)
 			yield* Effect.promise(() => expect.poll(() => view.textContent).toBe("2"))
-			expect(commits).toEqual([Result.void, Result.void])
 		})
 	)
 
@@ -161,14 +158,15 @@ describe("React activation with the native browser scheduler", function () {
 				<React.Activity mode={mode}>
 					<App.Provider
 						init={{ model: 0 }}
-						onError={(cause) =>
-							Effect.sync(function () {
-								reports.push(cause)
-							})
-						}
-						renderError={function (cause) {
-							rendered.push(cause)
-							return <span>Failed</span>
+						crash={{
+							view({ cause }) {
+								rendered.push(cause)
+								return <span>Failed</span>
+							},
+							report: ({ cause }) =>
+								Effect.sync(function () {
+									reports.push(cause)
+								}),
 						}}
 					>
 						<View />
@@ -211,14 +209,15 @@ describe("React activation with the native browser scheduler", function () {
 				<React.Activity mode={mode}>
 					<App.Provider
 						init={{ model: 0 }}
-						onError={(cause) =>
-							Effect.sync(function () {
-								reports.push(cause)
-							})
-						}
-						renderError={function (cause) {
-							rendered.push(cause)
-							return <span>Failed</span>
+						crash={{
+							view({ cause }) {
+								rendered.push(cause)
+								return <span>Failed</span>
+							},
+							report: ({ cause }) =>
+								Effect.sync(function () {
+									reports.push(cause)
+								}),
 						}}
 					>
 						<View />
@@ -270,12 +269,13 @@ describe("React activation with the native browser scheduler", function () {
 				<React.Activity mode={mode}>
 					<App.Provider
 						init={{ model: 0 }}
-						onError={(cause) =>
-							Effect.sync(function () {
-								reports.push(cause)
-							})
-						}
-						renderError={() => <span>Failed</span>}
+						crash={{
+							view: () => <span>Failed</span>,
+							report: ({ cause }) =>
+								Effect.sync(function () {
+									reports.push(cause)
+								}),
+						}}
 					>
 						<View />
 					</App.Provider>

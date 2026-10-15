@@ -10,16 +10,16 @@ import {
 import { Context, DateTime, Effect, Layer, Option, Result, Schema } from "effect"
 import * as Query from "foldkit/experimental/query"
 import React from "react"
-import * as AsyncData from "../../src/asyncData"
-import * as Command from "../../src/command"
+import * as AsyncData from "foldkit/asyncData"
+import * as Command from "foldkit/command"
 import * as Loader from "../../src/loader"
-import { defineMessageUnion } from "../../src/message"
+import { defineMessageUnion } from "foldkit/message"
 import * as ReactFoldkit from "../../src/react"
 import { defineApplication } from "../../src/react"
-import { modifyFields } from "../../src/struct"
+import { modifyFields } from "foldkit/struct"
 import { define, lift } from "../../src/submodel"
 import * as TanStackSource from "../../src/tanstack"
-import * as Update from "../../src/update"
+import * as Update from "foldkit/update"
 
 const SearchResponse = Schema.Struct({
 	query: Schema.String,
@@ -168,7 +168,7 @@ export function createFixture(
 		})
 	const App = defineApplication({
 		Model: AppModel,
-		layer: Layer.succeed(LoaderApi, {
+		resources: Layer.succeed(LoaderApi, {
 			load: (query) =>
 				Effect.suspend(function () {
 					fetchCalls.push(query)
@@ -194,14 +194,9 @@ export function createFixture(
 			layoutMounts += 1
 		}, [])
 		return (
-			<App.SubmodelProvider
-				lift={search}
-				render={({ source }) => (
-					<Provider source={source}>
-						<Outlet />
-					</Provider>
-				)}
-			/>
+			<Provider from={App} lift={search}>
+				<Outlet />
+			</Provider>
 		)
 	}
 	function RootLayout() {

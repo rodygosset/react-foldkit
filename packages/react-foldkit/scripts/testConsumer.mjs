@@ -82,12 +82,15 @@ import * as Foldkit from "react-foldkit"
 import * as Store from "react-foldkit/store"
 import * as Loader from "react-foldkit/loader"
 import * as Query from "foldkit/experimental/query"
+import * as AsyncData from "foldkit/asyncData"
+import { defineTaggedUnion } from "foldkit/schema"
 import { defineApplication } from "react-foldkit/react"
 const entries: ReadonlyArray<string> = ${stringify(Object.keys(manifest.exports).map((entry) => (entry === "." ? "react-foldkit" : "react-foldkit/" + entry.slice(2))))}
 const App = defineApplication({ Model: Schema.Finite, update: (model: number, message: number) => ({model: model + message}) })
 function View() { return createElement("span", null, App.useModel()) }
 assert.equal(renderToString(createElement(App.Provider, { init: { model: 7 }, children: createElement(View) })), "<span>7</span>")
-assert.equal(typeof Foldkit.Schema.defineTaggedUnion, "function")
+assert.equal(typeof defineTaggedUnion, "function")
+assert.deepEqual(Object.keys(Foldkit).sort(), ["CommitSource", "Loader", "ModelSource", "ReactFoldkit", "Store", "Submodel"])
 const query = Query.define({ name: "Packed", data: Schema.String, error: Schema.String, interrupt: true, execute: Effect.succeed("ok") })
 const program = Effect.scoped(Effect.gen(function* () {
   for (const entry of entries) yield* Effect.promise(() => import(entry))
@@ -96,7 +99,7 @@ const program = Effect.scoped(Effect.gen(function* () {
   assert.equal(envelope.key, "singleton")
   const pending = query.loadIfMissing(query.init("consumer"))
   const store = yield* Store.make({ update: query.update }, pending)
-  const data = yield* Store.takeWhen(store, (model) => Option.filter(Foldkit.AsyncData.getData(query.read(model)), (data) => data === "ok"))
+  const data = yield* Store.takeWhen(store, (model) => Option.filter(AsyncData.getData(query.read(model)), (data) => data === "ok"))
   assert.equal(data, "ok")
 }))
 await Effect.runPromise(program)

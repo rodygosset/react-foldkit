@@ -2,14 +2,7 @@ import type { Rule } from "eslint"
 import type { ArrowFunctionExpression, FunctionDeclaration, FunctionExpression } from "estree"
 import { paramHasDispatch, applicationMember, origin } from "../utils.js"
 
-const STORE_HOOKS = new Set([
-	"useDispatch",
-	"useModel",
-	"useCommit",
-	"useOptionalModel",
-	"useOptionalDispatch",
-	"useOptionalCommit",
-])
+const STORE_HOOKS = new Set(["useDispatch", "useModel", "useInbound", "useOptionalModel", "useOptionalDispatch"])
 
 const meta: Rule.RuleMetaData = {
 	type: "problem",

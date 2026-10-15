@@ -16,7 +16,7 @@ Use `strictConfig` instead to add warnings about local React state in Views.
 
 ## Rules
 
-The recommended preset enables these rules as errors.
+The recommended preset enables these rules. `no-inline-submodel-lift` is a warning; the others are errors.
 
 | Rule                             | Reports                                                                |
 | -------------------------------- | ---------------------------------------------------------------------- |
@@ -24,6 +24,7 @@ The recommended preset enables these rules as errors.
 | `no-nested-store`                | Store construction or application Providers inside Views               |
 | `no-effect-run-outside-commands` | Effect runners outside Command execution or allowed host files         |
 | `no-store-hooks-in-child-view`   | Store hooks in child Views that already receive dispatch through props |
+| `no-inline-submodel-lift`        | Submodel lifts built during render, which recreate the child source    |
 
 The strict preset also warns with `no-domain-use-state` when View components use `useState` or `useReducer`. Keep application state in the Model. Use a local disable with a reason for component-only UI state.
 

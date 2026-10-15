@@ -4,7 +4,7 @@ import * as Query from "foldkit/experimental/query"
 import React from "react"
 import { afterEach, expect } from "vitest"
 import { it } from "@effect/vitest"
-import * as AsyncData from "./asyncData"
+import * as AsyncData from "foldkit/asyncData"
 import { defineApplication } from "./react"
 
 afterEach(cleanup)
@@ -143,14 +143,15 @@ it.live("reports the original reactivation update defect and recovers on a later
 				<React.Activity mode={mode}>
 					<App.Provider
 						init={{ model: 0 }}
-						onError={(cause) =>
-							Effect.sync(function () {
-								reported.push(cause)
-							})
-						}
-						renderError={function (cause) {
-							rendered.push(cause)
-							return <span>Failed</span>
+						crash={{
+							view({ cause }) {
+								rendered.push(cause)
+								return <span>Failed</span>
+							},
+							report: ({ cause }) =>
+								Effect.sync(function () {
+									reported.push(cause)
+								}),
 						}}
 					>
 						<View />
@@ -203,14 +204,15 @@ it.live.each([false, true])("renders a new callback defect after Activity retain
 				<React.Activity mode={mode}>
 					<App.Provider
 						init={{ model: 0 }}
-						onError={(cause) =>
-							Effect.sync(function () {
-								reports.push(cause)
-							})
-						}
-						renderError={function (cause) {
-							rendered.push(cause)
-							return <span>Failed</span>
+						crash={{
+							view({ cause }) {
+								rendered.push(cause)
+								return <span>Failed</span>
+							},
+							report: ({ cause }) =>
+								Effect.sync(function () {
+									reports.push(cause)
+								}),
 						}}
 					>
 						<View />
