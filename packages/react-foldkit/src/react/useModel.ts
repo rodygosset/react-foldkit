@@ -1,9 +1,19 @@
 import { Equal, Option } from "effect"
-import { identity } from "effect/Function"
-import React from "react"
+import { constVoid, identity } from "effect/Function"
 import { useSyncExternalStoreWithSelector } from "use-sync-external-store/with-selector"
-import { stabilize, type ModelReader } from "../modelSource/modelSource"
+import type { ModelReader } from "../modelSource/modelSource"
 
+export function useModel<Model>(source: ModelReader<Model>): Model
+export function useModel<Model, Selected>(
+	source: ModelReader<Model>,
+	selector: (model: Model) => Selected,
+	isEqual?: (a: Selected, b: Selected) => boolean
+): Selected
+export function useModel<Model, Selected>(
+	source: ModelReader<Model>,
+	selector?: (model: Model) => Selected,
+	isEqual?: (a: Selected, b: Selected) => boolean
+): Model | Selected
 export function useModel<Model, Selected>(
 	source: ModelReader<Model>,
 	selector?: (model: Model) => Selected,
@@ -19,25 +29,18 @@ export function useModel<Model, Selected>(
 	)
 }
 
-const absent = Option.none<never>()
-const subscribeAbsent = () => function () {}
+// Stands in for the Model outside a Provider. As its own snapshot, it never changes.
+const absent: unique symbol = Symbol.for("react-foldkit/AbsentModel")
+const absentReader: ModelReader<typeof absent> = {
+	subscribe: () => constVoid,
+	getSnapshot: () => absent,
+	getServerSnapshot: () => absent,
+}
+const toOption = <Model>(snapshot: Model | typeof absent): Option.Option<Model> =>
+	snapshot === absent ? Option.none() : Option.some(snapshot)
 
 export function useOptionalModel<Model>(source: Option.Option<ModelReader<Model>>): Option.Option<Model> {
-	const reader = React.useMemo<ModelReader<Option.Option<Model>>>(
-		() =>
-			Option.match(source, {
-				onNone: () => ({
-					subscribe: subscribeAbsent,
-					getSnapshot: () => absent,
-					getServerSnapshot: () => absent,
-				}),
-				onSome: (source) => ({
-					subscribe: source.subscribe,
-					getSnapshot: stabilize(Option.some, source.getSnapshot),
-					getServerSnapshot: stabilize(Option.some, source.getServerSnapshot),
-				}),
-			}),
-		[source]
-	)
-	return React.useSyncExternalStore(reader.subscribe, reader.getSnapshot, reader.getServerSnapshot)
+	const reader: ModelReader<Model | typeof absent> = Option.getOrElse(source, () => absentReader)
+	// The selector store caches each selection by snapshot, so a Model keeps one Some wrapper.
+	return useModel(reader, toOption<Model>, Object.is)
 }

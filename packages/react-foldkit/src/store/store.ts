@@ -1,7 +1,7 @@
 import {
+	Array,
 	Cause,
 	Context,
-	Deferred,
 	Effect,
 	Exit,
 	Fiber,
@@ -16,7 +16,7 @@ import {
 	Scope,
 } from "effect"
 import * as InitCommand from "../internal/initCommand"
-import { CurrentInterruptRegistry, type InterruptRegistry, makeInterruptRegistry } from "../internal/interrupt"
+import { CurrentInterruptRegistry, makeInterruptRegistry } from "../internal/interrupt"
 import type * as Subscription from "foldkit/subscription"
 import type * as Update from "foldkit/update"
 import { browserScheduler } from "./scheduler"
@@ -323,7 +323,10 @@ export const takeWhen: {
 					)
 				: store.isDisposed()
 					? Exit.fail(new Disposed())
-					: Effect.runSyncExit(Effect.sync(() => pick(store.getModel())))
+					: Result.match(
+							Result.try(() => pick(store.getModel())),
+							{ onSuccess: Exit.succeed, onFailure: Exit.die }
+						)
 			if (Exit.isFailure(result)) {
 				settled = true
 				cleanup()
@@ -346,24 +349,454 @@ export const takeWhen: {
 
 const DRAIN_BUDGET_MS = 5
 
-type Phase =
-	| { readonly _tag: "Live"; readonly drain: "Idle" | "Sync" | "Deferred" }
-	| { readonly _tag: "Crashed"; readonly cause: Cause.Cause<unknown> }
-	| { readonly _tag: "Disposed"; readonly crash: Option.Option<Cause.Cause<unknown>> }
+/** Messages kept while the Store is inactive before the oldest are dropped. */
+const MAX_INACTIVE_MESSAGES = 1000
 
-const isTerminal = (phase: Phase): boolean => phase._tag === "Crashed" || phase._tag === "Disposed"
+type Command<Message, R> = Update.Commands<Message, R>[number]
 
-const canEnterDrain = (phase: Phase): boolean => phase._tag === "Live" && phase.drain === "Idle"
+interface PendingMessage<Message, R> {
+	readonly message: Message
+	/** The Command whose result this is. Its delivery completes a tracked init Command. */
+	readonly command?: Command<Message, R>
+}
 
-const makeProvideAllResources =
-	<R>(
-		acquireResourceContext: Effect.Effect<Context.Context<R>>,
-		interruptRegistry: InterruptRegistry
-	): (<A, E>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E>) =>
-	<A, E>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E> =>
-		Effect.flatMap(acquireResourceContext, (ctx) =>
-			Effect.provideService(Effect.provideContext(effect, ctx), CurrentInterruptRegistry, interruptRegistry)
+interface Crash<Message> {
+	readonly cause: Cause.Cause<unknown>
+	/** The Message whose update or Command crashed the Store. */
+	readonly message: Option.Option<Message>
+}
+
+/**
+ * The live work of one activation: Command and Subscription fibers, the services they use, and
+ * the Model feed for Subscriptions.
+ */
+interface Activation<Model, R> {
+	readonly runtimeContext: Context.Context<never>
+	readonly fiberScope: Scope.Scope
+	readonly modelPubSub: PubSub.PubSub<Model>
+	readonly provideServices: <A, E>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E>
+	/** Stops the fibers, then releases the services. The first Exit passed here wins. */
+	readonly close: (exit: Exit.Exit<unknown, unknown>) => Effect.Effect<void>
+}
+
+type Phase<Model, Message, R> =
+	| { readonly _tag: "Inactive"; readonly crash: Option.Option<Crash<Message>> }
+	| {
+			readonly _tag: "Live"
+			readonly activation: Activation<Model, R>
+			readonly drain: "Idle" | "Sync" | "Deferred"
+	  }
+	| { readonly _tag: "Crashed"; readonly activation: Activation<Model, R>; readonly crash: Crash<Message> }
+	| { readonly _tag: "Disposed"; readonly crash: Option.Option<Crash<Message>> }
+
+/**
+ * Options for one activation of a Runtime.
+ */
+export interface ActivateOptions<Message, R> {
+	/**
+	 * The activating fiber's Context. Commands and Subscriptions run with it, and it supplies their
+	 * services when the Program has no `resources` Layer.
+	 */
+	readonly context: Context.Context<never>
+	readonly commands: Update.Commands<Message, R>
+	/** Delivered before the Messages that were queued while the Store was inactive. */
+	readonly firstMessage: Option.Option<Message>
+}
+
+/**
+ * A Store that can stop and restart its live work. It keeps its Model, queue, and listeners
+ * across activations. Each activation owns the Command and Subscription fibers and the services
+ * they use, and ends when the Scope passed to `activate` closes. A crash is terminal for the
+ * activation, and the next activation clears it.
+ */
+export type Runtime<Model, Message, R> = Omit<Store<Model, Message>, "getRunningCommands" | "dispose"> & {
+	readonly activate: (options: ActivateOptions<Message, R>) => Effect.Effect<void, never, Scope.Scope>
+	readonly getCrashMessage: () => Option.Option<Message>
+	readonly getRunningCommands: () => Update.Commands<Message, R>
+	/** Like `Store.dispose`, and resource finalizers receive `exit` unless a crash closed them first. */
+	readonly dispose: (exit?: Exit.Exit<unknown, unknown>) => Effect.Effect<void>
+}
+
+export function makeRuntime<Model, Message, R>(
+	program: Config<Model, Message, R>,
+	initialModel: Model
+): Runtime<Model, Message, R>
+export function makeRuntime<Model, Message, R>(
+	program: Program<Model, Message, R> & { readonly resources?: Layer.Layer<NoInfer<R>, never, never> },
+	initialModel: Model
+): Runtime<Model, Message, R>
+export function makeRuntime<Model, Message, R>(
+	program: Program<Model, Message, R> & { readonly resources?: Layer.Layer<NoInfer<R>, never, never> },
+	initialModel: Model
+): Runtime<Model, Message, R> {
+	const listeners = new Set<() => void>()
+	const crashListeners = new Set<() => void>()
+	const pendingMessages = MutableList.make<PendingMessage<Message, R>>()
+	const runningCommands = new Map<Fiber.Fiber<void>, Command<Message, R>>()
+	let model = initialModel
+	let phase: Phase<Model, Message, R> = { _tag: "Inactive", crash: Option.none() }
+	let syncWorkMsSinceYield = 0
+	let lastDrainEndedAt = 0
+	let deferredDrainChannel: MessageChannel | undefined
+	let warnedInactiveOverflow = false
+
+	// Logs with the live activation's services, such as its Logger, when there is one.
+	function runFork(effect: Effect.Effect<void>): void {
+		const context =
+			phase._tag === "Live" || phase._tag === "Crashed" ? phase.activation.runtimeContext : Context.empty()
+		Effect.runForkWith(context)(effect)
+	}
+
+	// Observers run synchronously and in order. A throwing observer is logged and the rest still run.
+	function notify(observers: Iterable<() => void>): void {
+		for (const observer of Array.fromIterable(observers)) {
+			const notified = Result.try(observer)
+			if (Result.isFailure(notified)) runFork(Effect.logError(Cause.die(notified.failure)))
+		}
+	}
+
+	function currentCrash(): Option.Option<Crash<Message>> {
+		switch (phase._tag) {
+			case "Live":
+				return Option.none()
+			case "Crashed":
+				return Option.some(phase.crash)
+			case "Inactive":
+			case "Disposed":
+				return phase.crash
+		}
+	}
+
+	function crashWith(cause: Cause.Cause<unknown>, message: Option.Option<Message>): void {
+		if (phase._tag !== "Live") return
+		const { activation } = phase
+		phase = { _tag: "Crashed", activation, crash: { cause, message } }
+		runFork(activation.close(Exit.failCause(cause)).pipe(Effect.catchCause(Effect.logError)))
+		// onCrash runs first so crash listeners observe everything it records.
+		if (program.onCrash === undefined)
+			runFork(Effect.logError("[react-foldkit] Store crashed:", Cause.pretty(cause)))
+		else notify([() => program.onCrash?.(cause, message)])
+		notify(crashListeners)
+	}
+
+	function enqueueMessage(message: Message, command?: Command<Message, R>): void {
+		switch (phase._tag) {
+			case "Live":
+				MutableList.append(pendingMessages, { message, command })
+				drainPendingMessages()
+				return
+			case "Inactive":
+				queueWhileInactive(message)
+				return
+			case "Crashed":
+			case "Disposed":
+				return
+		}
+	}
+
+	// Holds Messages sent while React has deactivated the Provider until the next activation.
+	function queueWhileInactive(message: Message): void {
+		MutableList.append(pendingMessages, { message })
+		if (pendingMessages.length <= MAX_INACTIVE_MESSAGES) return
+		MutableList.take(pendingMessages)
+		if (warnedInactiveOverflow) return
+		warnedInactiveOverflow = true
+		runFork(
+			Effect.logWarning(
+				`[react-foldkit] Dropping Messages dispatched while the Provider is inactive; more than ${MAX_INACTIVE_MESSAGES} are waiting.`
+			)
 		)
+	}
+
+	function cancelDeferredDrain(): void {
+		if (deferredDrainChannel === undefined) return
+		deferredDrainChannel.port1.close()
+		deferredDrainChannel.port2.close()
+		deferredDrainChannel = undefined
+	}
+
+	function scheduleDeferredDrain(): void {
+		if (phase._tag !== "Live" || phase.drain === "Deferred") return
+		if (deferredDrainChannel === undefined) {
+			const channel = new MessageChannel()
+			deferredDrainChannel = channel
+			channel.port2.onmessage = function () {
+				// A commit can overtake this task and replace its channel.
+				if (deferredDrainChannel !== channel || phase._tag !== "Live" || phase.drain !== "Deferred") return
+				phase = { ...phase, drain: "Idle" }
+				syncWorkMsSinceYield = 0
+				drainPendingMessages()
+			}
+		}
+		phase = { ...phase, drain: "Deferred" }
+		deferredDrainChannel.port1.postMessage(null)
+	}
+
+	const isLive = (activation: Activation<Model, R>): boolean =>
+		phase._tag === "Live" && phase.activation === activation
+
+	// Forks the Command into the activation's fiber Scope. The fiber inherits the calling fiber's
+	// Context, so run this with the activation's Context.
+	function startCommand(
+		activation: Activation<Model, R>,
+		command: Command<Message, R>,
+		triggeringMessage: Option.Option<Message>
+	): Effect.Effect<void> {
+		// Foldkit Command accepts a Schema or its Type; this runtime dispatches values.
+		const effect = (command.effect as Effect.Effect<Message, never, R>).pipe(
+			Effect.withSpan(command.name, { attributes: command.args ?? {} }),
+			activation.provideServices,
+			Effect.flatMap((message) =>
+				Effect.sync(function () {
+					// A result that lands after its activation ended belongs to no Store.
+					if (isLive(activation)) enqueueMessage(message, command)
+				})
+			),
+			Effect.catchCause((cause) =>
+				Effect.sync(function () {
+					if (isLive(activation)) crashWith(cause, triggeringMessage)
+				})
+			)
+		)
+		// Each start gets its own entry, listed from the moment it is forked. A Command forked and
+		// stopped in the same tick still counts as interrupted.
+		return Effect.forkIn(effect, activation.fiberScope).pipe(
+			Effect.flatMap((fiber) =>
+				Effect.sync(function () {
+					runningCommands.set(fiber, command)
+					fiber.addObserver(() => runningCommands.delete(fiber))
+				})
+			)
+		)
+	}
+
+	// update runs outside any fiber, so a Command it returns starts on a new one.
+	function forkCommand(
+		activation: Activation<Model, R>,
+		command: Command<Message, R>,
+		triggeringMessage: Option.Option<Message>
+	): void {
+		Effect.runForkWith(activation.runtimeContext)(startCommand(activation, command, triggeringMessage))
+	}
+
+	function processMessage(activation: Activation<Model, R>, { message, command }: PendingMessage<Message, R>): void {
+		const updated = Result.try(() => program.update(model, message))
+		if (Result.isFailure(updated)) return crashWith(Cause.die(updated.failure), Option.some(message))
+		const previous = model
+		model = updated.success.model
+		if (command !== undefined) InitCommand.complete(command)
+		if (previous !== model) {
+			PubSub.publishUnsafe(activation.modelPubSub, model)
+			notify(listeners)
+		}
+		for (const next of updated.success.commands ?? []) forkCommand(activation, next, Option.some(message))
+	}
+
+	function drainPendingMessages(until?: PendingMessage<Message, R>): void {
+		if (phase._tag !== "Live" || phase.drain !== "Idle") return
+		const { activation } = phase
+
+		const drainStartedAt = performance.now()
+		if (drainStartedAt - lastDrainEndedAt > DRAIN_BUDGET_MS) syncWorkMsSinceYield = 0
+
+		if (until === undefined && syncWorkMsSinceYield > DRAIN_BUDGET_MS) {
+			scheduleDeferredDrain()
+			return
+		}
+
+		phase = { ...phase, drain: "Sync" }
+		processUntilYield(activation, drainStartedAt, until)
+		const drainEndedAt = performance.now()
+		syncWorkMsSinceYield += drainEndedAt - drainStartedAt
+		lastDrainEndedAt = drainEndedAt
+		if (phase._tag === "Live" && phase.drain === "Sync") phase = { ...phase, drain: "Idle" }
+	}
+
+	// Processes queued Messages until the queue empties, `until` is processed, the activation
+	// ends, or the budget runs out. The last two cases defer the rest to a later task.
+	function processUntilYield(
+		activation: Activation<Model, R>,
+		drainStartedAt: number,
+		until: PendingMessage<Message, R> | undefined
+	): void {
+		while (isLive(activation)) {
+			const entry = MutableList.take(pendingMessages)
+			if (entry === MutableList.Empty) return
+			processMessage(activation, entry)
+
+			if (entry === until) {
+				if (pendingMessages.length > 0) scheduleDeferredDrain()
+				return
+			}
+			if (
+				until === undefined &&
+				pendingMessages.length > 0 &&
+				syncWorkMsSinceYield + (performance.now() - drainStartedAt) > DRAIN_BUDGET_MS
+			) {
+				scheduleDeferredDrain()
+				return
+			}
+		}
+	}
+
+	function canCommit(): Result.Result<void, CommitError> {
+		switch (phase._tag) {
+			case "Inactive":
+				return Result.fail(new CommitError({ reason: new Inactive() }))
+			case "Crashed":
+				return Result.fail(new CommitError({ reason: new Crashed({ cause: phase.crash.cause }) }))
+			case "Disposed":
+				return Result.fail(new CommitError({ reason: new Disposed() }))
+			case "Live":
+				return phase.drain === "Sync" ? Result.fail(new CommitError({ reason: new Reentrant() })) : Result.void
+		}
+	}
+
+	const commit = (message: Message): Result.Result<void, CommitError> =>
+		Result.flatMap(canCommit(), function () {
+			if (phase._tag !== "Live") return canCommit()
+			const entry: PendingMessage<Message, R> = { message }
+			MutableList.append(pendingMessages, entry)
+			cancelDeferredDrain()
+			phase = { ...phase, drain: "Idle" }
+			drainPendingMessages(entry)
+			return canCommit()
+		})
+
+	const activate = ({
+		context,
+		commands,
+		firstMessage,
+	}: ActivateOptions<Message, R>): Effect.Effect<void, never, Scope.Scope> =>
+		Effect.gen(function* () {
+			if (phase._tag !== "Inactive")
+				return yield* Effect.die(new Error("[react-foldkit] Store is already active"))
+			const scope = yield* Scope.Scope
+			const work = yield* Scope.fork(scope, "sequential")
+			// Finish Commands and Subscriptions before releasing their services.
+			const layerScope = yield* Scope.fork(work)
+			const fiberScope = yield* Scope.fork(work, "parallel")
+			const layer = program.resources
+			const build = yield* Effect.cached(
+				Effect.forkIn(
+					layer === undefined
+						? // Without a Layer, the overloads of `make` require the caller's Context to supply R.
+							Effect.succeed(context as Context.Context<R>)
+						: Layer.buildWithScope(layer, layerScope),
+					layerScope,
+					{ uninterruptible: false }
+				).pipe(Effect.uninterruptible)
+			)
+			const services = Effect.flatMap(build, Fiber.join)
+			const interruptRegistry = makeInterruptRegistry()
+			let closingExit: Exit.Exit<unknown, unknown> | undefined
+			const closed = yield* Effect.cached(Effect.suspend(() => Scope.close(work, closingExit ?? Exit.void)))
+			const activation: Activation<Model, R> = {
+				runtimeContext: Context.add(context, Scheduler.Scheduler, browserScheduler),
+				fiberScope,
+				modelPubSub: yield* PubSub.unbounded<Model>(),
+				provideServices: (effect) =>
+					Effect.flatMap(services, (services) =>
+						Effect.provideService(
+							Effect.provideContext(effect, services),
+							CurrentInterruptRegistry,
+							interruptRegistry
+						)
+					),
+				close: (exit) =>
+					Effect.suspend(function () {
+						closingExit ??= exit
+						return closed
+					}),
+			}
+			yield* Scope.addFinalizerExit(scope, (exit) =>
+				Effect.suspend(function () {
+					if ((phase._tag === "Live" || phase._tag === "Crashed") && phase.activation === activation) {
+						phase = { _tag: "Inactive", crash: currentCrash() }
+						cancelDeferredDrain()
+					}
+					return activation.close(exit)
+				})
+			)
+			phase = { _tag: "Live", activation, drain: "Idle" }
+			// The host yielded while the Store was inactive, so the drain budget starts over.
+			syncWorkMsSinceYield = 0
+			// Activation clears any earlier crash. Crash listeners read the new health.
+			notify(crashListeners)
+
+			// Foldkit attaches subscriptions before forking init Commands, so their initial
+			// dependencies come from the current Model.
+			yield* Effect.gen(function* () {
+				yield* forkSubscriptionFibers(program.subscriptions, {
+					initialModel: model,
+					modelPubSub: activation.modelPubSub,
+					fiberScope,
+					provideServices: activation.provideServices,
+					deliver(message) {
+						if (isLive(activation)) enqueueMessage(message)
+					},
+					crash(cause, message) {
+						if (isLive(activation)) crashWith(cause, message)
+					},
+				})
+				for (const command of commands) yield* startCommand(activation, command, Option.none())
+			}).pipe(Effect.provideContext(activation.runtimeContext))
+
+			if (Option.isNone(firstMessage)) return drainPendingMessages()
+			// The first Message and every Message queued while inactive arrive before activate returns.
+			const backlog = Array.prepend(MutableList.takeAll(pendingMessages), { message: firstMessage.value })
+			MutableList.appendAll(pendingMessages, backlog)
+			drainPendingMessages(Array.lastNonEmpty(backlog))
+		})
+
+	let disposeExit: Exit.Exit<unknown, unknown> | undefined
+	const disposeOnce = Effect.runSync(
+		Effect.cached(
+			Effect.suspend(function () {
+				const activation = phase._tag === "Live" || phase._tag === "Crashed" ? phase.activation : undefined
+				phase = { _tag: "Disposed", crash: currentCrash() }
+				MutableList.clear(pendingMessages)
+				cancelDeferredDrain()
+				return Effect.forEach(Array.fromIterable(listeners), (listener) =>
+					Effect.exit(Effect.sync(listener))
+				).pipe(
+					Effect.flatMap(Exit.asVoidAll),
+					Effect.ensuring(
+						Effect.suspend(() =>
+							activation === undefined ? Effect.void : activation.close(disposeExit ?? Exit.void)
+						)
+					)
+				)
+			}).pipe(Effect.uninterruptible)
+		)
+	)
+
+	return {
+		[StoreTypeId]: StoreTypeId,
+		getModel: () => model,
+		getCrash: () => Option.map(currentCrash(), (crash) => crash.cause),
+		getCrashMessage: () => Option.flatMap(currentCrash(), (crash) => crash.message),
+		subscribeCrash: (listener) => subscribeTo(crashListeners, listener),
+		subscribe: (listener) => subscribeTo(listeners, listener),
+		dispatch: (message) => enqueueMessage(message),
+		commit,
+		dispose: (exit = Exit.void) =>
+			Effect.suspend(function () {
+				disposeExit ??= exit
+				return disposeOnce
+			}),
+		isDisposed: () => phase._tag === "Disposed",
+		getRunningCommands: () => Array.fromIterable(runningCommands.values()),
+		activate,
+	}
+}
+
+function subscribeTo(listeners: Set<() => void>, listener: () => void): () => void {
+	listeners.add(listener)
+	return function () {
+		listeners.delete(listener)
+	}
+}
 
 /**
  * Creates a Store managed by an Effect Scope.
@@ -420,37 +853,15 @@ export function make<Model, Message, R = never>(
 	init: Update.Return<Model, Message, R>
 ): Effect.Effect<Store<Model, Message>, never, R | Scope.Scope> {
 	return Effect.gen(function* () {
-		const ambient = yield* Effect.context<R>()
-		const runtimeContext = Context.add(ambient, Scheduler.Scheduler, browserScheduler)
-		const scope = yield* Scope.fork(yield* Scope.Scope, "sequential")
-		// Finish Commands and subscriptions before releasing their services.
-		const layerScope = yield* Scope.fork(scope)
-		const fiberScope = yield* Scope.fork(scope, "parallel")
-		const modelPubSub = yield* PubSub.unbounded<Model>()
-		const layer = config.resources
-		const getBuild = yield* Effect.cached(
-			Effect.forkIn(
-				layer === undefined ? Effect.succeed(ambient) : Layer.buildWithScope(layer, layerScope),
-				layerScope,
-				{
-					uninterruptible: false,
-				}
-			).pipe(Effect.uninterruptible)
-		)
-		const acquireResourceContext = Effect.flatMap(getBuild, Fiber.join)
-		let closingExit: Exit.Exit<unknown, unknown> | undefined
-		const closed = yield* Effect.cached(Effect.suspend(() => Scope.close(scope, closingExit ?? Exit.void)))
-		const closeResources = (exit: Exit.Exit<unknown, unknown>) =>
-			Effect.suspend(function () {
-				closingExit ??= exit
-				return closed
-			})
-		return yield* Effect.acquireRelease(
-			Effect.sync(() =>
-				start(config, init, fiberScope, modelPubSub, acquireResourceContext, runtimeContext, closeResources)
-			),
-			(store, exit) => store.dispose(exit)
-		)
+		const runtime = makeRuntime(config, init.model)
+		yield* runtime.activate({
+			context: yield* Effect.context<R>(),
+			commands: init.commands ?? [],
+			firstMessage: Option.none(),
+		})
+		// Runs before the activation's finalizer, so disposal sets the Exit resources receive.
+		yield* Effect.addFinalizer((exit) => runtime.dispose(exit))
+		return runtime
 	})
 }
 
@@ -506,302 +917,4 @@ export function boot<Model, Message, R = never>(
 			Effect.onExit((exit) => (Exit.isFailure(exit) ? Scope.close(scope, exit) : Effect.void))
 		)
 	)
-}
-
-function start<Model, Message, R>(
-	config: Program<Model, Message, R>,
-	init: Update.Return<Model, Message, R>,
-	fiberScope: Scope.Scope,
-	modelPubSub: PubSub.PubSub<Model>,
-	acquireResourceContext: Effect.Effect<Context.Context<R>>,
-	runtimeContext: Context.Context<never>,
-	closeResources: (exit: Exit.Exit<unknown, unknown>) => Effect.Effect<void>
-) {
-	const listeners = new Set<() => void>()
-	const crashListeners = new Set<() => void>()
-	type PendingMessage = {
-		readonly message: Message
-		readonly command?: Update.Commands<Message, R>[number]
-	}
-	const pendingMessages = MutableList.make<PendingMessage>()
-	const runningCommands = new Set<{ readonly command: Update.Commands<Message, R>[number] }>()
-	let phase: Phase = {
-		_tag: "Live",
-		drain: "Idle",
-	}
-	let syncWorkMsSinceYield = 0
-	let lastDrainEndedAt = 0
-	let deferredDrainChannel: MessageChannel | null = null
-
-	const interruptRegistry = makeInterruptRegistry()
-	const initialModel = init.model
-	const initCommands = init.commands ?? []
-	let model: Model = initialModel
-	PubSub.publishUnsafe(modelPubSub, model)
-
-	const provideAllResources = makeProvideAllResources(acquireResourceContext, interruptRegistry)
-	function getCrash(): Option.Option<Cause.Cause<unknown>> {
-		switch (phase._tag) {
-			case "Live":
-				return Option.none()
-			case "Crashed":
-				return Option.some(phase.cause)
-			case "Disposed":
-				return phase.crash
-		}
-	}
-
-	function crashWith(cause: Cause.Cause<unknown>, triggeringMessage: Option.Option<Message>): void {
-		if (isTerminal(phase)) return
-		phase = {
-			_tag: "Crashed",
-			cause,
-		}
-		Effect.runForkWith(runtimeContext)(
-			closeResources(Exit.failCause(cause)).pipe(Effect.catchCause(Effect.logError))
-		)
-		// onCrash runs first so crash listeners observe everything it records.
-		if (config.onCrash !== undefined) {
-			const exit = Effect.runSyncExit(Effect.sync(() => config.onCrash?.(cause, triggeringMessage)))
-			if (Exit.isFailure(exit)) Effect.runForkWith(runtimeContext)(Effect.logError(exit.cause))
-		} else
-			Effect.runForkWith(runtimeContext)(Effect.logError("[react-foldkit] Store crashed:", Cause.pretty(cause)))
-		const observers = [...crashListeners]
-		for (const listener of observers) {
-			const exit = Effect.runSyncExit(Effect.sync(listener))
-			if (Exit.isFailure(exit)) Effect.runForkWith(runtimeContext)(Effect.logError(exit.cause))
-		}
-	}
-
-	function enqueueMessage(message: Message, command?: Update.Commands<Message, R>[number]): void {
-		if (isTerminal(phase)) return
-		MutableList.append(pendingMessages, { message, command })
-		drainPendingMessages()
-	}
-
-	function publishModel(nextModel: Model): void {
-		PubSub.publishUnsafe(modelPubSub, nextModel)
-	}
-
-	function cancelDeferredDrain(): void {
-		if (deferredDrainChannel === null) return
-		deferredDrainChannel.port1.close()
-		deferredDrainChannel.port2.close()
-		deferredDrainChannel = null
-	}
-
-	function scheduleDeferredDrain(): void {
-		if (phase._tag !== "Live" || phase.drain === "Deferred") return
-		if (deferredDrainChannel === null) {
-			const channel = new MessageChannel()
-			deferredDrainChannel = channel
-			channel.port2.onmessage = function () {
-				// A commit can overtake this task and replace its channel.
-				if (deferredDrainChannel !== channel || phase._tag !== "Live" || phase.drain !== "Deferred") return
-				phase = {
-					_tag: "Live",
-					drain: "Idle",
-				}
-				syncWorkMsSinceYield = 0
-				drainPendingMessages()
-			}
-		}
-		phase = {
-			_tag: "Live",
-			drain: "Deferred",
-		}
-		deferredDrainChannel.port1.postMessage(null)
-	}
-
-	function forkCommand(
-		command: Update.Commands<Message, R>[number],
-		triggeringMessage: Option.Option<Message>
-	): void {
-		// Each start gets its own entry; the same Command value can run more than once.
-		const running = { command }
-		const effect = Effect.suspend(function () {
-			runningCommands.add(running)
-
-			// Foldkit Command accepts a Schema or its Type; this runtime dispatches values.
-			return (command.effect as Effect.Effect<Message, never, R>).pipe(
-				Effect.withSpan(command.name, {
-					attributes: command.args ?? {},
-				}),
-				provideAllResources,
-				Effect.flatMap((message) =>
-					Effect.sync(function () {
-						enqueueMessage(message, command)
-					})
-				),
-				Effect.catchCause((cause) =>
-					Effect.sync(function () {
-						crashWith(cause, triggeringMessage)
-					})
-				),
-				Effect.ensuring(
-					Effect.sync(function () {
-						runningCommands.delete(running)
-					})
-				)
-			)
-		})
-		Effect.runForkWith(runtimeContext)(Effect.forkIn(effect, fiberScope))
-	}
-
-	function processMessage({ message, command }: PendingMessage): void {
-		try {
-			const result = config.update(model, message)
-			const previous = model
-			model = result.model
-			if (command !== undefined) InitCommand.complete(command)
-			if (previous !== result.model) {
-				publishModel(result.model)
-				const observers = [...listeners]
-				for (const listener of observers) {
-					const exit = Effect.runSyncExit(Effect.sync(listener))
-					if (Exit.isFailure(exit)) Effect.runForkWith(runtimeContext)(Effect.logError(exit.cause))
-				}
-			}
-			for (const command of result.commands ?? []) forkCommand(command, Option.some(message))
-		} catch (error) {
-			crashWith(Cause.die(error), Option.some(message))
-		}
-	}
-
-	function drainPendingMessages(until?: PendingMessage): void {
-		if (!canEnterDrain(phase)) return
-
-		const drainStartedAt = performance.now()
-		if (drainStartedAt - lastDrainEndedAt > DRAIN_BUDGET_MS) syncWorkMsSinceYield = 0
-
-		if (until === undefined && syncWorkMsSinceYield > DRAIN_BUDGET_MS) {
-			scheduleDeferredDrain()
-			return
-		}
-
-		phase = {
-			_tag: "Live",
-			drain: "Sync",
-		}
-		try {
-			while (!isTerminal(phase)) {
-				const entry = MutableList.take(pendingMessages)
-				if (entry === MutableList.Empty) return
-				processMessage(entry)
-
-				if (entry === until) {
-					if (pendingMessages.length > 0) scheduleDeferredDrain()
-					return
-				}
-				if (
-					until === undefined &&
-					pendingMessages.length > 0 &&
-					syncWorkMsSinceYield + (performance.now() - drainStartedAt) > DRAIN_BUDGET_MS
-				) {
-					scheduleDeferredDrain()
-					return
-				}
-			}
-		} finally {
-			const drainEndedAt = performance.now()
-			syncWorkMsSinceYield += drainEndedAt - drainStartedAt
-			lastDrainEndedAt = drainEndedAt
-			if (phase._tag === "Live" && phase.drain === "Sync") {
-				phase = {
-					_tag: "Live",
-					drain: "Idle",
-				}
-			}
-		}
-	}
-
-	function canCommit(): Result.Result<void, CommitError> {
-		switch (phase._tag) {
-			case "Crashed":
-				return Result.fail(new CommitError({ reason: new Crashed({ cause: phase.cause }) }))
-			case "Disposed":
-				return Result.fail(new CommitError({ reason: new Disposed() }))
-			case "Live":
-				return phase.drain === "Sync" ? Result.fail(new CommitError({ reason: new Reentrant() })) : Result.void
-		}
-	}
-
-	const commit = (message: Message): Result.Result<void, CommitError> =>
-		Result.flatMap(canCommit(), function () {
-			const entry = { message }
-			MutableList.append(pendingMessages, entry)
-			cancelDeferredDrain()
-			phase = {
-				_tag: "Live",
-				drain: "Idle",
-			}
-			drainPendingMessages(entry)
-			return canCommit()
-		})
-
-	function subscribe(listener: () => void): () => void {
-		listeners.add(listener)
-		return function () {
-			listeners.delete(listener)
-		}
-	}
-
-	const disposal = Deferred.makeUnsafe<void>()
-	const dispose = (exit: Exit.Exit<unknown, unknown> = Exit.void): Effect.Effect<void> =>
-		Effect.uninterruptibleMask((restore) =>
-			Effect.suspend(function () {
-				if (phase._tag === "Disposed") return restore(Deferred.await(disposal))
-				phase = {
-					_tag: "Disposed",
-					crash: getCrash(),
-				}
-				const notify = [...listeners]
-				return Effect.sync(function () {
-					MutableList.clear(pendingMessages)
-					cancelDeferredDrain()
-				}).pipe(
-					Effect.andThen(Effect.forEach(notify, (listener) => Effect.exit(Effect.sync(listener)))),
-					Effect.flatMap(function (exits) {
-						const result = Exit.asVoidAll(exits)
-						return Exit.isFailure(result) ? Effect.failCause(result.cause) : Effect.void
-					}),
-					Effect.ensuring(closeResources(exit)),
-					Effect.onExit((result) => Deferred.done(disposal, result))
-				)
-			})
-		)
-
-	// Foldkit attaches subscriptions before forking init Commands, so their initial
-	// dependencies come from the init Model.
-	forkSubscriptionFibers(config.subscriptions, {
-		bootModel: initialModel,
-		modelPubSub,
-		fiberScope,
-		runtimeContext,
-		provideAllResources,
-		enqueueMessage,
-		crashWith,
-	})
-
-	if (initCommands.length > 0) {
-		for (const command of initCommands) forkCommand(command, Option.none())
-	}
-
-	return {
-		[StoreTypeId]: StoreTypeId,
-		getModel: () => model,
-		getCrash,
-		subscribeCrash(listener) {
-			crashListeners.add(listener)
-			return function () {
-				crashListeners.delete(listener)
-			}
-		},
-		subscribe,
-		dispatch: enqueueMessage,
-		commit,
-		dispose,
-		isDisposed: () => phase._tag === "Disposed",
-		getRunningCommands: () => Array.from(runningCommands, ({ command }) => command),
-	} satisfies Store<Model, Message>
 }

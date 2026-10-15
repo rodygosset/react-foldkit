@@ -229,10 +229,19 @@ export interface Application<Model, Message, R = never> extends ModelHooks<Model
 	) => React.ReactNode
 }
 
-export function modelHooks<Model, Message>(
-	useSource: () => ModelSource<Model, Message>,
-	useOptionalSource: () => Option.Option<ModelSource<Model, Message>>
-) {
+/** The React context that application and Submodel Providers use to pass their source down. */
+export type SourceContext<Model, Message> = React.Context<Option.Option<ModelSource<Model, Message>>>
+
+export const makeSourceContext = <Model, Message>(): SourceContext<Model, Message> =>
+	React.createContext<Option.Option<ModelSource<Model, Message>>>(Option.none())
+
+export function modelHooks<Model, Message>(Context: SourceContext<Model, Message>, missingProvider: () => Error) {
+	function useOptionalSource(): Option.Option<ModelSource<Model, Message>> {
+		return React.useContext(Context)
+	}
+	function useSource(): ModelSource<Model, Message> {
+		return Option.getOrThrowWith(useOptionalSource(), missingProvider)
+	}
 	function useModel(): Model
 	function useModel<Selected>(
 		selector: (model: Model) => Selected,
@@ -402,7 +411,7 @@ export function defineApplication<ModelSchema extends ModelCodec, Message, R = n
 	config: Config<ModelSchema, Message, R>
 ): Application<Type<ModelSchema>, Message, R> {
 	type Model = Type<ModelSchema>
-	const StoreContext = React.createContext<ReactStore.ReactStore<Model, Message> | null>(null)
+	const Context = makeSourceContext<Model, Message>()
 	const validateInit = config.validateInit ?? isDevelopment
 	const checkModel = Schema.decodeUnknownExit(Schema.toType(config.Model))
 
@@ -418,14 +427,11 @@ export function defineApplication<ModelSchema extends ModelCodec, Message, R = n
 						props.createCommitSource === undefined
 							? props.commitSource
 							: yield* Effect.fromResult(props.createCommitSource())
-					if (source === undefined) {
-						if (validateInit) yield* checkModel(init.model)
-						return { store: ReactStore.make(config, init), connection: undefined }
-					}
-					const snapshot = yield* Effect.fromResult(source.getSnapshot())
-					const connection = yield* Effect.fromResult(
-						CommitConnection.make({ source, initialSnapshot: snapshot })
-					)
+					const snapshot = source === undefined ? [] : yield* Effect.fromResult(source.getSnapshot())
+					const connection =
+						source === undefined
+							? undefined
+							: yield* Effect.fromResult(CommitConnection.make({ source, initialSnapshot: snapshot }))
 					const folded = Update.combine(init.model, [
 						() => init,
 						...Array.map(
@@ -440,21 +446,25 @@ export function defineApplication<ModelSchema extends ModelCodec, Message, R = n
 				})
 			)
 		)
-		const crashContext = (cause: Cause.Cause<unknown>): CrashContext<Model, Message> =>
-			Exit.isSuccess(bootstrap)
-				? {
-						cause,
-						model: Option.some(bootstrap.value.store.getModel()),
-						message: Option.isSome(bootstrap.value.store.getCrash())
-							? bootstrap.value.store.getCrashMessage()
-							: Option.none(),
-					}
-				: { cause, model: Option.none(), message: Option.none() }
+		const store = Option.map(Exit.getSuccess(bootstrap), (bootstrapped) => bootstrapped.store)
+		const crashContext = (cause: Cause.Cause<unknown>): CrashContext<Model, Message> => ({
+			cause,
+			model: Option.map(store, (store) => store.getModel()),
+			message: Option.flatMap(store, (store) => store.getCrashMessage()),
+		})
 		const observeFailure = React.useEffectEvent(function (cause: Cause.Cause<unknown>) {
 			const report = props.crash?.report ?? config.crash?.report
 			return report === undefined ? Effect.void : Effect.suspend(() => report(crashContext(cause)))
 		})
 		const [session] = React.useState(() => ProviderSession.make(bootstrap, observeFailure))
+		const [source] = React.useState(() =>
+			Option.map(store, (store): ModelSource<Model, Message> => ({
+				getSnapshot: store.getModel,
+				getServerSnapshot: store.getServerModel,
+				subscribe: store.subscribe,
+				dispatch: store.dispatch,
+			}))
+		)
 		const { cause } = React.useSyncExternalStore(session.subscribe, session.getSnapshot, session.getServerSnapshot)
 		const view = props.crash?.view ?? config.crash?.view
 		const content = Option.isSome(cause) ? (
@@ -463,8 +473,8 @@ export function defineApplication<ModelSchema extends ModelCodec, Message, R = n
 			) : (
 				view({ ...crashContext(cause.value), restart })
 			)
-		) : Exit.isFailure(bootstrap) ? null : (
-			<StoreContext.Provider value={bootstrap.value.store}>{props.children}</StoreContext.Provider>
+		) : Option.isNone(source) ? null : (
+			<Context.Provider value={source}>{props.children}</Context.Provider>
 		)
 		return (
 			<>
@@ -488,26 +498,8 @@ export function defineApplication<ModelSchema extends ModelCodec, Message, R = n
 		)
 	}
 
-	function useOptionalSource(): Option.Option<ModelSource<Model, Message>> {
-		const store = React.useContext(StoreContext)
-		return React.useMemo(
-			() =>
-				store === null
-					? Option.none()
-					: Option.some({
-							getSnapshot: store.getModel,
-							getServerSnapshot: store.getServerModel,
-							subscribe: store.subscribe,
-							dispatch: store.dispatch,
-						}),
-			[store]
-		)
+	return {
+		Provider,
+		...modelHooks(Context, () => new Error("react-foldkit hooks must be used within a <Provider>")),
 	}
-	function useSource() {
-		return Option.getOrThrowWith(
-			useOptionalSource(),
-			() => new Error("react-foldkit hooks must be used within a <Provider>")
-		)
-	}
-	return { Provider, ...modelHooks(useSource, useOptionalSource) }
 }

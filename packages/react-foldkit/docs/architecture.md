@@ -16,7 +16,7 @@ A Store crash stops delivery and releases live work. `takeWhen` fails with `Cras
 
 An application Provider captures `init` and its commit source during initialization. Remount it to replace either, or send later changes to update with `useInbound`. Initialization and source reads must be pure because React can repeat or abandon render. Client activation starts Commands and Subscriptions. Deactivation stops live work while retaining the Model for reactivation. Messages dispatched while the Provider is inactive wait for the next activation.
 
-`retainInactive` keeps the Store, its Layer, and its live work running for a window after deactivation, so a quick hide and show interrupts nothing. Once a Store is disposed, the next activation replaces it. Completed init Commands do not repeat on replacement, and interrupted init Commands restart. Interrupted update Commands restart when `restartInterrupted` selects them. The rest reach `onReactivate`, which turns them into a Message. The initial server snapshot stays available for hydration.
+`retainInactive` keeps the Store, its Layer, and its live work running for a window after deactivation, so a quick hide and show interrupts nothing. Once deactivation stops a Store's live work, the next activation restarts it from the retained Model. Completed init Commands do not repeat on replacement, and interrupted init Commands restart. Interrupted update Commands restart when `restartInterrupted` selects them. The rest reach `onReactivate`, which turns them into a Message. The initial server snapshot stays available for hydration.
 
 Outside production builds, the Provider checks its initial Model against the Model Schema and freezes every published Model, so accidental mutation throws where it happens.
 
