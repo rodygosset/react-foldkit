@@ -1,13 +1,13 @@
 import { it as effectIt } from "@effect/vitest"
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
-import { Effect, Function, Option, Result, Schema } from "effect"
+import { Effect, Function, Option, Schema } from "effect"
 import React from "react"
 import { hydrateRoot } from "react-dom/client"
 import { renderToString } from "react-dom/server"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { defineMessageUnion } from "foldkit/message"
 import type { ModelSource } from "./modelSource"
-import { type CommitSource, defineApplication } from "./react"
+import { defineApplication } from "./react"
 import { modifyFields } from "foldkit/struct"
 import type * as Update from "foldkit/update"
 
@@ -321,32 +321,6 @@ describe("development checks", function () {
 
 		expect(captured?.count).toBe(1)
 		expect(Object.isFrozen(captured)).toBe(true)
-	})
-
-	// The Provider folds the commit-source snapshot into init before it publishes a Model, so
-	// validateInit checks the result of that fold, not the init it started from.
-	it.each([
-		{ init: 0, snapshot: Number.NaN, renders: "the crash view" },
-		{ init: Number.NaN, snapshot: 1, renders: "its children" },
-	])("renders $renders for init $init and snapshot $snapshot", function ({ init, snapshot }) {
-		const App = defineApplication({ Model, update, validateInit: true })
-		const commitSource: CommitSource<Message> = {
-			getSnapshot: () =>
-				Result.succeed([{ key: "count", version: 1, message: Message.ChangedCount({ count: snapshot }) }]),
-			subscribe: () => Function.constVoid,
-		}
-
-		render(
-			<App.Provider
-				init={{ model: { filter: "all", count: init } }}
-				commitSource={commitSource}
-			>
-				<span>children</span>
-			</App.Provider>
-		)
-
-		expect(screen.queryByRole("alert") === null).toBe(Number.isFinite(snapshot))
-		expect(screen.queryByText("children") === null).toBe(!Number.isFinite(snapshot))
 	})
 
 	it("leaves Models unfrozen when freezeModel is false", function () {

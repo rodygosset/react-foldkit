@@ -49,8 +49,8 @@ The `Model` Schema supplies type inference. The Provider does not validate Model
 
 - [Build a counter with Commands](docs/examples.md) for a step-by-step tutorial.
 - [Public API reference](docs/reference.md) for imports and contracts.
-- [Runtime architecture](docs/architecture.md) for lifecycle, child Models, and external data.
-- [Project-cache example](examples/projectCache/README.md) for Query and TanStack composition.
+- [Runtime architecture](docs/architecture.md) for lifecycle, child Models, and async data.
+- [Project-cache example](examples/projectCache/README.md) for loading a keyed Query from TanStack routes.
 - [ESLint presets](eslint/README.md) for architecture rules.
 
-Import Foldkit vocabulary, such as Messages, Commands, `Update`, `AsyncData`, and Query, from `foldkit` itself; it is a peer dependency, so your application and React Foldkit share one copy. `react-foldkit` exports only what it adds: the React bindings, Store, Submodels, commit sources, and Loaders. The optional `react-foldkit/tanstack` adapter requires the TanStack peer dependencies listed in `package.json`.
+Import Foldkit vocabulary, such as Messages, Commands, `Update`, `AsyncData`, and Query, from `foldkit` itself; it is a peer dependency, so your application and React Foldkit share one copy. `react-foldkit` exports only what it adds: the React bindings, Store, and Submodels.

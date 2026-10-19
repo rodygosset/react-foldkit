@@ -1,7 +1,7 @@
 import React from "react"
-import { Context, Effect, Layer, Option, Result, Schema } from "effect"
+import { Context, Effect, Layer, Option, Schema } from "effect"
 import { defineMessageUnion } from "foldkit/message"
-import { defineApplication, type CommitEntry, type CommitSource } from "react-foldkit/react"
+import { defineApplication } from "react-foldkit/react"
 import type * as Update from "foldkit/update"
 import { describe, expectTypeOf, it } from "vitest"
 
@@ -14,18 +14,12 @@ const App = defineApplication({
 	onReactivate: () => Message.Increment(),
 	update: (model: Model, _message: Message): Update.Return<Model, Message> => ({ model }),
 })
-declare const source: CommitSource<Message>
-declare const foreign: CommitSource<{ readonly _tag: "Other" }>
 
 describe("React public types", function () {
 	it("useInbound maps external values to the app Message", function () {
 		expectTypeOf(App.useInbound<string>)
 			.parameter(1)
 			.toEqualTypeOf<(value: string) => Message>()
-	})
-
-	it("Provider commitSource binds to the app Message", function () {
-		expectTypeOf<CommitEntry<Message>["version"]>().toEqualTypeOf<string | number>()
 	})
 
 	if (false) {
@@ -52,60 +46,13 @@ describe("React public types", function () {
 			crash: { report: () => Effect.sleep("1 millis") },
 		})
 
-		App.Provider({ init: { model: { count: 0 } }, commitSource: source, children: null })
-		App.Provider({
-			init: { model: { count: 0 } },
-			createCommitSource: () => Result.succeed(source),
-			children: null,
-		})
 		expectTypeOf(App.useOptionalModel()).toEqualTypeOf<Option.Option<Model>>()
-		// @ts-expect-error A Provider has one source owner.
-		App.Provider({
-			init: { model: { count: 0 } },
-			commitSource: source,
-			createCommitSource: () => Result.succeed(source),
-			children: null,
-		})
-		App.Provider({
-			init: { model: { count: 0 } },
-			// @ts-expect-error Factory sources must contain the application's Messages.
-			createCommitSource: () => Result.succeed(foreign),
-			children: null,
-		})
-		// @ts-expect-error A factory returns a Result, preserving construction errors.
-		App.Provider({ init: { model: { count: 0 } }, createCommitSource: () => source, children: null })
-		const typed: CommitSource<Message, string> = {
-			getSnapshot: () => Result.fail("failed"),
-			subscribe: () => function () {},
-		}
-		App.Provider({ init: { model: { count: 0 } }, createCommitSource: () => Result.succeed(typed), children: null })
-		// @ts-expect-error Provider sources must contain the app's own Messages.
-		App.Provider({ init: { model: { count: 0 } }, commitSource: foreign, children: null })
+		// @ts-expect-error Providers do not accept external Message sources.
+		App.Provider({ init: { model: { count: 0 } }, commitSource: {}, children: null })
 		// @ts-expect-error A consumer cannot widen the app's Message union.
 		App.useDispatch()({ _tag: "Other" })
 		// @ts-expect-error Commit is not part of the React API; use Store.commit outside React.
 		App.useCommit
-		// @ts-expect-error Manual useCommitSource is not part of the public API.
-		App.useCommitSource
-		const numericKey: CommitEntry<Message> = {
-			// @ts-expect-error Entry keys are strings.
-			key: 1,
-			version: 1,
-			message: Message.Increment(),
-		}
-		const asynchronous: CommitSource<Message> = {
-			// @ts-expect-error Snapshots must be synchronously readable.
-			getSnapshot: () => Promise.resolve([]),
-			// @ts-expect-error Subscription setup must synchronously return cleanup.
-			subscribe: () => Promise.resolve(function () {}),
-		}
-		const entry: CommitEntry<Message> = {
-			key: "count",
-			// @ts-expect-error Object identity is not a published version.
-			version: {},
-			message: Message.Increment(),
-		}
-		void [numericKey, asynchronous, entry]
 	}
 })
 

@@ -63,9 +63,6 @@ const program = Effect.acquireUseRelease(
 						"@types/react": "^19",
 						"@types/react-dom": "^19",
 						"@types/node": "^22",
-						"@tanstack/react-router": manifest.devDependencies["@tanstack/react-router"],
-						"@tanstack/router-core": manifest.devDependencies["@tanstack/router-core"],
-						"@tanstack/react-store": manifest.devDependencies["@tanstack/react-store"],
 					},
 					overrides: { foldkit: "file:" + foldkit },
 				})
@@ -80,7 +77,6 @@ import { renderToString } from "react-dom/server"
 import { Effect, Option, Schema } from "effect"
 import * as Foldkit from "react-foldkit"
 import * as Store from "react-foldkit/store"
-import * as Loader from "react-foldkit/loader"
 import * as Query from "foldkit/experimental/query"
 import * as AsyncData from "foldkit/asyncData"
 import { defineTaggedUnion } from "foldkit/schema"
@@ -90,13 +86,10 @@ const App = defineApplication({ Model: Schema.Finite, update: (model: number, me
 function View() { return createElement("span", null, App.useModel()) }
 assert.equal(renderToString(createElement(App.Provider, { init: { model: 7 }, children: createElement(View) })), "<span>7</span>")
 assert.equal(typeof defineTaggedUnion, "function")
-assert.deepEqual(Object.keys(Foldkit).sort(), ["CommitSource", "Loader", "ModelSource", "ReactFoldkit", "Store", "Submodel"])
+assert.deepEqual(Object.keys(Foldkit).sort(), ["ModelSource", "ReactFoldkit", "Store", "Submodel"])
 const query = Query.define({ name: "Packed", data: Schema.String, error: Schema.String, interrupt: true, execute: Effect.succeed("ok") })
 const program = Effect.scoped(Effect.gen(function* () {
   for (const entry of entries) yield* Effect.promise(() => import(entry))
-  const loader = Loader.fromQuery(query)
-  const envelope = yield* Loader.loadQuery(loader)
-  assert.equal(envelope.key, "singleton")
   const pending = query.loadIfMissing(query.init("consumer"))
   const store = yield* Store.make({ update: query.update }, pending)
   const data = yield* Store.takeWhen(store, (model) => Option.filter(AsyncData.getData(query.read(model)), (data) => data === "ok"))

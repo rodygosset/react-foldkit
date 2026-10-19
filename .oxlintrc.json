@@ -52,23 +52,12 @@
 		{
 			"files": [
 				"packages/react-foldkit/src/query.test.ts",
-				"packages/react-foldkit/src/loaderQuery.test.ts",
-				"packages/react-foldkit/test/types/loader.test.ts",
 				"apps/web/src/examples/api-cache-http-api/index.tsx"
 			],
 			"rules": {
 				// Deliberate exercise of the unstable effect/http-api surface
 				// in tests and the http-api example.
 				"effecttsgo/unstable-api-usage": "off"
-			}
-		},
-		{
-			"files": ["packages/react-foldkit/src/loader.test.ts"],
-			"rules": {
-				// Pipeable.Prototype.pipe is this-dynamic, so the copied
-				// reference binds the structural stub correctly at call time;
-				// the Loader interface requires the pipe member.
-				"typescript/unbound-method": "off"
 			}
 		},
 		{

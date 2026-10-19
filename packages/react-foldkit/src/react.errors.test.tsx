@@ -1,15 +1,17 @@
 import { it } from "@effect/vitest"
 import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react"
-import { Cause, Effect, Option, Result, Schema } from "effect"
+import { Cause, Effect, Layer, Option, Result, Schema, Stream } from "effect"
 import React from "react"
 import { hydrateRoot } from "react-dom/client"
 import { renderToString } from "react-dom/server"
 import { afterEach, expect, vi } from "vitest"
-import { entry, fakeSource, Message } from "../test/fixtures/commitSource"
-import { createSourceFixture } from "../test/fixtures/reactCommitSource"
+import { defineMessageUnion } from "foldkit/message"
+import * as Subscription from "foldkit/subscription"
 import { defineApplication } from "./react"
 import { define } from "./submodel"
-import { CommitSourceError, DuplicateKey, ReentrantNotification } from "./commitSource"
+
+const Message = defineMessageUnion({ Edited: {} })
+type Message = typeof Message.Type
 
 afterEach(function () {
 	cleanup()
@@ -21,107 +23,26 @@ function CauseView(props: { cause: Cause.Cause<unknown>; seen: Array<Cause.Cause
 	return <pre role="alert">{Cause.pretty(props.cause)}</pre>
 }
 
-it("owns a factory result across rerenders and releases its subscription", function () {
-	const f = createSourceFixture([], fakeSource([entry("a", 1)]))
-	const create = vi.fn(() => Result.succeed(f.source.source))
-	const tree = () => (
-		<f.App.Provider
-			init={f.init}
-			createCommitSource={create}
-		>
-			<f.View />
-		</f.App.Provider>
-	)
-	const mounted = render(tree())
-	mounted.rerender(tree())
-	expect(create).toHaveBeenCalledTimes(1)
-	expect(f.handled).toEqual([Message.Received({ value: "a" })])
-	expect(f.source.listeners).toBe(1)
-	mounted.unmount()
-	expect(f.source.listeners).toBe(0)
-})
-
-it("renders typed factory failures during SSR and reports them after mounting", function () {
-	const f = createSourceFixture([])
-	const error = new Error("registry failed")
-	const onError = vi.fn((_cause: Cause.Cause<unknown>) => Effect.void)
-	const tree = (
-		<f.App.Provider
-			init={f.init}
-			createCommitSource={() => Result.fail(error)}
-			crash={{
-				view: ({ cause }) => <span role="alert">{Cause.pretty(cause)}</span>,
-				report: ({ cause }) => onError(cause),
-			}}
-		>
-			<f.View />
-		</f.App.Provider>
-	)
-	expect(renderToString(tree)).toContain("registry failed")
-	expect(onError).not.toHaveBeenCalled()
-	expect(render(tree).getByRole("alert").textContent).toContain("registry failed")
-	expect(onError).toHaveBeenCalledWith(Cause.fail(error))
-	expect(f.source.subscriptions).toBe(0)
-	expect(f.handled).toEqual([])
-})
-
-it("captures factory, snapshot and bootstrap update defects", function () {
-	const f = createSourceFixture([])
-	const defect = new Error("bootstrap defect")
-	const factories = [
-		function () {
-			throw defect
-		},
-		() =>
-			Result.succeed({
-				...f.source.source,
-				getSnapshot() {
-					throw defect
-				},
-			}),
-	]
-	for (const create of factories) {
-		const onError = vi.fn((_cause: Cause.Cause<unknown>) => Effect.void)
-		const mounted = render(
-			<f.App.Provider
-				init={f.init}
-				createCommitSource={create}
-				crash={{ report: ({ cause }) => onError(cause) }}
-			>
-				<f.View />
-			</f.App.Provider>
-		)
-		// A defect is a programmer error, so the default fallback stays generic and the
-		// observable detail travels through onError.
-		expect(mounted.getByRole("alert").textContent).toBe("The application could not start.")
-		expect(onError).toHaveBeenCalledWith(Cause.die(defect))
-		mounted.unmount()
-	}
+function crashingApplication(defect: Error) {
 	const App = defineApplication({
 		Model: Schema.Finite,
-		update(_model: number, _message: Message) {
+		update(_model: number, _message: Message): { readonly model: number } {
 			throw defect
 		},
 	})
-	const source = fakeSource([entry("a", 1)])
-	const onError = vi.fn((_cause: Cause.Cause<unknown>) => Effect.void)
-	render(
-		<App.Provider
-			init={{ model: 0 }}
-			createCommitSource={() => Result.succeed(source.source)}
-			crash={{ report: ({ cause }) => onError(cause) }}
-		>
-			child
-		</App.Provider>
-	)
-	expect(onError).toHaveBeenCalledWith(Cause.die(defect))
-	expect(source.subscriptions).toBe(0)
-})
+	function View() {
+		const dispatch = App.useDispatch()
+		return <button onClick={() => dispatch(Message.Edited())}>Crash</button>
+	}
+	return { App, View }
+}
 
-it.live("replaces mounted children with the fallback after an update defect and keeps the crash terminal", () =>
+const releaseFailingLayer = (release: () => Effect.Effect<void>) =>
+	Layer.effectDiscard(Effect.acquireRelease(Effect.void, release))
+
+it.live("replaces mounted children with the fallback after an update defect and reports the crash once", () =>
 	Effect.gen(function* () {
 		const defect = new Error("update defect")
-		const source = fakeSource<Message>()
 		const onCrash = vi.fn()
 		const App = defineApplication({
 			Model: Schema.Finite,
@@ -140,7 +61,6 @@ it.live("replaces mounted children with the fallback after an update defect and 
 		const mounted = render(
 			<App.Provider
 				init={{ model: 0 }}
-				commitSource={source.source}
 				crash={{
 					view: ({ cause }) => (
 						<CauseView
@@ -164,15 +84,7 @@ it.live("replaces mounted children with the fallback after an update defect and 
 				expect(seen).toEqual([Cause.die(defect)])
 			})
 		)
-		source.publish([entry("a", 1)])
-		yield* Effect.promise(() =>
-			waitFor(function () {
-				expect(onCrash).toHaveBeenCalledExactlyOnceWith(Cause.die(defect), Option.some(Message.Edited()))
-				expect(mounted.getByRole("alert").textContent).toContain("update defect")
-				expect(onError).toHaveBeenCalledExactlyOnceWith(Cause.die(defect))
-				expect(seen).toEqual([Cause.die(defect)])
-			})
-		)
+		expect(mounted.queryByRole("button")).toBeNull()
 		mounted.unmount()
 	})
 )
@@ -230,145 +142,37 @@ it.live("replaces mounted children with the fallback after a Command defect", ()
 	})
 )
 
-it("reports a typed live snapshot failure, then accepts the next publication", function () {
-	const f = createSourceFixture([])
-	const failure = new Error("snapshot failure")
-	let fail = false
-	const source = {
-		...f.source.source,
-		getSnapshot: () => (fail ? Result.fail(failure) : f.source.source.getSnapshot()),
-	}
-	const onError = vi.fn((_cause: Cause.Cause<unknown>) => Effect.void)
-	const mounted = render(
-		<f.App.Provider
-			init={f.init}
-			commitSource={source}
-			crash={{ report: ({ cause }) => onError(cause) }}
-		>
-			<f.View />
-		</f.App.Provider>
-	)
-	fail = true
-	act(() => f.source.notify())
-	expect(onError).toHaveBeenCalledExactlyOnceWith(Cause.fail(failure))
-	expect(f.handled).toEqual([])
-	fail = false
-	act(() => f.source.publish([entry("a", 1)]))
-	expect(f.handled).toEqual([Message.Received({ value: "a" })])
-	mounted.unmount()
-})
-
-it("reports a throwing live snapshot as a defect and accepts the next publication", function () {
-	const f = createSourceFixture([])
-	const defect = new Error("catch-up read failed")
-	let fail = false
-	const source = {
-		...f.source.source,
-		getSnapshot() {
-			if (fail) throw defect
-			return f.source.source.getSnapshot()
-		},
-	}
-	const onError = vi.fn((_cause: Cause.Cause<unknown>) => Effect.void)
-	const mounted = render(
-		<f.App.Provider
-			init={f.init}
-			commitSource={source}
-			crash={{ report: ({ cause }) => onError(cause) }}
-		>
-			<f.View />
-		</f.App.Provider>
-	)
-	fail = true
-	act(() => f.source.notify())
-	expect(onError).toHaveBeenCalledExactlyOnceWith(Cause.die(defect))
-	expect(mounted.getByRole("alert").textContent).toBe("The application could not start.")
-	fail = false
-	act(() => f.source.publish([entry("a", 1)]))
-	expect(f.handled).toEqual([Message.Received({ value: "a" })])
-	mounted.unmount()
-})
-
-it("preserves setup failure and cleanup defect in the Provider's reported Cause", function () {
-	const source = fakeSource<Message>()
-	const f = createSourceFixture([], source)
-	const defect = new Error("cleanup defect")
-	source.onSubscribe(() => source.publish([entry("a", 1), entry("a", 2)]))
-	source.onUnsubscribe(function () {
-		throw defect
+it.live("reports cleanup defects without throwing from unmount", () =>
+	Effect.gen(function* () {
+		const defect = new Error("unmount defect")
+		const App = defineApplication({
+			Model: Schema.Finite,
+			update: (model: number, _message: Message) => ({ model: model + 1 }),
+			resources: releaseFailingLayer(() => Effect.die(defect)),
+		})
+		function View() {
+			return <span data-testid="model">{App.useModel()}</span>
+		}
+		const onError = vi.fn((_cause: Cause.Cause<unknown>) => Effect.void)
+		const mounted = render(
+			<App.Provider
+				init={{ model: 0, commands: [{ name: "Acquire", effect: Effect.succeed(Message.Edited()) }] }}
+				crash={{ report: ({ cause }) => onError(cause) }}
+			>
+				<View />
+			</App.Provider>
+		)
+		yield* Effect.promise(() => waitFor(() => expect(mounted.getByTestId("model").textContent).toBe("1")))
+		expect(() => mounted.unmount()).not.toThrow()
+		yield* Effect.promise(() => waitFor(() => expect(onError).toHaveBeenCalledWith(Cause.die(defect))))
 	})
-	const onError = vi.fn<(cause: Cause.Cause<unknown>) => Effect.Effect<void>>(() => Effect.void)
-	const mounted = render(
-		<f.App.Provider
-			init={f.init}
-			createCommitSource={() => Result.succeed(source.source)}
-			crash={{ report: ({ cause }) => onError(cause) }}
-		>
-			<f.View />
-		</f.App.Provider>
-	)
-	expect(mounted.getByRole("alert").textContent).toContain("Duplicate source key: a")
-	expect(onError).toHaveBeenCalledTimes(1)
-	const cause = onError.mock.calls[0]![0]
-	expect(Result.getOrThrow(Cause.findError(cause))).toEqual(
-		new CommitSourceError({ reason: new DuplicateKey({ key: "a" }) })
-	)
-	expect(Result.getOrThrow(Cause.findDefect(cause))).toBe(defect)
-	expect(source.listeners).toBe(0)
-	expect(source.unsubscriptions).toBe(1)
-})
+)
 
-it("renders live failures, then recovers on a valid notification without replay", function () {
-	const f = createSourceFixture([])
-	const onError = vi.fn((_cause: Cause.Cause<unknown>) => Effect.void)
+it("keeps the fallback when the error observer throws", function () {
+	const f = crashingApplication(new Error("update defect"))
 	const mounted = render(
 		<f.App.Provider
-			init={f.init}
-			createCommitSource={() => Result.succeed(f.source.source)}
-			crash={{ report: ({ cause }) => onError(cause) }}
-		>
-			<f.View />
-		</f.App.Provider>
-	)
-	act(() => f.source.publish([entry("a", 1)]))
-	act(() => f.source.publish([entry("b", 1), entry("b", 2)]))
-	expect(mounted.getByRole("alert").textContent).toContain("Duplicate source key: b")
-	expect(onError).toHaveBeenCalledTimes(1)
-	expect(f.source.listeners).toBe(1)
-	act(() => f.source.publish([entry("a", 1), entry("b", 1)]))
-	expect(mounted.queryByRole("alert")).toBeNull()
-	expect(f.model.values).toEqual(["a", "b"])
-	expect(f.handled).toHaveLength(2)
-})
-
-it("reports cleanup defects without throwing from unmount", function () {
-	const f = createSourceFixture([])
-	const defect = new Error("unmount defect")
-	f.source.onUnsubscribe(function () {
-		throw defect
-	})
-	const onError = vi.fn((_cause: Cause.Cause<unknown>) => Effect.void)
-	const mounted = render(
-		<f.App.Provider
-			init={f.init}
-			commitSource={f.source.source}
-			crash={{ report: ({ cause }) => onError(cause) }}
-		>
-			<f.View />
-		</f.App.Provider>
-	)
-	expect(() => mounted.unmount()).not.toThrow()
-	expect(onError).toHaveBeenCalledWith(Cause.die(defect))
-	expect(f.source.listeners).toBe(0)
-})
-
-it("preserves a failing error observer's defect in the fallback", function () {
-	const f = createSourceFixture([])
-	const error = new Error("factory failure")
-	const mounted = render(
-		<f.App.Provider
-			init={f.init}
-			createCommitSource={() => Result.fail(error)}
+			init={{ model: 0 }}
 			crash={{
 				report() {
 					throw new Error("observer defect")
@@ -378,17 +182,17 @@ it("preserves a failing error observer's defect in the fallback", function () {
 			<f.View />
 		</f.App.Provider>
 	)
-	expect(mounted.getByRole("alert").textContent).toContain("factory failure")
+	fireEvent.click(mounted.getByRole("button", { name: "Crash" }))
+	expect(mounted.getByRole("alert").textContent).toBe("The application could not start.")
 })
 
-it("gives renderError the application Cause when its observer fails", function () {
-	const f = createSourceFixture([])
-	const error = new Error("factory failure")
+it("gives the crash view the application Cause when its observer fails", function () {
+	const defect = new Error("update defect")
+	const f = crashingApplication(defect)
 	const seen: Array<Cause.Cause<unknown>> = []
 	const mounted = render(
 		<f.App.Provider
-			init={f.init}
-			createCommitSource={() => Result.fail(error)}
+			init={{ model: 0 }}
 			crash={{
 				view: ({ cause }) => (
 					<CauseView
@@ -402,21 +206,20 @@ it("gives renderError the application Cause when its observer fails", function (
 			<f.View />
 		</f.App.Provider>
 	)
-	expect(mounted.getByRole("alert").textContent).toContain("factory failure")
+	fireEvent.click(mounted.getByRole("button", { name: "Crash" }))
+	expect(mounted.getByRole("alert").textContent).toContain("update defect")
 	expect(mounted.getByRole("alert").textContent).not.toContain("observer defect")
-	const cause = seen.at(-1)!
-	expect(Result.getOrThrow(Cause.findError(cause))).toBe(error)
-	expect(Result.isFailure(Cause.findDefect(cause))).toBe(true)
+	expect(seen.at(-1)).toEqual(Cause.die(defect))
 })
 
 it("uses the latest error observer and fallback after rerendering", function () {
-	const f = createSourceFixture([])
+	const defect = new Error("update defect")
+	const f = crashingApplication(defect)
 	const firstObserver = vi.fn((_cause: Cause.Cause<unknown>) => Effect.void)
 	const latestObserver = vi.fn((_cause: Cause.Cause<unknown>) => Effect.void)
 	const tree = (onError: typeof firstObserver, label: string) => (
 		<f.App.Provider
-			init={f.init}
-			commitSource={f.source.source}
+			init={{ model: 0 }}
 			crash={{
 				view: ({ cause }) => (
 					<pre role="alert">
@@ -430,18 +233,13 @@ it("uses the latest error observer and fallback after rerendering", function () 
 		</f.App.Provider>
 	)
 	const mounted = render(tree(firstObserver, "first"))
-	act(() => f.source.publish([entry("a", 1), entry("a", 2)]))
-	expect(firstObserver).toHaveBeenCalledExactlyOnceWith(
-		Cause.fail(new CommitSourceError({ reason: new DuplicateKey({ key: "a" }) }))
-	)
 	mounted.rerender(tree(latestObserver, "latest"))
+	fireEvent.click(mounted.getByRole("button", { name: "Crash" }))
+	expect(latestObserver).toHaveBeenCalledExactlyOnceWith(Cause.die(defect))
+	expect(firstObserver).not.toHaveBeenCalled()
 	expect(mounted.getByRole("alert").textContent).toContain("latest: ")
-	act(() => f.source.publish([entry("b", 1), entry("b", 2)]))
-	expect(latestObserver).toHaveBeenCalledExactlyOnceWith(
-		Cause.fail(new CommitSourceError({ reason: new DuplicateKey({ key: "b" }) }))
-	)
-	expect(firstObserver).toHaveBeenCalledTimes(1)
-	expect(mounted.getByRole("alert").textContent).toContain("Duplicate source key: b")
+	mounted.rerender(tree(firstObserver, "first"))
+	expect(mounted.getByRole("alert").textContent).toContain("first: ")
 })
 
 it("optional root and child hooks return absence and subscribe when provided", function () {
@@ -473,89 +271,45 @@ it("optional root and child hooks return absence and subscribe when provided", f
 	expect(values.at(-1)).toEqual(Option.none())
 })
 
-it("preserves typed snapshot failures before any bootstrap delivery", function () {
-	const f = createSourceFixture([])
-	const error = new Error("snapshot failure")
-	const onError = vi.fn((_cause: Cause.Cause<unknown>) => Effect.void)
-	render(
-		<f.App.Provider
-			init={f.init}
-			createCommitSource={() => Result.succeed({ ...f.source.source, getSnapshot: () => Result.fail(error) })}
-			crash={{ report: ({ cause }) => onError(cause) }}
-		>
-			<f.View />
-		</f.App.Provider>
-	)
-	expect(onError).toHaveBeenCalledWith(Cause.fail(error))
-	expect(f.source.subscriptions).toBe(0)
-	expect(f.handled).toEqual([])
-})
-
-it.live.each(["setup", "cleanup"])("recovers a %s failure after Activity reconnects without a notification", (kind) =>
+it.live("recovers a cleanup failure after Activity reconnects", () =>
 	Effect.gen(function* () {
-		const source = fakeSource<Message>()
-		const f = createSourceFixture([], source)
+		let releases = 0
+		const App = defineApplication({
+			Model: Schema.Finite,
+			update: (model: number, _message: Message) => ({ model: model + 1 }),
+			resources: releaseFailingLayer(() =>
+				Effect.suspend(() => (++releases === 1 ? Effect.die(new Error("cleanup failed")) : Effect.void))
+			),
+		})
+		function View() {
+			return <span data-testid="model">{App.useModel()}</span>
+		}
 		const onError = vi.fn((_cause: Cause.Cause<unknown>) => Effect.void)
-		if (kind === "setup")
-			source.onSubscribe((count) => (count === 1 ? source.publish([entry("a", 1), entry("a", 2)]) : undefined))
-		else
-			source.onUnsubscribe(function (count) {
-				if (count === 1) throw new Error("cleanup failed")
-			})
+		const init = { model: 0, commands: [{ name: "Acquire", effect: Effect.succeed(Message.Edited()) }] }
 		const tree = (visible: boolean) => (
 			<React.Activity mode={visible ? "visible" : "hidden"}>
-				<f.App.Provider
-					init={f.init}
-					commitSource={source.source}
+				<App.Provider
+					init={init}
 					crash={{ report: ({ cause }) => onError(cause) }}
 				>
-					<f.View />
-				</f.App.Provider>
+					<View />
+				</App.Provider>
 			</React.Activity>
 		)
 		const mounted = render(tree(true))
+		yield* Effect.promise(() => waitFor(() => expect(mounted.getByTestId("model").textContent).toBe("1")))
 		mounted.rerender(tree(false))
-		source.set([entry("a", 1)])
+		yield* Effect.promise(() => waitFor(() => expect(onError).toHaveBeenCalledTimes(1)))
 		mounted.rerender(tree(true))
 		yield* Effect.promise(() =>
 			waitFor(function () {
 				expect(mounted.queryByRole("alert")).toBeNull()
-				expect(f.model.values).toEqual(["a"])
-				expect(f.handled).toHaveLength(1)
+				expect(mounted.getByTestId("model").textContent).toBe("1")
 				expect(onError).toHaveBeenCalledTimes(1)
-				expect(source.listeners).toBe(1)
 			})
 		)
 	})
 )
-
-it("retains tokens for committed Messages when rejecting a reentrant notification", function () {
-	const source = fakeSource<Message>()
-	const App = defineApplication({
-		Model: Schema.Finite,
-		update(model: number, _message: Message) {
-			source.notify()
-			return { model: model + 1 }
-		},
-	})
-	function View() {
-		return <span data-testid="model">{App.useModel()}</span>
-	}
-	const onError = vi.fn((_cause: Cause.Cause<unknown>) => Effect.void)
-	const mounted = render(
-		<App.Provider
-			init={{ model: 0 }}
-			commitSource={source.source}
-			crash={{ report: ({ cause }) => onError(cause) }}
-		>
-			<View />
-		</App.Provider>
-	)
-	act(() => source.publish([entry("a", 1)]))
-	expect(onError).toHaveBeenCalledWith(Cause.fail(new CommitSourceError({ reason: new ReentrantNotification() })))
-	act(() => source.notify())
-	expect(mounted.getByTestId("model").textContent).toBe("1")
-})
 
 it.live("hydrates optional root and child hooks with stable server snapshots", () =>
 	Effect.gen(function* () {
@@ -616,9 +370,15 @@ it.live("hydrates optional root and child hooks with stable server snapshots", (
 
 it.live("reports subscription defects and cancels their asynchronous observer on unmount", () =>
 	Effect.gen(function* () {
-		const f = createSourceFixture([])
 		const defect = new Error("subscription defect")
 		let interrupted = false
+		const App = defineApplication({
+			Model: Schema.Finite,
+			update: (model: number, _message: Message) => ({ model }),
+			subscriptions: Subscription.make<number, Message>()((entry) => ({
+				failing: entry({}, { modelToDependencies: () => ({}), dependenciesToStream: () => Stream.die(defect) }),
+			})),
+		})
 		const onError = vi.fn((_cause: Cause.Cause<unknown>) =>
 			Effect.never.pipe(
 				Effect.onInterrupt(() =>
@@ -629,21 +389,20 @@ it.live("reports subscription defects and cancels their asynchronous observer on
 			)
 		)
 		const mounted = render(
-			<f.App.Provider
-				init={f.init}
-				commitSource={{
-					...f.source.source,
-					subscribe() {
-						throw defect
-					},
-				}}
+			<App.Provider
+				init={{ model: 0 }}
 				crash={{ report: ({ cause }) => onError(cause) }}
 			>
-				<f.View />
-			</f.App.Provider>
+				child
+			</App.Provider>
 		)
-		expect(mounted.getByRole("alert").textContent).toBe("The application could not start.")
-		expect(onError).toHaveBeenCalledExactlyOnceWith(Cause.die(defect))
+		yield* Effect.promise(() =>
+			waitFor(function () {
+				expect(mounted.getByRole("alert").textContent).toBe("The application could not start.")
+				expect(onError).toHaveBeenCalledTimes(1)
+			})
+		)
+		expect(Result.getOrThrow(Cause.findDefect(onError.mock.calls[0]![0]))).toBe(defect)
 		mounted.unmount()
 		yield* Effect.promise(() => waitFor(() => expect(interrupted).toBe(true)))
 	})

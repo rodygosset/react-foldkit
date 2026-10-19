@@ -57,18 +57,6 @@
 			"import": "./eslint/dist/index.js",
 			"default": "./eslint/dist/index.js"
 		},
-		"./commitSource": {
-			"types": "./dist/commitSource.d.ts",
-			"import": "./dist/commitSource.js"
-		},
-		"./loader": {
-			"types": "./dist/loader.d.ts",
-			"import": "./dist/loader.js"
-		},
-		"./tanstack": {
-			"types": "./dist/tanstack.d.ts",
-			"import": "./dist/tanstack.js"
-		},
 		"./modelSource": {
 			"types": "./dist/modelSource.d.ts",
 			"import": "./dist/modelSource.js"
@@ -89,22 +77,10 @@
 		"effect": "4.0.0",
 		"foldkit": ">=0.166.0",
 		"eslint": "^9",
-		"react": "^19.2.6",
-		"@tanstack/react-router": "^1.170.33",
-		"@tanstack/router-core": "^1.171.28",
-		"@tanstack/react-store": "^0.9.3"
+		"react": "^19.2.6"
 	},
 	"peerDependenciesMeta": {
 		"eslint": {
-			"optional": true
-		},
-		"@tanstack/react-router": {
-			"optional": true
-		},
-		"@tanstack/router-core": {
-			"optional": true
-		},
-		"@tanstack/react-store": {
 			"optional": true
 		}
 	},
@@ -115,8 +91,6 @@
 	"devDependencies": {
 		"@effect/vitest": "4.0.0",
 		"@tanstack/react-router": "1.170.33",
-		"@tanstack/react-store": "0.9.3",
-		"@tanstack/router-core": "1.171.28",
 		"@testing-library/react": "^16.3.2",
 		"@types/estree": "^1.0.8",
 		"@types/picomatch": "^4.0.3",

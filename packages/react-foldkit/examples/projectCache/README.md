@@ -1,17 +1,16 @@
 # Project cache
 
-This example shares project data between TanStack routes and React views. Route loaders populate a Query Model in one application Provider. Refresh buttons use Query Commands, and update accepts only newer revisions.
+This example shares project data between TanStack routes and React views. Opening a project route sends a Message, and update loads the project through a keyed Query in one application Provider. Refresh buttons use Query Commands, and fetches that React Activity interrupted restart on reactivation.
 
 The source uses a fixed project response so you can follow the data flow without a server.
 
 ## Follow the data
 
 1. `src/entities/project/model/query.ts` defines the keyed Query.
-2. `src/entities/project/api/loader.ts` derives its Loader.
-3. `src/pages/projectDetails/api/load.ts` loads a project and returns an envelope.
-4. `src/app/providers/provider.tsx` connects route data to the application Provider.
-5. `src/app/model/application.ts` settles the Query and handles refresh Messages.
-6. `src/entities/project/ui/provider.tsx` exposes the projected Query Model to views.
+2. `src/app/routes/projects.$projectId.tsx` sends `OpenedProject` when the route shows a project.
+3. `src/app/model/application.ts` loads missing projects and handles refresh Messages.
+4. `src/app/providers/provider.tsx` renders the application Provider and the project Submodel Provider.
+5. `src/entities/project/ui/provider.tsx` exposes the projected Query Model to views.
 
 ## Check the example
 

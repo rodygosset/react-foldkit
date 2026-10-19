@@ -1,18 +1,6 @@
 [
 	{
 		"entryPoint": "react-foldkit",
-		"name": "CommitSource",
-		"owner": "react-foldkit",
-		"introduced": "0.1.0"
-	},
-	{
-		"entryPoint": "react-foldkit",
-		"name": "Loader",
-		"owner": "react-foldkit",
-		"introduced": "0.1.0"
-	},
-	{
-		"entryPoint": "react-foldkit",
 		"name": "ModelSource",
 		"owner": "react-foldkit",
 		"introduced": "0.1.0"
@@ -38,24 +26,6 @@
 	{
 		"entryPoint": "react-foldkit/react",
 		"name": "Application",
-		"owner": "react-foldkit",
-		"introduced": "0.1.0"
-	},
-	{
-		"entryPoint": "react-foldkit/react",
-		"name": "CommitEntry",
-		"owner": "react-foldkit",
-		"introduced": "0.1.0"
-	},
-	{
-		"entryPoint": "react-foldkit/react",
-		"name": "CommitSource",
-		"owner": "react-foldkit",
-		"introduced": "0.1.0"
-	},
-	{
-		"entryPoint": "react-foldkit/react",
-		"name": "CommitSourceError",
 		"owner": "react-foldkit",
 		"introduced": "0.1.0"
 	},
@@ -92,12 +62,6 @@
 	{
 		"entryPoint": "react-foldkit/react",
 		"name": "ReactivationContext",
-		"owner": "react-foldkit",
-		"introduced": "0.1.0"
-	},
-	{
-		"entryPoint": "react-foldkit/react",
-		"name": "SourceOptions",
 		"owner": "react-foldkit",
 		"introduced": "0.1.0"
 	},
@@ -254,168 +218,6 @@
 	{
 		"entryPoint": "react-foldkit/eslint",
 		"name": "strictConfig",
-		"owner": "react-foldkit",
-		"introduced": "0.1.0"
-	},
-	{
-		"entryPoint": "react-foldkit/commitSource",
-		"name": "CommitEntry",
-		"owner": "react-foldkit",
-		"introduced": "0.1.0"
-	},
-	{
-		"entryPoint": "react-foldkit/commitSource",
-		"name": "CommitSource",
-		"owner": "react-foldkit",
-		"introduced": "0.1.0"
-	},
-	{
-		"entryPoint": "react-foldkit/commitSource",
-		"name": "CommitSourceError",
-		"owner": "react-foldkit",
-		"introduced": "0.1.0"
-	},
-	{
-		"entryPoint": "react-foldkit/commitSource",
-		"name": "DuplicateKey",
-		"owner": "react-foldkit",
-		"introduced": "0.1.0"
-	},
-	{
-		"entryPoint": "react-foldkit/commitSource",
-		"name": "ReentrantNotification",
-		"owner": "react-foldkit",
-		"introduced": "0.1.0"
-	},
-	{
-		"entryPoint": "react-foldkit/loader",
-		"name": "Config",
-		"owner": "react-foldkit",
-		"introduced": "0.1.0"
-	},
-	{
-		"entryPoint": "react-foldkit/loader",
-		"name": "Declaration",
-		"owner": "react-foldkit",
-		"introduced": "0.1.0"
-	},
-	{
-		"entryPoint": "react-foldkit/loader",
-		"name": "Delivery",
-		"owner": "react-foldkit",
-		"introduced": "0.1.0"
-	},
-	{
-		"entryPoint": "react-foldkit/loader",
-		"name": "Envelope",
-		"owner": "react-foldkit",
-		"introduced": "0.1.0"
-	},
-	{
-		"entryPoint": "react-foldkit/loader",
-		"name": "FromKeyedQueryOptions",
-		"owner": "react-foldkit",
-		"introduced": "0.1.0"
-	},
-	{
-		"entryPoint": "react-foldkit/loader",
-		"name": "FromQueryOptions",
-		"owner": "react-foldkit",
-		"introduced": "0.1.0"
-	},
-	{
-		"entryPoint": "react-foldkit/loader",
-		"name": "KeyedQueryLoader",
-		"owner": "react-foldkit",
-		"introduced": "0.1.0"
-	},
-	{
-		"entryPoint": "react-foldkit/loader",
-		"name": "LoadPayload",
-		"owner": "react-foldkit",
-		"introduced": "0.1.0"
-	},
-	{
-		"entryPoint": "react-foldkit/loader",
-		"name": "Loader",
-		"owner": "react-foldkit",
-		"introduced": "0.1.0"
-	},
-	{
-		"entryPoint": "react-foldkit/loader",
-		"name": "QueryLoader",
-		"owner": "react-foldkit",
-		"introduced": "0.1.0"
-	},
-	{
-		"entryPoint": "react-foldkit/loader",
-		"name": "Receipt",
-		"owner": "react-foldkit",
-		"introduced": "0.1.0"
-	},
-	{
-		"entryPoint": "react-foldkit/loader",
-		"name": "SettleQueryIfOptions",
-		"owner": "react-foldkit",
-		"introduced": "0.1.0"
-	},
-	{
-		"entryPoint": "react-foldkit/loader",
-		"name": "define",
-		"owner": "react-foldkit",
-		"introduced": "0.1.0"
-	},
-	{
-		"entryPoint": "react-foldkit/loader",
-		"name": "fromQuery",
-		"owner": "react-foldkit",
-		"introduced": "0.1.0"
-	},
-	{
-		"entryPoint": "react-foldkit/loader",
-		"name": "load",
-		"owner": "react-foldkit",
-		"introduced": "0.1.0"
-	},
-	{
-		"entryPoint": "react-foldkit/loader",
-		"name": "loadQuery",
-		"owner": "react-foldkit",
-		"introduced": "0.1.0"
-	},
-	{
-		"entryPoint": "react-foldkit/loader",
-		"name": "mapMessages",
-		"owner": "react-foldkit",
-		"introduced": "0.1.0"
-	},
-	{
-		"entryPoint": "react-foldkit/loader",
-		"name": "settleQueryIf",
-		"owner": "react-foldkit",
-		"introduced": "0.1.0"
-	},
-	{
-		"entryPoint": "react-foldkit/tanstack",
-		"name": "DecodeFailure",
-		"owner": "react-foldkit",
-		"introduced": "0.1.0"
-	},
-	{
-		"entryPoint": "react-foldkit/tanstack",
-		"name": "MakeOptions",
-		"owner": "react-foldkit",
-		"introduced": "0.1.0"
-	},
-	{
-		"entryPoint": "react-foldkit/tanstack",
-		"name": "RegistryError",
-		"owner": "react-foldkit",
-		"introduced": "0.1.0"
-	},
-	{
-		"entryPoint": "react-foldkit/tanstack",
-		"name": "make",
 		"owner": "react-foldkit",
 		"introduced": "0.1.0"
 	},

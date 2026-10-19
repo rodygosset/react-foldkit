@@ -1,18 +1,14 @@
-import { Array, Cause, Effect, Equal, Exit, Option, type Result, Schema } from "effect"
+import { Cause, Effect, Equal, Exit, Option, Schema } from "effect"
 import React from "react"
-import * as CommitConnection from "../commitSource/connection"
-import type * as CommitSource from "../commitSource/public"
 import { isDevelopment } from "../internal/deepFreeze"
 import type { ModelSource } from "../modelSource"
 import type { Lift, OptionalLift } from "../submodel/lift"
 import { project, projectOptional } from "../submodel/lift"
-import * as Update from "foldkit/update"
+import type * as Update from "foldkit/update"
 import * as ProviderSession from "./providerSession"
 import * as ReactStore from "./reactStore"
 import * as ModelSelectors from "./useModel"
 
-export { CommitSourceError } from "../commitSource/public"
-export type { CommitEntry, CommitSource } from "../commitSource/public"
 export type { ReactivationContext } from "./reactStore"
 
 type ModelCodec = Schema.Codec<unknown, unknown, unknown, unknown>
@@ -33,12 +29,12 @@ export interface CrashContext<Model, Message> {
 	readonly cause: Cause.Cause<unknown>
 	/**
 	 * The Model when the failure happened. `None` when the Provider failed before it had a Model,
-	 * such as a commit source that could not be created.
+	 * such as an initial Model that failed `validateInit`.
 	 */
 	readonly model: Option.Option<Model>
 	/**
 	 * The Message whose update or Command crashed the Store. `None` for other failures, such as
-	 * Subscriptions, init Commands, or commit sources.
+	 * Subscriptions, init Commands, or resource cleanup.
 	 */
 	readonly message: Option.Option<Message>
 }
@@ -90,54 +86,25 @@ export type Config<ModelSchema extends ModelCodec, Message, R = never> = ReactSt
 	 */
 	readonly crash?: CrashConfig<Type<ModelSchema>, Message>
 	/**
-	 * Checks the initial Model, after the commit-source snapshot, against `Model`. A mismatch
-	 * fails the Provider with a `SchemaError`. Defaults to `true` outside production builds.
+	 * Checks the initial Model against `Model`. A mismatch fails the Provider with a
+	 * `SchemaError`. Defaults to `true` outside production builds.
 	 */
 	readonly validateInit?: boolean
 }
 
 /**
- * Options for receiving Messages from external data, such as route loader results.
- * Pass a commit source directly or provide a factory that creates it during Provider initialization.
- *
- * Choose either `commitSource` or `createCommitSource`. The Provider keeps that source for its
- * mounted lifetime. Remount it to use another source. Factory failures use the Provider's
- * crash view and reporting.
- *
- * @category configuration
- * @since 0.1.0
- */
-export type SourceOptions<Message, E = never, FactoryError = never> =
-	| {
-			/**
-			 * Source captured during Provider initialization. Mutually exclusive with
-			 * `createCommitSource`.
-			 */
-			readonly commitSource?: CommitSource.CommitSource<Message, E>
-			readonly createCommitSource?: never
-	  }
-	| {
-			readonly commitSource?: never
-			/**
-			 * Constructs a source during render, including SSR. React may repeat or abandon the call.
-			 * Keep construction pure and acquire resources in `subscribe`.
-			 */
-			readonly createCommitSource: () => Result.Result<CommitSource.CommitSource<Message, E>, FactoryError>
-	  }
-
-/**
  * Props for the application Provider that supplies the Model and Message handlers to its views.
- * `init` supplies the initial Model and Commands. A commit source can supply additional Messages,
- * and `crash` overrides how this Provider shows and reports failures.
+ * `init` supplies the initial Model and Commands, and `crash` overrides how this Provider shows
+ * and reports failures.
  *
- * The Provider captures `init` and its source on initialization. Changing those props later
- * does not replace them. Children and crash callbacks follow subsequent renders. Use
- * `useInbound` to send later prop changes to update.
+ * The Provider captures `init` on initialization. Changing it later does not replace it.
+ * Children and crash callbacks follow subsequent renders. Use `useInbound` to send later prop
+ * changes to update.
  *
  * @category configuration
  * @since 0.1.0
  */
-export type ProviderProps<Model, Message, R = never, E = never, FactoryError = never> = {
+export type ProviderProps<Model, Message, R = never> = {
 	/**
 	 * Initial Model and Commands, or a function that creates them. The Provider calls a function
 	 * once per initialization, including after a crash view's `restart`.
@@ -148,7 +115,7 @@ export type ProviderProps<Model, Message, R = never, E = never, FactoryError = n
 	 * Overrides the application's crash view or report for this Provider.
 	 */
 	readonly crash?: CrashConfig<Model, Message>
-} & SourceOptions<Message, E, FactoryError>
+}
 
 /**
  * The hooks shared by applications and Submodels.
@@ -222,11 +189,9 @@ export interface ModelHooks<Model, Message> {
 export interface Application<Model, Message, R = never> extends ModelHooks<Model, Message> {
 	/**
 	 * Provides application state to its children and owns Commands and Subscriptions while active.
-	 * Captures `init` and the commit source on initialization. Remount to replace either.
+	 * Captures `init` on initialization. Remount to replace it.
 	 */
-	readonly Provider: <E = never, FactoryError = never>(
-		props: ProviderProps<Model, Message, R, E, FactoryError>
-	) => React.ReactNode
+	readonly Provider: (props: ProviderProps<Model, Message, R>) => React.ReactNode
 }
 
 /** The React context that application and Submodel Providers use to pass their source down. */
@@ -349,8 +314,7 @@ function SessionLifecycle({ session }: { readonly session: ProviderSession.Provi
  *
  * **Details**
  *
- * The Provider renders the initial Model and applies the initial commit-source snapshot during
- * render, including SSR. Commands and Subscriptions start when React activates the Provider.
+ * The Provider renders the initial Model during render, including SSR. Commands and Subscriptions start when React activates the Provider.
  * Deactivation stops them and retains the Model for reactivation, unless `retainInactive`
  * keeps the Store running for a while.
  *
@@ -360,9 +324,8 @@ function SessionLifecycle({ session }: { readonly session: ProviderSession.Provi
  *
  * **Gotchas**
  *
- * React may repeat or abandon initialization. Keep update and source construction pure.
- * Remount the Provider to replace `init` or its commit source, or use `useInbound` to send
- * changing values to update.
+ * React may repeat or abandon initialization. Keep update and `init` functions pure.
+ * Remount the Provider to replace `init`, or use `useInbound` to send changing values to update.
  *
  * **Example** (Connecting a counter to React)
  *
@@ -415,34 +378,16 @@ export function defineApplication<ModelSchema extends ModelCodec, Message, R = n
 	const validateInit = config.validateInit ?? isDevelopment
 	const checkModel = Schema.decodeUnknownExit(Schema.toType(config.Model))
 
-	function ProviderInstance<E, FactoryError>({
+	function ProviderInstance({
 		restart,
 		...props
-	}: ProviderProps<Model, Message, R, E, FactoryError> & { readonly restart: () => void }) {
+	}: ProviderProps<Model, Message, R> & { readonly restart: () => void }) {
 		const [bootstrap] = React.useState(() =>
 			Effect.runSyncExit(
 				Effect.gen(function* () {
 					const init = typeof props.init === "function" ? props.init() : props.init
-					const source: CommitSource.CommitSource<Message, E> | undefined =
-						props.createCommitSource === undefined
-							? props.commitSource
-							: yield* Effect.fromResult(props.createCommitSource())
-					const snapshot = source === undefined ? [] : yield* Effect.fromResult(source.getSnapshot())
-					const connection =
-						source === undefined
-							? undefined
-							: yield* Effect.fromResult(CommitConnection.make({ source, initialSnapshot: snapshot }))
-					const folded = Update.combine(init.model, [
-						() => init,
-						...Array.map(
-							snapshot,
-							({ message }) =>
-								(model: Model) =>
-									config.update(model, message)
-						),
-					])
-					if (validateInit) yield* checkModel(folded.model)
-					return { store: ReactStore.make(config, folded), connection }
+					if (validateInit) yield* checkModel(init.model)
+					return { store: ReactStore.make(config, init) }
 				})
 			)
 		)
@@ -484,7 +429,7 @@ export function defineApplication<ModelSchema extends ModelCodec, Message, R = n
 		)
 	}
 
-	function Provider<E = never, FactoryError = never>(props: ProviderProps<Model, Message, R, E, FactoryError>) {
+	function Provider(props: ProviderProps<Model, Message, R>) {
 		const [generation, setGeneration] = React.useState(0)
 		const restart = React.useCallback(function () {
 			setGeneration((current) => current + 1)

@@ -8,12 +8,9 @@ export default defineConfig({
 	entry: {
 		index: "src/index.ts",
 		react: "src/react/public.ts",
-		commitSource: "src/commitSource/public.ts",
-		loader: "src/loader/public.ts",
 		modelSource: "src/modelSource/public.ts",
 		store: "src/store/public.ts",
 		submodel: "src/submodel/public.ts",
-		tanstack: "src/tanstack.ts",
 	},
 	format: ["esm"],
 	dts: {
@@ -26,5 +23,5 @@ export default defineConfig({
 	sourcemap: true,
 	clean: true,
 	treeshake: true,
-	external: ["effect", /^foldkit(?:\/.*)?$/, /^@tanstack\//, "react", "react/jsx-runtime", "react/jsx-dev-runtime"],
+	external: ["effect", /^foldkit(?:\/.*)?$/, "react", "react/jsx-runtime", "react/jsx-dev-runtime"],
 })

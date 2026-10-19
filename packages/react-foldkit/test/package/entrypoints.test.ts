@@ -1,51 +1,22 @@
-import { Effect, Result, Schema } from "effect"
+import { Effect, Result } from "effect"
 import * as Foldkit from "react-foldkit"
-import * as AsyncData from "foldkit/asyncData"
-import * as CommitSource from "react-foldkit/commitSource"
-import * as Loader from "react-foldkit/loader"
-import * as Query from "foldkit/experimental/query"
 import * as ReactFoldkit from "react-foldkit/react"
 import * as Submodel from "react-foldkit/submodel"
 import * as Store from "react-foldkit/store"
 import { describe, expect, it } from "vitest"
 
 describe("built package entry points", function () {
-	it("exports only React Foldkit modules and loads a Foldkit Query through the built Loader", function () {
+	it("exports only React Foldkit modules", function () {
 		// Foldkit vocabulary is imported from foldkit itself.
-		expect(Object.keys(Foldkit).sort()).toEqual([
-			"CommitSource",
-			"Loader",
-			"ModelSource",
-			"ReactFoldkit",
-			"Store",
-			"Submodel",
-		])
-
-		const query = Query.define({
-			name: "Package",
-			data: Schema.String,
-			error: Schema.String,
-			execute: Effect.succeed("fetch"),
-		})
-		const loader = Loader.fromQuery(query)
-		const envelope = Effect.runSync(loader.loadQuery)
-		expect(Result.getOrThrow(loader.decode(envelope))).toEqual({
-			result: AsyncData.Success({ data: "fetch" }),
-		})
+		expect(Object.keys(Foldkit).sort()).toEqual(["ModelSource", "ReactFoldkit", "Store", "Submodel"])
 	})
 
 	it("shares public error constructors across the root and subpath exports", function () {
-		expect(Foldkit.CommitSource.CommitSourceError).toBe(CommitSource.CommitSourceError)
-		expect(ReactFoldkit.CommitSourceError).toBe(CommitSource.CommitSourceError)
-		expect(Foldkit.Loader.define).toBe(Loader.define)
 		expect(Foldkit.Store.CommitError).toBe(Store.CommitError)
 		expect(Foldkit.Submodel.ProviderError).toBe(Submodel.ProviderError)
 		expect(Foldkit.Submodel.define).toBe(Submodel.define)
 		expect(Foldkit.Submodel.lift).toBe(Submodel.lift)
-
-		const error = new ReactFoldkit.CommitSourceError({ reason: new CommitSource.ReentrantNotification() })
-		expect(error).toBeInstanceOf(CommitSource.CommitSourceError)
-		expect(error).toBeInstanceOf(Foldkit.CommitSource.CommitSourceError)
+		expect(Foldkit.ReactFoldkit.defineApplication).toBe(ReactFoldkit.defineApplication)
 	})
 
 	it("returns a CommitError recognized through every Store export", function () {

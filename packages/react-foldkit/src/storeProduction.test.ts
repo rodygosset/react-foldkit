@@ -2,7 +2,6 @@ import { it } from "@effect/vitest"
 import {
 	Cause,
 	Context,
-	Crypto,
 	Deferred,
 	Effect,
 	Exit,
@@ -10,13 +9,10 @@ import {
 	Layer,
 	Option,
 	Result,
-	Schema,
 	Scope,
 	Stream,
 } from "effect"
 import { expect } from "vitest"
-import * as Connection from "./commitSource/connection"
-import * as Loader from "./loader"
 import * as ReactStore from "./react/reactStore"
 import * as Store from "./store"
 import * as Subscription from "foldkit/subscription"
@@ -109,20 +105,8 @@ it.effect("uses ambient services without constructing another closed Layer", fun
 	}).pipe(Effect.provideService(Counter, 42))
 })
 
-it.effect("retains delivered source versions when React model observers throw and reconnect", () =>
+it.effect("retains committed Models when React model observers throw and reactivate", () =>
 	Effect.gen(function* () {
-		let snapshot: ReadonlyArray<{ key: string; version: number; message: number }> = []
-		let publish = function () {}
-		const source = {
-			getSnapshot: () => Result.succeed(snapshot),
-			subscribe(notify: () => void) {
-				publish = notify
-				return function () {
-					publish = function () {}
-				}
-			},
-		}
-		const connection = Result.getOrThrow(Connection.make({ source, initialSnapshot: [] }))
 		const store = ReactStore.make(
 			{ update: (model: number, message: number) => ({ model: model + message }) },
 			{ model: 0 }
@@ -136,37 +120,18 @@ it.effect("retains delivered source versions when React model observers throw an
 		})
 		const first = yield* Scope.make()
 		yield* store.activate.pipe(Scope.provide(first))
-		yield* connection
-			.connect(store.commit, (exit) => expect(Exit.isSuccess(exit)).toBe(true))
-			.pipe(Scope.provide(first))
-		snapshot = [{ key: "one", version: 1, message: 1 }]
-		publish()
+		expect(Result.isSuccess(store.commit(1))).toBe(true)
 		expect(store.getModel()).toBe(1)
 		expect(notifications).toBe(2)
 		expect(store.getCrash()).toEqual(Option.none())
 		yield* Scope.close(first, Exit.void)
 		const second = yield* Scope.make()
 		yield* store.activate.pipe(Scope.provide(second))
-		yield* connection.connect(store.commit, function () {}).pipe(Scope.provide(second))
 		expect(store.getModel()).toBe(1)
 		unsubscribe()
 		yield* Scope.close(second, Exit.void)
 	})
 )
-
-it.effect("uses caller Crypto for receipts without overriding the loading program's services", function () {
-	const crypto = Crypto.make({
-		randomBytes: (size) => new Uint8Array(size),
-		digest: () => Effect.succeed(new Uint8Array()),
-	})
-	const loader = Loader.define({ name: "Deterministic", data: Schema.String, key: () => "one" })
-	return Effect.gen(function* () {
-		const expected = yield* crypto.randomUUIDv4
-		const envelope = yield* loader.load(Effect.flatMap(Crypto.Crypto, (provided) => provided.randomUUIDv4))
-		expect(envelope.version).toBe(expected)
-		expect(envelope.payload).toBe(expected)
-	}).pipe(Effect.provideService(Crypto.Crypto, crypto))
-})
 
 it.effect("snapshots observers so resubscription cannot repeat a notification in the same delivery", () =>
 	Effect.gen(function* () {

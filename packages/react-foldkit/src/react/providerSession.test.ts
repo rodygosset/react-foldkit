@@ -3,40 +3,16 @@
 import { expect, it } from "@effect/vitest"
 import { Cause, Deferred, Effect, Exit, Fiber, Layer, Logger, Option, Result, Stream } from "effect"
 import { TestClock } from "effect/testing"
-import { CommitSourceError, type CommitEntry, type CommitSource, DuplicateKey } from "../commitSource"
-import * as Connection from "../commitSource/connection"
 import * as Subscription from "foldkit/subscription"
 import * as Session from "./providerSession"
 import * as ReactStore from "./reactStore"
 
-function source() {
-	let snapshot: Result.Result<ReadonlyArray<CommitEntry<number>>, string> = Result.succeed([])
-	const listeners = new Set<() => void>()
-	const source: CommitSource<number, string> = {
-		getSnapshot: () => snapshot,
-		subscribe(listener) {
-			listeners.add(listener)
-			return function () {
-				listeners.delete(listener)
-			}
-		},
-	}
-	return {
-		connection: Result.getOrThrow(Connection.make({ source, initialSnapshot: [] })),
-		publish(entries: ReadonlyArray<CommitEntry<number>>) {
-			snapshot = Result.succeed(entries)
-			for (const listener of listeners) listener()
-		},
-	}
-}
-
-for (const delivery of ["dispatch", "commit", "source"] as const) {
-	it.effect(`reports a ${delivery} crash once and keeps it after successful source reconciliation`, () =>
+for (const delivery of ["dispatch", "commit"] as const) {
+	it.effect(`reports a ${delivery} crash once and keeps it after later deliveries`, () =>
 		Effect.gen(function* () {
 			const defect = new Error(delivery)
 			const observed: Array<Cause.Cause<unknown>> = []
 			const crashed: Array<Cause.Cause<unknown>> = []
-			const input = source()
 			const store = ReactStore.make<number, number>(
 				{
 					update(_model, message) {
@@ -49,7 +25,7 @@ for (const delivery of ["dispatch", "commit", "source"] as const) {
 				},
 				{ model: 0 }
 			)
-			const session = Session.make(Exit.succeed({ store, connection: input.connection }), (cause) =>
+			const session = Session.make(Exit.succeed({ store }), (cause) =>
 				Effect.sync(function () {
 					observed.push(cause)
 				})
@@ -57,9 +33,8 @@ for (const delivery of ["dispatch", "commit", "source"] as const) {
 			yield* session.start
 			if (delivery === "dispatch") store.dispatch(9)
 			if (delivery === "commit") store.commit(9)
-			if (delivery === "source") input.publish([{ key: "a", version: 1, message: 9 }])
-			input.publish([{ key: "b", version: 1, message: 1 }])
-			input.publish([])
+			store.dispatch(1)
+			store.commit(1)
 			expect(observed).toEqual([Cause.die(defect)])
 			expect(crashed).toEqual([Cause.die(defect)])
 			expect(session.getSnapshot().cause).toEqual(Option.some(Cause.die(defect)))
@@ -114,13 +89,9 @@ for (const command of ["init", "update", "subscription"] as const) {
 	)
 }
 
-it.effect(
-	"replays a startup subscription crash before source connection without reporting its CommitError wrapper",
-	() =>
+it.effect("reports a startup subscription crash once", () =>
 		Effect.gen(function* () {
 			const defect = new Error("startup")
-			const input = source()
-			input.publish([{ key: "initial", version: 1, message: 1 }])
 			const observations: Array<Cause.Cause<unknown>> = []
 			const notified = Deferred.makeUnsafe<void>()
 			const store = ReactStore.make<number, number>(
@@ -136,14 +107,14 @@ it.effect(
 				},
 				{ model: 0 }
 			)
-			const session = Session.make(Exit.succeed({ store, connection: input.connection }), (cause) =>
+			const session = Session.make(Exit.succeed({ store }), (cause) =>
 				Effect.sync(function () {
 					observations.push(cause)
 				}).pipe(Effect.andThen(Deferred.succeed(notified, undefined)))
 			)
 			yield* session.start
 			yield* Deferred.await(notified)
-			input.publish([{ key: "next", version: 1, message: 2 }])
+			store.dispatch(2)
 			expect(observations).toEqual([Cause.die(defect)])
 			expect(session.getSnapshot().cause).toEqual(Option.some(Cause.die(defect)))
 			yield* session.stop
@@ -310,81 +281,27 @@ it.effect("protects resource release while a stop caller is interrupted, then in
 	})
 )
 
-it.effect("reports independent cleanup defects during terminal source catchup without the CommitError wrapper", () =>
-	Effect.gen(function* () {
-		const acquired = Deferred.makeUnsafe<void>()
-		const reported = Deferred.makeUnsafe<void>()
-		const runtimeDefect = new Error("runtime crash")
-		const cleanupDefect = new Error("cleanup defect")
-		const input = source()
-		input.publish([{ key: "catchup", version: 1, message: 9 }])
-		const store = ReactStore.make<number, number>(
-			{
-				update() {
-					throw runtimeDefect
-				},
-				onCrash() {},
-				resources: Layer.effectDiscard(Effect.acquireRelease(Effect.void, () => Effect.die(cleanupDefect))),
-			},
-			{
-				model: 0,
-				commands: [
-					{
-						name: "Acquire",
-						effect: Deferred.succeed(acquired, undefined).pipe(Effect.andThen(Effect.never)),
-					},
-				],
-			}
-		)
-		const connection: Connection.Connection<number, string> = {
-			...input.connection,
-			connect: (commit, onReconcile) =>
-				Deferred.await(acquired).pipe(Effect.andThen(input.connection.connect(commit, onReconcile))),
-		}
-		const observations: Array<Cause.Cause<unknown>> = []
-		const session = Session.make(Exit.succeed({ store, connection }), (cause) =>
-			Effect.gen(function* () {
-				observations.push(cause)
-				if (observations.length === 2) yield* Deferred.succeed(reported, undefined)
-			})
-		)
-		yield* session.start
-		yield* Deferred.await(reported)
-		expect(observations).toEqual([
-			Cause.die(runtimeDefect),
-			Cause.combine(Cause.die(runtimeDefect), Cause.die(cleanupDefect)),
-		])
-		expect(session.getSnapshot().cause).toEqual(
-			Option.some(Cause.combine(Cause.die(runtimeDefect), Cause.die(cleanupDefect)))
-		)
-		expect(Option.getOrThrow(store.getCrash())).toBe(observations[0])
-		yield* session.stop
-		expect(observations).toHaveLength(2)
-	})
-)
-
 it.effect("logs nonterminal setup cleanup failure once before observing the combined Cause", () =>
 	Effect.gen(function* () {
+		const failure = new Error("setup failure")
 		const defect = new Error("setup cleanup")
-		const input = source()
-		input.publish([
-			{ key: "duplicate", version: 1, message: 1 },
-			{ key: "duplicate", version: 2, message: 2 },
-		])
 		const original = ReactStore.make<number, number>(
 			{ update: (_model, message) => ({ model: message }) },
 			{ model: 0 }
 		)
 		const store = {
 			...original,
-			activate: original.activate.pipe(Effect.andThen(Effect.addFinalizer(() => Effect.die(defect)))),
+			activate: original.activate.pipe(
+				Effect.andThen(Effect.addFinalizer(() => Effect.die(defect))),
+				Effect.andThen(Effect.die(failure))
+			),
 		}
 		const observed = Deferred.makeUnsafe<void>()
 		const events: Array<{ kind: "log" | "observe"; cause: Cause.Cause<unknown> }> = []
 		const logger = Logger.make(function (options) {
 			events.push({ kind: "log", cause: options.cause })
 		})
-		const session = Session.make(Exit.succeed({ store, connection: input.connection }), (cause) =>
+		const session = Session.make(Exit.succeed({ store }), (cause) =>
 			Effect.sync(function () {
 				events.push({ kind: "observe", cause })
 			}).pipe(Effect.andThen(Deferred.succeed(observed, undefined)))
@@ -395,10 +312,7 @@ it.effect("logs nonterminal setup cleanup failure once before observing the comb
 			yield* session.stop
 			yield* session.stop
 		}).pipe(Effect.provide(Logger.layer([logger])))
-		const combined = Cause.combine(
-			Cause.fail(new CommitSourceError({ reason: new DuplicateKey({ key: "duplicate" }) })),
-			Cause.die(defect)
-		)
+		const combined = Cause.combine(Cause.die(failure), Cause.die(defect))
 		expect(events).toEqual([
 			{ kind: "log", cause: Cause.die(defect) },
 			{ kind: "observe", cause: combined },

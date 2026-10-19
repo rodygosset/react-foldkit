@@ -18,7 +18,7 @@ export default [
 	{
 		settings: {
 			"react-foldkit": {
-				// Store/React infrastructure, test harnesses, and route loaders run Effects.
+				// Store/React infrastructure and test harnesses run Effects.
 				commandPaths: [
 					"**/store.ts",
 					"**/store.*.ts",
@@ -28,8 +28,6 @@ export default [
 					"**/scripts/**",
 					"**/src/react/**",
 					"**/src/store/**",
-					"**/src/commitSource/**",
-					"**/examples/*/src/app/routes/**",
 				],
 				urlBridgePaths: ["**/*.test.{ts,tsx}", "**/test/**"],
 			},

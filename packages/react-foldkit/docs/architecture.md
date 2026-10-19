@@ -14,13 +14,13 @@ A Store crash stops delivery and releases live work. `takeWhen` fails with `Cras
 
 `Store.make` belongs to the caller's Effect Scope. Its `Program` can use ambient services. `Store.boot` and React applications use a `Config` whose `resources` Layer is closed when services are required. Services are acquired lazily and released after live work stops.
 
-An application Provider captures `init` and its commit source during initialization. Remount it to replace either, or send later changes to update with `useInbound`. Initialization and source reads must be pure because React can repeat or abandon render. Client activation starts Commands and Subscriptions. Deactivation stops live work while retaining the Model for reactivation. Messages dispatched while the Provider is inactive wait for the next activation.
+An application Provider captures `init` during initialization. Remount it to replace it, or send later changes to update with `useInbound`. Initialization must be pure because React can repeat or abandon render. Client activation starts Commands and Subscriptions. Deactivation stops live work while retaining the Model for reactivation. Messages dispatched while the Provider is inactive wait for the next activation.
 
 `retainInactive` keeps the Store, its Layer, and its live work running for a window after deactivation, so a quick hide and show interrupts nothing. Once deactivation stops a Store's live work, the next activation restarts it from the retained Model. Completed init Commands do not repeat on replacement, and interrupted init Commands restart. Interrupted update Commands restart when `restartInterrupted` selects them. The rest reach `onReactivate`, which turns them into a Message. The initial server snapshot stays available for hydration.
 
 Outside production builds, the Provider checks its initial Model against the Model Schema and freezes every published Model, so accidental mutation throws where it happens.
 
-`crash.view` renders failures with the Model and triggering Message when they are known, and can restart the Provider from `init`. `crash.report` observes client failures as an Effect. Report failures are logged separately. A source failure can recover after a valid snapshot. A Store crash remains terminal for that Store, though a new healthy activation can replace it.
+`crash.view` renders failures with the Model and triggering Message when they are known, and can restart the Provider from `init`. `crash.report` observes client failures as an Effect. Report failures are logged separately. A setup or cleanup failure can recover after a healthy reactivation. A Store crash remains terminal for that Store, though a new healthy activation can replace it.
 
 ## Child Models
 
@@ -30,17 +30,9 @@ A child Provider consumes a projected source. It creates no Store and runs no si
 
 `useModel()` compares whole snapshots with `Object.is`. Selectors default to `Equal.equals`, which compares plain objects and arrays structurally on every change, and accept a custom equality function. Required hooks need their matching Provider. Optional hooks return `Option`. Optional child sources retain their last snapshot while the child is absent.
 
-## External data
+## Async data
 
-A Loader encodes data into an envelope and decodes accepted envelopes into Messages. `Loader.fromQuery` derives its payload from a Query. Keyed payloads contain `{ args, result }`. Plain payloads contain `{ result }`.
-
-A commit source exposes synchronous snapshots and a subscription. The Provider folds its initial snapshot during render, then commits changed entries after activation. Acquire resources in `subscribe` and release them in its cleanup.
-
-Each source key remembers its last successfully delivered version using `Object.is`. Reconnection preserves that record. Removing a key forgets it. Duplicate keys and notifications during reconciliation fail the source contract.
-
-Delivery versions prevent repeated delivery. They do not establish data freshness. `Loader.settleQueryIf` applies the application's freshness policy, which accepts every success by default, invalidates older fetch generations, and returns cancellation Commands. It does not start a fetch.
-
-`TanStack.make` adapts successful route matches into a commit source. A registry maps declaration names to decoders. Duplicate names fail construction. Invalid recognized envelopes fail snapshot reads, unless `onDecodeError` turns each into a Message for update. Unrelated loader data is ignored.
+Load server data with Foldkit Query from `foldkit/experimental/query`. A Query is a viewless Submodel: its Model tracks data, failure, and pending state, and its lift returns the Commands that fetch, revalidate, or cancel work. Send a Message when a view needs data, such as when a route opens, and let update call the Query lift.
 
 ## Implementation map
 
@@ -50,9 +42,6 @@ Delivery versions prevent repeated delivery. They do not establish data freshnes
 | `src/react`        | Application bindings, activation, selectors, and failure reporting            |
 | `src/modelSource`  | Shared snapshot, subscription, and dispatch contracts                         |
 | `src/submodel`     | Child bindings and Model sources                                              |
-| `src/commitSource` | Snapshot reconciliation and delivery records                                  |
-| `src/loader`       | Envelopes, codecs, resource keys, and Query settlement                        |
-| `src/tanstack.ts`  | Router adapter                                                                |
 | `src/internal`     | Init Command tracking, Model freezing, and Foldkit interruption compatibility |
 
 Public barrels define the exports. Applications import Foldkit vocabulary from `foldkit`, a peer dependency, so both packages share one copy. See the [API reference](reference.md) for the public contracts.

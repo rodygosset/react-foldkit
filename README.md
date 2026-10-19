@@ -186,112 +186,80 @@ export function App() {
 
 Type **Buy milk**, then click **Add todo**. The draft clears and the list gains an item. Empty submissions do nothing. The form has its own hooks, but shares the parent Store, so its state remains part of the application Model.
 
-## Preload a Query with TanStack Router
+## Load a Query
 
-A Foldkit Query keeps track of a request's data, failure, and pending state. A route loader can run the Query before rendering the page and deliver its result to the application.
+A Foldkit Query keeps track of a request's data, failure, and pending state. It is a viewless Submodel: update calls its lift, and the lift returns the Commands that fetch the data.
 
-This example uses `@tanstack/react-router`, `@tanstack/router-core`, and `@tanstack/react-store`. Create `profile.tsx`. The Query returns a local profile so you can try the example without a server. Replace `execute` with your data-loading Effect when connecting a backend.
+Create `profile.tsx`. The Query returns a local profile so you can try the example without a server. Replace `execute` with your data-loading Effect when connecting a backend.
 
 ```tsx
 import { Effect, Schema } from "effect"
-import * as Query from "foldkit/experimental/query"
 import * as AsyncData from "foldkit/asyncData"
-import * as Command from "foldkit/command"
-import * as Loader from "react-foldkit/loader"
+import * as Query from "foldkit/experimental/query"
 import { defineMessageUnion } from "foldkit/message"
-import { defineApplication } from "react-foldkit/react"
-import { modifyFields } from "foldkit/struct"
 import type * as Update from "foldkit/update"
+import { defineApplication } from "react-foldkit/react"
 
-const Profile = Schema.Struct({ name: Schema.String, revision: Schema.Finite })
+const Profile = Schema.Struct({ name: Schema.String })
 
-export const query = Query.define({
+const query = Query.define({
   name: "Profile",
   data: Profile,
   error: Schema.String,
-  execute: Effect.succeed({ name: "Ada", revision: 1 }),
+  execute: Effect.succeed({ name: "Ada" }),
 })
-
-export const loader = Loader.fromQuery(query)
 
 const Model = Schema.Struct({ profile: query.Model })
 type Model = typeof Model.Type
 
 const Message = defineMessageUnion({
   GotProfileMessage: { message: query.Message },
-  LoadedProfile: { load: loader.Load },
+  ClickedRefresh: {},
 })
 type Message = typeof Message.Type
 
-const toParentMessage = (message: typeof query.Message.Type) => Message.GotProfileMessage({ message })
-const profile = query.lift<Model, Message>({ parentField: "profile", toParentMessage })
+const profile = query.lift<Model, Message>({
+  parentField: "profile",
+  toParentMessage: (message) => Message.GotProfileMessage({ message }),
+})
 
 const update = (model: Model, message: Message) =>
   Message.match<Update.Return<Model, Message>>(message, {
     GotProfileMessage: ({ message }) => profile.fold(model, message),
-    LoadedProfile: ({ load }) => {
-      const settled = Loader.settleQueryIf(query, model.profile, load.result, {
-        fresher: (incoming, current) => incoming.revision > current.revision,
-      })
-
-      return {
-        model: modifyFields(model, { profile: () => settled.model }),
-        commands: Command.mapMessages(settled.commands, toParentMessage),
-      }
-    },
+    ClickedRefresh: () => profile.revalidate(model),
   })
 
-export const declaration = loader.pipe(Loader.mapMessages((load) => Message.LoadedProfile({ load })))
-export const { Provider, useModel } = defineApplication({ Model, update })
-export const init = { model: { profile: query.init() } }
-
-export function View() {
-  const result = useModel((model) => query.read(model.profile))
-
-  return AsyncData.matchData(result, {
-    onEmpty: () => <p>Loading profile...</p>,
-    onFailure: (error) => <p>{error}</p>,
-    onData: (profile) => <h1>Hello, {profile.name}</h1>,
-  })
-}
-```
-
-Replace `App.tsx` with the router below. The route's `loader` returns the encoded Query result. `TanStack.make` connects successful route results to the application Provider, using the declaration to turn each result into `LoadedProfile`.
-
-```tsx
-import { createRootRoute, createRouter, RouterProvider, useRouter } from "@tanstack/react-router"
-import { Effect } from "effect"
-import * as TanStack from "react-foldkit/tanstack"
-import * as Profile from "./profile"
-
-const route = createRootRoute({
-  loader: () => Effect.runPromise(Profile.loader.loadQuery),
-  component: View,
-})
-
-const router = createRouter({ routeTree: route })
+const { Provider, useModel, useDispatch } = defineApplication({ Model, update })
+const init = profile.loadIfMissing({ profile: query.init() })
 
 function View() {
-  const router = useRouter()
+  const result = useModel((model) => query.read(model.profile))
+  const dispatch = useDispatch()
 
   return (
-    <Profile.Provider
-      init={Profile.init}
-      createCommitSource={() => TanStack.make(router, [Profile.declaration])}
-    >
-      <Profile.View />
-    </Profile.Provider>
+    <>
+      {AsyncData.matchData(result, {
+        onEmpty: () => <p>Loading profile...</p>,
+        onFailure: (error) => <p>{error}</p>,
+        onData: (profile) => <h1>Hello, {profile.name}</h1>,
+      })}
+      <button onClick={() => dispatch(Message.ClickedRefresh())}>Refresh</button>
+    </>
   )
 }
 
 export function App() {
-  return <RouterProvider router={router} />
+  return (
+    <Provider init={init}>
+      <View />
+    </Provider>
+  )
 }
 ```
 
-Open the page to see **Hello, Ada**. The Provider applies the loaded result to the Query Model before rendering its children. `settleQueryIf` uses the profile revision to keep an older route result from replacing newer data.
+Open the page to see **Loading profile...**, then **Hello, Ada**. `init` marks the profile as pending and returns the fetch Command, which the Provider starts on activation. **Refresh** revalidates the profile while keeping the current data on screen.
 
-For Queries that take arguments and cache several resources, see the [project-cache example](packages/react-foldkit/examples/projectCache/README.md).
+For Queries that take arguments and cache several resources across TanStack routes, see the [project-cache example](packages/react-foldkit/examples/projectCache/README.md).
 
 ## Find your way around
 

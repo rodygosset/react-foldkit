@@ -62,8 +62,6 @@
       "devDependencies": {
         "@effect/vitest": "4.0.0",
         "@tanstack/react-router": "1.170.33",
-        "@tanstack/react-store": "0.9.3",
-        "@tanstack/router-core": "1.171.28",
         "@testing-library/react": "^16.3.2",
         "@types/estree": "^1.0.8",
         "@types/picomatch": "^4.0.3",
@@ -86,18 +84,12 @@
         "vitest": "5.0.3",
       },
       "peerDependencies": {
-        "@tanstack/react-router": "^1.170.33",
-        "@tanstack/react-store": "^0.9.3",
-        "@tanstack/router-core": "^1.171.28",
         "effect": "4.0.0",
         "eslint": "^9",
         "foldkit": ">=0.166.0",
         "react": "^19.2.6",
       },
       "optionalPeers": [
-        "@tanstack/react-router",
-        "@tanstack/react-store",
-        "@tanstack/router-core",
         "eslint",
       ],
     },
