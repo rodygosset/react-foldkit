@@ -4,7 +4,7 @@ export default defineConfig({
 	test: {
 		environment: "happy-dom",
 		setupFiles: ["./vitest.setup.ts"],
-		include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
+		include: ["src/**/*.test.ts", "src/**/*.test.tsx", "test/conformance/**/*.test.ts"],
 		coverage: {
 			thresholds: {
 				"src/store/store.ts": { branches: 85, lines: 95 },
