@@ -3,13 +3,14 @@ import * as Update from "foldkit/update"
 import { stabilize, type ModelReader, type ModelSource } from "../modelSource/modelSource"
 
 /**
- * Description of a child that is always present in a parent Model. Use it with
- * `useSubmodel` to derive the child's source and route its Messages to the parent.
+ * How a child Provider or `useSubmodel` reads a child that is always present in a parent Model
+ * and routes its Messages back. A `Lift` is one; a plain object with the same two fields works
+ * for any other read.
  *
  * @category models
  * @since 0.1.0
  */
-export interface Lift<ParentModel, ParentMessage, Model, Message> {
+export interface Projection<ParentModel, ParentMessage, Model, Message> {
 	/**
 	 * Projects a child Model. Keep this function pure and its declaration stable across renders.
 	 */
@@ -21,58 +22,15 @@ export interface Lift<ParentModel, ParentMessage, Model, Message> {
 }
 
 /**
- * Declares a child Model read and Message lift while preserving their inferred types.
- *
- * In real code the child owns canonical `Model` and `Message` names in its own module,
- * imported below as `Counter`.
- *
- * **Example** (Reading a child and lifting its Message)
- *
- * ```ts
- * // counter.ts owns the child Model and Message.
- * import { Schema } from "effect"
- * import { defineMessageUnion } from "foldkit/message"
- *
- * export const Model = Schema.Struct({ count: Schema.Finite })
- * export type Model = typeof Model.Type
- *
- * export const Message = defineMessageUnion({ Incremented: {} })
- * export type Message = typeof Message.Type
- *
- * // app.ts lifts counter messages into its own Message.
- * import * as Counter from "./counter"
- * import { Schema } from "effect"
- * import { defineMessageUnion } from "foldkit/message"
- * import * as Submodel from "react-foldkit/submodel"
- *
- * const Model = Schema.Struct({ counter: Counter.Model })
- * type Model = typeof Model.Type
- *
- * const Message = defineMessageUnion({ GotCounterMessage: { message: Counter.Message } })
- *
- * export const counter = Submodel.lift({
- * 	read: (model: Model) => model.counter,
- * 	toParentMessage: (message: Counter.Message) => Message.GotCounterMessage({ message }),
- * })
- * ```
- *
- * @category constructors
- * @since 0.1.0
- */
-export const lift = <ParentModel, ParentMessage, Model, Message>(
-	input: Lift<ParentModel, ParentMessage, Model, Message>
-): Lift<ParentModel, ParentMessage, Model, Message> => input
-
-/**
  * A child stored in one field of its parent Model, described once for both halves of the
- * Submodel. Pass it to a Submodel Provider or `useSubmodel` as a `Lift`, and call `fold`
- * from the parent update to run the child update and write the result back.
+ * Submodel. Pass it to a Submodel Provider or `useSubmodel`, and call `fold` from the parent
+ * update to run the child update and write the result back.
  *
  * @category models
  * @since 0.1.0
  */
-export interface Field<ParentModel, ParentMessage, Model, Message, FoldResult>
-	extends Lift<ParentModel, ParentMessage, Model, Message> {
+export interface Lift<ParentModel, ParentMessage, Model, Message, FoldResult>
+	extends Projection<ParentModel, ParentMessage, Model, Message> {
 	/**
 	 * The parent field that holds the child Model.
 	 */
@@ -88,15 +46,15 @@ export interface Field<ParentModel, ParentMessage, Model, Message, FoldResult>
 	readonly fold: FoldResult
 }
 
-type FieldUpdate<Model, Message, R> = (model: Model, message: Message) => Update.Return<Model, Message, R>
+type LiftUpdate<Model, Message, R> = (model: Model, message: Message) => Update.Return<Model, Message, R>
 
-type FieldUpdateWithOutMessage<Model, Message, OutMessage, R> = (
+type LiftUpdateWithOutMessage<Model, Message, OutMessage, R> = (
 	model: Model,
 	message: Message
 ) => Update.ReturnWithOutMessage<Model, Message, OutMessage, R>
 
 /**
- * Describes a child stored in one field of the parent Model. The result reads and writes that
+ * Lifts a child stored in one field of the parent Model. The result reads and writes that
  * field, lifts child Messages, and folds the child update, so the view and update halves share
  * one declaration. Supply the parent Model type first.
  *
@@ -130,7 +88,7 @@ type FieldUpdateWithOutMessage<Model, Message, OutMessage, R> = (
  * const Message = defineMessageUnion({ GotFormMessage: { message: Form.Message } })
  * type Message = typeof Message.Type
  *
- * export const form = Submodel.field<Model>()("form", {
+ * export const form = Submodel.lift<Model>()("form", {
  * 	update: Form.update,
  * 	toParentMessage: (message: Form.Message) => Message.GotFormMessage({ message }),
  * })
@@ -139,11 +97,10 @@ type FieldUpdateWithOutMessage<Model, Message, OutMessage, R> = (
  * 	Message.match(message, { GotFormMessage: ({ message }) => form.fold(model, message) })
  * ```
  *
- * @see {@link lift} for a child read that is not a single field
  * @category constructors
  * @since 0.1.0
  */
-export function field<ParentModel>() {
+export function lift<ParentModel>() {
 	function build<
 		K extends keyof ParentModel & string,
 		ParentMessage,
@@ -155,14 +112,14 @@ export function field<ParentModel>() {
 	>(
 		key: K,
 		options: {
-			readonly update: FieldUpdateWithOutMessage<ParentModel[K], Message, OutMessage, R>
+			readonly update: LiftUpdateWithOutMessage<ParentModel[K], Message, OutMessage, R>
 			readonly toParentMessage: (message: Message) => ParentMessage
 			readonly foldOutMessage: (
 				outMessage: OutMessage,
 				context: Update.FoldContext<Message, ParentMessage>
 			) => Update.Step<NoInfer<ParentModel>, StepMessage, StepR>
 		}
-	): Field<
+	): Lift<
 		ParentModel,
 		ParentMessage,
 		ParentModel[K],
@@ -172,24 +129,24 @@ export function field<ParentModel>() {
 	function build<K extends keyof ParentModel & string, ParentMessage, Message, R = never>(
 		key: K,
 		options: {
-			readonly update: FieldUpdate<ParentModel[K], Message, R>
+			readonly update: LiftUpdate<ParentModel[K], Message, R>
 			readonly toParentMessage: (message: Message) => ParentMessage
 		}
-	): Field<ParentModel, ParentMessage, ParentModel[K], Message, Update.Fold<ParentModel, ParentMessage, Message, R>>
+	): Lift<ParentModel, ParentMessage, ParentModel[K], Message, Update.Fold<ParentModel, ParentMessage, Message, R>>
 	// eslint-disable-next-line foldkit-style/prefer-arrow-for-expression-return -- Overloads describe each foldChild shape.
-	function build(key: string, options: AnyFieldOptions): unknown {
-		return makeField(key, options)
+	function build(key: string, options: AnyLiftOptions): unknown {
+		return makeLift(key, options)
 	}
 	return build
 }
 
-type AnyFieldOptions = {
+type AnyLiftOptions = {
 	readonly update: (model: never, message: never) => unknown
 	readonly toParentMessage: (message: never) => unknown
 	readonly foldOutMessage?: (outMessage: never, context: never) => unknown
 }
 
-function makeField(key: string, options: AnyFieldOptions) {
+function makeLift(key: string, options: AnyLiftOptions) {
 	type Parent = Readonly<Record<string, unknown>>
 	const read = (model: Parent) => model[key]
 	const write = (model: Parent, child: unknown): Parent =>
@@ -204,13 +161,13 @@ function makeField(key: string, options: AnyFieldOptions) {
 }
 
 /**
- * Description of a child that may be absent from a parent Model. Use it with
- * `useOptionalSubmodel` to expose a child source while the child exists.
+ * How `useOptionalSubmodel` reads a child that may be absent from a parent Model, exposing a
+ * child source while the child exists.
  *
  * @category models
  * @since 0.1.0
  */
-export interface OptionalLift<ParentModel, ParentMessage, Model, Message> {
+export interface OptionalProjection<ParentModel, ParentMessage, Model, Message> {
 	/**
 	 * Returns the current child Model or `None`. Keep this function pure and stable across renders.
 	 */
@@ -223,7 +180,7 @@ export interface OptionalLift<ParentModel, ParentMessage, Model, Message> {
 
 export const project = <ParentModel, ParentMessage, Model, Message>(
 	parent: ModelSource<ParentModel, ParentMessage>,
-	{ read, toParentMessage }: Lift<ParentModel, ParentMessage, Model, Message>
+	{ read, toParentMessage }: Projection<ParentModel, ParentMessage, Model, Message>
 ): ModelSource<Model, Message> => ({
 	getSnapshot: stabilize(read, () => parent.getSnapshot()),
 	getServerSnapshot: stabilize(read, () => parent.getServerSnapshot()),
@@ -231,15 +188,15 @@ export const project = <ParentModel, ParentMessage, Model, Message>(
 	dispatch: (message) => parent.dispatch(toParentMessage(message)),
 })
 
-export interface OptionalLiftResult<Model, Message> {
+export interface OptionalProjectionResult<Model, Message> {
 	readonly source: () => Option.Option<ModelSource<Model, Message>>
 	readonly presence: ModelReader<boolean>
 }
 
 export function projectOptional<ParentModel, ParentMessage, Model, Message>(
 	parent: ModelSource<ParentModel, ParentMessage>,
-	{ read, toParentMessage }: OptionalLift<ParentModel, ParentMessage, Model, Message>
-): OptionalLiftResult<Model, Message> {
+	{ read, toParentMessage }: OptionalProjection<ParentModel, ParentMessage, Model, Message>
+): OptionalProjectionResult<Model, Message> {
 	const current = stabilize(read, () => parent.getSnapshot())
 	const server = stabilize(read, () => parent.getServerSnapshot())
 	function retain(getModel: () => Option.Option<Model>, initial: Model) {

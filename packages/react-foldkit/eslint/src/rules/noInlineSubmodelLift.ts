@@ -2,7 +2,6 @@ import type { Rule } from "eslint"
 import type { Expression, Node } from "estree"
 
 const LIFT_HOOKS = new Set(["useSubmodel", "useOptionalSubmodel"])
-const LIFT_CONSTRUCTORS = new Set(["lift", "field"])
 
 const meta: Rule.RuleMetaData = {
 	type: "suggestion",
@@ -24,13 +23,11 @@ function calleeName(node: Node): string | undefined {
 	return undefined
 }
 
-// Object literals and lift(...)/field(...)() calls build a new lift each time they run.
+// Object literals and lift()(...) calls build a new lift each time they run.
 function isFreshLift(node: Expression): boolean {
 	if (node.type === "ObjectExpression") return true
 	if (node.type !== "CallExpression") return false
-	const name = calleeName(node.callee)
-	if (name !== undefined && LIFT_CONSTRUCTORS.has(name)) return true
-	return node.callee.type === "CallExpression" && calleeName(node.callee.callee) === "field"
+	return node.callee.type === "CallExpression" && calleeName(node.callee.callee) === "lift"
 }
 
 interface JsxAttribute {

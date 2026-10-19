@@ -2,7 +2,7 @@ import { Option, Schema } from "effect"
 import React from "react"
 import { makeSourceContext, modelHooks, type ModelHooks } from "../react/react"
 import type { ModelSource } from "../modelSource"
-import type { Lift } from "./lift"
+import type { Projection } from "./lift"
 
 /**
  * Props for a Submodel Provider. Pass the parent hooks and a lift to derive the child source,
@@ -22,7 +22,7 @@ export type ProviderProps<Model, Message, ParentModel = never, ParentMessage = n
 			/**
 			 * Reads the child from the parent Model and lifts its Messages. Declare it outside render.
 			 */
-			readonly lift: Lift<ParentModel, ParentMessage, Model, Message>
+			readonly lift: Projection<ParentModel, ParentMessage, Model, Message>
 			readonly source?: never
 	  }
 	| {
@@ -128,7 +128,7 @@ export function define<Model, Message>(): Submodel<Model, Message> {
 		children,
 	}: {
 		readonly from: Pick<ModelHooks<ParentModel, ParentMessage>, "useSubmodel">
-		readonly lift: Lift<ParentModel, ParentMessage, Model, Message>
+		readonly lift: Projection<ParentModel, ParentMessage, Model, Message>
 		readonly children?: React.ReactNode
 	}) {
 		return <SourceProvider source={from.useSubmodel(lift)}>{children}</SourceProvider>

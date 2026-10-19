@@ -84,7 +84,7 @@ independent Model and the Commands and Subscriptions that update it.
   `toParentMessage` creates a new source. Throws outside the matching Provider.
 
   ```ts
-  <ChildModel, ChildMessage>(projection: Lift<Model, Message, ChildModel, ChildMessage>) => ModelSource<ChildModel, ChildMessage>
+  <ChildModel, ChildMessage>(projection: Projection<Model, Message, ChildModel, ChildMessage>) => ModelSource<ChildModel, ChildMessage>
   ```
 
 - `useOptionalSubmodel` Returns `None` while the child Model is absent. A previously created source retains its
@@ -92,7 +92,7 @@ independent Model and the Commands and Subscriptions that update it.
   parent Provider.
 
   ```ts
-  <ChildModel, ChildMessage>(projection: OptionalLift<Model, Message, ChildModel, ChildMessage>) => Option.Option<ModelSource<ChildModel, ChildMessage>>
+  <ChildModel, ChildMessage>(projection: OptionalProjection<Model, Message, ChildModel, ChildMessage>) => Option.Option<ModelSource<ChildModel, ChildMessage>>
   ```
 
 ### Config
@@ -279,7 +279,7 @@ Submodel access to part of that Model.
   `toParentMessage` creates a new source. Throws outside the matching Provider.
 
   ```ts
-  <ChildModel, ChildMessage>(projection: Lift<Model, Message, ChildModel, ChildMessage>) => ModelSource<ChildModel, ChildMessage>
+  <ChildModel, ChildMessage>(projection: Projection<Model, Message, ChildModel, ChildMessage>) => ModelSource<ChildModel, ChildMessage>
   ```
 
 - `useOptionalSubmodel` Returns `None` while the child Model is absent. A previously created source retains its
@@ -287,7 +287,7 @@ Submodel access to part of that Model.
   parent Provider.
 
   ```ts
-  <ChildModel, ChildMessage>(projection: OptionalLift<Model, Message, ChildModel, ChildMessage>) => Option.Option<ModelSource<ChildModel, ChildMessage>>
+  <ChildModel, ChildMessage>(projection: OptionalProjection<Model, Message, ChildModel, ChildMessage>) => Option.Option<ModelSource<ChildModel, ChildMessage>>
   ```
 
 ### ProviderProps
@@ -724,11 +724,11 @@ await Effect.runPromise(program)
 
 ## react-foldkit/submodel
 
-### Field
+### Lift
 
 A child stored in one field of its parent Model, described once for both halves of the
-Submodel. Pass it to a Submodel Provider or `useSubmodel` as a `Lift`, and call `fold`
-from the parent update to run the child update and write the result back.
+Submodel. Pass it to a Submodel Provider or `useSubmodel`, and call `fold` from the parent
+update to run the child update and write the result back.
 
 - `key` The parent field that holds the child Model.
 
@@ -761,15 +761,15 @@ from the parent update to run the child update and write the result back.
   (message: Message) => ParentMessage
   ```
 
-### Lift
+### OptionalProjection
 
-Description of a child that is always present in a parent Model. Use it with
-`useSubmodel` to derive the child's source and route its Messages to the parent.
+How `useOptionalSubmodel` reads a child that may be absent from a parent Model, exposing a
+child source while the child exists.
 
-- `read` Projects a child Model. Keep this function pure and its declaration stable across renders.
+- `read` Returns the current child Model or `None`. Keep this function pure and stable across renders.
 
   ```ts
-  (model: ParentModel) => Model
+  (model: ParentModel) => Option.Option<Model>
   ```
 
 - `toParentMessage` Converts a child Message into the Message handled by the parent update.
@@ -778,15 +778,16 @@ Description of a child that is always present in a parent Model. Use it with
   (message: Message) => ParentMessage
   ```
 
-### OptionalLift
+### Projection
 
-Description of a child that may be absent from a parent Model. Use it with
-`useOptionalSubmodel` to expose a child source while the child exists.
+How a child Provider or `useSubmodel` reads a child that is always present in a parent Model
+and routes its Messages back. A `Lift` is one; a plain object with the same two fields works
+for any other read.
 
-- `read` Returns the current child Model or `None`. Keep this function pure and stable across renders.
+- `read` Projects a child Model. Keep this function pure and its declaration stable across renders.
 
   ```ts
-  (model: ParentModel) => Option.Option<Model>
+  (model: ParentModel) => Model
   ```
 
 - `toParentMessage` Converts a child Message into the Message handled by the parent update.
@@ -819,7 +820,7 @@ or pass a source you already derived.
 - `lift` Reads the child from the parent Model and lifts its Messages. Declare it outside render.
 
   ```ts
-  Lift<ParentModel, ParentMessage, Model, Message> | undefined
+  Projection<ParentModel, ParentMessage, Model, Message> | undefined
   ```
 
 - `source` A child source derived with `useSubmodel` or `useOptionalSubmodel`.
@@ -882,7 +883,7 @@ its Provider to give child views a lifted source without starting another Store.
   `toParentMessage` creates a new source. Throws outside the matching Provider.
 
   ```ts
-  <ChildModel, ChildMessage>(projection: Lift<Model, Message, ChildModel, ChildMessage>) => ModelSource<ChildModel, ChildMessage>
+  <ChildModel, ChildMessage>(projection: Projection<Model, Message, ChildModel, ChildMessage>) => ModelSource<ChildModel, ChildMessage>
   ```
 
 - `useOptionalSubmodel` Returns `None` while the child Model is absent. A previously created source retains its
@@ -890,7 +891,7 @@ its Provider to give child views a lifted source without starting another Store.
   parent Provider.
 
   ```ts
-  <ChildModel, ChildMessage>(projection: import("./lift").OptionalLift<Model, Message, ChildModel, ChildMessage>) => Option.Option<ModelSource<ChildModel, ChildMessage>>
+  <ChildModel, ChildMessage>(projection: import("./lift").OptionalProjection<Model, Message, ChildModel, ChildMessage>) => Option.Option<ModelSource<ChildModel, ChildMessage>>
   ```
 
 ### define
@@ -923,9 +924,9 @@ export function View() {
 }
 ```
 
-### field
+### lift
 
-Describes a child stored in one field of the parent Model. The result reads and writes that
+Lifts a child stored in one field of the parent Model. The result reads and writes that
 field, lifts child Messages, and folds the child update, so the view and update halves share
 one declaration. Supply the parent Model type first.
 
@@ -959,50 +960,13 @@ type Model = typeof Model.Type
 const Message = defineMessageUnion({ GotFormMessage: { message: Form.Message } })
 type Message = typeof Message.Type
 
-export const form = Submodel.field<Model>()("form", {
+export const form = Submodel.lift<Model>()("form", {
   update: Form.update,
   toParentMessage: (message: Form.Message) => Message.GotFormMessage({ message }),
 })
 
 export const update = (model: Model, message: Message) =>
   Message.match(message, { GotFormMessage: ({ message }) => form.fold(model, message) })
-```
-
-### lift
-
-Declares a child Model read and Message lift while preserving their inferred types.
-
-In real code the child owns canonical `Model` and `Message` names in its own module,
-imported below as `Counter`.
-
-**Example** (Reading a child and lifting its Message)
-
-```ts
-// counter.ts owns the child Model and Message.
-import { Schema } from "effect"
-import { defineMessageUnion } from "foldkit/message"
-
-export const Model = Schema.Struct({ count: Schema.Finite })
-export type Model = typeof Model.Type
-
-export const Message = defineMessageUnion({ Incremented: {} })
-export type Message = typeof Message.Type
-
-// app.ts lifts counter messages into its own Message.
-import * as Counter from "./counter"
-import { Schema } from "effect"
-import { defineMessageUnion } from "foldkit/message"
-import * as Submodel from "react-foldkit/submodel"
-
-const Model = Schema.Struct({ counter: Counter.Model })
-type Model = typeof Model.Type
-
-const Message = defineMessageUnion({ GotCounterMessage: { message: Counter.Message } })
-
-export const counter = Submodel.lift({
-  read: (model: Model) => model.counter,
-  toParentMessage: (message: Counter.Message) => Message.GotCounterMessage({ message }),
-})
 ```
 
 ## react-foldkit/eslint

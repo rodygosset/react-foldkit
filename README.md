@@ -126,7 +126,7 @@ export function View() {
 }
 ```
 
-Replace `App.tsx` with the parent application below. `Submodel.field` describes the form once: it reads and writes the `form` field, wraps form Messages for the parent, and folds the form update, including its `Submitted` event.
+Replace `App.tsx` with the parent application below. `Submodel.lift` describes the form once: it reads and writes the `form` field, wraps form Messages for the parent, and folds the form update, including its `Submitted` event.
 
 ```tsx
 import { Array, Schema } from "effect"
@@ -143,7 +143,7 @@ type Model = typeof Model.Type
 const Message = defineMessageUnion({ GotFormMessage: { message: Form.Message } })
 type Message = typeof Message.Type
 
-const form = Submodel.field<Model>()("form", {
+const form = Submodel.lift<Model>()("form", {
   update: Form.update,
   toParentMessage: (message: Form.Message) => Message.GotFormMessage({ message }),
   foldOutMessage: (out) => (model: Model) => ({

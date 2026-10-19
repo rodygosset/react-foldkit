@@ -10,7 +10,7 @@ import { defineMessageUnion } from "foldkit/message"
 import type { ModelSource } from "./modelSource"
 import { defineApplication } from "./react"
 import { modifyFields } from "foldkit/struct"
-import { define, lift, ProviderError } from "./submodel"
+import { define, ProviderError } from "./submodel"
 import * as Update from "foldkit/update"
 
 const Model = Schema.Struct({ count: Schema.Finite })
@@ -65,10 +65,10 @@ describe("define", function () {
 	it("composes inline root, sibling, and nested Providers without parent subscriptions", function () {
 		const fixture = createSubmodelFixture()
 		const NumberView = define<number, string>()
-		const count = lift({
+		const count = {
 			read: (model: ChildModel) => model.count,
 			toParentMessage: (_message: string) => ChildMessage.Increment(),
-		})
+		}
 		let dispatch: ReturnType<typeof fixture.App.useDispatch> | undefined
 		const sources: Array<ModelSource<{ readonly count: number; readonly unrelated: number }, ChildMessage>> = []
 		function Capture() {
@@ -444,14 +444,14 @@ describe("define", function () {
 				update: (model: SecondModel, { message }: ParentMessage) => foldSecond(model, message),
 				resources: layer,
 			})
-			const firstForm = lift({
+			const firstForm = {
 				read: (model: FirstModel) => model.form,
 				toParentMessage: (message: Message) => ParentMessage.GotChild({ message }),
-			})
-			const secondEditor = lift({
+			}
+			const secondEditor = {
 				read: (model: SecondModel) => model.editor,
 				toParentMessage: (message: Message) => ParentMessage.GotChild({ message }),
-			})
+			}
 			function FirstView() {
 				const model = First.useModel()
 				const source = First.useSubmodel(firstForm)
@@ -505,10 +505,10 @@ describe("define", function () {
 				model: modifyFields(model, { child: () => child }),
 			}),
 		})
-		const child = lift({
+		const child = {
 			read: (model: ParentModel) => model.child,
 			toParentMessage: (_message: Message) => ParentMessage.Set({ child: Option.none() }),
-		})
+		}
 		let dispatch: Option.Option<ReturnType<typeof App.useDispatch>> = Option.none()
 		let parentRenders = 0
 		function Connection() {

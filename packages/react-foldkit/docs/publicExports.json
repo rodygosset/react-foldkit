@@ -151,19 +151,19 @@
 	},
 	{
 		"entryPoint": "react-foldkit/submodel",
-		"name": "Field",
-		"owner": "react-foldkit",
-		"introduced": "0.1.0"
-	},
-	{
-		"entryPoint": "react-foldkit/submodel",
 		"name": "Lift",
 		"owner": "react-foldkit",
 		"introduced": "0.1.0"
 	},
 	{
 		"entryPoint": "react-foldkit/submodel",
-		"name": "OptionalLift",
+		"name": "OptionalProjection",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/submodel",
+		"name": "Projection",
 		"owner": "react-foldkit",
 		"introduced": "0.1.0"
 	},
@@ -188,12 +188,6 @@
 	{
 		"entryPoint": "react-foldkit/submodel",
 		"name": "define",
-		"owner": "react-foldkit",
-		"introduced": "0.1.0"
-	},
-	{
-		"entryPoint": "react-foldkit/submodel",
-		"name": "field",
 		"owner": "react-foldkit",
 		"introduced": "0.1.0"
 	},

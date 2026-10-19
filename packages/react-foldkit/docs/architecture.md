@@ -24,7 +24,7 @@ Outside production builds, the Provider checks its initial Model against the Mod
 
 ## Child Models
 
-`Submodel.define` creates child Providers and hooks. A child Provider takes the parent hooks and a lift, or a source derived with `useSubmodel`. `Submodel.field` describes a child stored in one parent field once: it reads and writes the field, wraps child Messages, and folds the child update with Foldkit's `Update.foldChild`. `Submodel.lift` describes other reads. Declare lifts outside render; the `no-inline-submodel-lift` lint rule reports lifts built during render.
+`Submodel.define` creates child Providers and hooks. A child Provider takes the parent hooks and a lift, or a source derived with `useSubmodel`. `Submodel.lift` describes a child stored in one parent field once: it reads and writes the field, wraps child Messages, and folds the child update with Foldkit's `Update.foldChild`. For any other read, pass an object with `read` and `toParentMessage`. Declare lifts outside render; the `no-inline-submodel-lift` lint rule reports lifts built during render.
 
 A child Provider consumes a projected source. It creates no Store and runs no side effects of its own. Unmounting a child does not cancel its Commands. Handle cancellation and stale child identity in the parent update.
 

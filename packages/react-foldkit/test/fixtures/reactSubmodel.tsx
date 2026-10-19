@@ -4,7 +4,7 @@ import { defineMessageUnion } from "foldkit/message"
 import type { ModelSource } from "../../src/modelSource"
 import { defineApplication } from "../../src/react"
 import { modifyFields } from "foldkit/struct"
-import { define, lift } from "../../src/submodel"
+import { define } from "../../src/submodel"
 
 export const ChildModel = Schema.Struct({ count: Schema.Finite, unrelated: Schema.Finite })
 export type ChildModel = typeof ChildModel.Type
@@ -38,10 +38,10 @@ export function createSubmodelFixture() {
 				Other: () => ({ model: modifyFields(model, { other: (other) => other + 1 }) }),
 			}),
 	})
-	const child = lift({
+	const child = {
 		read: (model: Model) => ({ ...model.child }),
 		toParentMessage: (message: ChildMessage) => Message.Child({ message }),
-	})
+	}
 	let dispatch: Option.Option<ReturnType<typeof App.useDispatch>> = Option.none()
 	let source: Option.Option<ModelSource<ChildModel, ChildMessage>> = Option.none()
 	let parentRenders = 0

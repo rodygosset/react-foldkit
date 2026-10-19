@@ -2,7 +2,7 @@ import { Cause, Effect, Equal, Exit, Option, Schema } from "effect"
 import React from "react"
 import { isDevelopment } from "../internal/deepFreeze"
 import type { ModelSource } from "../modelSource"
-import type { Lift, OptionalLift } from "../submodel/lift"
+import type { OptionalProjection, Projection } from "../submodel/lift"
 import { project, projectOptional } from "../submodel/lift"
 import type * as Update from "foldkit/update"
 import * as ProviderSession from "./providerSession"
@@ -166,7 +166,7 @@ export interface ModelHooks<Model, Message> {
 	 * `toParentMessage` creates a new source. Throws outside the matching Provider.
 	 */
 	readonly useSubmodel: <ChildModel, ChildMessage>(
-		projection: Lift<Model, Message, ChildModel, ChildMessage>
+		projection: Projection<Model, Message, ChildModel, ChildMessage>
 	) => ModelSource<ChildModel, ChildMessage>
 	/**
 	 * Returns `None` while the child Model is absent. A previously created source retains its
@@ -174,7 +174,7 @@ export interface ModelHooks<Model, Message> {
 	 * parent Provider.
 	 */
 	readonly useOptionalSubmodel: <ChildModel, ChildMessage>(
-		projection: OptionalLift<Model, Message, ChildModel, ChildMessage>
+		projection: OptionalProjection<Model, Message, ChildModel, ChildMessage>
 	) => Option.Option<ModelSource<ChildModel, ChildMessage>>
 }
 
@@ -260,14 +260,14 @@ function projectionHooks<ParentModel, ParentMessage>(useSource: () => ModelSourc
 	function useSubmodel<Model, Message>({
 		read,
 		toParentMessage,
-	}: Lift<ParentModel, ParentMessage, Model, Message>): ModelSource<Model, Message> {
+	}: Projection<ParentModel, ParentMessage, Model, Message>): ModelSource<Model, Message> {
 		const parent = useSource()
 		return React.useMemo(() => project(parent, { read, toParentMessage }), [parent, read, toParentMessage])
 	}
 	function useOptionalSubmodel<Model, Message>({
 		read,
 		toParentMessage,
-	}: OptionalLift<ParentModel, ParentMessage, Model, Message>): Option.Option<ModelSource<Model, Message>> {
+	}: OptionalProjection<ParentModel, ParentMessage, Model, Message>): Option.Option<ModelSource<Model, Message>> {
 		const parent = useSource()
 		const projected = React.useMemo(
 			() => projectOptional(parent, { read, toParentMessage }),

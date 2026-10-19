@@ -190,7 +190,7 @@ const init = (flags: Flags): UpdateReturn => ({
 	commands: [FetchTodos()],
 })
 
-const form = Submodel.field<Model>()("form", {
+const form = Submodel.lift<Model>()("form", {
 	update: TodoForm.update,
 	toParentMessage: (message: TodoForm.Message) => Message.GotFormMessage({ message }),
 	foldOutMessage: (out) => (nextModel) =>

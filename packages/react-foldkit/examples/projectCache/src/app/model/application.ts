@@ -17,6 +17,11 @@ export type Message = typeof Message.Type
 
 const toProjectMessage = (message: Project.Message) => Message.GotProjectMessage({ message })
 
+export const projects = Submodel.lift<Model>()("projects", {
+	update: Project.query.update,
+	toParentMessage: toProjectMessage,
+})
+
 const project = Project.query.lift<Model, Message>({
 	parentField: "projects",
 	toParentMessage: toProjectMessage,
@@ -24,18 +29,13 @@ const project = Project.query.lift<Model, Message>({
 
 export const update = (model: Model, message: Message) =>
 	Message.match<Update.Return<Model, Message>>(message, {
-		GotProjectMessage: ({ message }) => project.fold(model, message),
+		GotProjectMessage: ({ message }) => projects.fold(model, message),
 		OpenedProject: ({ projectId }) => project.loadIfMissing(model, { projectId }),
 		ClickedRefreshProject: ({ projectId }) => project.revalidateOrLoad(model, { projectId }),
 	})
 
 export const init = (): Update.Return<Model, Message> => ({
 	model: { projects: Project.query.init() },
-})
-
-export const projects = Submodel.lift({
-	read: (model: Model) => model.projects,
-	toParentMessage: toProjectMessage,
 })
 
 export const Application = defineApplication({
