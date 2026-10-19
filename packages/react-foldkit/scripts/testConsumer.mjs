@@ -4,7 +4,7 @@ import { dirname, join, resolve } from "node:path"
 import { tmpdir } from "node:os"
 import { fileURLToPath } from "node:url"
 import { spawnSync } from "node:child_process"
-import { Data, Effect, Schema } from "effect"
+import { Effect, Schema } from "effect"
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 const manifest = parse(
@@ -15,7 +15,10 @@ const manifest = parse(
 	}),
 	readFileSync(join(root, "package.json"), "utf8")
 )
-class ConsumerError extends Data.TaggedError("ConsumerError") {}
+class ConsumerError extends Schema.TaggedError()("ConsumerError", {
+	message: Schema.String,
+	cause: Schema.optional(Schema.Defect()),
+}) {}
 function run(command, args, cwd, cache = cwd) {
 	const result = spawnSync(command, args, {
 		cwd,

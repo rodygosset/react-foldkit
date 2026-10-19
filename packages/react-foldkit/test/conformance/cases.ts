@@ -6,15 +6,15 @@ import { defineMessageUnion } from "foldkit/message"
 import * as Subscription from "foldkit/subscription"
 import { type Case, Event, send, Trace, until } from "./harness"
 
-const updated = (observed: unknown) => Event.Updated({ observed })
+const updated = (observed: unknown) => Event.cases.Updated.make({ observed })
 
 /** Logs a Stream's lifetime under `key`, so start, stop, and restart show up in the trace. */
 const logged =
 	(record: Trace["Service"]["record"], key: string) =>
 	<A>(stream: Stream.Stream<A>): Stream.Stream<A> =>
 		stream.pipe(
-			Stream.onStart(Effect.sync(() => record(Event.Started({ key })))),
-			Stream.ensuring(Effect.sync(() => record(Event.Stopped({ key }))))
+			Stream.onStart(Effect.sync(() => record(Event.cases.Started.make({ key })))),
+			Stream.ensuring(Effect.sync(() => record(Event.cases.Stopped.make({ key }))))
 		)
 
 // 1. Init: the init Model is in place and init Commands deliver their Messages first.
@@ -105,9 +105,17 @@ export const commandChain: Case<ListModel, ChainMessage> = {
 // 4. Batch: every Command in one batch delivers. Foldkit promises no order within a batch.
 const BatchMessage = defineMessageUnion({ Fired: {}, ReceivedA: {}, ReceivedB: {} })
 type BatchMessage = typeof BatchMessage.Type
-const EmitA = Command.define("EmitA", { messages: [BatchMessage.ReceivedA], execute: Effect.succeed(BatchMessage.ReceivedA()) })
-const EmitB = Command.define("EmitB", { messages: [BatchMessage.ReceivedB], execute: Effect.succeed(BatchMessage.ReceivedB()) })
-const byObservedTag = Order.mapInput(Order.String, (event: Event) => (event._tag === "Updated" ? String(event.observed) : ""))
+const EmitA = Command.define("EmitA", {
+	messages: [BatchMessage.ReceivedA],
+	execute: Effect.succeed(BatchMessage.ReceivedA()),
+})
+const EmitB = Command.define("EmitB", {
+	messages: [BatchMessage.ReceivedB],
+	execute: Effect.succeed(BatchMessage.ReceivedB()),
+})
+const byObservedTag = Order.mapInput(Order.String, (event: Event) =>
+	event._tag === "Updated" ? String(event.observed) : ""
+)
 
 export const batch: Case<number, BatchMessage> = {
 	program: Effect.succeed({
@@ -153,7 +161,8 @@ export const subscriptionLifecycle: Case<RoomModel, RoomMessage> = {
 					{ room: Schema.Option(Schema.String) },
 					{
 						modelToDependencies: (model) => ({ room: model.room }),
-						dependenciesToStream: ({ room }) => Option.match(room, { onNone: () => Stream.empty, onSome: presence }),
+						dependenciesToStream: ({ room }) =>
+							Option.match(room, { onNone: () => Stream.empty, onSome: presence }),
 					}
 				),
 			})),
@@ -170,13 +179,13 @@ export const subscriptionLifecycle: Case<RoomModel, RoomMessage> = {
 	}),
 	expected: [
 		updated({ message: "Joined", room: Option.some("r1") }),
-		Event.Started({ key: "r1" }),
+		Event.cases.Started.make({ key: "r1" }),
 		updated({ message: "Joined", room: Option.some("r1") }),
 		updated({ message: "Joined", room: Option.some("r2") }),
-		Event.Stopped({ key: "r1" }),
-		Event.Started({ key: "r2" }),
+		Event.cases.Stopped.make({ key: "r1" }),
+		Event.cases.Started.make({ key: "r2" }),
 		updated({ message: "Left", room: Option.none() }),
-		Event.Stopped({ key: "r2" }),
+		Event.cases.Stopped.make({ key: "r2" }),
 	],
 }
 
@@ -241,7 +250,9 @@ export const interrupt: Case<number, WorkMessage> = {
 		const Work = Command.define("Work", {
 			messages: [WorkMessage.CompletedWork],
 			interrupt: true,
-			execute: Effect.sync(() => record(Event.Started({ key: "Work" }))).pipe(Effect.andThen(Effect.never)),
+			execute: Effect.sync(() => record(Event.cases.Started.make({ key: "Work" }))).pipe(
+				Effect.andThen(Effect.never)
+			),
 		})
 		return {
 			Model: Schema.Finite,
@@ -273,7 +284,7 @@ export const interrupt: Case<number, WorkMessage> = {
 	}),
 	expected: [
 		updated(WorkMessage.Started()),
-		Event.Started({ key: "Work" }),
+		Event.cases.Started.make({ key: "Work" }),
 		updated(WorkMessage.Cancelled()),
 		updated(WorkMessage.CompletedCancelWork({ interrupted: true })),
 		updated(WorkMessage.Cancelled()),
@@ -377,6 +388,6 @@ export const crash: Case<ListModel, CrashMessage> = {
 	}),
 	expected: [
 		updated({ message: CrashMessage.Added({ value: 1 }), model: [1] }),
-		Event.Crashed({ message: Option.some(CrashMessage.Exploded()) }),
+		Event.cases.Crashed.make({ message: Option.some(CrashMessage.Exploded()) }),
 	],
 }

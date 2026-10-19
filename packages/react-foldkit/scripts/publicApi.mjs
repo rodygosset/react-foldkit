@@ -2,7 +2,7 @@ import { parse, stringify } from "./json.mjs"
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs"
 import { resolve, dirname, relative } from "node:path"
 import { fileURLToPath } from "node:url"
-import { Data, Effect, Schema } from "effect"
+import { Effect, Schema } from "effect"
 import ts from "typescript6"
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..")
@@ -20,7 +20,7 @@ const entries = Object.keys(manifest.exports).map(function (entry) {
 		),
 	}
 })
-class PublicApiError extends Data.TaggedError("PublicApiError") {}
+class PublicApiError extends Schema.TaggedError()("PublicApiError", { message: Schema.String }) {}
 const mode = process.argv[2] ?? "check"
 
 function documentation(node) {

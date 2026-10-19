@@ -1,8 +1,8 @@
 import { readdirSync } from "node:fs"
 import { fileURLToPath } from "node:url"
-import { Data, Effect } from "effect"
+import { Effect, Schema } from "effect"
 
-class FilenameError extends Data.TaggedError("FilenameError") {}
+class FilenameError extends Schema.TaggedError()("FilenameError", { message: Schema.String }) {}
 
 const packageRoot = new URL("../", import.meta.url)
 const ignoredDirectories = new Set(["node_modules", "dist", "coverage", "build"])

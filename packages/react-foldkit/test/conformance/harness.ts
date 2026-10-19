@@ -1,4 +1,4 @@
-import { Array, Context, Data, Effect, Function, Layer, Option, Queue, Ref, Schema, Scope } from "effect"
+import { Array, Context, Effect, Function, Layer, Queue, Ref, Schema, Scope } from "effect"
 import * as Port from "foldkit/port"
 import { embed, makeElement } from "foldkit/runtime"
 import * as Subscription from "foldkit/subscription"
@@ -10,16 +10,16 @@ import * as Store from "../../src/store"
  * `update` wrapper, `Started` and `Stopped` from Streams or Commands that log their lifetime,
  * and `Crashed` from the runtime's crash hook.
  */
-export type Event = Data.TaggedEnum<{
-	Updated: { readonly observed: unknown }
-	Started: { readonly key: string }
-	Stopped: { readonly key: string }
-	Crashed: { readonly message: Option.Option<unknown> }
-}>
-export const Event = Data.taggedEnum<Event>()
+export const Event = Schema.TaggedUnion({
+	Updated: { observed: Schema.Unknown },
+	Started: { key: Schema.String },
+	Stopped: { key: Schema.String },
+	Crashed: { message: Schema.Option(Schema.Unknown) },
+})
+export type Event = typeof Event.Type
 
 /** No event arrived that satisfied a step within the deadline. */
-export class Unsettled extends Data.TaggedError("Unsettled")<{ readonly events: ReadonlyArray<Event> }> {}
+export class Unsettled extends Schema.TaggedError<Unsettled>()("Unsettled", { events: Schema.Array(Event) }) {}
 
 const settleDeadline = "2 seconds"
 
@@ -60,10 +60,9 @@ export class Trace extends Context.Service<
 }
 
 /** Sends Messages into the runtime under test, the way an external caller would. */
-export class Driver extends Context.Service<
-	Driver,
-	{ readonly send: (message: unknown) => Effect.Effect<void> }
->()("react-foldkit/conformance/Driver") {}
+export class Driver extends Context.Service<Driver, { readonly send: (message: unknown) => Effect.Effect<void> }>()(
+	"react-foldkit/conformance/Driver"
+) {}
 
 export const send = (message: unknown): Effect.Effect<void, never, Driver> =>
 	Effect.gen(function* () {
@@ -107,10 +106,13 @@ export type Runtime = <Model, Message extends Tagged, R>(
 	program: Program<Model, Message, R>
 ) => Effect.Effect<Driver["Service"], never, Trace | Scope.Scope>
 
-const traced = <Model, Message extends Tagged, R>(record: (event: Event) => void, program: Program<Model, Message, R>) =>
+const traced = <Model, Message extends Tagged, R>(
+	record: (event: Event) => void,
+	program: Program<Model, Message, R>
+) =>
 	function (model: Model, message: Message): Update.Return<Model, Message, R> {
 		const next = program.update(model, message)
-		record(Event.Updated({ observed: program.observe(message, next.model) }))
+		record(Event.cases.Updated.make({ observed: program.observe(message, next.model) }))
 		return next
 	}
 
@@ -121,7 +123,7 @@ export const storeRuntime: Runtime = <Model, Message extends Tagged, R>(program:
 			{
 				update: traced(record, program),
 				...(program.subscriptions === undefined ? {} : { subscriptions: program.subscriptions }),
-				onCrash: (_cause, message) => record(Event.Crashed({ message })),
+				onCrash: (_cause, message) => record(Event.cases.Crashed.make({ message })),
 				resources: program.resources,
 			},
 			program.init()
@@ -137,7 +139,9 @@ export const foldkitRuntime: Runtime = <Model, Message extends Tagged, R>(progra
 		const { record } = yield* Trace
 		const ports = { inbound: { input: Port.inbound(program.Message) } }
 		const container = yield* Effect.acquireRelease(
-			Effect.sync(() => document.body.appendChild(Object.assign(document.createElement("div"), { id: "conformance" }))),
+			Effect.sync(() =>
+				document.body.appendChild(Object.assign(document.createElement("div"), { id: "conformance" }))
+			),
 			(element) => Effect.sync(() => element.remove())
 		)
 		const handle = yield* Effect.acquireRelease(
@@ -154,7 +158,7 @@ export const foldkitRuntime: Runtime = <Model, Message extends Tagged, R>(progra
 								input: Port.subscriptionEntry(ports.inbound.input, Function.identity),
 							})),
 						},
-						crash: { report: ({ message }) => record(Event.Crashed({ message })) },
+						crash: { report: ({ message }) => record(Event.cases.Crashed.make({ message })) },
 						resources: program.resources,
 						ports,
 						container,
