@@ -17,7 +17,8 @@ export type Message = typeof Message.Type
 
 const toProjectMessage = (message: Project.Message) => Message.GotProjectMessage({ message })
 
-export const projects = Submodel.lift<Model>()("projects", {
+export const projects = Submodel.lift<Model>()({
+	field: "projects",
 	update: Project.query.update,
 	toParentMessage: toProjectMessage,
 })

@@ -730,7 +730,7 @@ A child stored in one field of its parent Model, described once for both halves 
 Submodel. Pass it to a Submodel Provider or `useSubmodel`, and call `fold` from the parent
 update to run the child update and write the result back.
 
-- `key` The parent field that holds the child Model.
+- `field` The parent field that holds the child Model.
 
   ```ts
   string
@@ -928,7 +928,7 @@ export function View() {
 
 Lifts a child stored in one field of the parent Model. The result reads and writes that
 field, lifts child Messages, and folds the child update, so the view and update halves share
-one declaration. Supply the parent Model type first.
+one declaration. Supply the parent Model type in the first call and the options in the second.
 
 **Example** (Embedding a form in a parent Model)
 
@@ -960,7 +960,8 @@ type Model = typeof Model.Type
 const Message = defineMessageUnion({ GotFormMessage: { message: Form.Message } })
 type Message = typeof Message.Type
 
-export const form = Submodel.lift<Model>()("form", {
+export const form = Submodel.lift<Model>()({
+  field: "form",
   update: Form.update,
   toParentMessage: (message: Form.Message) => Message.GotFormMessage({ message }),
 })

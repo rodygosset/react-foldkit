@@ -119,26 +119,30 @@ it("publishes all six rules and keeps local-state policy opt-in", function () {
 })
 tester.run("no-inline-submodel-lift", rules["no-inline-submodel-lift"], {
 	valid: [
-		valid(app + "const child = lift()('child', options); function View() { App.useSubmodel(child) }"),
+		valid(app + "const child = lift()({ ...options, field: 'child' }); function View() { App.useSubmodel(child) }"),
 		valid(
-			app + "function View() { const child = useMemo(() => lift()('child', options), []); App.useSubmodel(child) }"
+			app +
+				"function View() { const child = useMemo(() => lift()({ ...options, field: 'child' }), []); App.useSubmodel(child) }"
 		),
 		valid(
 			submodelApp +
-				"const form = Submodel.lift()('form', options); function View() { return <Child.Provider from={App} lift={form}/> }"
+				"const form = Submodel.lift()({ ...options, field: 'form' }); function View() { return <Child.Provider from={App} lift={form}/> }"
 		),
 		valid("function View() { other({ read }) }"),
 	],
 	invalid: [
 		invalid(app + "function View() { App.useSubmodel({ read, toParentMessage }) }", "inlineLift"),
-		invalid(app + "function View() { App.useSubmodel(Submodel.lift()('child', options)) }", "inlineLift"),
+		invalid(
+			app + "function View() { App.useSubmodel(Submodel.lift()({ ...options, field: 'child' })) }",
+			"inlineLift"
+		),
 		invalid(
 			submodelApp + "function View() { return <Child.Provider from={App} lift={{ read, toParentMessage }}/> }",
 			"inlineLift"
 		),
 		invalid(
 			submodelApp +
-				"function View() { return <Child.Provider from={App} lift={lift()('form', options)}/> }",
+				"function View() { return <Child.Provider from={App} lift={lift()({ ...options, field: 'form' })}/> }",
 			"inlineLift"
 		),
 	],

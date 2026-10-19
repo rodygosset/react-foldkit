@@ -85,19 +85,21 @@ interface Projection<ParentModel, ParentMessage, Model, Message> {
   readonly toParentMessage: (message: Message) => ParentMessage;
 }
 interface Lift<ParentModel, ParentMessage, Model, Message, FoldResult> extends Projection<ParentModel, ParentMessage, Model, Message> {
-  readonly key: string;
+  readonly field: string;
   readonly write: (model: ParentModel, child: Model) => ParentModel;
   readonly fold: FoldResult;
 }
 type LiftUpdate<Model, Message, R> = (model: Model, message: Message) => Update.Return<Model, Message, R>;
 type LiftUpdateWithOutMessage<Model, Message, OutMessage, R> = (model: Model, message: Message) => Update.ReturnWithOutMessage<Model, Message, OutMessage, R>;
 declare function lift<ParentModel>(): {
-  <K extends keyof ParentModel & string, ParentMessage, Message, OutMessage, R = never, StepR = R, StepMessage = ParentMessage>(key: K, options: {
+  <K extends keyof ParentModel & string, ParentMessage, Message, OutMessage, R = never, StepR = R, StepMessage = ParentMessage>(options: {
+    readonly field: K;
     readonly update: LiftUpdateWithOutMessage<ParentModel[K], Message, OutMessage, R>;
     readonly toParentMessage: (message: Message) => ParentMessage;
     readonly foldOutMessage: (outMessage: OutMessage, context: Update.FoldContext<Message, ParentMessage>) => Update.Step<NoInfer<ParentModel>, StepMessage, StepR>;
   }): Lift<ParentModel, ParentMessage, ParentModel[K], Message, Update.Fold<ParentModel, ParentMessage | StepMessage, Message, R | StepR>>;
-  <K extends keyof ParentModel & string, ParentMessage, Message, R = never>(key: K, options: {
+  <K extends keyof ParentModel & string, ParentMessage, Message, R = never>(options: {
+    readonly field: K;
     readonly update: LiftUpdate<ParentModel[K], Message, R>;
     readonly toParentMessage: (message: Message) => ParentMessage;
   }): Lift<ParentModel, ParentMessage, ParentModel[K], Message, Update.Fold<ParentModel, ParentMessage, Message, R>>;

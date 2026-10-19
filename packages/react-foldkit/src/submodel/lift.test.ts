@@ -93,10 +93,10 @@ type Parent = { readonly child: Child; readonly saved: ReadonlyArray<string> }
 const toParentMessage = (message: ChildMessage) => Message.GotChildMessage({ message })
 
 it("reads, writes, and folds a child field with lifted Commands", function () {
-	const child = Lift.lift<Parent>()("child", { update: childUpdate, toParentMessage })
+	const child = Lift.lift<Parent>()({ field: "child", update: childUpdate, toParentMessage })
 	const parent: Parent = { child: { text: "a" }, saved: [] }
 
-	expect(child.key).toBe("child")
+	expect(child.field).toBe("child")
 	expect(child.read(parent)).toBe(parent.child)
 	expect(child.write(parent, parent.child)).toBe(parent)
 
@@ -109,7 +109,8 @@ it("reads, writes, and folds a child field with lifted Commands", function () {
 })
 
 it("folds child OutMessages into the parent", function () {
-	const child = Lift.lift<Parent>()("child", {
+	const child = Lift.lift<Parent>()({
+		field: "child",
 		update: childUpdateWithOut,
 		toParentMessage,
 		foldOutMessage: (out) => (model: Parent) => ({
@@ -122,5 +123,5 @@ it("folds child OutMessages into the parent", function () {
 
 it("rejects keys that are not parent fields", function () {
 	// @ts-expect-error "missing" is not a field of Parent
-	Lift.lift<Parent>()("missing", { update: childUpdate, toParentMessage })
+	Lift.lift<Parent>()({ field: "missing", update: childUpdate, toParentMessage })
 })

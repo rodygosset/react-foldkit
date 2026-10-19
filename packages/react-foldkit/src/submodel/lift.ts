@@ -29,12 +29,16 @@ export interface Projection<ParentModel, ParentMessage, Model, Message> {
  * @category models
  * @since 0.1.0
  */
-export interface Lift<ParentModel, ParentMessage, Model, Message, FoldResult>
-	extends Projection<ParentModel, ParentMessage, Model, Message> {
+export interface Lift<ParentModel, ParentMessage, Model, Message, FoldResult> extends Projection<
+	ParentModel,
+	ParentMessage,
+	Model,
+	Message
+> {
 	/**
 	 * The parent field that holds the child Model.
 	 */
-	readonly key: string
+	readonly field: string
 	/**
 	 * Replaces the child Model, returning the same parent when the child is unchanged.
 	 */
@@ -56,7 +60,7 @@ type LiftUpdateWithOutMessage<Model, Message, OutMessage, R> = (
 /**
  * Lifts a child stored in one field of the parent Model. The result reads and writes that
  * field, lifts child Messages, and folds the child update, so the view and update halves share
- * one declaration. Supply the parent Model type first.
+ * one declaration. Supply the parent Model type in the first call and the options in the second.
  *
  * **Example** (Embedding a form in a parent Model)
  *
@@ -88,7 +92,8 @@ type LiftUpdateWithOutMessage<Model, Message, OutMessage, R> = (
  * const Message = defineMessageUnion({ GotFormMessage: { message: Form.Message } })
  * type Message = typeof Message.Type
  *
- * export const form = Submodel.lift<Model>()("form", {
+ * export const form = Submodel.lift<Model>()({
+ * 	field: "form",
  * 	update: Form.update,
  * 	toParentMessage: (message: Form.Message) => Message.GotFormMessage({ message }),
  * })
@@ -109,55 +114,52 @@ export function lift<ParentModel>() {
 		R = never,
 		StepR = R,
 		StepMessage = ParentMessage,
-	>(
-		key: K,
-		options: {
-			readonly update: LiftUpdateWithOutMessage<ParentModel[K], Message, OutMessage, R>
-			readonly toParentMessage: (message: Message) => ParentMessage
-			readonly foldOutMessage: (
-				outMessage: OutMessage,
-				context: Update.FoldContext<Message, ParentMessage>
-			) => Update.Step<NoInfer<ParentModel>, StepMessage, StepR>
-		}
-	): Lift<
+	>(options: {
+		readonly field: K
+		readonly update: LiftUpdateWithOutMessage<ParentModel[K], Message, OutMessage, R>
+		readonly toParentMessage: (message: Message) => ParentMessage
+		readonly foldOutMessage: (
+			outMessage: OutMessage,
+			context: Update.FoldContext<Message, ParentMessage>
+		) => Update.Step<NoInfer<ParentModel>, StepMessage, StepR>
+	}): Lift<
 		ParentModel,
 		ParentMessage,
 		ParentModel[K],
 		Message,
 		Update.Fold<ParentModel, ParentMessage | StepMessage, Message, R | StepR>
 	>
-	function build<K extends keyof ParentModel & string, ParentMessage, Message, R = never>(
-		key: K,
-		options: {
-			readonly update: LiftUpdate<ParentModel[K], Message, R>
-			readonly toParentMessage: (message: Message) => ParentMessage
-		}
-	): Lift<ParentModel, ParentMessage, ParentModel[K], Message, Update.Fold<ParentModel, ParentMessage, Message, R>>
+	function build<K extends keyof ParentModel & string, ParentMessage, Message, R = never>(options: {
+		readonly field: K
+		readonly update: LiftUpdate<ParentModel[K], Message, R>
+		readonly toParentMessage: (message: Message) => ParentMessage
+	}): Lift<ParentModel, ParentMessage, ParentModel[K], Message, Update.Fold<ParentModel, ParentMessage, Message, R>>
 	// eslint-disable-next-line foldkit-style/prefer-arrow-for-expression-return -- Overloads describe each foldChild shape.
-	function build(key: string, options: AnyLiftOptions): unknown {
-		return makeLift(key, options)
+	function build(options: AnyLiftOptions): unknown {
+		return makeLift(options)
 	}
 	return build
 }
 
 type AnyLiftOptions = {
+	readonly field: string
 	readonly update: (model: never, message: never) => unknown
 	readonly toParentMessage: (message: never) => unknown
 	readonly foldOutMessage?: (outMessage: never, context: never) => unknown
 }
 
-function makeLift(key: string, options: AnyLiftOptions) {
+function makeLift({ field, ...options }: AnyLiftOptions) {
 	type Parent = Readonly<Record<string, unknown>>
-	const read = (model: Parent) => model[key]
+	const read = (model: Parent) => model[field]
 	const write = (model: Parent, child: unknown): Parent =>
-		Object.is(model[key], child) ? model : { ...model, [key]: child }
+		Object.is(model[field], child) ? model : { ...model, [field]: child }
 	// foldChild picks its OutMessage behavior from the presence of foldOutMessage.
 	const fold = Update.foldChild({
 		...options,
 		read: (model: Parent) => Option.some(read(model)),
 		write,
 	} as Parameters<typeof Update.foldChild>[0])
-	return { key, read, write, toParentMessage: options.toParentMessage, fold }
+	return { field, read, write, toParentMessage: options.toParentMessage, fold }
 }
 
 /**

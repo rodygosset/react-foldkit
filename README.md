@@ -143,7 +143,8 @@ type Model = typeof Model.Type
 const Message = defineMessageUnion({ GotFormMessage: { message: Form.Message } })
 type Message = typeof Message.Type
 
-const form = Submodel.lift<Model>()("form", {
+const form = Submodel.lift<Model>()({
+  field: "form",
   update: Form.update,
   toParentMessage: (message: Form.Message) => Message.GotFormMessage({ message }),
   foldOutMessage: (out) => (model: Model) => ({
