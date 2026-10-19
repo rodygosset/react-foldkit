@@ -2,7 +2,7 @@
 
 React bindings for [Foldkit](https://foldkit.dev), built on Effect. Application state lives in a Model. Messages describe events, pure updates change the Model, and Commands run side effects. React renders the result.
 
-The examples below start with a counter, then add a child feature and preloaded route data. Each example is a separate application; replace the previous `App.tsx` when moving to the next one.
+The examples below start with a counter, then add a child feature and load data with a Query. Each example is a separate application; replace the previous `App.tsx` when moving to the next one.
 
 ## Run locally
 

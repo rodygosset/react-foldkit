@@ -1,7 +1,7 @@
 {
 	"name": "react-foldkit",
 	"version": "0.1.0",
-	"description": "React TEA bindings over Foldkit vocabulary (Command, Message, Update, Subscription, AsyncData).",
+	"description": "React bindings for Foldkit programs: application Providers, Model hooks, the Store, and Submodels.",
 	"type": "module",
 	"license": "MIT",
 	"author": "Rody Gosset",

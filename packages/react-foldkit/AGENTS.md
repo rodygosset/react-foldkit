@@ -10,6 +10,7 @@ Read [the runtime explanation](docs/architecture.md) before changing lifecycle b
 - Keep observer failures separate from Message delivery. Commit has no rollback and does not wait for Commands.
 - Effect hosts can supply ambient services to `Store.make`. React and `Store.boot` require a closed Layer when services are needed.
 - Preserve Foldkit's interrupt compatibility and the two-Store isolation test.
+- Keep `test/conformance` passing. It runs the same programs on the Store and on Foldkit's runtime; change an expected trace only when Foldkit changed that behavior on purpose.
 
 ## Keep the package consistent
 

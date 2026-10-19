@@ -49,7 +49,8 @@ export interface CrashContext<Model, Message> {
 export interface CrashConfig<Model, Message> {
 	/**
 	 * Renders in place of the Provider's children. Call `restart` to remount the Provider with
-	 * a fresh Store from `init`. The default view shows an Error's message.
+	 * a fresh Store from `init`. The default view shows a typed failure's message, or a generic
+	 * message for defects.
 	 */
 	readonly view?: (context: CrashContext<Model, Message> & { readonly restart: () => void }) => React.ReactNode
 	/**
@@ -314,8 +315,8 @@ function SessionLifecycle({ session }: { readonly session: ProviderSession.Provi
  *
  * **Details**
  *
- * The Provider renders the initial Model during render, including SSR. Commands and Subscriptions start when React activates the Provider.
- * Deactivation stops them and retains the Model for reactivation, unless `retainInactive`
+ * The Provider renders the initial Model during render, including SSR. Commands and
+ * Subscriptions start when React activates the Provider. Deactivation stops them and retains the Model for reactivation, unless `retainInactive`
  * keeps the Store running for a while.
  *
  * Completed init Commands do not run again after reactivation. Interrupted init Commands

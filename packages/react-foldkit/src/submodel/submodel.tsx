@@ -70,8 +70,9 @@ export class ProviderError extends Schema.Error<ProviderError>("react-foldkit/Su
 /**
  * Creates a child Provider and hooks for a parent-owned Model source.
  *
- * The Provider forwards snapshots and Messages through its `source` prop. It does not create a
- * Store, acquire services, or start Commands. Required hooks throw `ProviderError`
+ * The Provider reads the child from a parent with `from` and `lift`, or takes a `source` you
+ * already derived, and forwards its snapshots and Messages. It does not create a Store,
+ * acquire services, or start Commands. Required hooks throw `ProviderError`
  * outside this Provider; optional hooks return `None`.
  *
  * **Example** (Sharing a parent-owned counter with a child view)

@@ -15,7 +15,7 @@ import { defineApplication } from "react-foldkit/react"
 import { modifyFields } from "foldkit/struct"
 import type * as Update from "foldkit/update"
 
-const Model = Schema.Struct({ count: Schema.Number })
+const Model = Schema.Struct({ count: Schema.Finite })
 type Model = typeof Model.Type
 
 const Message = defineMessageUnion({ ClickedIncrement: {} })
@@ -43,7 +43,7 @@ export function App() {
 }
 ```
 
-The `Model` Schema supplies type inference. The Provider does not validate Model values with it. Keep updates pure and snapshots immutable.
+The `Model` Schema supplies type inference. Outside production builds, the Provider also checks the initial Model against it and freezes published Models, so accidental mutation throws. Keep updates pure.
 
 ## Read next
 

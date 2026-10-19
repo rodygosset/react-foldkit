@@ -8,7 +8,7 @@ The checks build the package, exercise its contracts, and validate consumers aga
 bun run check
 ```
 
-This builds the library, checks workspace and consumer types, runs runtime and package tests, lints code, typechecks the project-cache example, and checks generated documentation and API declarations.
+This builds the library, checks workspace and consumer types, runs runtime and package tests (including the conformance suite against Foldkit's runtime), lints code, typechecks the project-cache example, and checks generated documentation and API declarations.
 
 For a focused check, run `bun run --filter=react-foldkit` with `typecheck`, `test`, or `lint`. The [shared lint guide](../eslint/README.md) explains repository conventions.
 

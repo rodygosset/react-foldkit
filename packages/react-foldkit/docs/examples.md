@@ -15,7 +15,7 @@ import { defineApplication } from "react-foldkit/react"
 import { modifyFields } from "foldkit/struct"
 import type * as Update from "foldkit/update"
 
-const Model = Schema.Struct({ count: Schema.Number })
+const Model = Schema.Struct({ count: Schema.Finite })
 type Model = typeof Model.Type
 
 const Message = defineMessageUnion({
@@ -80,7 +80,7 @@ Replace the Model, Message, update, and `Counter` declarations with the followin
 
 ```ts
 const Model = Schema.Struct({
-  count: Schema.Number,
+  count: Schema.Finite,
   isWaiting: Schema.Boolean,
 })
 type Model = typeof Model.Type
@@ -168,7 +168,7 @@ The view now handles an asynchronous interaction without running Effects itself.
 The Provider reads `init` once. When a value from outside the application keeps changing, such as a route search parameter, send each change to update instead of remounting the Provider. Remounting would discard the Model and restart its Commands.
 
 ```tsx
-const Message = defineMessageUnion({ ChangedStep: { step: Schema.Number } })
+const Message = defineMessageUnion({ ChangedStep: { step: Schema.Finite } })
 
 function SyncStep({ step }: { readonly step: number }) {
   Counter.useInbound(step, (step) => Message.ChangedStep({ step }))
@@ -200,4 +200,4 @@ const Counter = defineApplication({
 
 A Provider's `crash` prop overrides either callback for that Provider.
 
-For child Models and route-loaded data, continue with the [project-cache example](../examples/projectCache/README.md). See [how the runtime works](architecture.md) for ownership and cancellation.
+For child Models and Queries, continue with the [workspace README](../../../README.md#give-a-todo-form-its-own-submodel) and the [project-cache example](../examples/projectCache/README.md). See [how the runtime works](architecture.md) for ownership and cancellation.

@@ -55,7 +55,7 @@ export function make<Model, Message>(
 	const isRunning = (lifetime: Lifetime) => running === lifetime
 	const crash = () => (Exit.isSuccess(bootstrap) ? bootstrap.value.store.getCrash() : Option.none())
 
-	// Observer failures are logged here. They never reach renderError.
+	// Report failures are logged here. They never reach the crash view.
 	const report = (cause: Cause.Cause<unknown>): Effect.Effect<void, never> =>
 		Effect.suspend(() => onError(cause)).pipe(
 			Effect.catchCause(function (observed) {
