@@ -17,7 +17,7 @@ For a focused check, run `bun run --filter=react-foldkit` with `typecheck`, `tes
 Install Chromium once, then run the additional checks.
 
 ```sh
-bunx playwright install chromium
+bun run --filter=react-foldkit browser:install
 bun run check:release
 ```
 

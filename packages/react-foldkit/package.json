@@ -33,7 +33,8 @@
 		"check:docs": "node scripts/publicApi.mjs check",
 		"check:api": "node scripts/publicApi.mjs api",
 		"test:consumer": "node scripts/testConsumer.mjs",
-		"test:browser:cold": "node scripts/testBrowserCold.mjs"
+		"test:browser:cold": "node scripts/testBrowserCold.mjs",
+		"browser:install": "playwright install chromium"
 	},
 	"exports": {
 		".": {

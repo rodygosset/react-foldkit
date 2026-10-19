@@ -34,6 +34,6 @@ jobs:
                   pnpm install --frozen-lockfile
                   pnpm --filter foldkit build
             - run: bun install --frozen-lockfile
-            - run: bun x --no-install playwright install --with-deps chromium
+            - run: bun run --filter=react-foldkit browser:install -- --with-deps
             - run: bun run check:release
             - run: bun run --filter=react-foldkit coverage
