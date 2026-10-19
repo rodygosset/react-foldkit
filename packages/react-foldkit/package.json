@@ -75,7 +75,7 @@
 		"docs"
 	],
 	"peerDependencies": {
-		"effect": "4.0.0",
+		"effect": "^4.0.0",
 		"foldkit": ">=0.166.0",
 		"eslint": "^9",
 		"react": "^19.2.6"

@@ -682,7 +682,9 @@ Use it to await a result produced by a Command or Subscription without polling t
 **Details**
 
 The Effect checks the current Model first. If the selector returns `None`, it waits for
-changes and checks again. It removes its listeners on completion or interruption.
+changes and checks again. It removes its listeners on completion or interruption. When a
+later Model matches, the Effect continues after the Store finishes delivering the Message
+that produced it, so the caller can `commit` right away.
 
 A crashed Store fails with `Crashed`; a disposed Store fails with `Disposed`. These failures
 take priority even if the last Model matches. Exceptions from the selector become defects.

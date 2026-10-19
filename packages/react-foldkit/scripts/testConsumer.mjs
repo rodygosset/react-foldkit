@@ -59,7 +59,7 @@ const program = Effect.acquireUseRelease(
 					dependencies: {
 						"react-foldkit": "file:" + reactFoldkit,
 						foldkit: "file:" + foldkit,
-						effect: manifest.peerDependencies.effect,
+						effect: manifest.devDependencies.effect,
 						react: "19.2.6",
 						"react-dom": "19.2.6",
 						eslint: "9.39.5",

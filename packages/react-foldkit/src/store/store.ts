@@ -249,7 +249,9 @@ export const commit: {
  * **Details**
  *
  * The Effect checks the current Model first. If the selector returns `None`, it waits for
- * changes and checks again. It removes its listeners on completion or interruption.
+ * changes and checks again. It removes its listeners on completion or interruption. When a
+ * later Model matches, the Effect continues after the Store finishes delivering the Message
+ * that produced it, so the caller can `commit` right away.
  *
  * A crashed Store fails with `Crashed`; a disposed Store fails with `Disposed`. These failures
  * take priority even if the last Model matches. Exceptions from the selector become defects.
@@ -312,8 +314,15 @@ export const takeWhen: {
 			unsubscribeModel()
 			unsubscribeCrash()
 		}
-		function check(): void {
+		// Listeners run inside the Store's delivery. Resuming there would make the caller's next
+		// commit reentrant, so a match found by a listener continues after a yield.
+		function check(fromListener: boolean): void {
 			if (settled) return
+			function settle(effect: Effect.Effect<A, Disposed | Crashed>): void {
+				settled = true
+				cleanup()
+				resume(fromListener ? Effect.andThen(Effect.yieldNow, effect) : effect)
+			}
 			const crash = store.getCrash()
 			const result: Exit.Exit<Option.Option<A>, Disposed | Crashed> = Option.isSome(crash)
 				? Exit.fail(
@@ -327,20 +336,13 @@ export const takeWhen: {
 							Result.try(() => pick(store.getModel())),
 							{ onSuccess: Exit.succeed, onFailure: Exit.die }
 						)
-			if (Exit.isFailure(result)) {
-				settled = true
-				cleanup()
-				resume(Effect.failCause(result.cause))
-			} else if (Option.isSome(result.value)) {
-				settled = true
-				cleanup()
-				resume(Effect.succeed(result.value.value))
-			}
+			if (Exit.isFailure(result)) settle(Effect.failCause(result.cause))
+			else if (Option.isSome(result.value)) settle(Effect.succeed(result.value.value))
 		}
-		check()
+		check(false)
 		if (settled) return
-		unsubscribeModel = store.subscribe(check)
-		unsubscribeCrash = store.subscribeCrash(check)
+		unsubscribeModel = store.subscribe(() => check(true))
+		unsubscribeCrash = store.subscribeCrash(() => check(true))
 		// A synchronous subscription may settle before it returns its cleanup handle.
 		if (settled) cleanup()
 		return Effect.sync(cleanup)

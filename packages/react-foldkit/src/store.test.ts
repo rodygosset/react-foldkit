@@ -560,8 +560,6 @@ describe("dispose", function () {
 				{ model: 0, commands: [{ name: "BuildResources", effect: Effect.succeed(1) }] }
 			)
 			yield* Store.takeWhen(store, (model) => (model === 1 ? Option.some(model) : Option.none()))
-			// takeWhen resumes inside the delivery that matched. Leave it so the next commit can run.
-			yield* Effect.yieldNow
 
 			// commit, unlike dispatch, processes the Message now even when the drain budget is spent.
 			expect(Result.isFailure(store.commit(2))).toBe(true)
@@ -811,6 +809,29 @@ describe("command message mappers", function () {
 			store.dispatch(CountMessage.Increment())
 			const n = yield* Fiber.join(fiber)
 			expect(n).toBe(2)
+		})
+	)
+
+	// The documented use: commit, wait for a Command's result, then keep sending Messages.
+	it.effect("takeWhen resumes after the delivery that matched, so the caller can commit next", () =>
+		Effect.gen(function* () {
+			const LoadMessage = defineMessageUnion({ Started: {}, Loaded: {}, Continued: {} })
+			type LoadMessage = typeof LoadMessage.Type
+			const store = yield* Store.make<number, LoadMessage>(
+				{
+					update: (model, message) =>
+						LoadMessage.match(message, {
+							Started: () => ({ model, commands: [{ name: "Load", effect: Effect.succeed(LoadMessage.Loaded()) }] }),
+							Loaded: () => ({ model: model + 1 }),
+							Continued: () => ({ model: model + 10 }),
+						}),
+				},
+				{ model: 0 }
+			)
+			yield* Store.commit(store, LoadMessage.Started())
+			yield* Store.takeWhen(store, (model) => (model === 1 ? Option.some(model) : Option.none()))
+			yield* Store.commit(store, LoadMessage.Continued())
+			expect(store.getModel()).toBe(11)
 		})
 	)
 
