@@ -38,6 +38,11 @@ it.live.each([false, true])("restarts pending reads without replaying mutations 
 			typeof query.Message.Type | { readonly _tag: "ClickedLoad" } | { readonly _tag: "ResumedApplication" }
 		const App = defineApplication({
 			Model: query.Model,
+			Message: Schema.Union([
+				query.Message,
+				Schema.TaggedStruct("ClickedLoad", {}),
+				Schema.TaggedStruct("ResumedApplication", {}),
+			]),
 			onReactivate: (): Message => ({ _tag: "ResumedApplication" }),
 			update(model: Model, message: Message) {
 				switch (message._tag) {
@@ -131,6 +136,7 @@ it.live("reports the original reactivation update defect and recovers on a later
 		const rendered: Cause.Cause<unknown>[] = []
 		const App = defineApplication({
 			Model: Schema.Finite,
+			Message: Schema.Finite,
 			onReactivate: () => 1,
 			update(model: number, message: number) {
 				if (shouldFail) throw defect
@@ -188,6 +194,7 @@ it.live.each([false, true])("renders a new callback defect after Activity retain
 		const rendered: Cause.Cause<unknown>[] = []
 		const App = defineApplication({
 			Model: Schema.Finite,
+			Message: Schema.Finite,
 			update(model: number, message: number) {
 				if (message === 9) throw previous
 				return { model: model + message }

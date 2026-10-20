@@ -11,6 +11,7 @@ function makeMountingApplication() {
 	const handled: Array<number> = []
 	const App = defineApplication({
 		Model: Schema.Finite,
+		Message: Schema.Finite,
 		update(_model: number, message: number) {
 			handled.push(message)
 			return { model: message }

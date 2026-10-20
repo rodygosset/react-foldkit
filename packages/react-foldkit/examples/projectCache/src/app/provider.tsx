@@ -4,7 +4,7 @@ import * as Application from "./application"
 
 export function Provider({ children }: { children: React.ReactNode }) {
 	return (
-		<Application.Provider init={Application.init()}>
+		<Application.Provider>
 			<Project.Provider
 				from={Application.Application}
 				lift={Application.projectsProjection}

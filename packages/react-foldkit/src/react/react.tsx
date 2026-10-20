@@ -7,9 +7,11 @@ import { project, projectOptional } from "../submodel/lift"
 import type * as Update from "foldkit/update"
 import * as ProviderSession from "./providerSession"
 import * as ReactStore from "./reactStore"
+import { sendFor, type Send } from "./send"
 import * as ModelSelectors from "./useModel"
 
 export type { ReactivationContext } from "./reactStore"
+export type { Send } from "./send"
 
 type ModelCodec = Schema.Codec<unknown, unknown, unknown, unknown>
 
@@ -62,9 +64,9 @@ export interface CrashConfig<Model, Message> {
 }
 
 /**
- * The Model Schema and Program used to create a React application with `defineApplication`.
- * Define a pure update function here and return Commands for side effects. Provide services
- * needed by Commands or Subscriptions through `resources`.
+ * The Model Schema, Message union, and Program used to create a React application with
+ * `defineApplication`. Define a pure update function here and return Commands for side effects.
+ * Provide services needed by Commands or Subscriptions through `resources`.
  *
  * The Layer must require no additional services and have no typed failures. The Model Schema
  * supplies the TypeScript type. Outside production builds, the Provider also checks its initial
@@ -83,6 +85,16 @@ export type Config<ModelSchema extends ModelCodec, Message, R = never> = ReactSt
 	 */
 	readonly Model: ModelSchema
 	/**
+	 * The Schema of the Messages update handles, usually the union from `defineMessageUnion`.
+	 * `useSend` builds Messages with its constructors.
+	 */
+	readonly Message: Schema.Schema<Message>
+	/**
+	 * Creates the initial Model and Commands when a Provider has no `init` prop. The Provider
+	 * calls it once per initialization, including after a crash view's `restart`.
+	 */
+	readonly init?: () => Update.Return<Type<ModelSchema>, Message, R>
+	/**
 	 * Default failure view and reporting for every Provider of this application.
 	 */
 	readonly crash?: CrashConfig<Type<ModelSchema>, Message>
@@ -96,7 +108,8 @@ export type Config<ModelSchema extends ModelCodec, Message, R = never> = ReactSt
 /**
  * Props for the application Provider that supplies the Model and Message handlers to its views.
  * `init` supplies the initial Model and Commands, and `crash` overrides how this Provider shows
- * and reports failures.
+ * and reports failures. `init` is optional when the application config has an `init`, and
+ * replaces it when passed.
  *
  * The Provider captures `init` on initialization. Changing it later does not replace it.
  * Children and crash callbacks follow subsequent renders. Use `useInbound` to send later prop
@@ -105,18 +118,19 @@ export type Config<ModelSchema extends ModelCodec, Message, R = never> = ReactSt
  * @category configuration
  * @since 0.1.0
  */
-export type ProviderProps<Model, Message, R = never> = {
-	/**
-	 * Initial Model and Commands, or a function that creates them. The Provider calls a function
-	 * once per initialization, including after a crash view's `restart`.
-	 */
-	readonly init: Update.Return<Model, Message, R> | (() => Update.Return<Model, Message, R>)
+export type ProviderProps<Model, Message, R = never, HasInit extends boolean = false> = {
 	readonly children?: React.ReactNode
 	/**
 	 * Overrides the application's crash view or report for this Provider.
 	 */
 	readonly crash?: CrashConfig<Model, Message>
-}
+} & (HasInit extends true ? { readonly init?: Init<Model, Message, R> } : { readonly init: Init<Model, Message, R> })
+
+/**
+ * Initial Model and Commands, or a function that creates them. The Provider calls a function
+ * once per initialization, including after a crash view's `restart`.
+ */
+type Init<Model, Message, R> = Update.Return<Model, Message, R> | (() => Update.Return<Model, Message, R>)
 
 /**
  * The hooks shared by applications and Submodels.
@@ -142,6 +156,12 @@ export interface ModelHooks<Model, Message> {
 	 * delivery or wait for Commands. Throws outside the matching Provider.
 	 */
 	readonly useDispatch: () => (message: Message) => void
+	/**
+	 * Returns a Send for the Provider's Message union. Call `send.Tag(fields)` to build and
+	 * dispatch a Message, or `send(message)` to dispatch one you built. Its identity is stable
+	 * while the Provider's source is. Throws outside the matching Provider.
+	 */
+	readonly useSend: () => Send<Message>
 	/**
 	 * Reads `Some(Model)` inside the matching Provider and `None` outside it.
 	 */
@@ -187,12 +207,15 @@ export interface ModelHooks<Model, Message> {
  * @category models
  * @since 0.1.0
  */
-export interface Application<Model, Message, R = never> extends ModelHooks<Model, Message> {
+export interface Application<Model, Message, R = never, HasInit extends boolean = false> extends ModelHooks<
+	Model,
+	Message
+> {
 	/**
 	 * Provides application state to its children and owns Commands and Subscriptions while active.
 	 * Captures `init` on initialization. Remount to replace it.
 	 */
-	readonly Provider: (props: ProviderProps<Model, Message, R>) => React.ReactNode
+	readonly Provider: (props: ProviderProps<Model, Message, R, HasInit>) => React.ReactNode
 }
 
 /** The React context that application and Submodel Providers use to pass their source down. */
@@ -201,7 +224,11 @@ export type SourceContext<Model, Message> = React.Context<Option.Option<ModelSou
 export const makeSourceContext = <Model, Message>(): SourceContext<Model, Message> =>
 	React.createContext<Option.Option<ModelSource<Model, Message>>>(Option.none())
 
-export function modelHooks<Model, Message>(Context: SourceContext<Model, Message>, missingProvider: () => Error) {
+export function modelHooks<Model, Message>(
+	Context: SourceContext<Model, Message>,
+	Message: Schema.Schema<Message>,
+	missingProvider: () => Error
+) {
 	function useOptionalSource(): Option.Option<ModelSource<Model, Message>> {
 		return React.useContext(Context)
 	}
@@ -219,8 +246,13 @@ export function modelHooks<Model, Message>(Context: SourceContext<Model, Message
 	): Model | Selected {
 		return ModelSelectors.useModel(useSource(), selector, isEqual)
 	}
+	const makeSend = sendFor(Message)
 	function useDispatch() {
 		return useSource().dispatch
+	}
+	function useSend(): Send<Message> {
+		const dispatch = useDispatch()
+		return React.useMemo(() => makeSend(dispatch), [dispatch])
 	}
 	function useOptionalModel(): Option.Option<Model> {
 		return ModelSelectors.useOptionalModel(useOptionalSource())
@@ -250,6 +282,7 @@ export function modelHooks<Model, Message>(Context: SourceContext<Model, Message
 	return {
 		useModel,
 		useDispatch,
+		useSend,
 		useOptionalModel,
 		useOptionalDispatch,
 		useInbound,
@@ -284,6 +317,8 @@ function projectionHooks<ParentModel, ParentMessage>(useSource: () => ModelSourc
 	return { useSubmodel, useOptionalSubmodel }
 }
 
+const missingInit = "An application Provider needs an init prop when its application has no init"
+
 function DefaultCrashView({ cause }: { readonly cause: Cause.Cause<unknown> }) {
 	return (
 		<pre role="alert">
@@ -311,7 +346,7 @@ function SessionLifecycle({ session }: { readonly session: ProviderSession.Provi
 /**
  * Creates a React Provider and hooks for a Foldkit application.
  * Define the application once, then render its Provider with an initial Model. Views read
- * state with `useModel` and send Messages with `useDispatch`.
+ * state with `useModel` and send Messages with `useSend`.
  *
  * **Details**
  *
@@ -327,6 +362,7 @@ function SessionLifecycle({ session }: { readonly session: ProviderSession.Provi
  *
  * React may repeat or abandon initialization. Keep update and `init` functions pure.
  * Remount the Provider to replace `init`, or use `useInbound` to send changing values to update.
+ * When the config has an `init`, a Provider's `init` prop replaces it for that Provider.
  *
  * **Example** (Connecting a counter to React)
  *
@@ -348,13 +384,13 @@ function SessionLifecycle({ session }: { readonly session: ProviderSession.Provi
  * 		ClickedIncrement: () => ({ model: modifyFields(model, { count: (count) => count + 1 }) }),
  * 	})
  *
- * const Application = defineApplication({ Model, update })
+ * const Application = defineApplication({ Model, Message, update })
  *
  * function View() {
  * 	const count = Application.useModel((model) => model.count)
- * 	const dispatch = Application.useDispatch()
+ * 	const send = Application.useSend()
  *
- * 	return <button onClick={() => dispatch(Message.ClickedIncrement())}>{count}</button>
+ * 	return <button onClick={() => send.ClickedIncrement()}>{count}</button>
  * }
  *
  * export function App() {
@@ -372,8 +408,16 @@ function SessionLifecycle({ session }: { readonly session: ProviderSession.Provi
  * @since 0.1.0
  */
 export function defineApplication<ModelSchema extends ModelCodec, Message, R = never>(
+	config: Config<ModelSchema, Message, R> & {
+		readonly init: () => Update.Return<Type<ModelSchema>, Message, R>
+	}
+): Application<Type<ModelSchema>, Message, R, true>
+export function defineApplication<ModelSchema extends ModelCodec, Message, R = never>(
 	config: Config<ModelSchema, Message, R>
-): Application<Type<ModelSchema>, Message, R> {
+): Application<Type<ModelSchema>, Message, R>
+export function defineApplication<ModelSchema extends ModelCodec, Message, R = never>(
+	config: Config<ModelSchema, Message, R>
+): Application<Type<ModelSchema>, Message, R, boolean> {
 	type Model = Type<ModelSchema>
 	const Context = makeSourceContext<Model, Message>()
 	const validateInit = config.validateInit ?? isDevelopment
@@ -382,11 +426,13 @@ export function defineApplication<ModelSchema extends ModelCodec, Message, R = n
 	function ProviderInstance({
 		restart,
 		...props
-	}: ProviderProps<Model, Message, R> & { readonly restart: () => void }) {
+	}: ProviderProps<Model, Message, R, boolean> & { readonly restart: () => void }) {
 		const [bootstrap] = React.useState(() =>
 			Effect.runSyncExit(
 				Effect.gen(function* () {
-					const init = typeof props.init === "function" ? props.init() : props.init
+					const source = props.init ?? config.init
+					if (source === undefined) return yield* Effect.die(new Error(missingInit))
+					const init = typeof source === "function" ? source() : source
 					if (validateInit) yield* checkModel(init.model)
 					return { store: ReactStore.make(config, init) }
 				})
@@ -430,7 +476,7 @@ export function defineApplication<ModelSchema extends ModelCodec, Message, R = n
 		)
 	}
 
-	function Provider(props: ProviderProps<Model, Message, R>) {
+	function Provider(props: ProviderProps<Model, Message, R, boolean>) {
 		const [generation, setGeneration] = React.useState(0)
 		const restart = React.useCallback(function () {
 			setGeneration((current) => current + 1)
@@ -446,6 +492,6 @@ export function defineApplication<ModelSchema extends ModelCodec, Message, R = n
 
 	return {
 		Provider,
-		...modelHooks(Context, () => new Error("react-foldkit hooks must be used within a <Provider>")),
+		...modelHooks(Context, config.Message, () => new Error("react-foldkit hooks must be used within a <Provider>")),
 	}
 }

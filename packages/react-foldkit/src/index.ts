@@ -26,3 +26,10 @@ export * as Submodel from "./submodel"
  * @since 0.1.0
  */
 export * as ModelSource from "./modelSource"
+/**
+ * Foldkit applications and child features without their views, shared by React, Stores, and tests.
+ *
+ * @category modules
+ * @since 0.2.0
+ */
+export * as Program from "./program"

@@ -11,6 +11,7 @@ export default defineConfig({
 		modelSource: "src/modelSource/public.ts",
 		store: "src/store/public.ts",
 		submodel: "src/submodel/public.ts",
+		program: "src/program/public.ts",
 	},
 	format: ["esm"],
 	dts: false,

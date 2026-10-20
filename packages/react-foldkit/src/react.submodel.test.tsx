@@ -45,7 +45,7 @@ const update = (model: Model, message: Message): UpdateReturn =>
 		}),
 	})
 
-const Submodel = define<Model, Message>()
+const Submodel = define({ Model, Message })
 
 afterEach(cleanup)
 
@@ -64,7 +64,7 @@ function View(props: { name: string }) {
 describe("define", function () {
 	it("composes inline root, sibling, and nested Providers without parent subscriptions", function () {
 		const fixture = createSubmodelFixture()
-		const NumberView = define<number, string>()
+		const NumberView = define({ Model: Schema.Finite, Message: Schema.String })
 		const count = {
 			read: (model: ChildModel) => model.count,
 			toParentMessage: (_message: string) => ChildMessage.Increment(),
@@ -212,7 +212,7 @@ describe("define", function () {
 	it.live("composes nested lifts and isolates sibling dispatchers under one root", () =>
 		Effect.gen(function* () {
 			const fixture = createSubmodelFixture()
-			const NumberView = define<number, ChildMessage>()
+			const NumberView = define({ Model: Schema.Finite, Message: ChildMessage })
 			const left = {
 				read: (model: Model & { unrelated: number }) => model.count,
 				toParentMessage: (message: ChildMessage) => message,
@@ -436,11 +436,13 @@ describe("define", function () {
 			})
 			const First = defineApplication({
 				Model: FirstModel,
+				Message: ParentMessage,
 				update: (model: FirstModel, { message }: ParentMessage) => foldFirst(model, message),
 				resources: layer,
 			})
 			const Second = defineApplication({
 				Model: SecondModel,
+				Message: ParentMessage,
 				update: (model: SecondModel, { message }: ParentMessage) => foldSecond(model, message),
 				resources: layer,
 			})
@@ -501,6 +503,7 @@ describe("define", function () {
 		type ParentMessage = typeof ParentMessage.Type
 		const App = defineApplication({
 			Model: ParentModel,
+			Message: ParentMessage,
 			update: (model: ParentModel, { child }: ParentMessage) => ({
 				model: modifyFields(model, { child: () => child }),
 			}),
@@ -585,6 +588,7 @@ describe("define", function () {
 				})
 			const App = defineApplication({
 				Model: ParentModel,
+				Message: ParentMessage,
 				resources: layer,
 				update(model: ParentModel, message: ParentMessage): Update.Return<ParentModel, ParentMessage, Reader> {
 					seen(message)

@@ -16,9 +16,10 @@ const Message = defineMessageUnion({ Child: { message: ChildMessage }, Set: { ch
 type Message = typeof Message.Type
 
 export function createSubmodelFixture() {
-	const Child = define<ChildModel, ChildMessage>()
+	const Child = define({ Model: ChildModel, Message: ChildMessage })
 	const App = defineApplication({
 		Model,
+		Message,
 		update: (model: Model, message: Message) =>
 			Message.match(message, {
 				Child: ({ message }) =>

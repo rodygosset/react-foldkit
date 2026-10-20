@@ -129,6 +129,10 @@ tester.run("no-inline-submodel-lift", rules["no-inline-submodel-lift"], {
 				"const form = Submodel.lift()({ ...options, field: 'form' }); function View() { return <Child.Provider from={App} lift={form}/> }"
 		),
 		valid("function View() { other({ read }) }"),
+		valid(
+			submodelApp +
+				"const editing = { read, toParentMessage }; function View() { return <Child.Provider from={App} optionalLift={editing}/> }"
+		),
 	],
 	invalid: [
 		invalid(app + "function View() { App.useSubmodel({ read, toParentMessage }) }", "inlineLift"),
@@ -143,6 +147,10 @@ tester.run("no-inline-submodel-lift", rules["no-inline-submodel-lift"], {
 		invalid(
 			submodelApp +
 				"function View() { return <Child.Provider from={App} lift={lift()({ ...options, field: 'form' })}/> }",
+			"inlineLift"
+		),
+		invalid(
+			submodelApp + "function View() { return <Child.Provider from={App} optionalLift={{ read, toParentMessage }}/> }",
 			"inlineLift"
 		),
 	],

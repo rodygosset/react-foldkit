@@ -124,8 +124,9 @@ const subscriptions = Subscription.make<Model, Message>()((entry) => ({
 	),
 }))
 
-const { Provider, useModel, useDispatch } = defineApplication({
+const { Provider, useModel, useSend } = defineApplication({
 	Model,
+	Message,
 	update,
 	subscriptions,
 })
@@ -147,7 +148,7 @@ function ElapsedDisplay() {
 
 function Controls() {
 	const isRunning = useModel((model) => model.isRunning)
-	const dispatch = useDispatch()
+	const send = useSend()
 
 	return (
 		<div className="flex gap-3">
@@ -155,7 +156,7 @@ function Controls() {
 				variant="outline"
 				size="lg"
 				onClick={function () {
-					dispatch(Message.ClickedReset())
+					send.ClickedReset()
 				}}
 			>
 				Reset
@@ -164,7 +165,7 @@ function Controls() {
 				<Button
 					size="lg"
 					onClick={function () {
-						dispatch(Message.ClickedStop())
+						send.ClickedStop()
 					}}
 				>
 					Stop
@@ -173,7 +174,7 @@ function Controls() {
 				<Button
 					size="lg"
 					onClick={function () {
-						dispatch(Message.ClickedStart())
+						send.ClickedStart()
 					}}
 				>
 					Start

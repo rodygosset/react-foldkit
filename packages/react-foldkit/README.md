@@ -47,12 +47,12 @@ const update = (model: Model, message: Message) =>
     ClickedIncrement: () => ({ model: modifyFields(model, { count: (count) => count + 1 }) }),
   })
 
-const Counter = defineApplication({ Model, update })
+const Counter = defineApplication({ Model, Message, update })
 
 function CounterView() {
   const count = Counter.useModel((model) => model.count)
-  const dispatch = Counter.useDispatch()
-  return <button onClick={() => dispatch(Message.ClickedIncrement())}>{count}</button>
+  const send = Counter.useSend()
+  return <button onClick={() => send.ClickedIncrement()}>{count}</button>
 }
 
 export function App() {

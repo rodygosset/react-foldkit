@@ -9,17 +9,17 @@ export const Route = createFileRoute("/projects/$projectId")({
 
 function View() {
 	const { projectId } = Route.useParams()
-	const dispatch = Application.useDispatch()
+	const send = Application.useSend()
 	React.useEffect(
 		function openProject() {
-			dispatch(Application.Message.OpenedProject({ projectId }))
+			send.OpenedProject({ projectId })
 		},
-		[dispatch, projectId]
+		[send, projectId]
 	)
 	return (
 		<ProjectDetails.View
 			projectId={projectId}
-			onRefresh={() => dispatch(Application.Message.ClickedRefreshProject({ projectId }))}
+			onRefresh={() => send.ClickedRefreshProject({ projectId })}
 		/>
 	)
 }

@@ -16,6 +16,7 @@ it.live("repeated subscription Cause after Activity reconnect", () =>
 		}))
 		const App = defineApplication({
 			Model: Schema.Finite,
+			Message: Schema.Finite,
 			update: (model: number, message: number) => ({ model: message }),
 			subscriptions,
 			onCrash: (cause) => crashes.push(cause),

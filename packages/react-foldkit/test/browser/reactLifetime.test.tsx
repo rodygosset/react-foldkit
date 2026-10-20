@@ -32,6 +32,7 @@ describe("React activation with the native browser scheduler", function () {
 		Effect.gen(function* () {
 			const App = defineApplication({
 				Model: Schema.Finite,
+				Message: Schema.Finite,
 				update: (_model: number, message: number) => ({ model: message }),
 			})
 			function View() {
@@ -93,6 +94,11 @@ describe("React activation with the native browser scheduler", function () {
 			type Message = typeof query.Message.Type | { readonly _tag: "Load" } | { readonly _tag: "Resume" }
 			const App = defineApplication({
 				Model: query.Model,
+				Message: Schema.Union([
+					query.Message,
+					Schema.TaggedStruct("Load", {}),
+					Schema.TaggedStruct("Resume", {}),
+				]),
 				onReactivate: (): Message => ({ _tag: "Resume" }),
 				update(model: Model, message: Message) {
 					switch (message._tag) {
@@ -148,6 +154,7 @@ describe("React activation with the native browser scheduler", function () {
 			const rendered: Cause.Cause<unknown>[] = []
 			const App = defineApplication({
 				Model: Schema.Finite,
+				Message: Schema.Finite,
 				onReactivate: () => 1,
 				update(_model: number, _message: number): { model: number } {
 					throw defect
@@ -196,6 +203,7 @@ describe("React activation with the native browser scheduler", function () {
 			const rendered: Cause.Cause<unknown>[] = []
 			const App = defineApplication({
 				Model: Schema.Finite,
+				Message: Schema.Finite,
 				update(_model: number, _message: number): { model: number } {
 					throw previous
 				},
@@ -261,6 +269,7 @@ describe("React activation with the native browser scheduler", function () {
 			}))
 			const App = defineApplication({
 				Model: Schema.Finite,
+				Message: Schema.Finite,
 				update: (model: number, _message: number) => ({ model }),
 				subscriptions,
 				onCrash() {},

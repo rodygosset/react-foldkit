@@ -9,6 +9,7 @@ export * as ReactFoldkit from "./react";
 export * as Store from "./store";
 export * as Submodel from "./submodel";
 export * as ModelSource from "./modelSource";
+export * as Program from "./program";
 ```
 
 ## dist/internal/deepFreeze.d.ts
@@ -75,6 +76,41 @@ export declare function stabilize<Model, Wrapped>(wrap: (model: Model) => Wrappe
 export type { ModelReader, ModelSource } from "./modelSource";
 ```
 
+## dist/program.d.ts
+
+```ts
+export * from "./program/public";
+```
+
+## dist/program/program.d.ts
+
+```ts
+import type { Schema } from "effect";
+import type * as Subscription from "foldkit/subscription";
+import type * as Update from "foldkit/update";
+export interface Program<Model, Message, OutMessage = never, R = never> {
+  readonly Model: Schema.Codec<Model, unknown, unknown, unknown>;
+  readonly Message: Schema.Schema<Message>;
+  readonly OutMessage?: Schema.Schema<OutMessage>;
+  readonly init?: () => Update.Return<Model, Message, R>;
+  readonly update: (model: Model, message: Message) => Update.ReturnWithOutMessage<Model, Message, OutMessage, R>;
+  readonly subscriptions?: Subscription.Subscriptions<Model, Message, R>;
+}
+export declare function make<Model, Message, OutMessage = never, R = never>(program: Program<Model, Message, OutMessage, R> & {
+  readonly init: () => Update.Return<Model, Message, R>;
+}): Program<Model, Message, OutMessage, R> & {
+  readonly init: () => Update.Return<Model, Message, R>;
+};
+export declare function make<Model, Message, OutMessage = never, R = never>(program: Program<Model, Message, OutMessage, R>): Program<Model, Message, OutMessage, R>;
+```
+
+## dist/program/public.d.ts
+
+```ts
+export { make } from "./program";
+export type { Program } from "./program";
+```
+
 ## dist/react.d.ts
 
 ```ts
@@ -104,7 +140,7 @@ export declare function make<Model, Message>(bootstrap: Exit.Exit<Bootstrap<Mode
 
 ```ts
 export { defineApplication } from "./react";
-export type { Application, Config, CrashConfig, CrashContext, ModelHooks, ProviderProps, ReactivationContext, } from "./react";
+export type { Application, Config, CrashConfig, CrashContext, ModelHooks, ProviderProps, ReactivationContext, Send, } from "./react";
 ```
 
 ## dist/react/react.d.ts
@@ -116,7 +152,9 @@ import type { ModelSource } from "../modelSource";
 import type { OptionalProjection, Projection } from "../submodel/lift";
 import type * as Update from "foldkit/update";
 import * as ReactStore from "./reactStore";
+import { type Send } from "./send";
 export type { ReactivationContext } from "./reactStore";
+export type { Send } from "./send";
 type ModelCodec = Schema.Codec<unknown, unknown, unknown, unknown>;
 type Type<ModelSchema extends ModelCodec> = Schema.Schema.Type<ModelSchema>;
 export interface CrashContext<Model, Message> {
@@ -132,43 +170,54 @@ export interface CrashConfig<Model, Message> {
 }
 export type Config<ModelSchema extends ModelCodec, Message, R = never> = ReactStore.Config<Type<ModelSchema>, Message, R> & {
   readonly Model: ModelSchema;
+  readonly Message: Schema.Schema<Message>;
+  readonly init?: () => Update.Return<Type<ModelSchema>, Message, R>;
   readonly crash?: CrashConfig<Type<ModelSchema>, Message>;
   readonly validateInit?: boolean;
 };
-export type ProviderProps<Model, Message, R = never> = {
-  readonly init: Update.Return<Model, Message, R> | (() => Update.Return<Model, Message, R>);
+export type ProviderProps<Model, Message, R = never, HasInit extends boolean = false> = {
   readonly children?: React.ReactNode;
   readonly crash?: CrashConfig<Model, Message>;
-};
+} & (HasInit extends true ? {
+  readonly init?: Init<Model, Message, R>;
+} : {
+  readonly init: Init<Model, Message, R>;
+});
+type Init<Model, Message, R> = Update.Return<Model, Message, R> | (() => Update.Return<Model, Message, R>);
 export interface ModelHooks<Model, Message> {
   readonly useModel: {
     (): Model;
     <Selected>(selector: (model: Model) => Selected, isEqual?: (a: Selected, b: Selected) => boolean): Selected;
   };
   readonly useDispatch: () => (message: Message) => void;
+  readonly useSend: () => Send<Message>;
   readonly useOptionalModel: () => Option.Option<Model>;
   readonly useOptionalDispatch: () => Option.Option<(message: Message) => void>;
   readonly useInbound: <A>(value: A, toMessage: (value: A) => Message, isEqual?: (previous: A, next: A) => boolean) => void;
   readonly useSubmodel: <ChildModel, ChildMessage>(projection: Projection<Model, Message, ChildModel, ChildMessage>) => ModelSource<ChildModel, ChildMessage>;
   readonly useOptionalSubmodel: <ChildModel, ChildMessage>(projection: OptionalProjection<Model, Message, ChildModel, ChildMessage>) => Option.Option<ModelSource<ChildModel, ChildMessage>>;
 }
-export interface Application<Model, Message, R = never> extends ModelHooks<Model, Message> {
-  readonly Provider: (props: ProviderProps<Model, Message, R>) => React.ReactNode;
+export interface Application<Model, Message, R = never, HasInit extends boolean = false> extends ModelHooks<Model, Message> {
+  readonly Provider: (props: ProviderProps<Model, Message, R, HasInit>) => React.ReactNode;
 }
 export type SourceContext<Model, Message> = React.Context<Option.Option<ModelSource<Model, Message>>>;
 export declare const makeSourceContext: <Model, Message>() => SourceContext<Model, Message>;
-export declare function modelHooks<Model, Message>(Context: SourceContext<Model, Message>, missingProvider: () => Error): {
+export declare function modelHooks<Model, Message>(Context: SourceContext<Model, Message>, Message: Schema.Schema<Message>, missingProvider: () => Error): {
   useModel: {
     (): Model;
     <Selected>(selector: (model: Model) => Selected, isEqual?: (a: Selected, b: Selected) => boolean): Selected;
   };
   useDispatch: () => (message: Message) => void;
+  useSend: () => Send<Message>;
   useOptionalModel: () => Option.Option<Model>;
   useOptionalDispatch: () => Option.Option<(message: Message) => void>;
   useInbound: <A>(value: A, toMessage: (value: A) => Message, isEqual?: (previous: A, next: A) => boolean) => void;
   useSubmodel: <Model_1, Message_1>({ read, toParentMessage, }: Projection<Model, Message, Model_1, Message_1>) => ModelSource<Model_1, Message_1>;
   useOptionalSubmodel: <Model_1, Message_1>({ read, toParentMessage, }: OptionalProjection<Model, Message, Model_1, Message_1>) => Option.Option<ModelSource<Model_1, Message_1>>;
 };
+export declare function defineApplication<ModelSchema extends ModelCodec, Message, R = never>(config: Config<ModelSchema, Message, R> & {
+  readonly init: () => Update.Return<Type<ModelSchema>, Message, R>;
+}): Application<Type<ModelSchema>, Message, R, true>;
 export declare function defineApplication<ModelSchema extends ModelCodec, Message, R = never>(config: Config<ModelSchema, Message, R>): Application<Type<ModelSchema>, Message, R>;
 ```
 
@@ -203,6 +252,23 @@ export type Config<Model, Message, R = never> = Store.Config<Model, Message, R> 
   readonly freezeModel?: boolean;
 };
 export declare function make<Model, Message, R = never>(config: Config<Model, Message, R>, init: Update.Return<Model, Message, R>): ReactStore<Model, Message>;
+export {};
+```
+
+## dist/react/send.d.ts
+
+```ts
+import { type Schema } from "effect";
+type Fields<Message> = {
+  readonly [Key in keyof Message as Key extends "_tag" ? never : Key]: Message[Key];
+};
+type SendVariant<Message> = keyof Fields<Message> extends never ? () => void : (fields: Fields<Message>) => void;
+export type Send<Message> = ((message: Message) => void) & {
+  readonly [Variant in Message as Variant extends {
+    readonly _tag: infer Tag extends string;
+  } ? Tag : never]: SendVariant<Variant>;
+};
+export declare function sendFor<Message>(union: Schema.Schema<Message>): (dispatch: (message: Message) => void) => Send<Message>;
 export {};
 ```
 
@@ -396,7 +462,7 @@ export {};
 
 ```ts
 export { define, ProviderError } from "./submodel";
-export type { ProviderProps, Submodel } from "./submodel";
+export type { Config, ProviderProps, Submodel } from "./submodel";
 export { lift } from "./lift";
 export type { Lift, OptionalProjection, Projection } from "./lift";
 ```
@@ -408,17 +474,27 @@ import { Schema } from "effect";
 import React from "react";
 import { type ModelHooks } from "../react/react";
 import type { ModelSource } from "../modelSource";
-import type { Projection } from "./lift";
+import type { OptionalProjection, Projection } from "./lift";
 export type ProviderProps<Model, Message, ParentModel = never, ParentMessage = never> = {
   readonly children?: React.ReactNode;
 } & ({
   readonly from: Pick<ModelHooks<ParentModel, ParentMessage>, "useSubmodel">;
   readonly lift: Projection<ParentModel, ParentMessage, Model, Message>;
+  readonly optionalLift?: never;
+  readonly fallback?: never;
+  readonly source?: never;
+} | {
+  readonly from: Pick<ModelHooks<ParentModel, ParentMessage>, "useOptionalSubmodel">;
+  readonly optionalLift: OptionalProjection<ParentModel, ParentMessage, Model, Message>;
+  readonly fallback?: React.ReactNode;
+  readonly lift?: never;
   readonly source?: never;
 } | {
   readonly source: ModelSource<Model, Message>;
   readonly from?: never;
   readonly lift?: never;
+  readonly optionalLift?: never;
+  readonly fallback?: never;
 });
 export interface Submodel<Model, Message> extends ModelHooks<Model, Message> {
   readonly Provider: <ParentModel = never, ParentMessage = never>(props: ProviderProps<Model, Message, ParentModel, ParentMessage>) => React.ReactNode;
@@ -429,7 +505,11 @@ declare const ProviderError_base: Schema.Class<ProviderError, Schema.Struct<{
 export declare class ProviderError extends ProviderError_base {
   get message(): string;
 }
-export declare function define<Model, Message>(): Submodel<Model, Message>;
+export interface Config<Model, Message> {
+  readonly Model: Schema.Codec<Model, unknown, unknown, unknown>;
+  readonly Message: Schema.Schema<Message>;
+}
+export declare function define<Model, Message>(config: Config<Model, Message>): Submodel<Model, Message>;
 export {};
 ```
 

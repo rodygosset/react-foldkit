@@ -56,7 +56,7 @@ describe("React server rendering", function () {
 				layerBuilds += 1
 			})
 		)
-		const { Provider, useModel } = defineApplication({ Model, update, subscriptions, resources: layer })
+		const { Provider, useModel } = defineApplication({ Model, Message, update, subscriptions, resources: layer })
 
 		function View() {
 			const status = useModel((model) => model.status)
@@ -76,7 +76,7 @@ describe("React server rendering", function () {
 	})
 
 	it("isolates preloaded Models across server renders of the same app definition", function () {
-		const { Provider, useModel } = defineApplication({ Model, update })
+		const { Provider, useModel } = defineApplication({ Model, Message, update })
 		function View() {
 			const model = useModel()
 			return <span>{`${model.status}:${model.value}`}</span>

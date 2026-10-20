@@ -211,10 +211,11 @@ const update = (model: Model, message: Message): UpdateReturn =>
 
 const Application = defineApplication({
 	Model,
+	Message,
 	update,
 	resources: TodoRepository.layer,
 })
-const { Provider, useModel, useDispatch, useInbound } = Application
+const { Provider, useModel, useSend, useInbound } = Application
 
 const filterLinks: ReadonlyArray<{ filter: Filter; label: string }> = [
 	{ filter: "all", label: "All" },
@@ -276,7 +277,7 @@ function ListSection(props: { status: React.ReactNode; notice?: React.ReactNode;
 }
 
 function TodoRow(props: { item: TodoItem; disabled: boolean }) {
-	const dispatch = useDispatch()
+	const send = useSend()
 	const { item } = props
 	const checkboxId = `todo-${item.id}`
 
@@ -286,7 +287,7 @@ function TodoRow(props: { item: TodoItem; disabled: boolean }) {
 				id={checkboxId}
 				checked={item.done}
 				disabled={props.disabled}
-				onCheckedChange={() => dispatch(Message.ToggledItem({ id: item.id }))}
+				onCheckedChange={() => send.ToggledItem({ id: item.id })}
 			/>
 			<Label
 				htmlFor={checkboxId}
@@ -302,7 +303,7 @@ function TodoRow(props: { item: TodoItem; disabled: boolean }) {
 				disabled={props.disabled}
 				className="opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
 				aria-label={`Remove ${item.text}`}
-				onClick={() => dispatch(Message.RemovedItem({ id: item.id }))}
+				onClick={() => send.RemovedItem({ id: item.id })}
 			>
 				<Trash2Icon />
 			</Button>
@@ -313,7 +314,7 @@ function TodoRow(props: { item: TodoItem; disabled: boolean }) {
 function TodoList(props: { items: ReadonlyArray<TodoItem> }) {
 	const itemsData = useModel((model) => model.items)
 	const filter = useModel((model) => model.filter)
-	const dispatch = useDispatch()
+	const send = useSend()
 	const remaining = props.items.filter((item) => !item.done).length
 	const completed = props.items.length - remaining
 	const visible = props.items.filter((item) => isVisible(item, filter))
@@ -329,7 +330,7 @@ function TodoList(props: { items: ReadonlyArray<TodoItem> }) {
 							variant="ghost"
 							size="sm"
 							disabled={pending}
-							onClick={() => dispatch(Message.ClickedClearCompleted())}
+							onClick={() => send.ClickedClearCompleted()}
 						>
 							Clear completed
 						</Button>
@@ -344,7 +345,7 @@ function TodoList(props: { items: ReadonlyArray<TodoItem> }) {
 						<button
 							type="button"
 							className="underline"
-							onClick={() => dispatch(Message.ClickedRetryLoad())}
+							onClick={() => send.ClickedRetryLoad()}
 						>
 							Retry
 						</button>
@@ -373,7 +374,7 @@ function TodoList(props: { items: ReadonlyArray<TodoItem> }) {
 
 function View() {
 	const items = useModel((model) => model.items)
-	const dispatch = useDispatch()
+	const send = useSend()
 
 	return (
 		<ExampleShell
@@ -401,7 +402,7 @@ function View() {
 								<Button
 									variant="outline"
 									size="sm"
-									onClick={() => dispatch(Message.ClickedRetryLoad())}
+									onClick={() => send.ClickedRetryLoad()}
 								>
 									Retry
 								</Button>

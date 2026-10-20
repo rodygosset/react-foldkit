@@ -2,6 +2,7 @@ import type { Rule } from "eslint"
 import type { Expression, Node } from "estree"
 
 const LIFT_HOOKS = new Set(["useSubmodel", "useOptionalSubmodel"])
+const LIFT_PROPS = new Set(["lift", "optionalLift"])
 
 const meta: Rule.RuleMetaData = {
 	type: "suggestion",
@@ -47,7 +48,8 @@ const rule: Rule.RuleModule = {
 				context.report({ node: lift, messageId: "inlineLift" })
 		},
 		JSXAttribute(node: JsxAttribute) {
-			if (node.name.type !== "JSXIdentifier" || node.name.name !== "lift") return
+			if (node.name.type !== "JSXIdentifier" || node.name.name === undefined || !LIFT_PROPS.has(node.name.name))
+				return
 			const expression = node.value?.type === "JSXExpressionContainer" ? node.value.expression : undefined
 			if (expression !== undefined && isFreshLift(expression))
 				context.report({ node: node as never, messageId: "inlineLift" })

@@ -10,6 +10,7 @@ function fixture(kind: "layout" | "passive" | "ref") {
 	const handled: number[] = []
 	const App = defineApplication({
 		Model: Schema.Finite,
+		Message: Schema.Finite,
 		update(_model: number, message: number) {
 			handled.push(message)
 			return { model: message }

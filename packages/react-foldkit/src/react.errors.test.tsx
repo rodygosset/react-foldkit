@@ -26,6 +26,7 @@ function CauseView(props: { cause: Cause.Cause<unknown>; seen: Array<Cause.Cause
 function crashingApplication(defect: Error) {
 	const App = defineApplication({
 		Model: Schema.Finite,
+		Message,
 		update(_model: number, _message: Message): { readonly model: number } {
 			throw defect
 		},
@@ -46,6 +47,7 @@ it.live("replaces mounted children with the fallback after an update defect and 
 		const onCrash = vi.fn()
 		const App = defineApplication({
 			Model: Schema.Finite,
+			Message,
 			update(model: number, message: Message) {
 				if (message._tag === "Edited") throw defect
 				return { model: model + 1 }
@@ -95,6 +97,7 @@ it.live("replaces mounted children with the fallback after a Command defect", ()
 		const onCrash = vi.fn<(cause: Cause.Cause<unknown>, message: Option.Option<Message>) => void>()
 		const App = defineApplication({
 			Model: Schema.Finite,
+			Message,
 			update: (model: number, message: Message) =>
 				message._tag === "Edited"
 					? { model, commands: [{ name: "Fail", effect: Effect.die(defect) }] }
@@ -147,6 +150,7 @@ it.live("reports cleanup defects without throwing from unmount", () =>
 		const defect = new Error("unmount defect")
 		const App = defineApplication({
 			Model: Schema.Finite,
+			Message,
 			update: (model: number, _message: Message) => ({ model: model + 1 }),
 			resources: releaseFailingLayer(() => Effect.die(defect)),
 		})
@@ -245,9 +249,10 @@ it("uses the latest error observer and fallback after rerendering", function () 
 it("optional root and child hooks return absence and subscribe when provided", function () {
 	const App = defineApplication({
 		Model: Schema.Finite,
+		Message,
 		update: (model: number, _message: Message) => ({ model: model + 1 }),
 	})
-	const Child = define<number, Message>()
+	const Child = define({ Model: Schema.Finite, Message })
 	const values: Array<Option.Option<number>> = []
 	let dispatch: Option.Option<(message: Message) => void> = Option.none()
 	function View() {
@@ -276,6 +281,7 @@ it.live("recovers a cleanup failure after Activity reconnects", () =>
 		let releases = 0
 		const App = defineApplication({
 			Model: Schema.Finite,
+			Message,
 			update: (model: number, _message: Message) => ({ model: model + 1 }),
 			resources: releaseFailingLayer(() =>
 				Effect.suspend(() => (++releases === 1 ? Effect.die(new Error("cleanup failed")) : Effect.void))
@@ -316,9 +322,10 @@ it.live("hydrates optional root and child hooks with stable server snapshots", (
 		const testServices = yield* Effect.context<never>()
 		const App = defineApplication({
 			Model: Schema.Finite,
+			Message,
 			update: (model: number, _message: Message) => ({ model: model + 1 }),
 		})
-		const Child = define<number, Message>()
+		const Child = define({ Model: Schema.Finite, Message })
 		const child = { read: (model: number) => model, toParentMessage: (message: Message) => message }
 		let dispatch: Option.Option<(message: Message) => void> = Option.none()
 		function Read() {
@@ -374,6 +381,7 @@ it.live("reports subscription defects and cancels their asynchronous observer on
 		let interrupted = false
 		const App = defineApplication({
 			Model: Schema.Finite,
+			Message,
 			update: (model: number, _message: Message) => ({ model }),
 			subscriptions: Subscription.make<number, Message>()((entry) => ({
 				failing: entry({}, { modelToDependencies: () => ({}), dependenciesToStream: () => Stream.die(defect) }),

@@ -25,10 +25,11 @@ const reader: Reader = {
 const directReader: ModelReader<number> = reader
 assert.equal(directReader.getSnapshot(), 7)
 assert.equal(Foldkit.Submodel.define, Submodel.define)
-assert.deepEqual(Object.keys(Foldkit).sort(), ["ModelSource", "ReactFoldkit", "Store", "Submodel"])
+assert.deepEqual(Object.keys(Foldkit).sort(), ["ModelSource", "Program", "ReactFoldkit", "Store", "Submodel"])
 
 const App = defineApplication({
 	Model: Schema.Finite,
+	Message: Schema.Finite,
 	update: (model: number, message: number) => ({ model: model + message }),
 })
 function View() {

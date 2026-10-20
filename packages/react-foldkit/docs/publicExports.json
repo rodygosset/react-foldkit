@@ -7,6 +7,12 @@
 	},
 	{
 		"entryPoint": "react-foldkit",
+		"name": "Program",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit",
 		"name": "ReactFoldkit",
 		"owner": "react-foldkit",
 		"introduced": "0.1.0"
@@ -62,6 +68,12 @@
 	{
 		"entryPoint": "react-foldkit/react",
 		"name": "ReactivationContext",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/react",
+		"name": "Send",
 		"owner": "react-foldkit",
 		"introduced": "0.1.0"
 	},
@@ -151,6 +163,12 @@
 	},
 	{
 		"entryPoint": "react-foldkit/submodel",
+		"name": "Config",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/submodel",
 		"name": "Lift",
 		"owner": "react-foldkit",
 		"introduced": "0.1.0"
@@ -194,6 +212,18 @@
 	{
 		"entryPoint": "react-foldkit/submodel",
 		"name": "lift",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/program",
+		"name": "Program",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/program",
+		"name": "make",
 		"owner": "react-foldkit",
 		"introduced": "0.1.0"
 	},

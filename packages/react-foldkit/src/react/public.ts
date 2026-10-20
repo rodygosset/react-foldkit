@@ -7,4 +7,5 @@ export type {
 	ModelHooks,
 	ProviderProps,
 	ReactivationContext,
+	Send,
 } from "./react"

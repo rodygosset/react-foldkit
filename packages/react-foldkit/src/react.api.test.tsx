@@ -41,6 +41,7 @@ describe("useInbound", function () {
 		const handled: Array<Message> = []
 		const Tracked = defineApplication({
 			Model,
+			Message,
 			update(model: Model, message: Message) {
 				handled.push(message)
 				return update(model, message)
@@ -78,6 +79,7 @@ describe("useInbound", function () {
 		const sent: Array<string> = []
 		const App = defineApplication({
 			Model,
+			Message,
 			update(model: Model, message: Message) {
 				if (message._tag === "ChangedFilter") sent.push(message.filter)
 				return update(model, message)
@@ -104,6 +106,7 @@ describe("useInbound", function () {
 		const sent: Array<string> = []
 		const App = defineApplication({
 			Model,
+			Message,
 			update(model: Model, message: Message) {
 				if (message._tag === "ChangedFilter") sent.push(message.filter)
 				return update(model, message)
@@ -132,6 +135,7 @@ describe("useInbound", function () {
 		const events: Array<string> = []
 		const App = defineApplication({
 			Model,
+			Message,
 			update(model: Model, message: Message) {
 				if (message._tag === "ChangedFilter") events.push("update")
 				return update(model, message)
@@ -170,6 +174,7 @@ describe("crash", function () {
 			const init = vi.fn(() => ({ model: { filter: "all", count: 0 } }))
 			const App = defineApplication({
 				Model,
+				Message,
 				update,
 				onCrash() {},
 				crash: {
@@ -229,6 +234,7 @@ describe("crash", function () {
 			const reported: Array<string> = []
 			const App = defineApplication({
 				Model,
+				Message,
 				update,
 				onCrash: Function.constVoid,
 				crash: {
@@ -263,7 +269,7 @@ describe("crash", function () {
 	)
 
 	it("uses the default view when no view is configured", function () {
-		const App = defineApplication({ Model, update, validateInit: true })
+		const App = defineApplication({ Model, Message, update, validateInit: true })
 		render(
 			<App.Provider init={{ model: { filter: "all", count: Number.NaN } }}>
 				<span>children</span>
@@ -276,7 +282,7 @@ describe("crash", function () {
 
 describe("development checks", function () {
 	it("skips the init check when validateInit is false", function () {
-		const App = defineApplication({ Model, update, validateInit: false })
+		const App = defineApplication({ Model, Message, update, validateInit: false })
 		render(
 			<App.Provider init={{ model: { filter: "all", count: Number.NaN } }}>
 				<span>children</span>
@@ -287,7 +293,7 @@ describe("development checks", function () {
 
 	it("freezes published Models outside production", function () {
 		let captured: Model | undefined
-		const App = defineApplication({ Model, update })
+		const App = defineApplication({ Model, Message, update })
 		function Capture() {
 			captured = App.useModel()
 			return null
@@ -305,7 +311,7 @@ describe("development checks", function () {
 
 	it("freezes the Models that update returns", function () {
 		let captured: Model | undefined
-		const App = defineApplication({ Model, update })
+		const App = defineApplication({ Model, Message, update })
 		function Capture() {
 			captured = App.useModel()
 			const dispatch = App.useDispatch()
@@ -325,7 +331,7 @@ describe("development checks", function () {
 
 	it("leaves Models unfrozen when freezeModel is false", function () {
 		let captured: Model | undefined
-		const App = defineApplication({ Model, update, freezeModel: false })
+		const App = defineApplication({ Model, Message, update, freezeModel: false })
 		function Capture() {
 			captured = App.useModel()
 			return null
@@ -345,7 +351,7 @@ describe("snapshot identity", function () {
 	// structurally equal to the last one.
 	it("rerenders whole-Model readers when update returns an equal copy", function () {
 		const seen: Array<Model> = []
-		const App = defineApplication({ Model, update })
+		const App = defineApplication({ Model, Message, update })
 		function Capture() {
 			seen.push(App.useModel())
 			const dispatch = App.useDispatch()
@@ -368,7 +374,7 @@ describe("snapshot identity", function () {
 	// returned a new source on every render, each parent render would resubscribe every child.
 	it("returns the same Submodel source across renders for the same lift", function () {
 		const sources: Array<ModelSource<number, Message>> = []
-		const App = defineApplication({ Model, update })
+		const App = defineApplication({ Model, Message, update })
 		const count = { read: (model: Model) => model.count, toParentMessage: Function.identity<Message> }
 		function Capture() {
 			sources.push(App.useSubmodel(count))
@@ -392,7 +398,7 @@ describe("snapshot identity", function () {
 	// reuse that wrapper.
 	it("hydrates useOptionalModel from a cached server snapshot", function () {
 		const consoleError = vi.spyOn(console, "error").mockImplementation(Function.constVoid)
-		const App = defineApplication({ Model, update })
+		const App = defineApplication({ Model, Message, update })
 		function Read() {
 			return (
 				<span>

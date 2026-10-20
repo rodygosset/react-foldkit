@@ -72,6 +72,10 @@
 			"types": "./dist/submodel.d.ts",
 			"import": "./dist/submodel.js"
 		},
+		"./program": {
+			"types": "./dist/program.d.ts",
+			"import": "./dist/program.js"
+		},
 		"./eslint": {
 			"types": "./eslint/dist/index.d.ts",
 			"import": "./eslint/dist/index.js",

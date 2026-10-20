@@ -41,8 +41,10 @@ export const init = (): Update.Return<Model, Message> => ({
 
 export const Application = defineApplication({
 	Model,
+	Message,
+	init,
 	update,
 	// Query fetches are idempotent reads, so retry any that React Activity interrupted.
 	restartInterrupted: true,
 })
-export const { Provider, useModel, useDispatch } = Application
+export const { Provider, useModel, useDispatch, useSend } = Application
