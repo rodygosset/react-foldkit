@@ -64,8 +64,8 @@ const rule: Rule.RuleModule = {
 					!isApi(
 						jsxOrigin(context, node as unknown as Node, node.name),
 						"react-foldkit",
-						"ReactFoldkit",
-						"defineApplication()",
+						"Application",
+						"define()",
 						"Provider"
 					)
 				)

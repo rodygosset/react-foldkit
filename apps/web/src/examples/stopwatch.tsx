@@ -2,7 +2,7 @@ import { Button } from "@workspace/ui/components/button"
 import { Clock, Duration, Effect, Schema, Stream } from "effect"
 import * as Command from "foldkit/command"
 import { defineMessageUnion } from "foldkit/message"
-import { defineApplication } from "react-foldkit/react"
+import * as Application from "react-foldkit/application"
 import { modifyFields } from "foldkit/struct"
 import * as Subscription from "foldkit/subscription"
 import type * as Update from "foldkit/update"
@@ -124,12 +124,7 @@ const subscriptions = Subscription.make<Model, Message>()((entry) => ({
 	),
 }))
 
-const { Provider, useModel, useSend } = defineApplication({
-	Model,
-	Message,
-	update,
-	subscriptions,
-})
+const { Provider, useModel, useSend } = Application.define({ Model, Message, update, subscriptions })
 
 const floorAndPad = (value: number): string => Math.floor(value).toString().padStart(2, "0")
 

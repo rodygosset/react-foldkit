@@ -7,7 +7,7 @@ import { modifyFields } from "foldkit/struct"
 import type * as Update from "foldkit/update"
 import { expectTypeOf } from "vitest"
 import * as Lift from "./lift"
-import * as ReactStore from "../react/reactStore"
+import * as ReactStore from "../application/reactStore"
 
 it.effect("server reads cannot replace an optional source's last live snapshot", () =>
 	Effect.gen(function* () {

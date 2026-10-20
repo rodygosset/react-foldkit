@@ -3,7 +3,7 @@
 Generated from the public exports. See the [counter tutorial](examples.md) for usage and [runtime architecture](architecture.md) for ownership. Regenerate with `bun run --filter=react-foldkit docs:generate` from the repository root.
 
 - [react-foldkit](#react-foldkit)
-- [react-foldkit/react](#react-foldkitreact)
+- [react-foldkit/application](#react-foldkitapplication)
 - [react-foldkit/store](#react-foldkitstore)
 - [react-foldkit/submodel](#react-foldkitsubmodel)
 - [react-foldkit/program](#react-foldkitprogram)
@@ -11,6 +11,10 @@ Generated from the public exports. See the [counter tutorial](examples.md) for u
 - [react-foldkit/modelSource](#react-foldkitmodelSource)
 
 ## react-foldkit
+
+### Application
+
+Application Providers and Model hooks for running a Program in React.
 
 ### ModelSource
 
@@ -20,10 +24,6 @@ Model snapshots, subscriptions, and dispatch contracts shared by React bindings.
 
 Foldkit applications and child features without their views, shared by React, Stores, and tests.
 
-### ReactFoldkit
-
-Application Providers, Model hooks, and child lifts.
-
 ### Store
 
 Scoped Model ownership, Message delivery, and lifecycle errors.
@@ -32,11 +32,11 @@ Scoped Model ownership, Message delivery, and lifecycle errors.
 
 Child Model Providers, hooks, and lifts.
 
-## react-foldkit/react
+## react-foldkit/application
 
 ### Application
 
-The Provider and hooks returned by `defineApplication` for a Foldkit application.
+The Provider and hooks returned by `define` for a Foldkit application.
 Render its Provider above the views that use its hooks. Each mounted Provider owns an
 independent Model and the Commands and Subscriptions that update it.
 
@@ -108,116 +108,10 @@ independent Model and the Commands and Subscriptions that update it.
   <ChildModel, ChildMessage>(projection: OptionalProjection<Model, Message, ChildModel, ChildMessage>) => Option.Option<ModelSource<ChildModel, ChildMessage>>
   ```
 
-### Config
-
-The Model Schema, Message union, and Program used to create a React application with
-`defineApplication`. Define a pure update function here and return Commands for side effects.
-Provide services needed by Commands or Subscriptions through `resources`.
-
-The Layer must require no additional services and have no typed failures. The Model Schema
-supplies the TypeScript type. Outside production builds, the Provider also checks its initial
-Model against the Schema and freezes published Models.
-
-- `update` Applies a Message to the Model without running side effects. Return Commands for work that
-  runs after the transition.
-
-  ```ts
-  ((model: Schema.Schema.Type<ModelSchema>, message: Message) => Readonly<{ model: Schema.Schema.Type<ModelSchema>; commands?: Update.Commands<Message, R> | undefined; outMessage?: never; }>) | ((model: Schema.Schema.Type<ModelSchema>, message: Message) => Readonly<{ model: Schema.Schema.Type<ModelSchema>; commands?: Update.Commands<Message, R> | undefined; outMessage?: never; }>)
-  ```
-
-- `subscriptions` Declares Streams whose dependencies are derived from the Model. Changed dependencies
-  restart their Streams.
-
-  ```ts
-  Readonly<Record<string, import("foldkit/subscription").Subscription<Schema.Schema.Type<ModelSchema>, Message, any, R>>> | Readonly<Record<string, import("foldkit/subscription").Subscription<Schema.Schema.Type<ModelSchema>, Message, any, R>>> | undefined
-  ```
-
-- `onCrash` Called once on terminal failure, with the original Cause and a Message when one triggered
-  the failure. Runs before `subscribeCrash` listeners. Observer defects are logged.
-
-  ```ts
-  ((cause: Cause.Cause<unknown>, triggeringMessage: Option.Option<Message>) => void) | undefined
-  ```
-
-- `resources` Supplies all required services. Live work finishes before the Layer releases its
-  resources.
-
-  ```ts
-  import("effect/Layer").Layer<never, never, never> | import("effect/Layer").Layer<NoInfer<R>, never, never> | undefined
-  ```
-
-- `onReactivate` Creates a Message when the Provider reactivates with a replacement Store. Use it to retry
-  interrupted work or clear pending state. It is not called on the initial activation or when
-  `retainInactive` kept the previous Store running.
-
-  ```ts
-  ((context: ReactStore.ReactivationContext<Schema.Schema.Type<ModelSchema>, Message, R>) => Message) | undefined
-  ```
-
-- `retainInactive` Keeps the Store, its Layer, Commands, and Subscriptions running for this long after the
-  last activation ends. Reactivating within the window resumes the same Store without
-  interrupting anything. Defaults to zero, which disposes the Store on deactivation.
-  
-  Work started before an unmount can still finish during the window, so keep it short when
-  Commands perform writes or navigation.
-
-  ```ts
-  import("effect/Duration").Input | undefined
-  ```
-
-- `restartInterrupted` Starts Commands interrupted by deactivation again when a replacement Store activates. Pass
-  `true` for all of them or a predicate to choose. Restart only idempotent work, such as
-  Query fetches: an interrupted write may already have reached its server.
-
-  ```ts
-  boolean | ((command: import("foldkit/command").Command<Message, never, R>) => boolean) | undefined
-  ```
-
-- `freezeModel` Freezes every Model the Provider publishes so accidental mutation throws where it happens.
-  Plain objects and arrays are frozen; Effect values and class instances are not. Defaults to
-  `true` outside production builds.
-
-  ```ts
-  boolean | undefined
-  ```
-
-- `Model` Supplies the Model type and checks the initial Model when `validateInit` is on.
-
-  ```ts
-  ModelSchema
-  ```
-
-- `Message` The Schema of the Messages update handles, usually the union from `defineMessageUnion`.
-  `useSend` builds Messages with its constructors.
-
-  ```ts
-  Schema.Schema<Message>
-  ```
-
-- `init` Creates the initial Model and Commands when a Provider has no `init` prop. The Provider
-  calls it once per initialization, including after a crash view's `restart`.
-
-  ```ts
-  (() => Update.Return<Type<ModelSchema>, Message, R>) | undefined
-  ```
-
-- `crash` Default failure view and reporting for every Provider of this application.
-
-  ```ts
-  CrashConfig<Schema.Schema.Type<ModelSchema>, Message> | undefined
-  ```
-
-- `validateInit` Checks the initial Model against `Model`. A mismatch fails the Provider with a
-  `SchemaError`. Defaults to `true` outside production builds.
-
-  ```ts
-  boolean | undefined
-  ```
-
 ### CrashConfig
 
 How an application shows and reports failures. Mirrors Foldkit's crash configuration.
-Set it on `defineApplication`, and override either callback on a Provider.
+Set it in the options of `define`, and override either callback on a Provider.
 
 - `view` Renders in place of the Provider's children. Call `restart` to remount the Provider with
   a fresh Store from `init`. The default view shows a typed failure's message, or a generic
@@ -326,11 +220,82 @@ Submodel access to part of that Model.
   <ChildModel, ChildMessage>(projection: OptionalProjection<Model, Message, ChildModel, ChildMessage>) => Option.Option<ModelSource<ChildModel, ChildMessage>>
   ```
 
+### Options
+
+How an application runs its Program in React: the services its Commands and Subscriptions
+need, its failure handling, and its activation behavior. Pass it to `define` after the
+Program.
+
+The `resources` Layer must require no additional services and have no typed failures. It is
+required when the Program needs services, which also makes the options argument required.
+
+- `onReactivate` Creates a Message when the Provider reactivates with a replacement Store. Use it to retry
+  interrupted work or clear pending state. It is not called on the initial activation or when
+  `retainInactive` kept the previous Store running.
+
+  ```ts
+  ReactStore.Config<Model, Message, R>["onReactivate"] | undefined
+  ```
+
+- `retainInactive` Keeps the Store, its Layer, Commands, and Subscriptions running for this long after the
+  last activation ends. Reactivating within the window resumes the same Store without
+  interrupting anything. Defaults to zero, which disposes the Store on deactivation.
+  
+  Work started before an unmount can still finish during the window, so keep it short when
+  Commands perform writes or navigation.
+
+  ```ts
+  ReactStore.Config<Model, Message, R>["retainInactive"] | undefined
+  ```
+
+- `restartInterrupted` Starts Commands interrupted by deactivation again when a replacement Store activates. Pass
+  `true` for all of them or a predicate to choose. Restart only idempotent work, such as
+  Query fetches: an interrupted write may already have reached its server.
+
+  ```ts
+  ReactStore.Config<Model, Message, R>["restartInterrupted"] | undefined
+  ```
+
+- `freezeModel` Freezes every Model the Provider publishes so accidental mutation throws where it happens.
+  Plain objects and arrays are frozen; Effect values and class instances are not. Defaults to
+  `true` outside production builds.
+
+  ```ts
+  ReactStore.Config<Model, Message, R>["freezeModel"] | undefined
+  ```
+
+- `onCrash` Called once on terminal failure, with the original Cause and a Message when one triggered
+  the failure. Runs before `subscribeCrash` listeners. Observer defects are logged.
+
+  ```ts
+  ReactStore.Config<Model, Message, R>["onCrash"] | undefined
+  ```
+
+- `resources` Supplies all required services. Live work finishes before the Layer releases its
+  resources.
+
+  ```ts
+  ReactStore.Config<Model, Message, R>["resources"] | undefined
+  ```
+
+- `crash` Default failure view and reporting for every Provider of this application.
+
+  ```ts
+  CrashConfig<Model, Message> | undefined
+  ```
+
+- `validateInit` Checks the initial Model against the Program's `Model`. A mismatch fails the Provider with
+  a `SchemaError`. Defaults to `true` outside production builds.
+
+  ```ts
+  boolean | undefined
+  ```
+
 ### ProviderProps
 
 Props for the application Provider that supplies the Model and Message handlers to its views.
 `init` supplies the initial Model and Commands, and `crash` overrides how this Provider shows
-and reports failures. `init` is optional when the application config has an `init`, and
+and reports failures. `init` is optional when the Program has an `init`, and
 replaces it when passed.
 
 The Provider captures `init` on initialization. Changing it later does not replace it.
@@ -377,11 +342,12 @@ What the Provider knows when it replaces a Store that deactivation disposed.
 Sends Messages by tag. `send.ChangedTitle({ title })` builds the Message with the union's
 constructor and dispatches it. `send(message)` dispatches a Message you already built.
 
-### defineApplication
+### define
 
-Creates a React Provider and hooks for a Foldkit application.
-Define the application once, then render its Provider with an initial Model. Views read
-state with `useModel` and send Messages with `useSend`.
+Creates a React Provider and hooks for a Foldkit Program.
+Define the application once, then render its Provider. Views read state with `useModel` and
+send Messages with `useSend`. The second argument holds React-only options and the
+`resources` that supply the Program's services.
 
 **Details**
 
@@ -397,14 +363,14 @@ rest reach `onReactivate`.
 
 React may repeat or abandon initialization. Keep update and `init` functions pure.
 Remount the Provider to replace `init`, or use `useInbound` to send changing values to update.
-When the config has an `init`, a Provider's `init` prop replaces it for that Provider.
+When the Program has an `init`, a Provider's `init` prop replaces it for that Provider.
 
 **Example** (Connecting a counter to React)
 
 ```tsx
 import { Schema } from "effect"
 import { defineMessageUnion } from "foldkit/message"
-import { defineApplication } from "react-foldkit/react"
+import * as Application from "react-foldkit/application"
 import { modifyFields } from "foldkit/struct"
 import type * as Update from "foldkit/update"
 
@@ -419,20 +385,20 @@ const update = (model: Model, message: Message) =>
     ClickedIncrement: () => ({ model: modifyFields(model, { count: (count) => count + 1 }) }),
   })
 
-const Application = defineApplication({ Model, Message, update })
+const Counter = Application.define({ Model, Message, update })
 
 function View() {
-  const count = Application.useModel((model) => model.count)
-  const send = Application.useSend()
+  const count = Counter.useModel((model) => model.count)
+  const send = Counter.useSend()
 
   return <button onClick={() => send.ClickedIncrement()}>{count}</button>
 }
 
 export function App() {
   return (
-    <Application.Provider init={{ model: { count: 0 } }}>
+    <Counter.Provider init={{ model: { count: 0 } }}>
       <View />
-    </Application.Provider>
+    </Counter.Provider>
   )
 }
 ```
@@ -939,7 +905,7 @@ its Provider to give child views a lifted source without starting another Store.
   while the Provider's source is. Throws outside the matching Provider.
 
   ```ts
-  () => import("../react").Send<Message>
+  () => import("../application").Send<Message>
   ```
 
 - `useOptionalModel` Reads `Some(Model)` inside the matching Provider and `None` outside it.
@@ -1068,10 +1034,10 @@ Foldkit's `Runtime.makeApplication`.
 
 **When to use**
 
-Use a Program to keep a feature's logic in a module without React. Spread an application
-Program into `defineApplication` with React-only options and `resources`, pass a child
-Program to `Submodel.define`, run `update` in Foldkit Story tests, or spread it into
-`Store.make` and `Store.boot`.
+Use a Program to keep a feature's logic in a module without React. Pass an application
+Program to `Application.define`, with React-only options and `resources` as its second
+argument. Pass a child Program to `Submodel.define`, run `update` in Foldkit Story tests, or
+pass the Program to `Store.make` and `Store.boot`.
 
 **Details**
 
@@ -1079,7 +1045,7 @@ Program to `Submodel.define`, run `update` in Foldkit Story tests, or spread it 
 them: the host that runs it supplies `resources`. An application Program has no
 OutMessage, so its update returns `Update.Return`.
 
-- `Model` Supplies the Model type. `defineApplication` also checks initial Models against it.
+- `Model` Supplies the Model type. `Application.define` also checks initial Models against it.
 
   ```ts
   Schema.Codec<Model, unknown, unknown, unknown>

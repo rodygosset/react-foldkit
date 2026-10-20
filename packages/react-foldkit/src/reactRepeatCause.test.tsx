@@ -3,7 +3,7 @@ import { it } from "@effect/vitest"
 import React from "react"
 import { cleanup, render, waitFor } from "@testing-library/react"
 import { Cause, Effect, Schema, Stream } from "effect"
-import { defineApplication } from "./react"
+import * as Application from "./application"
 import * as Subscription from "foldkit/subscription"
 afterEach(cleanup)
 it.live("repeated subscription Cause after Activity reconnect", () =>
@@ -14,13 +14,17 @@ it.live("repeated subscription Cause after Activity reconnect", () =>
 		const subscriptions = Subscription.make<number, number>()((entry) => ({
 			fail: entry({}, { modelToDependencies: () => ({}), dependenciesToStream: () => stream }),
 		}))
-		const App = defineApplication({
-			Model: Schema.Finite,
-			Message: Schema.Finite,
-			update: (model: number, message: number) => ({ model: message }),
-			subscriptions,
-			onCrash: (cause) => crashes.push(cause),
-		})
+		const App = Application.define(
+			{
+				Model: Schema.Finite,
+				Message: Schema.Finite,
+				update: (model: number, message: number) => ({ model: message }),
+				subscriptions,
+			},
+			{
+				onCrash: (cause) => crashes.push(cause),
+			}
+		)
 		let dispatch: ReturnType<typeof App.useDispatch> | undefined
 		function View() {
 			dispatch = App.useDispatch()

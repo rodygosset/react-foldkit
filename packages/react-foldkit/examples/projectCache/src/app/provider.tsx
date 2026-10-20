@@ -6,7 +6,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
 	return (
 		<Application.Provider>
 			<Project.Provider
-				from={Application.Application}
+				from={Application.App}
 				lift={Application.projectsProjection}
 			>
 				{children}

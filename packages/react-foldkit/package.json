@@ -60,9 +60,9 @@
 			"types": "./dist/index.d.ts",
 			"import": "./dist/index.js"
 		},
-		"./react": {
-			"types": "./dist/react.d.ts",
-			"import": "./dist/react.js"
+		"./application": {
+			"types": "./dist/application.d.ts",
+			"import": "./dist/application.js"
 		},
 		"./store": {
 			"types": "./dist/store.d.ts",

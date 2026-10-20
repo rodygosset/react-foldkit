@@ -26,8 +26,8 @@
 		},
 		{
 			"files": [
-				"packages/react-foldkit/src/react/providerSession.ts",
-				"packages/react-foldkit/src/react/react.tsx"
+				"packages/react-foldkit/src/application/providerSession.ts",
+				"packages/react-foldkit/src/application/react.tsx"
 			],
 			"rules": {
 				// Crash-reporting boundary: observers receive Cause<unknown>

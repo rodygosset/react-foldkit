@@ -2,7 +2,7 @@ import { Option, Schema } from "effect"
 import React from "react"
 import { defineMessageUnion } from "foldkit/message"
 import type { ModelSource } from "../../src/modelSource"
-import { defineApplication } from "../../src/react"
+import * as Application from "../../src/application"
 import { modifyFields } from "foldkit/struct"
 import { define } from "../../src/submodel"
 
@@ -17,7 +17,7 @@ type Message = typeof Message.Type
 
 export function createSubmodelFixture() {
 	const Child = define({ Model: ChildModel, Message: ChildMessage })
-	const App = defineApplication({
+	const App = Application.define({
 		Model,
 		Message,
 		update: (model: Model, message: Message) =>

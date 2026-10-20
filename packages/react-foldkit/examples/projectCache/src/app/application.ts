@@ -1,7 +1,7 @@
 import * as Project from "@/entities/project"
 import { Schema } from "effect"
 import { defineMessageUnion } from "foldkit/message"
-import { defineApplication } from "react-foldkit/react"
+import * as Application from "react-foldkit/application"
 import type * as Submodel from "react-foldkit/submodel"
 import type * as Update from "foldkit/update"
 
@@ -39,12 +39,11 @@ export const init = (): Update.Return<Model, Message> => ({
 	model: { projects: Project.query.init() },
 })
 
-export const Application = defineApplication({
-	Model,
-	Message,
-	init,
-	update,
-	// Query fetches are idempotent reads, so retry any that React Activity interrupted.
-	restartInterrupted: true,
-})
-export const { Provider, useModel, useDispatch, useSend } = Application
+export const App = Application.define(
+	{ Model, Message, init, update },
+	{
+		// Query fetches are idempotent reads, so retry any that React Activity interrupted.
+		restartInterrupted: true,
+	}
+)
+export const { Provider, useModel, useDispatch, useSend } = App

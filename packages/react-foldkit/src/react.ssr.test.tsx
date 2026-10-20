@@ -4,7 +4,7 @@ import { renderToString } from "react-dom/server"
 import { describe, expect, it } from "vitest"
 import type * as Command from "foldkit/command"
 import { defineMessageUnion } from "foldkit/message"
-import { defineApplication } from "./react"
+import * as Application from "./application"
 import { modifyFields } from "foldkit/struct"
 import * as Subscription from "foldkit/subscription"
 import type * as Update from "foldkit/update"
@@ -56,7 +56,12 @@ describe("React server rendering", function () {
 				layerBuilds += 1
 			})
 		)
-		const { Provider, useModel } = defineApplication({ Model, Message, update, subscriptions, resources: layer })
+		const { Provider, useModel } = Application.define(
+			{ Model, Message, update, subscriptions },
+			{
+				resources: layer,
+			}
+		)
 
 		function View() {
 			const status = useModel((model) => model.status)
@@ -76,7 +81,7 @@ describe("React server rendering", function () {
 	})
 
 	it("isolates preloaded Models across server renders of the same app definition", function () {
-		const { Provider, useModel } = defineApplication({ Model, Message, update })
+		const { Provider, useModel } = Application.define({ Model, Message, update })
 		function View() {
 			const model = useModel()
 			return <span>{`${model.status}:${model.value}`}</span>

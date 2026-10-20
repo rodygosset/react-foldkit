@@ -1,6 +1,12 @@
 [
 	{
 		"entryPoint": "react-foldkit",
+		"name": "Application",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit",
 		"name": "ModelSource",
 		"owner": "react-foldkit",
 		"introduced": "0.1.0"
@@ -8,12 +14,6 @@
 	{
 		"entryPoint": "react-foldkit",
 		"name": "Program",
-		"owner": "react-foldkit",
-		"introduced": "0.1.0"
-	},
-	{
-		"entryPoint": "react-foldkit",
-		"name": "ReactFoldkit",
 		"owner": "react-foldkit",
 		"introduced": "0.1.0"
 	},
@@ -30,56 +30,56 @@
 		"introduced": "0.1.0"
 	},
 	{
-		"entryPoint": "react-foldkit/react",
+		"entryPoint": "react-foldkit/application",
 		"name": "Application",
 		"owner": "react-foldkit",
 		"introduced": "0.1.0"
 	},
 	{
-		"entryPoint": "react-foldkit/react",
-		"name": "Config",
-		"owner": "react-foldkit",
-		"introduced": "0.1.0"
-	},
-	{
-		"entryPoint": "react-foldkit/react",
+		"entryPoint": "react-foldkit/application",
 		"name": "CrashConfig",
 		"owner": "react-foldkit",
 		"introduced": "0.1.0"
 	},
 	{
-		"entryPoint": "react-foldkit/react",
+		"entryPoint": "react-foldkit/application",
 		"name": "CrashContext",
 		"owner": "react-foldkit",
 		"introduced": "0.1.0"
 	},
 	{
-		"entryPoint": "react-foldkit/react",
+		"entryPoint": "react-foldkit/application",
 		"name": "ModelHooks",
 		"owner": "react-foldkit",
 		"introduced": "0.1.0"
 	},
 	{
-		"entryPoint": "react-foldkit/react",
+		"entryPoint": "react-foldkit/application",
+		"name": "Options",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/application",
 		"name": "ProviderProps",
 		"owner": "react-foldkit",
 		"introduced": "0.1.0"
 	},
 	{
-		"entryPoint": "react-foldkit/react",
+		"entryPoint": "react-foldkit/application",
 		"name": "ReactivationContext",
 		"owner": "react-foldkit",
 		"introduced": "0.1.0"
 	},
 	{
-		"entryPoint": "react-foldkit/react",
+		"entryPoint": "react-foldkit/application",
 		"name": "Send",
 		"owner": "react-foldkit",
 		"introduced": "0.1.0"
 	},
 	{
-		"entryPoint": "react-foldkit/react",
-		"name": "defineApplication",
+		"entryPoint": "react-foldkit/application",
+		"name": "define",
 		"owner": "react-foldkit",
 		"introduced": "0.1.0"
 	},

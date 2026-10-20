@@ -3,13 +3,13 @@ import { cleanup, render, waitFor } from "@testing-library/react"
 import { Effect, Schema } from "effect"
 import React from "react"
 import { afterEach, describe, expect } from "vitest"
-import { defineApplication } from "./react"
+import * as Application from "./application"
 
 afterEach(cleanup)
 
 function makeMountingApplication() {
 	const handled: Array<number> = []
-	const App = defineApplication({
+	const App = Application.define({
 		Model: Schema.Finite,
 		Message: Schema.Finite,
 		update(_model: number, message: number) {

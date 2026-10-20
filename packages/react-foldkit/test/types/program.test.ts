@@ -3,7 +3,7 @@ import { Schema } from "effect"
 import { defineMessageUnion } from "foldkit/message"
 import type * as Update from "foldkit/update"
 import * as Program from "react-foldkit/program"
-import { defineApplication } from "react-foldkit/react"
+import * as Application from "react-foldkit/application"
 import { define } from "react-foldkit/submodel"
 import { describe, expectTypeOf, it } from "vitest"
 
@@ -27,12 +27,12 @@ describe("Program public types", function () {
 
 	if (false) {
 		const program = Program.make({ Model, Message, init, update })
-		const App = defineApplication({ ...program, retainInactive: "1 second" })
+		const App = Application.define(program, { retainInactive: "1 second" })
 		// The Program's init makes the Provider's init optional.
 		App.Provider({ children: null })
 		App.Provider({ init: { model: { count: 1 } }, children: null })
 
-		const Bare = defineApplication(Program.make({ Model, Message, update }))
+		const Bare = Application.define(Program.make({ Model, Message, update }))
 		// @ts-expect-error Without a Program init, the Provider needs one.
 		Bare.Provider({ children: null })
 
@@ -50,6 +50,6 @@ describe("Program public types", function () {
 		})
 		define(child).useSend().Set({ count: 1 })
 		// @ts-expect-error A child Program reports OutMessages, so it cannot own a Store.
-		defineApplication(child)
+		Application.define(child)
 	}
 })

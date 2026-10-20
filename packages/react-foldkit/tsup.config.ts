@@ -7,7 +7,7 @@ import { defineConfig } from "tsup"
 export default defineConfig({
 	entry: {
 		index: "src/index.ts",
-		react: "src/react/public.ts",
+		application: "src/application/public.ts",
 		modelSource: "src/modelSource/public.ts",
 		store: "src/store/public.ts",
 		submodel: "src/submodel/public.ts",

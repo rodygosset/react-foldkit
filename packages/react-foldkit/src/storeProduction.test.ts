@@ -1,19 +1,7 @@
 import { it } from "@effect/vitest"
-import {
-	Cause,
-	Context,
-	Deferred,
-	Effect,
-	Exit,
-	Fiber,
-	Layer,
-	Option,
-	Result,
-	Scope,
-	Stream,
-} from "effect"
+import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, Option, Result, Scope, Stream } from "effect"
 import { expect } from "vitest"
-import * as ReactStore from "./react/reactStore"
+import * as ReactStore from "./application/reactStore"
 import * as Store from "./store"
 import * as Subscription from "foldkit/subscription"
 

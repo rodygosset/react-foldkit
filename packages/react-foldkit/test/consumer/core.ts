@@ -7,14 +7,14 @@ import { createElement } from "react"
 import { renderToString } from "react-dom/server"
 import * as Foldkit from "react-foldkit"
 import type { ModelReader } from "react-foldkit/modelSource"
-import { defineApplication } from "react-foldkit/react"
+import * as Application from "react-foldkit/application"
 import * as Store from "react-foldkit/store"
 import * as Submodel from "react-foldkit/submodel"
 
 export type Reader = Foldkit.ModelSource.ModelReader<number>
 export type Program = Foldkit.Store.Program<number, number>
 export type RuntimeStore = Foldkit.Store.Store<number, number>
-export type Application = Foldkit.ReactFoldkit.Application<number, number>
+export type CounterApplication = Foldkit.Application.Application<number, number>
 export type Projection = Foldkit.Submodel.Projection<number, number, number, number>
 
 const reader: Reader = {
@@ -25,9 +25,9 @@ const reader: Reader = {
 const directReader: ModelReader<number> = reader
 assert.equal(directReader.getSnapshot(), 7)
 assert.equal(Foldkit.Submodel.define, Submodel.define)
-assert.deepEqual(Object.keys(Foldkit).sort(), ["ModelSource", "Program", "ReactFoldkit", "Store", "Submodel"])
+assert.deepEqual(Object.keys(Foldkit).sort(), ["Application", "ModelSource", "Program", "Store", "Submodel"])
 
-const App = defineApplication({
+const App = Application.define({
 	Model: Schema.Finite,
 	Message: Schema.Finite,
 	update: (model: number, message: number) => ({ model: model + message }),

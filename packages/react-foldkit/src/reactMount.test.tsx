@@ -2,13 +2,13 @@ import { afterEach, expect, it } from "vitest"
 import React from "react"
 import { cleanup, render } from "@testing-library/react"
 import { Schema } from "effect"
-import { defineApplication } from "./react"
+import * as Application from "./application"
 
 afterEach(cleanup)
 
 function fixture(kind: "layout" | "passive" | "ref") {
 	const handled: number[] = []
-	const App = defineApplication({
+	const App = Application.define({
 		Model: Schema.Finite,
 		Message: Schema.Finite,
 		update(_model: number, message: number) {

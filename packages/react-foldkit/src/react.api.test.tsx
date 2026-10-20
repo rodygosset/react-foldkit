@@ -7,7 +7,7 @@ import { renderToString } from "react-dom/server"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { defineMessageUnion } from "foldkit/message"
 import type { ModelSource } from "./modelSource"
-import { defineApplication } from "./react"
+import * as Application from "./application"
 import { modifyFields } from "foldkit/struct"
 import type * as Update from "foldkit/update"
 
@@ -39,7 +39,7 @@ const update = (model: Model, message: Message) =>
 describe("useInbound", function () {
 	it("sends changed values to update without remounting, and skips the initial value", function () {
 		const handled: Array<Message> = []
-		const Tracked = defineApplication({
+		const Tracked = Application.define({
 			Model,
 			Message,
 			update(model: Model, message: Message) {
@@ -77,7 +77,7 @@ describe("useInbound", function () {
 
 	it("compares values structurally by default", function () {
 		const sent: Array<string> = []
-		const App = defineApplication({
+		const App = Application.define({
 			Model,
 			Message,
 			update(model: Model, message: Message) {
@@ -104,7 +104,7 @@ describe("useInbound", function () {
 	// Comparing with a stale value drops the change back to an earlier value.
 	it("sends a change back to an earlier value", function () {
 		const sent: Array<string> = []
-		const App = defineApplication({
+		const App = Application.define({
 			Model,
 			Message,
 			update(model: Model, message: Message) {
@@ -133,7 +133,7 @@ describe("useInbound", function () {
 	// effect in the same commit runs, including effects in components rendered earlier.
 	it("delivers the change before passive effects of the same commit", function () {
 		const events: Array<string> = []
-		const App = defineApplication({
+		const App = Application.define({
 			Model,
 			Message,
 			update(model: Model, message: Message) {
@@ -172,18 +172,18 @@ describe("crash", function () {
 			const reports: Array<{ readonly model: Option.Option<Model>; readonly message: Option.Option<Message> }> =
 				[]
 			const init = vi.fn(() => ({ model: { filter: "all", count: 0 } }))
-			const App = defineApplication({
-				Model,
-				Message,
-				update,
-				onCrash() {},
-				crash: {
-					report: ({ model, message }) =>
-						Effect.sync(function () {
-							reports.push({ model, message })
-						}),
-				},
-			})
+			const App = Application.define(
+				{ Model, Message, update },
+				{
+					onCrash() {},
+					crash: {
+						report: ({ model, message }) =>
+							Effect.sync(function () {
+								reports.push({ model, message })
+							}),
+					},
+				}
+			)
 			function Buttons() {
 				const dispatch = App.useDispatch()
 				return (
@@ -232,16 +232,16 @@ describe("crash", function () {
 	effectIt.live("uses the Provider's view and report over the application's", () =>
 		Effect.gen(function* () {
 			const reported: Array<string> = []
-			const App = defineApplication({
-				Model,
-				Message,
-				update,
-				onCrash: Function.constVoid,
-				crash: {
-					view: () => <span>application view</span>,
-					report: () => Effect.sync(() => reported.push("application report")),
-				},
-			})
+			const App = Application.define(
+				{ Model, Message, update },
+				{
+					onCrash: Function.constVoid,
+					crash: {
+						view: () => <span>application view</span>,
+						report: () => Effect.sync(() => reported.push("application report")),
+					},
+				}
+			)
 			function Explode() {
 				const dispatch = App.useDispatch()
 				return <button onClick={() => dispatch(Message.ClickedExplode())}>explode</button>
@@ -269,7 +269,12 @@ describe("crash", function () {
 	)
 
 	it("uses the default view when no view is configured", function () {
-		const App = defineApplication({ Model, Message, update, validateInit: true })
+		const App = Application.define(
+			{ Model, Message, update },
+			{
+				validateInit: true,
+			}
+		)
 		render(
 			<App.Provider init={{ model: { filter: "all", count: Number.NaN } }}>
 				<span>children</span>
@@ -282,7 +287,12 @@ describe("crash", function () {
 
 describe("development checks", function () {
 	it("skips the init check when validateInit is false", function () {
-		const App = defineApplication({ Model, Message, update, validateInit: false })
+		const App = Application.define(
+			{ Model, Message, update },
+			{
+				validateInit: false,
+			}
+		)
 		render(
 			<App.Provider init={{ model: { filter: "all", count: Number.NaN } }}>
 				<span>children</span>
@@ -293,7 +303,7 @@ describe("development checks", function () {
 
 	it("freezes published Models outside production", function () {
 		let captured: Model | undefined
-		const App = defineApplication({ Model, Message, update })
+		const App = Application.define({ Model, Message, update })
 		function Capture() {
 			captured = App.useModel()
 			return null
@@ -311,7 +321,7 @@ describe("development checks", function () {
 
 	it("freezes the Models that update returns", function () {
 		let captured: Model | undefined
-		const App = defineApplication({ Model, Message, update })
+		const App = Application.define({ Model, Message, update })
 		function Capture() {
 			captured = App.useModel()
 			const dispatch = App.useDispatch()
@@ -331,7 +341,12 @@ describe("development checks", function () {
 
 	it("leaves Models unfrozen when freezeModel is false", function () {
 		let captured: Model | undefined
-		const App = defineApplication({ Model, Message, update, freezeModel: false })
+		const App = Application.define(
+			{ Model, Message, update },
+			{
+				freezeModel: false,
+			}
+		)
 		function Capture() {
 			captured = App.useModel()
 			return null
@@ -351,7 +366,7 @@ describe("snapshot identity", function () {
 	// structurally equal to the last one.
 	it("rerenders whole-Model readers when update returns an equal copy", function () {
 		const seen: Array<Model> = []
-		const App = defineApplication({ Model, Message, update })
+		const App = Application.define({ Model, Message, update })
 		function Capture() {
 			seen.push(App.useModel())
 			const dispatch = App.useDispatch()
@@ -374,7 +389,7 @@ describe("snapshot identity", function () {
 	// returned a new source on every render, each parent render would resubscribe every child.
 	it("returns the same Submodel source across renders for the same lift", function () {
 		const sources: Array<ModelSource<number, Message>> = []
-		const App = defineApplication({ Model, Message, update })
+		const App = Application.define({ Model, Message, update })
 		const count = { read: (model: Model) => model.count, toParentMessage: Function.identity<Message> }
 		function Capture() {
 			sources.push(App.useSubmodel(count))
@@ -398,7 +413,7 @@ describe("snapshot identity", function () {
 	// reuse that wrapper.
 	it("hydrates useOptionalModel from a cached server snapshot", function () {
 		const consoleError = vi.spyOn(console, "error").mockImplementation(Function.constVoid)
-		const App = defineApplication({ Model, Message, update })
+		const App = Application.define({ Model, Message, update })
 		function Read() {
 			return (
 				<span>

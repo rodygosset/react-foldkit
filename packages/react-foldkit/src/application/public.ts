@@ -1,10 +1,10 @@
-export { defineApplication } from "./react"
+export { define } from "./react"
 export type {
 	Application,
-	Config,
 	CrashConfig,
 	CrashContext,
 	ModelHooks,
+	Options,
 	ProviderProps,
 	ReactivationContext,
 	Send,

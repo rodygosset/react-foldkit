@@ -2,7 +2,7 @@ import { Duration, Effect, Match, Option, Schema, Stream } from "effect"
 import * as AsyncData from "foldkit/asyncData"
 import * as Query from "foldkit/experimental/query"
 import { defineMessageUnion } from "foldkit/message"
-import { defineApplication } from "react-foldkit/react"
+import * as Application from "react-foldkit/application"
 import { modifyFields } from "foldkit/struct"
 import * as Subscription from "foldkit/subscription"
 import * as Update from "foldkit/update"
@@ -153,13 +153,12 @@ const subscriptions = Subscription.make<Model, Message, BlogClient>()((entry) =>
 	),
 }))
 
-const { Provider, useModel, useSend } = defineApplication({
-	Model,
-	Message,
-	update,
-	subscriptions,
-	resources: BlogClient.layer,
-})
+const { Provider, useModel, useSend } = Application.define(
+	{ Model, Message, update, subscriptions },
+	{
+		resources: BlogClient.layer,
+	}
+)
 
 function PostsListView() {
 	const postsData = useModel((model) => postsQuery.read(model.posts))

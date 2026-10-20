@@ -8,7 +8,7 @@ RuleTester.it = it
 RuleTester.itOnly = it.only
 const tester = new RuleTester({ languageOptions: { parser, parserOptions: { ecmaFeatures: { jsx: true } } } })
 const rules = recommendedConfig[0].plugins["react-foldkit"].rules
-const app = 'import { defineApplication as define } from "react-foldkit/react"; const App = define(config); '
+const app = 'import * as Application from "react-foldkit/application"; const App = Application.define(program); '
 const command = 'import { Command } from "react-foldkit"; import { Effect as Fx } from "effect"; '
 const submodelApp = 'import * as Submodel from "react-foldkit/submodel"; const Child = Submodel.define(); '
 const file = "/app/src/view.tsx"

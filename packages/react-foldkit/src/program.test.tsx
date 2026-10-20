@@ -6,7 +6,7 @@ import type * as Update from "foldkit/update"
 import React from "react"
 import { afterEach, describe, expect, it } from "vitest"
 import * as Program from "./program"
-import { defineApplication } from "./react"
+import * as Application from "./application"
 import * as Store from "./store"
 import { define } from "./submodel"
 
@@ -31,8 +31,8 @@ describe("Program.make", function () {
 		expect(Program.make(program)).toBe(program)
 	})
 
-	it("runs in React when spread into defineApplication", function () {
-		const App = defineApplication({ ...counter, freezeModel: true })
+	it("runs in React through Application.define", function () {
+		const App = Application.define(counter, { freezeModel: true })
 		function View() {
 			const send = App.useSend()
 			return <button onClick={() => send.ClickedIncrement()}>{App.useModel((model) => model.count)}</button>

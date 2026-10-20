@@ -2,7 +2,7 @@ import { Button } from "@workspace/ui/components/button"
 import { Schema } from "effect"
 import { MinusIcon, PlusIcon, RotateCcwIcon } from "lucide-react"
 import { defineMessageUnion } from "foldkit/message"
-import { defineApplication } from "react-foldkit/react"
+import * as Application from "react-foldkit/application"
 import { modifyFields } from "foldkit/struct"
 import type * as Update from "foldkit/update"
 import { ExampleShell } from "../components/example-shell"
@@ -31,7 +31,7 @@ const update = (model: Model, message: Message): UpdateReturn =>
 		ClickedReset: () => ({ model: modifyFields(model, { count: () => 0 }) }),
 	})
 
-const { Provider, useModel, useSend } = defineApplication({ Model, Message, update })
+const { Provider, useModel, useSend } = Application.define({ Model, Message, update })
 
 function View() {
 	const count = useModel((model) => model.count)

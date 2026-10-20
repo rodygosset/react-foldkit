@@ -9,10 +9,10 @@ import type * as Update from "foldkit/update"
  *
  * **When to use**
  *
- * Use a Program to keep a feature's logic in a module without React. Spread an application
- * Program into `defineApplication` with React-only options and `resources`, pass a child
- * Program to `Submodel.define`, run `update` in Foldkit Story tests, or spread it into
- * `Store.make` and `Store.boot`.
+ * Use a Program to keep a feature's logic in a module without React. Pass an application
+ * Program to `Application.define`, with React-only options and `resources` as its second
+ * argument. Pass a child Program to `Submodel.define`, run `update` in Foldkit Story tests, or
+ * pass the Program to `Store.make` and `Store.boot`.
  *
  * **Details**
  *
@@ -26,7 +26,7 @@ import type * as Update from "foldkit/update"
  */
 export interface Program<Model, Message, OutMessage = never, R = never> {
 	/**
-	 * Supplies the Model type. `defineApplication` also checks initial Models against it.
+	 * Supplies the Model type. `Application.define` also checks initial Models against it.
 	 */
 	readonly Model: Schema.Codec<Model, unknown, unknown, unknown>
 	/**
@@ -52,6 +52,13 @@ export interface Program<Model, Message, OutMessage = never, R = never> {
 	 * restart their Streams.
 	 */
 	readonly subscriptions?: Subscription.Subscriptions<Model, Message, R>
+}
+
+// An application Program reports no OutMessages, so OutMessage stays `never` rather than
+// being inferred from update's optional `outMessage` field.
+type ApplicationProgram<Model, Message, R> = Omit<Program<Model, Message, never, R>, "OutMessage" | "update"> & {
+	readonly OutMessage?: undefined
+	readonly update: (model: Model, message: Message) => Update.Return<Model, Message, R>
 }
 
 /**
@@ -92,13 +99,16 @@ export interface Program<Model, Message, OutMessage = never, R = never> {
  * @category constructors
  * @since 0.2.0
  */
-export function make<Model, Message, OutMessage = never, R = never>(
-	program: Program<Model, Message, OutMessage, R> & { readonly init: () => Update.Return<Model, Message, R> }
-): Program<Model, Message, OutMessage, R> & { readonly init: () => Update.Return<Model, Message, R> }
-export function make<Model, Message, OutMessage = never, R = never>(
-	program: Program<Model, Message, OutMessage, R>
+export function make<Model, Message, OutMessage, R = never>(
+	program: Program<Model, Message, OutMessage, R> & { readonly OutMessage: Schema.Schema<OutMessage> }
 ): Program<Model, Message, OutMessage, R>
-// eslint-disable-next-line foldkit-style/prefer-arrow-for-expression-return -- Overloads keep a required init.
+export function make<Model, Message, R = never>(
+	program: ApplicationProgram<Model, Message, R> & { readonly init: () => Update.Return<Model, Message, R> }
+): Program<Model, Message, never, R> & { readonly init: () => Update.Return<Model, Message, R> }
+export function make<Model, Message, R = never>(
+	program: ApplicationProgram<Model, Message, R>
+): Program<Model, Message, never, R>
+// eslint-disable-next-line foldkit-style/prefer-arrow-for-expression-return -- Overloads keep a required init and a `never` OutMessage.
 export function make<Model, Message, OutMessage, R>(
 	program: Program<Model, Message, OutMessage, R>
 ): Program<Model, Message, OutMessage, R> {

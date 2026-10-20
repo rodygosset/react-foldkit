@@ -2,7 +2,7 @@ import { Duration, Effect, HashMap, Match, Option, Schema, Stream, pipe } from "
 import * as AsyncData from "foldkit/asyncData"
 import * as Command from "foldkit/command"
 import { defineMessageUnion } from "foldkit/message"
-import { defineApplication } from "react-foldkit/react"
+import * as Application from "react-foldkit/application"
 import { modifyFields } from "foldkit/struct"
 import * as Subscription from "foldkit/subscription"
 import type * as Update from "foldkit/update"
@@ -202,12 +202,7 @@ const subscriptions = Subscription.make<Model, Message>()((entry) => ({
 	),
 }))
 
-const { Provider, useModel, useSend } = defineApplication({
-	Model,
-	Message,
-	update,
-	subscriptions,
-})
+const { Provider, useModel, useSend } = Application.define({ Model, Message, update, subscriptions })
 
 // VIEW
 

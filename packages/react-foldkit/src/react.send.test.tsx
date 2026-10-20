@@ -5,7 +5,7 @@ import { modifyFields } from "foldkit/struct"
 import type * as Update from "foldkit/update"
 import React from "react"
 import { afterEach, describe, expect, it } from "vitest"
-import { defineApplication } from "./react"
+import * as Application from "./application"
 import { define, lift } from "./submodel"
 
 afterEach(cleanup)
@@ -22,7 +22,7 @@ type Message = typeof Message.Type
 describe("useSend", function () {
 	it("builds Messages with the union constructors and dispatches built Messages", function () {
 		const handled: Array<Message> = []
-		const App = defineApplication({
+		const App = Application.define({
 			Model,
 			Message,
 			update(model: Model, message: Message) {
@@ -59,7 +59,7 @@ describe("useSend", function () {
 	})
 
 	it("keeps its identity across renders", function () {
-		const App = defineApplication({
+		const App = Application.define({
 			Model,
 			Message,
 			update: (model: Model, _message: Message) => ({
@@ -90,7 +90,7 @@ describe("useSend", function () {
 		const Outer = Schema.Union([Inner, Schema.TaggedStruct("Reset", {})])
 		type Outer = typeof Outer.Type
 		const handled: Array<Outer> = []
-		const App = defineApplication({
+		const App = Application.define({
 			Model: Schema.String,
 			Message: Outer,
 			update(model: string, message: Outer) {
@@ -135,7 +135,7 @@ describe("useSend", function () {
 			}),
 			toParentMessage: (message: ChildMessage) => ParentMessage.GotFormMessage({ message }),
 		})
-		const App = defineApplication({
+		const App = Application.define({
 			Model: ParentModel,
 			Message: ParentMessage,
 			update(model: ParentModel, message: ParentMessage) {
@@ -170,7 +170,7 @@ describe("useSend", function () {
 })
 
 describe("application init", function () {
-	const App = defineApplication({
+	const App = Application.define({
 		Model,
 		Message,
 		init: (): Update.Return<Model, Message> => ({ model: { count: 1, label: "config" } }),
@@ -220,7 +220,7 @@ describe("optionalLift", function () {
 
 	it("renders the fallback while the child is absent and the children while it is present", function () {
 		const handled: Array<ParentMessage> = []
-		const App = defineApplication({
+		const App = Application.define({
 			Model: ParentModel,
 			Message: ParentMessage,
 			update(model: ParentModel, message: ParentMessage) {
@@ -270,7 +270,7 @@ describe("optionalLift", function () {
 	})
 
 	it("renders nothing while absent when no fallback is given", function () {
-		const App = defineApplication({
+		const App = Application.define({
 			Model: ParentModel,
 			Message: ParentMessage,
 			update: (model: ParentModel, _message: ParentMessage) => ({ model }),

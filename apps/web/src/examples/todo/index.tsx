@@ -10,7 +10,7 @@ import type * as React from "react"
 import * as AsyncData from "foldkit/asyncData"
 import * as Command from "foldkit/command"
 import { defineMessageUnion } from "foldkit/message"
-import { defineApplication } from "react-foldkit/react"
+import * as Application from "react-foldkit/application"
 import { modifyFields } from "foldkit/struct"
 import * as Submodel from "react-foldkit/submodel"
 import type * as Update from "foldkit/update"
@@ -209,13 +209,13 @@ const update = (model: Model, message: Message): UpdateReturn =>
 		},
 	})
 
-const Application = defineApplication({
-	Model,
-	Message,
-	update,
-	resources: TodoRepository.layer,
-})
-const { Provider, useModel, useSend, useInbound } = Application
+const TodoApp = Application.define(
+	{ Model, Message, update },
+	{
+		resources: TodoRepository.layer,
+	}
+)
+const { Provider, useModel, useSend, useInbound } = TodoApp
 
 const filterLinks: ReadonlyArray<{ filter: Filter; label: string }> = [
 	{ filter: "all", label: "All" },
@@ -383,7 +383,7 @@ function View() {
 		>
 			<div className="mx-auto flex w-full max-w-lg flex-1 flex-col px-6 pt-10 pb-16">
 				<TodoForm.Provider
-					from={Application}
+					from={TodoApp}
 					lift={form}
 				>
 					<TodoForm.View />

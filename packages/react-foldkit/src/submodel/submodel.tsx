@@ -1,6 +1,6 @@
 import { Option, Schema } from "effect"
 import React from "react"
-import { makeSourceContext, modelHooks, type ModelHooks } from "../react/react"
+import { makeSourceContext, modelHooks, type ModelHooks } from "../application/react"
 import type { ModelSource } from "../modelSource"
 import type { OptionalProjection, Projection } from "./lift"
 

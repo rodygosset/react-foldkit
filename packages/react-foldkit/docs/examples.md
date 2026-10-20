@@ -11,7 +11,7 @@ Create `App.tsx` with the following code. Render its `App` component from your R
 ```tsx
 import { Schema } from "effect"
 import { defineMessageUnion } from "foldkit/message"
-import { defineApplication } from "react-foldkit/react"
+import * as Application from "react-foldkit/application"
 import { modifyFields } from "foldkit/struct"
 import type * as Update from "foldkit/update"
 
@@ -36,7 +36,7 @@ const update = (model: Model, message: Message) =>
     ClickedReset: () => ({ model: modifyFields(model, { count: () => 0 }) }),
   })
 
-const Counter = defineApplication({ Model, Message, update })
+const Counter = Application.define({ Model, Message, update })
 
 function CounterView() {
   const count = Counter.useModel((model) => model.count)
@@ -117,12 +117,12 @@ const update = (model: Model, message: Message) =>
     }),
   })
 
-const Counter = defineApplication({
-  Model,
-  Message,
-  update,
-  restartInterrupted: (command) => command.name === "WaitToIncrement",
-})
+const Counter = Application.define(
+  { Model, Message, update },
+  {
+    restartInterrupted: (command) => command.name === "WaitToIncrement",
+  }
+)
 ```
 
 Change the Provider's initial Model to `{ count: 0, isWaiting: false }`.
@@ -184,11 +184,8 @@ Render `SyncStep` inside the Provider. `useInbound` skips the first value, which
 A Command or update that fails crashes the Store. The Provider then renders `crash.view` in place of its children. The view receives the failure, the Model at the time, the Message that triggered it, and `restart`, which remounts the Provider from `init`.
 
 ```tsx
-const Counter = defineApplication({
-  Model,
-  Message,
-  update,
-  crash: {
+const Counter = Application.define({ Model, Message, update }, {
+crash: {
     view: ({ cause, restart }) => (
       <div role="alert">
         <pre>{Cause.pretty(cause)}</pre>

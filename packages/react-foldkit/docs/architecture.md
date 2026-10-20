@@ -6,7 +6,7 @@ React Foldkit runs a Foldkit program behind React views. One application owns th
 
 `update(model, message)` returns `{ model, commands?, outMessage? }`. The Store applies the Model before running returned Commands. Command results and Subscription Streams deliver more Messages to the same queue.
 
-Dispatch schedules FIFO delivery. `Store.commit` delivers synchronously through the submitted Message and returns before Commands finish. Commit has no rollback. Reentry or an inactive, disposed, or crashed Store produces a `CommitError` whose `reason` is `Reentrant`, `Inactive`, `Disposed`, or `Crashed`; handle one with `Effect.catchReason`. Commit is a Store API; React views use `useSend` or `useDispatch`. `useSend` builds Messages with the constructors of the Message union passed to `defineApplication` or `Submodel.define`, then dispatches them.
+Dispatch schedules FIFO delivery. `Store.commit` delivers synchronously through the submitted Message and returns before Commands finish. Commit has no rollback. Reentry or an inactive, disposed, or crashed Store produces a `CommitError` whose `reason` is `Reentrant`, `Inactive`, `Disposed`, or `Crashed`; handle one with `Effect.catchReason`. Commit is a Store API; React views use `useSend` or `useDispatch`. `useSend` builds Messages with the constructors of the Message union passed to `Application.define` or `Submodel.define`, then dispatches them.
 
 A Store crash stops delivery and releases live work. `takeWhen` fails with `Crashed` or `Disposed` when the Store is terminal. Observers cannot change the delivery result by throwing.
 
@@ -26,7 +26,7 @@ Outside production builds, the Provider checks its initial Model against the Mod
 
 `Submodel.define` creates child Providers and hooks from the child Model Schema and Message union. A child Provider takes the parent hooks and a lift, the parent hooks and an `optionalLift` for a child stored in an `Option`, or a source derived with `useSubmodel`. With `optionalLift`, the Provider renders its children while the child is present and `fallback` while it is absent. `Submodel.lift` describes a child stored in one parent field once: it reads and writes the field, wraps child Messages, and folds the child update with Foldkit's `Update.foldChild`. For any other read, pass an object with `read` and `toParentMessage`. Declare lifts outside render; the `no-inline-submodel-lift` lint rule reports lifts built during render.
 
-`Program.make` groups the Model Schema, Message union, `init`, update, and Subscriptions of an application or child without React. An application Program spreads into `defineApplication`, `Store.make`, or `Store.boot`; a child Program goes to `Submodel.define`. Programs declare the services they need and leave `resources` to the host that runs them.
+`Program.make` groups the Model Schema, Message union, `init`, update, and Subscriptions of an application or child without React. `Application.define` takes an application Program and, as a separate second argument, the React options and the `resources` that supply its services. `Store.make` and `Store.boot` also accept an application Program, and a child Program goes to `Submodel.define`. Programs declare the services they need and leave `resources` to the host that runs them.
 
 A child Provider consumes a projected source. It creates no Store and runs no side effects of its own. Unmounting a child does not cancel its Commands. Handle cancellation and stale child identity in the parent update.
 
@@ -41,7 +41,7 @@ Load server data with Foldkit Query from `foldkit/experimental/query`. Its Model
 | Module            | Responsibility                                                                |
 | ----------------- | ----------------------------------------------------------------------------- |
 | `src/store`       | Message queue, Commands, Subscriptions, crash, and disposal                   |
-| `src/react`       | Application bindings, activation, selectors, and failure reporting            |
+| `src/application` | Application bindings, activation, selectors, and failure reporting            |
 | `src/modelSource` | Shared snapshot, subscription, and dispatch contracts                         |
 | `src/program`     | Programs shared by React, Stores, and tests                                   |
 | `src/submodel`    | Child bindings and Model sources                                              |

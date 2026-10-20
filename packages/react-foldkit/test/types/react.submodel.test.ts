@@ -1,7 +1,7 @@
 // Check the built public API using Foldkit's Vitest type-test convention.
 import { Option, Schema } from "effect"
 import { defineMessageUnion } from "foldkit/message"
-import { defineApplication } from "react-foldkit/react"
+import * as Application from "react-foldkit/application"
 import { define } from "react-foldkit/submodel"
 import type { ModelSource } from "react-foldkit/modelSource"
 import { describe, expectTypeOf, it } from "vitest"
@@ -13,7 +13,7 @@ type Message = typeof Message.Type
 
 type ForeignMessage = { readonly _tag: "Other" }
 const Submodel = define({ Model, Message })
-const Root = defineApplication({ Model, Message, update: (model: Model, _message: Message) => ({ model }) })
+const Root = Application.define({ Model, Message, update: (model: Model, _message: Message) => ({ model }) })
 declare const dispatch: ReturnType<typeof Submodel.useDispatch>
 declare const foreignDispatch: (message: ForeignMessage) => void
 

@@ -34,7 +34,7 @@ We'll start with a button that increments a counter. Create `App.tsx` and render
 ```tsx
 import { Schema } from "effect"
 import { defineMessageUnion } from "foldkit/message"
-import { defineApplication } from "react-foldkit/react"
+import * as Application from "react-foldkit/application"
 import { modifyFields } from "foldkit/struct"
 import type * as Update from "foldkit/update"
 
@@ -49,20 +49,20 @@ const update = (model: Model, message: Message) =>
     ClickedIncrement: () => ({ model: modifyFields(model, { count: (count) => count + 1 }) }),
   })
 
-const Application = defineApplication({ Model, Message, update })
+const Counter = Application.define({ Model, Message, update })
 
 function View() {
-  const count = Application.useModel((model) => model.count)
-  const send = Application.useSend()
+  const count = Counter.useModel((model) => model.count)
+  const send = Counter.useSend()
 
   return <button onClick={() => send.ClickedIncrement()}>{count}</button>
 }
 
 export function App() {
   return (
-    <Application.Provider init={{ model: { count: 0 } }}>
+    <Counter.Provider init={{ model: { count: 0 } }}>
       <View />
-    </Application.Provider>
+    </Counter.Provider>
   )
 }
 ```
@@ -143,7 +143,7 @@ import { Array, Schema } from "effect"
 import { defineMessageUnion } from "foldkit/message"
 import { modifyFields } from "foldkit/struct"
 import type * as Update from "foldkit/update"
-import { defineApplication } from "react-foldkit/react"
+import * as Application from "react-foldkit/application"
 import * as Submodel from "react-foldkit/submodel"
 import * as Form from "./form"
 
@@ -167,15 +167,15 @@ const update = (model: Model, message: Message) =>
     GotFormMessage: ({ message }) => form.fold(model, message),
   })
 
-const Application = defineApplication({ Model, Message, update })
+const Todos = Application.define({ Model, Message, update })
 
 function View() {
-  const todos = Application.useModel((model) => model.todos)
+  const todos = Todos.useModel((model) => model.todos)
 
   return (
     <>
       <Form.Provider
-        from={Application}
+        from={Todos}
         lift={form}
       >
         <Form.View />
@@ -191,9 +191,9 @@ function View() {
 
 export function App() {
   return (
-    <Application.Provider init={{ model: { form: { draft: "" }, todos: [] } }}>
+    <Todos.Provider init={{ model: { form: { draft: "" }, todos: [] } }}>
       <View />
-    </Application.Provider>
+    </Todos.Provider>
   )
 }
 ```
@@ -212,7 +212,7 @@ import * as AsyncData from "foldkit/asyncData"
 import * as Query from "foldkit/experimental/query"
 import { defineMessageUnion } from "foldkit/message"
 import type * as Update from "foldkit/update"
-import { defineApplication } from "react-foldkit/react"
+import * as Application from "react-foldkit/application"
 
 const Profile = Schema.Struct({ name: Schema.String })
 
@@ -243,7 +243,7 @@ const update = (model: Model, message: Message) =>
     ClickedRefresh: () => profile.revalidate(model),
   })
 
-const { Provider, useModel, useSend } = defineApplication({ Model, Message, update })
+const { Provider, useModel, useSend } = Application.define({ Model, Message, update })
 const init = profile.loadIfMissing({ profile: query.init() })
 
 function View() {
@@ -338,7 +338,7 @@ import { Array, Option, Schema } from "effect"
 import { defineMessageUnion } from "foldkit/message"
 import { modifyFields } from "foldkit/struct"
 import type * as Update from "foldkit/update"
-import { defineApplication } from "react-foldkit/react"
+import * as Application from "react-foldkit/application"
 import type * as Submodel from "react-foldkit/submodel"
 import * as Editor from "./editor"
 
@@ -380,7 +380,7 @@ const update = (model: Model, message: Message) =>
       }),
   })
 
-const Application = defineApplication({ Model, Message, update })
+const Todos = Application.define({ Model, Message, update })
 
 const editing: Submodel.OptionalProjection<Model, Message, Editor.Model, Editor.Message> = {
   read: (model) => model.editing,
@@ -388,8 +388,8 @@ const editing: Submodel.OptionalProjection<Model, Message, Editor.Model, Editor.
 }
 
 function View() {
-  const todos = Application.useModel((model) => model.todos)
-  const send = Application.useSend()
+  const todos = Todos.useModel((model) => model.todos)
+  const send = Todos.useSend()
 
   return (
     <>
@@ -400,7 +400,7 @@ function View() {
           </li>
         ))}
       </ul>
-      <Editor.Provider from={Application} optionalLift={editing} fallback={<p>Double-click a todo to rename it.</p>}>
+      <Editor.Provider from={Todos} optionalLift={editing} fallback={<p>Double-click a todo to rename it.</p>}>
         <Editor.View />
       </Editor.Provider>
     </>
@@ -409,9 +409,9 @@ function View() {
 
 export function App() {
   return (
-    <Application.Provider init={{ model: { todos: [{ id: "1", title: "Buy milk" }], editing: Option.none() } }}>
+    <Todos.Provider init={{ model: { todos: [{ id: "1", title: "Buy milk" }], editing: Option.none() } }}>
       <View />
-    </Application.Provider>
+    </Todos.Provider>
   )
 }
 ```
@@ -446,27 +446,27 @@ export const update = (model: Model, message: Message) =>
 export const program = Program.make({ Model, Message, init, update })
 ```
 
-Spread the Program into `defineApplication` with any React-only options and `resources`. Because the Program has an `init`, the Provider needs no `init` prop; pass one to replace it, for example with server data.
+Pass the Program to `Application.define`, and React-only options and `resources` as the second argument. Because the Program has an `init`, the Provider needs no `init` prop; pass one to replace it, for example with server data.
 
 ```tsx
 // App.tsx
-import { defineApplication } from "react-foldkit/react"
+import * as Application from "react-foldkit/application"
 import * as Counter from "./counter"
 
-const Application = defineApplication({ ...Counter.program, retainInactive: "1 second" })
+const CounterApp = Application.define(Counter.program, { retainInactive: "1 second" })
 
 function View() {
-  const count = Application.useModel((model) => model.count)
-  const send = Application.useSend()
+  const count = CounterApp.useModel((model) => model.count)
+  const send = CounterApp.useSend()
 
   return <button onClick={() => send.ClickedIncrement()}>{count}</button>
 }
 
 export function App() {
   return (
-    <Application.Provider>
+    <CounterApp.Provider>
       <View />
-    </Application.Provider>
+    </CounterApp.Provider>
   )
 }
 ```

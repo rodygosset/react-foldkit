@@ -16,7 +16,7 @@ const entries = Object.keys(manifest.exports).map(function (entry) {
 		entry: entry === "." ? "react-foldkit" : "react-foldkit/" + name,
 		file: resolve(
 			root,
-			name === "eslint" ? "eslint/src/index.ts" : "src/" + name + (name === "react" ? ".tsx" : ".ts")
+			name === "eslint" ? "eslint/src/index.ts" : "src/" + name + ".ts"
 		),
 	}
 })
