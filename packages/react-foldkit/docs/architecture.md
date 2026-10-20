@@ -32,16 +32,16 @@ A child Provider consumes a projected source. It creates no Store and runs no si
 
 ## Async data
 
-Load server data with Foldkit Query from `foldkit/experimental/query`. A Query is a viewless Submodel: its Model tracks data, failure, and pending state, and its lift returns the Commands that fetch, revalidate, or cancel work. Send a Message when a view needs data, such as when a route opens, and let update call the Query lift.
+Load server data with Foldkit Query from `foldkit/experimental/query`. Its Model tracks data, failure, and pending state. Its lift returns Commands to fetch or revalidate data. Reset clears cached data and ignores late responses. It does not abort requests. Send a Message when a view needs data, then call the Query lift from update.
 
 ## Implementation map
 
-| Module             | Responsibility                                                                |
-| ------------------ | ----------------------------------------------------------------------------- |
-| `src/store`        | Message queue, Commands, Subscriptions, crash, and disposal                   |
-| `src/react`        | Application bindings, activation, selectors, and failure reporting            |
-| `src/modelSource`  | Shared snapshot, subscription, and dispatch contracts                         |
-| `src/submodel`     | Child bindings and Model sources                                              |
-| `src/internal`     | Init Command tracking, Model freezing, and Foldkit interruption compatibility |
+| Module            | Responsibility                                                                |
+| ----------------- | ----------------------------------------------------------------------------- |
+| `src/store`       | Message queue, Commands, Subscriptions, crash, and disposal                   |
+| `src/react`       | Application bindings, activation, selectors, and failure reporting            |
+| `src/modelSource` | Shared snapshot, subscription, and dispatch contracts                         |
+| `src/submodel`    | Child bindings and Model sources                                              |
+| `src/internal`    | Init Command tracking, Model freezing, and Foldkit interruption compatibility |
 
 Public barrels define the exports. Applications import Foldkit vocabulary from `foldkit`, a peer dependency, so both packages share one copy. See the [API reference](reference.md) for the public contracts.

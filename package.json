@@ -13,10 +13,14 @@
 		"test": "turbo test",
 		"prepare": "effect-tsgo patch --typescript --oxlint",
 		"check": "bun run build --filter=react-foldkit && bun run typecheck && bun run test --filter=react-foldkit && bun run lint && bun run --filter=react-foldkit test:types:package && bun run --filter=react-foldkit test:types:example && bun run --filter=react-foldkit test:package:built && bun run --filter=react-foldkit check:docs && bun run --filter=react-foldkit check:api",
-		"check:release": "bun run check && bun run --filter=react-foldkit test:browser:cold && bun run --filter=react-foldkit test:consumer && bun run --filter=web build"
+		"check:release": "bun run check && bun run --filter=react-foldkit test:browser:cold && bun run --filter=react-foldkit test:consumer && bun run --filter=web build",
+		"changeset": "changeset",
+		"version:packages": "changeset version",
+		"release:prepare": "bun run check:release && bun run --filter=react-foldkit coverage && bun run --filter=react-foldkit pack:release"
 	},
 	"devDependencies": {
 		"@effect/tsgo": "0.50.0",
+		"@changesets/cli": "3.0.3",
 		"@types/node": "^26.6.4",
 		"@typescript-eslint/parser": "8.66.0",
 		"eslint": "9.39.5",
@@ -33,7 +37,7 @@
 	},
 	"packageManager": "bun@1.3.14",
 	"engines": {
-		"node": ">=20.19.0"
+		"node": "^24"
 	},
 	"pnpm": {
 		"onlyBuiltDependencies": [

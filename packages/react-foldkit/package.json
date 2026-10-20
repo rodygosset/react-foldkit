@@ -5,6 +5,23 @@
 	"type": "module",
 	"license": "MIT",
 	"author": "Rody Gosset",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/rodygosset/react-foldkit.git",
+		"directory": "packages/react-foldkit"
+	},
+	"homepage": "https://github.com/rodygosset/react-foldkit#readme",
+	"bugs": {
+		"url": "https://github.com/rodygosset/react-foldkit/issues"
+	},
+	"engines": {
+		"node": ">=20.19.0"
+	},
+	"publishConfig": {
+		"access": "public",
+		"registry": "https://registry.npmjs.org/",
+		"tag": "latest"
+	},
 	"keywords": [
 		"react",
 		"tea",
@@ -27,6 +44,7 @@
 		"test:types:package": "tsc --project test/types/tsconfig.json",
 		"coverage": "vitest run --coverage",
 		"pack:dry": "bun run build && npm pack --dry-run",
+		"pack:release": "node scripts/prepareRelease.mjs",
 		"test:types:example": "tsc --project examples/projectCache/tsconfig.json",
 		"test:package:built": "vitest run --config vitest.package.config.ts",
 		"test:eslint": "node --import ../../eslint/ts6-register.mjs --test eslint/test/rules.test.mjs",
@@ -73,6 +91,8 @@
 		"LICENSE",
 		"README.md",
 		"THIRD-PARTY-NOTICES.md",
+		"AGENTS.md",
+		"CHANGELOG.md",
 		"docs"
 	],
 	"peerDependencies": {

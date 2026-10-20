@@ -22,3 +22,5 @@ packages/react-foldkit/TODO.md
 packages/react-foldkit/test/docs/.generated/
 
 packages/react-foldkit/coverage/
+
+.release/

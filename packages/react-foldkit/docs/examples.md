@@ -2,7 +2,7 @@
 
 We'll build a counter, then add a button that increments it after one second. The delay runs as an Effect Command, so the React view only reads state and sends Messages.
 
-Use a React application with `react-foldkit` and Effect available. Follow the [workspace setup](../../../README.md#run-locally) if you are working in this repository.
+Use a React application with the [required packages](../README.md#install).
 
 ## Create the counter
 
@@ -200,4 +200,4 @@ const Counter = defineApplication({
 
 A Provider's `crash` prop overrides either callback for that Provider.
 
-For child Models and Queries, continue with the [workspace README](../../../README.md#give-a-todo-form-its-own-submodel) and the [project-cache example](../examples/projectCache/README.md). See [how the runtime works](architecture.md) for ownership and cancellation.
+Continue with [child Models](https://github.com/rodygosset/react-foldkit/blob/v0.1.0/README.md#give-a-todo-form-its-own-submodel) and the [project-cache example](https://github.com/rodygosset/react-foldkit/tree/v0.1.0/packages/react-foldkit/examples/projectCache). See [how the runtime works](architecture.md) for ownership and cleanup.

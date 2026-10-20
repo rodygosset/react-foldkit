@@ -1,23 +1,14 @@
-# Working on React Foldkit
+# Use React Foldkit
 
-Read [the runtime explanation](docs/architecture.md) before changing lifecycle behavior. Run checks from the repository root as described in [verification](../../docs/verification.md).
+Import Messages, Commands, `Update`, `AsyncData`, and Query from `foldkit`. Import React bindings, Stores, and Submodels from `react-foldkit`.
 
-## Preserve the contracts
+- Keep updates pure and Model snapshots immutable. Return Commands for side effects.
+- Create the application outside React render. Let its Provider own the Store and its resources.
+- Use Submodels for child features. They share the parent Store. Unmounting a child does not cancel its Commands.
+- Keep application state in the Model. Component-only state can stay in React.
+- Supply Effect services through `resources`. Read an HttpApi client service inside Query's `execute` Effect.
+- Resetting a Query clears cached data and ignores late responses. It does not abort requests.
+- Keep server and client snapshots consistent for hydration.
+- Use the ESLint preset and configure React's hook rules separately.
 
-- Updates, source construction, and snapshot reads are pure. Acquire live source resources in `subscribe` and return cleanup.
-- Model snapshots are immutable. Selectors and snapshot reads stay synchronous.
-- Use Effect Scope for ownership. Stop work before releasing its services. Run crash cleanup outside the failing fiber's Scope.
-- Keep observer failures separate from Message delivery. Commit has no rollback and does not wait for Commands.
-- Effect hosts can supply ambient services to `Store.make`. React and `Store.boot` require a closed Layer when services are needed.
-- Preserve Foldkit's interrupt compatibility and the two-Store isolation test.
-- Keep `test/conformance` passing. It runs the same programs on the Store and on Foldkit's runtime; change an expected trace only when Foldkit changed that behavior on purpose.
-
-## Keep the package consistent
-
-Public barrels define the exports. Do not reexport Foldkit vocabulary; applications import it from `foldkit`, a peer dependency. Follow [the JSDoc playbook](../../docs/jsdocPlaybook.md) for owned exports.
-
-Use camelCase implementation filenames and directories. Keep public ESLint rule IDs in dash-case. Do not rename web app files. `check:filenames` checks the package conventions.
-
-Do not edit `routeTree.gen.ts`, `dist`, `eslint/dist`, or generated documentation by hand. Build and run `docs:generate` after an intentional API or JSDoc change, then review the generated diff.
-
-Use the official Foldkit npm release. Keep the demo and package development dependency pinned to the same version, and bound the peer range to tested compatible versions. CI and packed consumer tests must install from the registry without sibling checkouts or dependency overrides. Define HttpApi-backed Queries with `Query.define` and read the client service inside `execute`.
+Read the [counter tutorial](docs/examples.md), [API reference](docs/reference.md), [runtime explanation](docs/architecture.md), and [ESLint setup](eslint/README.md).

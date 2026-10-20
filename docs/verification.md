@@ -21,7 +21,9 @@ bun run --filter=react-foldkit browser:install
 bun run check:release
 ```
 
-This also runs browser tests from a cold cache, installs the React Foldkit tarball with the official Foldkit release in fresh npm consumers, and builds the web app. The core consumer has no ESLint dependency. The plugin consumer installs ESLint and checks its rules. Both compile with their own TypeScript installation and `skipLibCheck: false`. The checks do not publish anything.
+This also runs browser tests from a cold cache, installs the React Foldkit tarball with the official Foldkit release in fresh npm consumers, and builds the web app. The core consumer has no ESLint dependency. The plugin consumer installs ESLint and checks its rules. Both compile with their own TypeScript installation and `skipLibCheck: false`. The consumers also check packed documentation and links. CI repeats the consumer checks on Node.js 20.19.0.
+
+To save a tested tarball, run `bun run release:prepare`. Follow [the release procedure](releasing.md) before publishing. These checks do not publish anything.
 
 ## Update documentation and API records
 

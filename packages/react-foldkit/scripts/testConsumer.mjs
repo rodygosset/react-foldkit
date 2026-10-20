@@ -1,6 +1,15 @@
 import { parse, stringify } from "./json.mjs"
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
-import { dirname, join, resolve } from "node:path"
+import {
+	copyFileSync,
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	readdirSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs"
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path"
 import { tmpdir } from "node:os"
 import { fileURLToPath } from "node:url"
 import { spawnSync } from "node:child_process"
@@ -9,6 +18,8 @@ import { Effect, Schema } from "effect"
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 const manifest = parse(
 	Schema.Struct({
+		name: Schema.String,
+		version: Schema.String,
 		exports: Schema.Record(Schema.String, Schema.Struct({ types: Schema.String, import: Schema.String })),
 		dependencies: Schema.Record(Schema.String, Schema.String),
 		peerDependencies: Schema.Record(Schema.String, Schema.String),
@@ -55,6 +66,36 @@ function verifyExports(consumer) {
 		}
 	}
 }
+function verifyDocumentation(consumer) {
+	const packageRoot = join(consumer, "node_modules/react-foldkit")
+	const installed = parse(
+		Schema.Struct({ name: Schema.String, version: Schema.String }),
+		readFileSync(join(packageRoot, "package.json"), "utf8")
+	)
+	if (installed.name !== manifest.name || installed.version !== manifest.version)
+		throw new ConsumerError({ message: "The tarball name and version must match the package manifest" })
+	for (const file of ["AGENTS.md", "CHANGELOG.md", "README.md", "LICENSE", "THIRD-PARTY-NOTICES.md"]) {
+		if (!existsSync(join(packageRoot, file))) throw new ConsumerError({ message: "The tarball omits " + file })
+	}
+	for (const file of readdirSync(packageRoot, { recursive: true }).filter((file) => file.endsWith(".md"))) {
+		const text = readFileSync(join(packageRoot, file), "utf8")
+		for (const match of text.matchAll(/\[[^\]]+\]\(([^)]+)\)/g)) {
+			const target = match[1].replace(/^<|>$/g, "")
+			const releaseLink = /^https:\/\/github\.com\/rodygosset\/react-foldkit\/(?:blob|tree)\/v([^/]+)\//.exec(
+				target
+			)
+			if (releaseLink && releaseLink[1] !== manifest.version)
+				throw new ConsumerError({ message: file + " links to a different release: " + target })
+			if (/^(?:https?:|mailto:|#)/.test(target)) continue
+			const destination = resolve(dirname(join(packageRoot, file)), target.split("#")[0])
+			const path = relative(packageRoot, destination)
+			if (path === ".." || path.startsWith(".." + sep) || isAbsolute(path) || !existsSync(destination))
+				throw new ConsumerError({
+					message: file + " links outside the tarball or to a missing file: " + target,
+				})
+		}
+	}
+}
 function verifyConsumer(directory, tarball, fixture) {
 	const consumer = join(directory, fixture)
 	mkdirSync(consumer)
@@ -82,6 +123,7 @@ function verifyConsumer(directory, tarball, fixture) {
 	)
 	run("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund"], consumer, directory)
 	verifyExports(consumer)
+	verifyDocumentation(consumer)
 	if (fixture === "core" && existsSync(join(consumer, "node_modules/eslint")))
 		throw new ConsumerError({ message: "Core consumer unexpectedly requires ESLint" })
 	copyFileSync(join(root, "test/consumer", fixture + ".ts"), join(consumer, "consumer.ts"))
@@ -121,7 +163,7 @@ const program = Effect.acquireUseRelease(
 						message: name + " must use an npm registry version, received " + version,
 					})
 			}
-			const tarball = pack(directory)
+			const tarball = process.argv[2] === undefined ? pack(directory) : resolve(process.argv[2])
 			verifyConsumer(directory, tarball, "core")
 			verifyConsumer(directory, tarball, "eslint")
 		}),

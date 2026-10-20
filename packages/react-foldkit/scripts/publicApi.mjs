@@ -232,6 +232,8 @@ function persistOrCheck(file, content) {
 function checkLinks() {
 	const files = [
 		resolve(root, "README.md"),
+		resolve(root, "AGENTS.md"),
+		resolve(root, "CHANGELOG.md"),
 		resolve(root, "eslint/README.md"),
 		...readdirSync(resolve(root, "docs"))
 			.filter((name) => name.endsWith(".md"))

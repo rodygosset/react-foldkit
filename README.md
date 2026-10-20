@@ -2,11 +2,23 @@
 
 React bindings for [Foldkit](https://foldkit.dev), built on Effect. Application state lives in a Model. Messages describe events, pure updates change the Model, and Commands run side effects. React renders the result.
 
+> React Foldkit is experimental. Breaking changes may occur in minor releases. See the [changelog](packages/react-foldkit/CHANGELOG.md) for changes and migration steps.
+
+Compatible fixes use patch releases. Features use minor releases.
+
+## Install
+
+```sh
+npm install react-foldkit foldkit@^0.168.0 effect@4.0.0 react@^19.2.6
+```
+
+See the [requirements](packages/react-foldkit/README.md#requirements) and [ESLint setup](packages/react-foldkit/eslint/README.md).
+
 The examples below start with a counter, then add a child feature and load data with a Query. Each example is a separate application; replace the previous `App.tsx` when moving to the next one.
 
 ## Run locally
 
-Use Bun 1.3.14 and Node.js 20.19.0 or newer.
+Use Bun 1.3.14 and Node.js 24.
 
 The workspace installs the official Foldkit package from npm.
 
@@ -160,7 +172,10 @@ function View() {
 
   return (
     <>
-      <Form.Provider from={Application} lift={form}>
+      <Form.Provider
+        from={Application}
+        lift={form}
+      >
         <Form.View />
       </Form.Provider>
       <ul>
@@ -265,4 +280,4 @@ For Queries that take arguments and cache several resources across TanStack rout
 - `packages/ui` contains shared demo components.
 - `repos/foldkit` and `repos/effect` contain upstream source references. They are outside the workspace build.
 
-Read [how the runtime works](packages/react-foldkit/docs/architecture.md), [how to verify changes](docs/verification.md), and the [JSDoc playbook](docs/jsdocPlaybook.md).
+Read [how the runtime works](packages/react-foldkit/docs/architecture.md), [how to verify changes](docs/verification.md), and [how to release](docs/releasing.md).
