@@ -8,7 +8,7 @@ export default defineConfig({
 		coverage: {
 			thresholds: {
 				"src/store/store.ts": { branches: 85, lines: 95 },
-				"src/react/providerSession.ts": { branches: 90, lines: 95 },
+				"src/application/providerSession.ts": { branches: 90, lines: 95 },
 			},
 			provider: "v8",
 			reporter: ["text", "html", "json-summary"],

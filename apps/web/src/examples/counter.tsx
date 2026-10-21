@@ -2,7 +2,7 @@ import { Button } from "@workspace/ui/components/button"
 import { Schema } from "effect"
 import { MinusIcon, PlusIcon, RotateCcwIcon } from "lucide-react"
 import { defineMessageUnion } from "foldkit/message"
-import { defineApplication } from "react-foldkit/react"
+import * as Application from "react-foldkit/application"
 import { modifyFields } from "foldkit/struct"
 import type * as Update from "foldkit/update"
 import { ExampleShell } from "../components/example-shell"
@@ -31,11 +31,11 @@ const update = (model: Model, message: Message): UpdateReturn =>
 		ClickedReset: () => ({ model: modifyFields(model, { count: () => 0 }) }),
 	})
 
-const { Provider, useModel, useDispatch } = defineApplication({ Model, update })
+const { Provider, useModel, useSend } = Application.define({ Model, Message, update })
 
 function View() {
 	const count = useModel((model) => model.count)
-	const dispatch = useDispatch()
+	const send = useSend()
 
 	return (
 		<ExampleShell
@@ -54,7 +54,7 @@ function View() {
 						variant="outline"
 						size="icon-lg"
 						aria-label="Decrement"
-						onClick={() => dispatch(Message.ClickedDecrement())}
+						onClick={() => send.ClickedDecrement()}
 					>
 						<MinusIcon />
 					</Button>
@@ -62,7 +62,7 @@ function View() {
 						variant="outline"
 						size="icon-lg"
 						aria-label="Increment"
-						onClick={() => dispatch(Message.ClickedIncrement())}
+						onClick={() => send.ClickedIncrement()}
 					>
 						<PlusIcon />
 					</Button>
@@ -70,7 +70,7 @@ function View() {
 						variant="ghost"
 						size="icon-lg"
 						aria-label="Reset"
-						onClick={() => dispatch(Message.ClickedReset())}
+						onClick={() => send.ClickedReset()}
 					>
 						<RotateCcwIcon />
 					</Button>

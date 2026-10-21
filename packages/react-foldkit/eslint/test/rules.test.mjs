@@ -8,7 +8,7 @@ RuleTester.it = it
 RuleTester.itOnly = it.only
 const tester = new RuleTester({ languageOptions: { parser, parserOptions: { ecmaFeatures: { jsx: true } } } })
 const rules = recommendedConfig[0].plugins["react-foldkit"].rules
-const app = 'import { defineApplication as define } from "react-foldkit/react"; const App = define(config); '
+const app = 'import * as Application from "react-foldkit/application"; const App = Application.define(program); '
 const command = 'import { Command } from "react-foldkit"; import { Effect as Fx } from "effect"; '
 const submodelApp = 'import * as Submodel from "react-foldkit/submodel"; const Child = Submodel.define(); '
 const file = "/app/src/view.tsx"
@@ -129,6 +129,10 @@ tester.run("no-inline-submodel-lift", rules["no-inline-submodel-lift"], {
 				"const form = Submodel.lift()({ ...options, field: 'form' }); function View() { return <Child.Provider from={App} lift={form}/> }"
 		),
 		valid("function View() { other({ read }) }"),
+		valid(
+			submodelApp +
+				"const editing = { read, toParentMessage }; function View() { return <Child.Provider from={App} optionalLift={editing}/> }"
+		),
 	],
 	invalid: [
 		invalid(app + "function View() { App.useSubmodel({ read, toParentMessage }) }", "inlineLift"),
@@ -143,6 +147,10 @@ tester.run("no-inline-submodel-lift", rules["no-inline-submodel-lift"], {
 		invalid(
 			submodelApp +
 				"function View() { return <Child.Provider from={App} lift={lift()({ ...options, field: 'form' })}/> }",
+			"inlineLift"
+		),
+		invalid(
+			submodelApp + "function View() { return <Child.Provider from={App} optionalLift={{ read, toParentMessage }}/> }",
 			"inlineLift"
 		),
 	],

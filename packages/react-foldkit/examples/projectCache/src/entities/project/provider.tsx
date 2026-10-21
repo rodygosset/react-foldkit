@@ -1,4 +1,4 @@
 import * as Submodel from "react-foldkit/submodel"
-import type { Model, Message } from "./query"
+import { Message, Model } from "./query"
 
-export const { useModel, useDispatch, Provider } = Submodel.define<Model, Message>()
+export const { useModel, useDispatch, useSend, Provider } = Submodel.define({ Model, Message })

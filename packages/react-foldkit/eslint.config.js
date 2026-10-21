@@ -26,7 +26,7 @@ export default [
 					"**/vitest.setup.ts",
 					"**/test/**",
 					"**/scripts/**",
-					"**/src/react/**",
+					"**/src/application/**",
 					"**/src/store/**",
 				],
 				urlBridgePaths: ["**/*.test.{ts,tsx}", "**/test/**"],

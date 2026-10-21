@@ -2,7 +2,7 @@ import { Duration, Effect, Match, Option, Schema, Stream } from "effect"
 import * as AsyncData from "foldkit/asyncData"
 import { defineMessageUnion } from "foldkit/message"
 import * as Query from "foldkit/experimental/query"
-import { defineApplication } from "react-foldkit/react"
+import * as Application from "react-foldkit/application"
 import { modifyFields } from "foldkit/struct"
 import * as Subscription from "foldkit/subscription"
 import * as Update from "foldkit/update"
@@ -149,16 +149,12 @@ const subscriptions = Subscription.make<Model, Message>()((entry) => ({
 	),
 }))
 
-const { Provider, useModel, useDispatch } = defineApplication({
-	Model,
-	update,
-	subscriptions,
-})
+const { Provider, useModel, useSend } = Application.define({ Model, Message, update, subscriptions })
 
 function PostsListView() {
 	const postsData = useModel((model) => postsQuery.read(model.posts))
 	const postDetailById = useModel((model) => model.postDetailById)
-	const dispatch = useDispatch()
+	const send = useSend()
 
 	return (
 		<div className="flex flex-col gap-4">
@@ -166,7 +162,7 @@ function PostsListView() {
 				title="Posts"
 				actionLabel={AsyncData.isRefreshing(postsData) ? "Refreshing…" : "Invalidate"}
 				isActionDisabled={AsyncData.isPending(postsData)}
-				onAction={() => dispatch(Message.ClickedInvalidatePosts())}
+				onAction={() => send.ClickedInvalidatePosts()}
 			>
 				Open a post, then go back. The list stays Success. <code>reset</code> clears cached post details; late
 				responses for cleared entries are ignored. Open the same post again to load it fresh. The Cached badge
@@ -175,13 +171,13 @@ function PostsListView() {
 			<AsyncDataPanel
 				data={postsData}
 				loadingText="Loading posts…"
-				onRetry={() => dispatch(Message.ClickedRetryPosts())}
+				onRetry={() => send.ClickedRetryPosts()}
 			>
 				{(fetched) => (
 					<PostListItems
 						posts={fetched.posts}
 						isCached={(postId) => AsyncData.hasData(postDetailQuery.read(postDetailById, { postId }))}
-						onSelect={(postId) => dispatch(Message.ClickedPost({ postId }))}
+						onSelect={(postId) => send.ClickedPost({ postId })}
 					/>
 				)}
 			</AsyncDataPanel>
@@ -191,15 +187,15 @@ function PostsListView() {
 
 function PostDetailView(props: { postId: string }) {
 	const postDetailData = useModel((model) => postDetailQuery.read(model.postDetailById, { postId: props.postId }))
-	const dispatch = useDispatch()
+	const send = useSend()
 
 	return (
 		<div className="flex flex-col gap-4">
-			<BackButton onClick={() => dispatch(Message.ClickedBackToPosts())} />
+			<BackButton onClick={() => send.ClickedBackToPosts()} />
 			<AsyncDataPanel
 				data={postDetailData}
 				loadingText="Loading post…"
-				onRetry={() => dispatch(Message.ClickedRetryPostDetail({ postId: props.postId }))}
+				onRetry={() => send.ClickedRetryPostDetail({ postId: props.postId })}
 			>
 				{({ detail, fetchedAt }) => (
 					<PostDetailCard
@@ -224,7 +220,7 @@ function PostsTabView() {
 
 function StatsTabView() {
 	const statsData = useModel((model) => statsQuery.read(model.stats))
-	const dispatch = useDispatch()
+	const send = useSend()
 	const isPending = AsyncData.isPending(statsData)
 
 	return (
@@ -233,7 +229,7 @@ function StatsTabView() {
 				title="Stats"
 				actionLabel={isPending ? "Refreshing…" : "Refresh"}
 				isActionDisabled={isPending}
-				onAction={() => dispatch(Message.ClickedRefreshStats())}
+				onAction={() => send.ClickedRefreshStats()}
 			>
 				Stats refetch every 5 seconds while this tab is open. The old numbers stay on screen while the new ones
 				load. Query.define owns those AsyncData transitions.
@@ -241,7 +237,7 @@ function StatsTabView() {
 			<AsyncDataPanel
 				data={statsData}
 				loadingText="Loading stats…"
-				onRetry={() => dispatch(Message.ClickedRetryStats())}
+				onRetry={() => send.ClickedRetryStats()}
 			>
 				{(fetched) => (
 					<StatsCards
@@ -257,14 +253,14 @@ function StatsTabView() {
 
 function View() {
 	const activeTab = useModel((model) => model.activeTab)
-	const dispatch = useDispatch()
+	const send = useSend()
 
 	return (
 		<ApiCacheLayout
 			title="API Cache (Query)"
 			description="The same Model-as-cache TEA as API Cache. Foldkit Query owns fetch completion, retry, deduplication, and keyed slots. reset clears post details when leaving a post. The parent folds Query Messages and handles user intent."
 			activeTab={activeTab}
-			onSelectTab={(tab) => dispatch(Message.ClickedTab({ tab }))}
+			onSelectTab={(tab) => send.ClickedTab({ tab })}
 		>
 			{Match.value(activeTab).pipe(
 				Match.when("Posts", () => <PostsTabView />),

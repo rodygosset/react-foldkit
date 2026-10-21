@@ -2,13 +2,183 @@
 
 Generated from the build. Run docs:generate after an intentional API change and review this diff. Content hashes and JSDoc are omitted.
 
+## dist/application.d.ts
+
+```ts
+export * from "./application/public";
+```
+
+## dist/application/providerSession.d.ts
+
+```ts
+import { Cause, Effect, Exit, Option } from "effect";
+import type { ModelReader } from "../modelSource";
+import type { ReactStore } from "./reactStore";
+export interface Bootstrap<Model, Message> {
+  readonly store: ReactStore<Model, Message>;
+}
+export interface Snapshot {
+  readonly cause: Option.Option<Cause.Cause<unknown>>;
+}
+export interface ProviderSession extends ModelReader<Snapshot> {
+  readonly start: Effect.Effect<void>;
+  readonly stop: Effect.Effect<void>;
+}
+export declare function make<Model, Message>(bootstrap: Exit.Exit<Bootstrap<Model, Message>, unknown>, onError: (cause: Cause.Cause<unknown>) => Effect.Effect<void, unknown>): ProviderSession;
+```
+
+## dist/application/public.d.ts
+
+```ts
+export { define } from "./react";
+export type { Application, CrashConfig, CrashContext, ModelHooks, Options, ProviderProps, ReactivationContext, Send, } from "./react";
+```
+
+## dist/application/react.d.ts
+
+```ts
+import { Cause, Effect, Option, Schema } from "effect";
+import React from "react";
+import type { ModelSource } from "../modelSource";
+import type { OptionalProjection, Projection } from "../submodel/lift";
+import type * as Update from "foldkit/update";
+import type { Program } from "../program/program";
+import * as ReactStore from "./reactStore";
+import { type Send } from "./send";
+export type { ReactivationContext } from "./reactStore";
+export type { Send } from "./send";
+export interface CrashContext<Model, Message> {
+  readonly cause: Cause.Cause<unknown>;
+  readonly model: Option.Option<Model>;
+  readonly message: Option.Option<Message>;
+}
+export interface CrashConfig<Model, Message> {
+  readonly view?: (context: CrashContext<Model, Message> & {
+    readonly restart: () => void;
+  }) => React.ReactNode;
+  readonly report?: (context: CrashContext<Model, Message>) => Effect.Effect<void, unknown>;
+}
+export type Options<Model, Message, R = never> = Omit<ReactStore.Config<Model, Message, R>, "update" | "subscriptions"> & {
+  readonly crash?: CrashConfig<Model, Message>;
+  readonly validateInit?: boolean;
+};
+type OptionsArgument<Model, Message, R> = [R] extends [never] ? [options?: Options<Model, Message, R>] : [options: Options<Model, Message, R>];
+export type ProviderProps<Model, Message, R = never, HasInit extends boolean = false> = {
+  readonly children?: React.ReactNode;
+  readonly crash?: CrashConfig<Model, Message>;
+} & (HasInit extends true ? {
+  readonly init?: Init<Model, Message, R>;
+} : {
+  readonly init: Init<Model, Message, R>;
+});
+type Init<Model, Message, R> = Update.Return<Model, Message, R> | (() => Update.Return<Model, Message, R>);
+export interface ModelHooks<Model, Message> {
+  readonly useModel: {
+    (): Model;
+    <Selected>(selector: (model: Model) => Selected, isEqual?: (a: Selected, b: Selected) => boolean): Selected;
+  };
+  readonly useDispatch: () => (message: Message) => void;
+  readonly useSend: () => Send<Message>;
+  readonly useOptionalModel: () => Option.Option<Model>;
+  readonly useOptionalDispatch: () => Option.Option<(message: Message) => void>;
+  readonly useInbound: <A>(value: A, toMessage: (value: A) => Message, isEqual?: (previous: A, next: A) => boolean) => void;
+  readonly useSubmodel: <ChildModel, ChildMessage>(projection: Projection<Model, Message, ChildModel, ChildMessage>) => ModelSource<ChildModel, ChildMessage>;
+  readonly useOptionalSubmodel: <ChildModel, ChildMessage>(projection: OptionalProjection<Model, Message, ChildModel, ChildMessage>) => Option.Option<ModelSource<ChildModel, ChildMessage>>;
+}
+export interface Application<Model, Message, R = never, HasInit extends boolean = false> extends ModelHooks<Model, Message> {
+  readonly Provider: (props: ProviderProps<Model, Message, R, HasInit>) => React.ReactNode;
+}
+export type SourceContext<Model, Message> = React.Context<Option.Option<ModelSource<Model, Message>>>;
+export declare const makeSourceContext: <Model, Message>() => SourceContext<Model, Message>;
+export declare function modelHooks<Model, Message>(Context: SourceContext<Model, Message>, Message: Schema.Schema<Message>, missingProvider: () => Error): {
+  useModel: {
+    (): Model;
+    <Selected>(selector: (model: Model) => Selected, isEqual?: (a: Selected, b: Selected) => boolean): Selected;
+  };
+  useDispatch: () => (message: Message) => void;
+  useSend: () => Send<Message>;
+  useOptionalModel: () => Option.Option<Model>;
+  useOptionalDispatch: () => Option.Option<(message: Message) => void>;
+  useInbound: <A>(value: A, toMessage: (value: A) => Message, isEqual?: (previous: A, next: A) => boolean) => void;
+  useSubmodel: <Model_1, Message_1>({ read, toParentMessage, }: Projection<Model, Message, Model_1, Message_1>) => ModelSource<Model_1, Message_1>;
+  useOptionalSubmodel: <Model_1, Message_1>({ read, toParentMessage, }: OptionalProjection<Model, Message, Model_1, Message_1>) => Option.Option<ModelSource<Model_1, Message_1>>;
+};
+export declare function define<Model, Message, R = never>(program: Program<Model, Message, never, R> & {
+  readonly init: () => Update.Return<Model, Message, R>;
+}, ...options: OptionsArgument<Model, Message, R>): Application<Model, Message, R, true>;
+export declare function define<Model, Message, R = never>(program: Program<Model, Message, never, R>, ...options: OptionsArgument<Model, Message, R>): Application<Model, Message, R>;
+```
+
+## dist/application/reactStore.d.ts
+
+```ts
+import { Cause, Duration, Effect, Option, Result, Scope } from "effect";
+import * as Store from "../store/store";
+import type * as Update from "foldkit/update";
+declare const ReactStoreTypeId: unique symbol;
+export type ReactStoreTypeId = typeof ReactStoreTypeId;
+export type ReactStore<Model, Message> = Readonly<{
+  [ReactStoreTypeId]: ReactStoreTypeId;
+  getModel: () => Model;
+  getServerModel: () => Model;
+  getCrash: () => Option.Option<Cause.Cause<unknown>>;
+  getCrashMessage: () => Option.Option<Message>;
+  subscribeCrash: (listener: () => void) => () => void;
+  subscribe: (listener: () => void) => () => void;
+  dispatch: (message: Message) => void;
+  commit: (message: Message) => Result.Result<void, Store.CommitError>;
+  activate: Effect.Effect<void, never, Scope.Scope>;
+}>;
+export interface ReactivationContext<Model, Message, R = never> {
+  readonly model: Model;
+  readonly interrupted: Update.Commands<Message, R>;
+}
+export type Config<Model, Message, R = never> = Store.Config<Model, Message, R> & {
+  readonly onReactivate?: (context: ReactivationContext<Model, Message, R>) => Message;
+  readonly retainInactive?: Duration.Input;
+  readonly restartInterrupted?: boolean | ((command: Update.Commands<Message, R>[number]) => boolean);
+  readonly freezeModel?: boolean;
+};
+export declare function make<Model, Message, R = never>(config: Config<Model, Message, R>, init: Update.Return<Model, Message, R>): ReactStore<Model, Message>;
+export {};
+```
+
+## dist/application/send.d.ts
+
+```ts
+import { type Schema } from "effect";
+type Fields<Message> = {
+  readonly [Key in keyof Message as Key extends "_tag" ? never : Key]: Message[Key];
+};
+type SendVariant<Message> = keyof Fields<Message> extends never ? () => void : (fields: Fields<Message>) => void;
+export type Send<Message> = ((message: Message) => void) & {
+  readonly [Variant in Message as Variant extends {
+    readonly _tag: infer Tag extends string;
+  } ? Tag : never]: SendVariant<Variant>;
+};
+export declare function sendFor<Message>(union: Schema.Schema<Message>): (dispatch: (message: Message) => void) => Send<Message>;
+export {};
+```
+
+## dist/application/useModel.d.ts
+
+```ts
+import { Option } from "effect";
+import type { ModelReader } from "../modelSource/modelSource";
+export declare function useModel<Model>(source: ModelReader<Model>): Model;
+export declare function useModel<Model, Selected>(source: ModelReader<Model>, selector: (model: Model) => Selected, isEqual?: (a: Selected, b: Selected) => boolean): Selected;
+export declare function useModel<Model, Selected>(source: ModelReader<Model>, selector?: (model: Model) => Selected, isEqual?: (a: Selected, b: Selected) => boolean): Model | Selected;
+export declare function useOptionalModel<Model>(source: Option.Option<ModelReader<Model>>): Option.Option<Model>;
+```
+
 ## dist/index.d.ts
 
 ```ts
-export * as ReactFoldkit from "./react";
+export * as Application from "./application";
 export * as Store from "./store";
 export * as Submodel from "./submodel";
 export * as ModelSource from "./modelSource";
+export * as Program from "./program";
 ```
 
 ## dist/internal/deepFreeze.d.ts
@@ -75,146 +245,47 @@ export declare function stabilize<Model, Wrapped>(wrap: (model: Model) => Wrappe
 export type { ModelReader, ModelSource } from "./modelSource";
 ```
 
-## dist/react.d.ts
+## dist/program.d.ts
 
 ```ts
-export * from "./react/public";
+export * from "./program/public";
 ```
 
-## dist/react/providerSession.d.ts
+## dist/program/program.d.ts
 
 ```ts
-import { Cause, Effect, Exit, Option } from "effect";
-import type { ModelReader } from "../modelSource";
-import type { ReactStore } from "./reactStore";
-export interface Bootstrap<Model, Message> {
-  readonly store: ReactStore<Model, Message>;
-}
-export interface Snapshot {
-  readonly cause: Option.Option<Cause.Cause<unknown>>;
-}
-export interface ProviderSession extends ModelReader<Snapshot> {
-  readonly start: Effect.Effect<void>;
-  readonly stop: Effect.Effect<void>;
-}
-export declare function make<Model, Message>(bootstrap: Exit.Exit<Bootstrap<Model, Message>, unknown>, onError: (cause: Cause.Cause<unknown>) => Effect.Effect<void, unknown>): ProviderSession;
-```
-
-## dist/react/public.d.ts
-
-```ts
-export { defineApplication } from "./react";
-export type { Application, Config, CrashConfig, CrashContext, ModelHooks, ProviderProps, ReactivationContext, } from "./react";
-```
-
-## dist/react/react.d.ts
-
-```ts
-import { Cause, Effect, Option, Schema } from "effect";
-import React from "react";
-import type { ModelSource } from "../modelSource";
-import type { OptionalProjection, Projection } from "../submodel/lift";
+import type { Schema } from "effect";
+import type * as Subscription from "foldkit/subscription";
 import type * as Update from "foldkit/update";
-import * as ReactStore from "./reactStore";
-export type { ReactivationContext } from "./reactStore";
-type ModelCodec = Schema.Codec<unknown, unknown, unknown, unknown>;
-type Type<ModelSchema extends ModelCodec> = Schema.Schema.Type<ModelSchema>;
-export interface CrashContext<Model, Message> {
-  readonly cause: Cause.Cause<unknown>;
-  readonly model: Option.Option<Model>;
-  readonly message: Option.Option<Message>;
+export interface Program<Model, Message, OutMessage = never, R = never> {
+  readonly Model: Schema.Codec<Model, unknown, unknown, unknown>;
+  readonly Message: Schema.Schema<Message>;
+  readonly OutMessage?: Schema.Schema<OutMessage>;
+  readonly init?: () => Update.Return<Model, Message, R>;
+  readonly update: (model: Model, message: Message) => Update.ReturnWithOutMessage<Model, Message, OutMessage, R>;
+  readonly subscriptions?: Subscription.Subscriptions<Model, Message, R>;
 }
-export interface CrashConfig<Model, Message> {
-  readonly view?: (context: CrashContext<Model, Message> & {
-    readonly restart: () => void;
-  }) => React.ReactNode;
-  readonly report?: (context: CrashContext<Model, Message>) => Effect.Effect<void, unknown>;
-}
-export type Config<ModelSchema extends ModelCodec, Message, R = never> = ReactStore.Config<Type<ModelSchema>, Message, R> & {
-  readonly Model: ModelSchema;
-  readonly crash?: CrashConfig<Type<ModelSchema>, Message>;
-  readonly validateInit?: boolean;
+type ApplicationProgram<Model, Message, R> = Omit<Program<Model, Message, never, R>, "OutMessage" | "update"> & {
+  readonly OutMessage?: undefined;
+  readonly update: (model: Model, message: Message) => Update.Return<Model, Message, R>;
 };
-export type ProviderProps<Model, Message, R = never> = {
-  readonly init: Update.Return<Model, Message, R> | (() => Update.Return<Model, Message, R>);
-  readonly children?: React.ReactNode;
-  readonly crash?: CrashConfig<Model, Message>;
+export declare function make<Model, Message, OutMessage, R = never>(program: Program<Model, Message, OutMessage, R> & {
+  readonly OutMessage: Schema.Schema<OutMessage>;
+}): Program<Model, Message, OutMessage, R>;
+export declare function make<Model, Message, R = never>(program: ApplicationProgram<Model, Message, R> & {
+  readonly init: () => Update.Return<Model, Message, R>;
+}): Program<Model, Message, never, R> & {
+  readonly init: () => Update.Return<Model, Message, R>;
 };
-export interface ModelHooks<Model, Message> {
-  readonly useModel: {
-    (): Model;
-    <Selected>(selector: (model: Model) => Selected, isEqual?: (a: Selected, b: Selected) => boolean): Selected;
-  };
-  readonly useDispatch: () => (message: Message) => void;
-  readonly useOptionalModel: () => Option.Option<Model>;
-  readonly useOptionalDispatch: () => Option.Option<(message: Message) => void>;
-  readonly useInbound: <A>(value: A, toMessage: (value: A) => Message, isEqual?: (previous: A, next: A) => boolean) => void;
-  readonly useSubmodel: <ChildModel, ChildMessage>(projection: Projection<Model, Message, ChildModel, ChildMessage>) => ModelSource<ChildModel, ChildMessage>;
-  readonly useOptionalSubmodel: <ChildModel, ChildMessage>(projection: OptionalProjection<Model, Message, ChildModel, ChildMessage>) => Option.Option<ModelSource<ChildModel, ChildMessage>>;
-}
-export interface Application<Model, Message, R = never> extends ModelHooks<Model, Message> {
-  readonly Provider: (props: ProviderProps<Model, Message, R>) => React.ReactNode;
-}
-export type SourceContext<Model, Message> = React.Context<Option.Option<ModelSource<Model, Message>>>;
-export declare const makeSourceContext: <Model, Message>() => SourceContext<Model, Message>;
-export declare function modelHooks<Model, Message>(Context: SourceContext<Model, Message>, missingProvider: () => Error): {
-  useModel: {
-    (): Model;
-    <Selected>(selector: (model: Model) => Selected, isEqual?: (a: Selected, b: Selected) => boolean): Selected;
-  };
-  useDispatch: () => (message: Message) => void;
-  useOptionalModel: () => Option.Option<Model>;
-  useOptionalDispatch: () => Option.Option<(message: Message) => void>;
-  useInbound: <A>(value: A, toMessage: (value: A) => Message, isEqual?: (previous: A, next: A) => boolean) => void;
-  useSubmodel: <Model_1, Message_1>({ read, toParentMessage, }: Projection<Model, Message, Model_1, Message_1>) => ModelSource<Model_1, Message_1>;
-  useOptionalSubmodel: <Model_1, Message_1>({ read, toParentMessage, }: OptionalProjection<Model, Message, Model_1, Message_1>) => Option.Option<ModelSource<Model_1, Message_1>>;
-};
-export declare function defineApplication<ModelSchema extends ModelCodec, Message, R = never>(config: Config<ModelSchema, Message, R>): Application<Type<ModelSchema>, Message, R>;
-```
-
-## dist/react/reactStore.d.ts
-
-```ts
-import { Cause, Duration, Effect, Option, Result, Scope } from "effect";
-import * as Store from "../store/store";
-import type * as Update from "foldkit/update";
-declare const ReactStoreTypeId: unique symbol;
-export type ReactStoreTypeId = typeof ReactStoreTypeId;
-export type ReactStore<Model, Message> = Readonly<{
-  [ReactStoreTypeId]: ReactStoreTypeId;
-  getModel: () => Model;
-  getServerModel: () => Model;
-  getCrash: () => Option.Option<Cause.Cause<unknown>>;
-  getCrashMessage: () => Option.Option<Message>;
-  subscribeCrash: (listener: () => void) => () => void;
-  subscribe: (listener: () => void) => () => void;
-  dispatch: (message: Message) => void;
-  commit: (message: Message) => Result.Result<void, Store.CommitError>;
-  activate: Effect.Effect<void, never, Scope.Scope>;
-}>;
-export interface ReactivationContext<Model, Message, R = never> {
-  readonly model: Model;
-  readonly interrupted: Update.Commands<Message, R>;
-}
-export type Config<Model, Message, R = never> = Store.Config<Model, Message, R> & {
-  readonly onReactivate?: (context: ReactivationContext<Model, Message, R>) => Message;
-  readonly retainInactive?: Duration.Input;
-  readonly restartInterrupted?: boolean | ((command: Update.Commands<Message, R>[number]) => boolean);
-  readonly freezeModel?: boolean;
-};
-export declare function make<Model, Message, R = never>(config: Config<Model, Message, R>, init: Update.Return<Model, Message, R>): ReactStore<Model, Message>;
+export declare function make<Model, Message, R = never>(program: ApplicationProgram<Model, Message, R>): Program<Model, Message, never, R>;
 export {};
 ```
 
-## dist/react/useModel.d.ts
+## dist/program/public.d.ts
 
 ```ts
-import { Option } from "effect";
-import type { ModelReader } from "../modelSource/modelSource";
-export declare function useModel<Model>(source: ModelReader<Model>): Model;
-export declare function useModel<Model, Selected>(source: ModelReader<Model>, selector: (model: Model) => Selected, isEqual?: (a: Selected, b: Selected) => boolean): Selected;
-export declare function useModel<Model, Selected>(source: ModelReader<Model>, selector?: (model: Model) => Selected, isEqual?: (a: Selected, b: Selected) => boolean): Model | Selected;
-export declare function useOptionalModel<Model>(source: Option.Option<ModelReader<Model>>): Option.Option<Model>;
+export { make } from "./program";
+export type { Program } from "./program";
 ```
 
 ## dist/store.d.ts
@@ -396,7 +467,7 @@ export {};
 
 ```ts
 export { define, ProviderError } from "./submodel";
-export type { ProviderProps, Submodel } from "./submodel";
+export type { Config, ProviderProps, Submodel } from "./submodel";
 export { lift } from "./lift";
 export type { Lift, OptionalProjection, Projection } from "./lift";
 ```
@@ -406,19 +477,29 @@ export type { Lift, OptionalProjection, Projection } from "./lift";
 ```ts
 import { Schema } from "effect";
 import React from "react";
-import { type ModelHooks } from "../react/react";
+import { type ModelHooks } from "../application/react";
 import type { ModelSource } from "../modelSource";
-import type { Projection } from "./lift";
+import type { OptionalProjection, Projection } from "./lift";
 export type ProviderProps<Model, Message, ParentModel = never, ParentMessage = never> = {
   readonly children?: React.ReactNode;
 } & ({
   readonly from: Pick<ModelHooks<ParentModel, ParentMessage>, "useSubmodel">;
   readonly lift: Projection<ParentModel, ParentMessage, Model, Message>;
+  readonly optionalLift?: never;
+  readonly fallback?: never;
+  readonly source?: never;
+} | {
+  readonly from: Pick<ModelHooks<ParentModel, ParentMessage>, "useOptionalSubmodel">;
+  readonly optionalLift: OptionalProjection<ParentModel, ParentMessage, Model, Message>;
+  readonly fallback?: React.ReactNode;
+  readonly lift?: never;
   readonly source?: never;
 } | {
   readonly source: ModelSource<Model, Message>;
   readonly from?: never;
   readonly lift?: never;
+  readonly optionalLift?: never;
+  readonly fallback?: never;
 });
 export interface Submodel<Model, Message> extends ModelHooks<Model, Message> {
   readonly Provider: <ParentModel = never, ParentMessage = never>(props: ProviderProps<Model, Message, ParentModel, ParentMessage>) => React.ReactNode;
@@ -429,7 +510,11 @@ declare const ProviderError_base: Schema.Class<ProviderError, Schema.Struct<{
 export declare class ProviderError extends ProviderError_base {
   get message(): string;
 }
-export declare function define<Model, Message>(): Submodel<Model, Message>;
+export interface Config<Model, Message> {
+  readonly Model: Schema.Codec<Model, unknown, unknown, unknown>;
+  readonly Message: Schema.Schema<Message>;
+}
+export declare function define<Model, Message>(config: Config<Model, Message>): Submodel<Model, Message>;
 export {};
 ```
 

@@ -1,7 +1,7 @@
 // Check the built public API using Foldkit's Vitest type-test convention.
 import { Option, Schema } from "effect"
 import { defineMessageUnion } from "foldkit/message"
-import { defineApplication } from "react-foldkit/react"
+import * as Application from "react-foldkit/application"
 import { define } from "react-foldkit/submodel"
 import type { ModelSource } from "react-foldkit/modelSource"
 import { describe, expectTypeOf, it } from "vitest"
@@ -12,8 +12,8 @@ const Message = defineMessageUnion({ Load: {}, Loaded: { count: Schema.Finite } 
 type Message = typeof Message.Type
 
 type ForeignMessage = { readonly _tag: "Other" }
-const Submodel = define<Model, Message>()
-const Root = defineApplication({ Model, update: (model: Model, _message: Message) => ({ model }) })
+const Submodel = define({ Model, Message })
+const Root = Application.define({ Model, Message, update: (model: Model, _message: Message) => ({ model }) })
 declare const dispatch: ReturnType<typeof Submodel.useDispatch>
 declare const foreignDispatch: (message: ForeignMessage) => void
 
@@ -23,6 +23,7 @@ describe("define public types", function () {
 			| "Provider"
 			| "useModel"
 			| "useDispatch"
+			| "useSend"
 			| "useOptionalModel"
 			| "useOptionalDispatch"
 			| "useSubmodel"
@@ -75,6 +76,27 @@ describe("define public types", function () {
 			toParentMessage: (message: Message) => message,
 		})
 		expectTypeOf(optional).toEqualTypeOf<Option.Option<ModelSource<number, Message>>>()
+		const optionalChild = {
+			read: (model: Model) => Option.some(model),
+			toParentMessage: (message: Message) => message,
+		}
+		Submodel.Provider({ from: Root, optionalLift: optionalChild, fallback: null })
+		Submodel.Provider({
+			from: Root,
+			// @ts-expect-error optionalLift reads an Option of the child Model.
+			optionalLift: { read: (model: Model) => model, toParentMessage: (message: Message) => message },
+		})
+		// @ts-expect-error A Provider takes a lift or an optionalLift, not both.
+		Submodel.Provider({
+			from: Root,
+			lift: { read: (model: Model) => model, toParentMessage: (message: Message) => message },
+			optionalLift: optionalChild,
+		})
+		// @ts-expect-error fallback only applies to optionalLift.
+		Submodel.Provider({ source, fallback: null })
+		Submodel.useSend().Loaded({ count: 1 })
+		// @ts-expect-error Child Send only has the child's tags.
+		Submodel.useSend().Other()
 		// @ts-expect-error The Provider source must match the child Model.
 		Submodel.Provider({ source: { ...source, getSnapshot: () => "bad" } })
 		// @ts-expect-error The source dispatcher must accept the child's Messages.
@@ -90,7 +112,9 @@ describe("define public types", function () {
 		Root.useSubmodel({ read: (model) => model, toParentMessage: (_message: Message) => ({ _tag: "Other" }) })
 		// @ts-expect-error Optional projections must describe presence explicitly.
 		Root.useOptionalSubmodel({ read: (model) => model, toParentMessage: (message: Message) => message })
-		// @ts-expect-error The factory accepts no runtime configuration.
-		define<Model, Message>({ Model, Message })
+		// @ts-expect-error The factory needs the child Model Schema and Message union.
+		define<Model, Message>()
+		// @ts-expect-error The Message union must match the child's Messages.
+		define<Model, Message>({ Model, Message: defineMessageUnion({ Other: {} }) })
 	}
 })

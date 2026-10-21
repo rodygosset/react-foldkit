@@ -34,7 +34,7 @@ We'll start with a button that increments a counter. Create `App.tsx` and render
 ```tsx
 import { Schema } from "effect"
 import { defineMessageUnion } from "foldkit/message"
-import { defineApplication } from "react-foldkit/react"
+import * as Application from "react-foldkit/application"
 import { modifyFields } from "foldkit/struct"
 import type * as Update from "foldkit/update"
 
@@ -49,25 +49,27 @@ const update = (model: Model, message: Message) =>
     ClickedIncrement: () => ({ model: modifyFields(model, { count: (count) => count + 1 }) }),
   })
 
-const Application = defineApplication({ Model, update })
+const Counter = Application.define({ Model, Message, update })
 
 function View() {
-  const count = Application.useModel((model) => model.count)
-  const dispatch = Application.useDispatch()
+  const count = Counter.useModel((model) => model.count)
+  const send = Counter.useSend()
 
-  return <button onClick={() => dispatch(Message.ClickedIncrement())}>{count}</button>
+  return <button onClick={() => send.ClickedIncrement()}>{count}</button>
 }
 
 export function App() {
   return (
-    <Application.Provider init={{ model: { count: 0 } }}>
+    <Counter.Provider init={{ model: { count: 0 } }}>
       <View />
-    </Application.Provider>
+    </Counter.Provider>
   )
 }
 ```
 
 The button starts at `0`. Each click sends a Message to update, which returns the next Model. `useModel` subscribes the view to the count, so the button displays `1`, then `2`.
+
+`useSend` returns one function per Message tag. `send.ClickedIncrement()` builds the Message with the union's constructor, so it takes the same fields as `Message.ClickedIncrement`. Call `send(message)` to send a Message you already built.
 
 The Provider owns the application state. Updates are pure; return Commands when an update needs to run an Effect. See the [counter with a delayed increment](packages/react-foldkit/docs/examples.md) for that next step.
 
@@ -110,23 +112,23 @@ export const update = (model: Model, message: Message) =>
     },
   })
 
-export const { Provider, useModel, useDispatch } = Submodel.define<Model, Message>()
+export const { Provider, useModel, useSend } = Submodel.define({ Model, Message })
 
 export function View() {
   const draft = useModel((model) => model.draft)
-  const dispatch = useDispatch()
+  const send = useSend()
 
   return (
     <form
       onSubmit={(event) => {
         event.preventDefault()
-        dispatch(Message.ClickedSubmit())
+        send.ClickedSubmit()
       }}
     >
       <input
         aria-label="New todo"
         value={draft}
-        onChange={(event) => dispatch(Message.ChangedDraft({ text: event.target.value }))}
+        onChange={(event) => send.ChangedDraft({ text: event.target.value })}
       />
       <button type="submit">Add todo</button>
     </form>
@@ -141,7 +143,7 @@ import { Array, Schema } from "effect"
 import { defineMessageUnion } from "foldkit/message"
 import { modifyFields } from "foldkit/struct"
 import type * as Update from "foldkit/update"
-import { defineApplication } from "react-foldkit/react"
+import * as Application from "react-foldkit/application"
 import * as Submodel from "react-foldkit/submodel"
 import * as Form from "./form"
 
@@ -165,15 +167,15 @@ const update = (model: Model, message: Message) =>
     GotFormMessage: ({ message }) => form.fold(model, message),
   })
 
-const Application = defineApplication({ Model, update })
+const Todos = Application.define({ Model, Message, update })
 
 function View() {
-  const todos = Application.useModel((model) => model.todos)
+  const todos = Todos.useModel((model) => model.todos)
 
   return (
     <>
       <Form.Provider
-        from={Application}
+        from={Todos}
         lift={form}
       >
         <Form.View />
@@ -189,9 +191,9 @@ function View() {
 
 export function App() {
   return (
-    <Application.Provider init={{ model: { form: { draft: "" }, todos: [] } }}>
+    <Todos.Provider init={{ model: { form: { draft: "" }, todos: [] } }}>
       <View />
-    </Application.Provider>
+    </Todos.Provider>
   )
 }
 ```
@@ -210,7 +212,7 @@ import * as AsyncData from "foldkit/asyncData"
 import * as Query from "foldkit/experimental/query"
 import { defineMessageUnion } from "foldkit/message"
 import type * as Update from "foldkit/update"
-import { defineApplication } from "react-foldkit/react"
+import * as Application from "react-foldkit/application"
 
 const Profile = Schema.Struct({ name: Schema.String })
 
@@ -241,12 +243,12 @@ const update = (model: Model, message: Message) =>
     ClickedRefresh: () => profile.revalidate(model),
   })
 
-const { Provider, useModel, useDispatch } = defineApplication({ Model, update })
+const { Provider, useModel, useSend } = Application.define({ Model, Message, update })
 const init = profile.loadIfMissing({ profile: query.init() })
 
 function View() {
   const result = useModel((model) => query.read(model.profile))
-  const dispatch = useDispatch()
+  const send = useSend()
 
   return (
     <>
@@ -255,7 +257,7 @@ function View() {
         onFailure: (error) => <p>{error}</p>,
         onData: (profile) => <h1>Hello, {profile.name}</h1>,
       })}
-      <button onClick={() => dispatch(Message.ClickedRefresh())}>Refresh</button>
+      <button onClick={() => send.ClickedRefresh()}>Refresh</button>
     </>
   )
 }
@@ -272,6 +274,204 @@ export function App() {
 Open the page to see **Loading profile...**, then **Hello, Ada**. `init` marks the profile as pending and returns the fetch Command, which the Provider starts on activation. **Refresh** revalidates the profile while keeping the current data on screen.
 
 For Queries that take arguments and cache several resources across TanStack routes, see the [project-cache example](packages/react-foldkit/examples/projectCache/README.md).
+
+## Open an optional child
+
+Some children exist only part of the time, such as an editor that opens on double-click. Store the child Model in an `Option` field and give its Provider an `optionalLift`. The Provider renders its children while the field is `Some` and `fallback` while it is `None`.
+
+Create `editor.tsx`. It reports `Saved` or `Discarded` to its parent.
+
+```tsx
+import { Schema } from "effect"
+import { defineMessageUnion } from "foldkit/message"
+import { modifyFields } from "foldkit/struct"
+import type * as Update from "foldkit/update"
+import * as Submodel from "react-foldkit/submodel"
+
+export const Model = Schema.Struct({ id: Schema.String, title: Schema.String })
+export type Model = typeof Model.Type
+
+export const Message = defineMessageUnion({
+  ChangedTitle: { title: Schema.String },
+  PressedEnter: {},
+  PressedEscape: {},
+})
+export type Message = typeof Message.Type
+
+export const OutMessage = defineMessageUnion({
+  Saved: { id: Schema.String, title: Schema.String },
+  Discarded: {},
+})
+export type OutMessage = typeof OutMessage.Type
+
+export const update = (model: Model, message: Message) =>
+  Message.match<Update.ReturnWithOutMessage<Model, Message, OutMessage>>(message, {
+    ChangedTitle: ({ title }) => ({ model: modifyFields(model, { title: () => title }) }),
+    PressedEnter: () => ({ model, outMessage: OutMessage.Saved({ id: model.id, title: model.title }) }),
+    PressedEscape: () => ({ model, outMessage: OutMessage.Discarded() }),
+  })
+
+export const { Provider, useModel, useSend } = Submodel.define({ Model, Message })
+
+export function View() {
+  const title = useModel((model) => model.title)
+  const send = useSend()
+
+  return (
+    <input
+      autoFocus
+      value={title}
+      onChange={(event) => send.ChangedTitle({ title: event.target.value })}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") send.PressedEnter()
+        if (event.key === "Escape") send.PressedEscape()
+      }}
+    />
+  )
+}
+```
+
+The parent opens the editor by setting `editing` to `Some`, and folds its OutMessages. It drops editor Messages that arrive after the editor closed.
+
+```tsx
+import { Array, Option, Schema } from "effect"
+import { defineMessageUnion } from "foldkit/message"
+import { modifyFields } from "foldkit/struct"
+import type * as Update from "foldkit/update"
+import * as Application from "react-foldkit/application"
+import type * as Submodel from "react-foldkit/submodel"
+import * as Editor from "./editor"
+
+const Todo = Schema.Struct({ id: Schema.String, title: Schema.String })
+
+const Model = Schema.Struct({ todos: Schema.Array(Todo), editing: Schema.Option(Editor.Model) })
+type Model = typeof Model.Type
+
+const Message = defineMessageUnion({
+  DoubleClickedTodo: { id: Schema.String },
+  GotEditorMessage: { message: Editor.Message },
+})
+type Message = typeof Message.Type
+
+const closeEditor = (model: Model) => modifyFields(model, { editing: () => Option.none() })
+
+const update = (model: Model, message: Message) =>
+  Message.match<Update.Return<Model, Message>>(message, {
+    DoubleClickedTodo: ({ id }) => ({
+      model: modifyFields(model, { editing: () => Array.findFirst(model.todos, (todo) => todo.id === id) }),
+    }),
+    GotEditorMessage: ({ message }) =>
+      Option.match(model.editing, {
+        onNone: () => ({ model }),
+        onSome: (editing) => {
+          const result = Editor.update(editing, message)
+          if (result.outMessage === undefined) {
+            return { model: modifyFields(model, { editing: () => Option.some(result.model) }) }
+          }
+          return Editor.OutMessage.match(result.outMessage, {
+            Saved: ({ id, title }) => ({
+              model: modifyFields(closeEditor(model), {
+                todos: Array.map((todo) => (todo.id === id ? { ...todo, title } : todo)),
+              }),
+            }),
+            Discarded: () => ({ model: closeEditor(model) }),
+          })
+        },
+      }),
+  })
+
+const Todos = Application.define({ Model, Message, update })
+
+const editing: Submodel.OptionalProjection<Model, Message, Editor.Model, Editor.Message> = {
+  read: (model) => model.editing,
+  toParentMessage: (message) => Message.GotEditorMessage({ message }),
+}
+
+function View() {
+  const todos = Todos.useModel((model) => model.todos)
+  const send = Todos.useSend()
+
+  return (
+    <>
+      <ul>
+        {todos.map((todo) => (
+          <li key={todo.id} onDoubleClick={() => send.DoubleClickedTodo({ id: todo.id })}>
+            {todo.title}
+          </li>
+        ))}
+      </ul>
+      <Editor.Provider from={Todos} optionalLift={editing} fallback={<p>Double-click a todo to rename it.</p>}>
+        <Editor.View />
+      </Editor.Provider>
+    </>
+  )
+}
+
+export function App() {
+  return (
+    <Todos.Provider init={{ model: { todos: [{ id: "1", title: "Buy milk" }], editing: Option.none() } }}>
+      <View />
+    </Todos.Provider>
+  )
+}
+```
+
+Double-click **Buy milk** to open the editor. **Enter** saves the title and **Escape** discards it; both close the editor and show the hint again.
+
+## Keep the logic in a Program
+
+`Program.make` groups a feature's Model, Message union, `init`, `update`, and Subscriptions without importing React. The field names match Foldkit's `Runtime.makeApplication`, so the same module can run in React, in a Store, in Foldkit Story tests, or later in a Foldkit application with a view.
+
+```ts
+// counter.ts
+import { Schema } from "effect"
+import { defineMessageUnion } from "foldkit/message"
+import { modifyFields } from "foldkit/struct"
+import type * as Update from "foldkit/update"
+import * as Program from "react-foldkit/program"
+
+export const Model = Schema.Struct({ count: Schema.Finite })
+export type Model = typeof Model.Type
+
+export const Message = defineMessageUnion({ ClickedIncrement: {} })
+export type Message = typeof Message.Type
+
+export const init = (): Update.Return<Model, Message> => ({ model: { count: 0 } })
+
+export const update = (model: Model, message: Message) =>
+  Message.match<Update.Return<Model, Message>>(message, {
+    ClickedIncrement: () => ({ model: modifyFields(model, { count: (count) => count + 1 }) }),
+  })
+
+export const program = Program.make({ Model, Message, init, update })
+```
+
+Pass the Program to `Application.define`, and React-only options and `resources` as the second argument. Because the Program has an `init`, the Provider needs no `init` prop; pass one to replace it, for example with server data.
+
+```tsx
+// App.tsx
+import * as Application from "react-foldkit/application"
+import * as Counter from "./counter"
+
+const CounterApp = Application.define(Counter.program, { retainInactive: "1 second" })
+
+function View() {
+  const count = CounterApp.useModel((model) => model.count)
+  const send = CounterApp.useSend()
+
+  return <button onClick={() => send.ClickedIncrement()}>{count}</button>
+}
+
+export function App() {
+  return (
+    <CounterApp.Provider>
+      <View />
+    </CounterApp.Provider>
+  )
+}
+```
+
+A child Program declares an `OutMessage` union and usually no `init`, since its parent creates the child Model. Pass it to `Submodel.define` to get its hooks.
 
 ## Find your way around
 

@@ -2,7 +2,7 @@ import { Duration, Effect, HashMap, Match, Option, Schema, Stream, pipe } from "
 import * as AsyncData from "foldkit/asyncData"
 import * as Command from "foldkit/command"
 import { defineMessageUnion } from "foldkit/message"
-import { defineApplication } from "react-foldkit/react"
+import * as Application from "react-foldkit/application"
 import { modifyFields } from "foldkit/struct"
 import * as Subscription from "foldkit/subscription"
 import type * as Update from "foldkit/update"
@@ -202,18 +202,14 @@ const subscriptions = Subscription.make<Model, Message>()((entry) => ({
 	),
 }))
 
-const { Provider, useModel, useDispatch } = defineApplication({
-	Model,
-	update,
-	subscriptions,
-})
+const { Provider, useModel, useSend } = Application.define({ Model, Message, update, subscriptions })
 
 // VIEW
 
 function PostsListView() {
 	const posts = useModel((model) => model.posts)
 	const postDetailById = useModel((model) => model.postDetailById)
-	const dispatch = useDispatch()
+	const send = useSend()
 
 	return (
 		<div className="flex flex-col gap-4">
@@ -221,7 +217,7 @@ function PostsListView() {
 				title="Posts"
 				actionLabel={AsyncData.isRefreshing(posts) ? "Refreshing…" : "Invalidate"}
 				isActionDisabled={AsyncData.isPending(posts)}
-				onAction={() => dispatch(Message.ClickedInvalidatePosts())}
+				onAction={() => send.ClickedInvalidatePosts()}
 			>
 				Open a post, go back, and open it again. The second visit renders instantly from the Model. Invalidate
 				marks the list stale and refetches it while the current list stays on screen.
@@ -229,13 +225,13 @@ function PostsListView() {
 			<AsyncDataPanel
 				data={posts}
 				loadingText="Loading posts…"
-				onRetry={() => dispatch(Message.ClickedRetryPosts())}
+				onRetry={() => send.ClickedRetryPosts()}
 			>
 				{(fetched) => (
 					<PostListItems
 						posts={fetched.posts}
 						isCached={(postId) => Option.exists(HashMap.get(postDetailById, postId), AsyncData.hasData)}
-						onSelect={(postId) => dispatch(Message.ClickedPost({ postId }))}
+						onSelect={(postId) => send.ClickedPost({ postId })}
 					/>
 				)}
 			</AsyncDataPanel>
@@ -247,15 +243,15 @@ function PostDetailView(props: { postId: string }) {
 	const postDetailData = useModel((model) =>
 		Option.getOrElse(HashMap.get(model.postDetailById, props.postId), () => PostDetailData.Idle())
 	)
-	const dispatch = useDispatch()
+	const send = useSend()
 
 	return (
 		<div className="flex flex-col gap-4">
-			<BackButton onClick={() => dispatch(Message.ClickedBackToPosts())} />
+			<BackButton onClick={() => send.ClickedBackToPosts()} />
 			<AsyncDataPanel
 				data={postDetailData}
 				loadingText="Loading post…"
-				onRetry={() => dispatch(Message.ClickedRetryPostDetail({ postId: props.postId }))}
+				onRetry={() => send.ClickedRetryPostDetail({ postId: props.postId })}
 			>
 				{({ detail, fetchedAt }) => (
 					<PostDetailCard
@@ -280,7 +276,7 @@ function PostsTabView() {
 
 function StatsTabView() {
 	const stats = useModel((model) => model.stats)
-	const dispatch = useDispatch()
+	const send = useSend()
 	const isPending = AsyncData.isPending(stats)
 
 	return (
@@ -289,7 +285,7 @@ function StatsTabView() {
 				title="Stats"
 				actionLabel={isPending ? "Refreshing…" : "Refresh"}
 				isActionDisabled={isPending}
-				onAction={() => dispatch(Message.ClickedRefreshStats())}
+				onAction={() => send.ClickedRefreshStats()}
 			>
 				Stats refetch every 5 seconds while this tab is open. The old numbers stay on screen while the new ones
 				load.
@@ -297,7 +293,7 @@ function StatsTabView() {
 			<AsyncDataPanel
 				data={stats}
 				loadingText="Loading stats…"
-				onRetry={() => dispatch(Message.ClickedRetryStats())}
+				onRetry={() => send.ClickedRetryStats()}
 			>
 				{(fetched) => (
 					<StatsCards
@@ -313,14 +309,14 @@ function StatsTabView() {
 
 function View() {
 	const activeTab = useModel((model) => model.activeTab)
-	const dispatch = useDispatch()
+	const send = useSend()
 
 	return (
 		<ApiCacheLayout
 			title="API Cache"
 			description="Query client patterns as ordinary Model state, update logic, and one Subscription."
 			activeTab={activeTab}
-			onSelectTab={(tab) => dispatch(Message.ClickedTab({ tab }))}
+			onSelectTab={(tab) => send.ClickedTab({ tab })}
 		>
 			{Match.value(activeTab).pipe(
 				Match.when("Posts", () => <PostsTabView />),

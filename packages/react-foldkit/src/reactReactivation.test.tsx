@@ -6,7 +6,7 @@ import React from "react"
 import { afterEach, expect } from "vitest"
 import { it } from "@effect/vitest"
 import * as AsyncData from "foldkit/asyncData"
-import { defineApplication } from "./react"
+import * as Application from "./application"
 
 afterEach(cleanup)
 
@@ -36,42 +36,51 @@ it.live.each([false, true])("restarts pending reads without replaying mutations 
 		type Model = typeof query.Model.Type
 		type Message =
 			typeof query.Message.Type | { readonly _tag: "ClickedLoad" } | { readonly _tag: "ResumedApplication" }
-		const App = defineApplication({
-			Model: query.Model,
-			onReactivate: (): Message => ({ _tag: "ResumedApplication" }),
-			update(model: Model, message: Message) {
-				switch (message._tag) {
-					case "ResumedApplication":
-						return AsyncData.isPending(query.read(model))
-							? Update.combine(model, [query.reset, query.loadIfMissing])
-							: { model }
-					case "ClickedLoad": {
-						const loaded = query.loadIfMissing(model)
-						return {
-							...loaded,
-							commands: [
-								...(loaded.commands ?? []),
-								{
-									name: "Save",
-									effect: Effect.sync(function () {
-										writes += 1
-									}).pipe(
-										Effect.andThen(Effect.never),
-										Effect.onInterrupt(() =>
-											Effect.sync(function () {
-												canceledWrites += 1
-											})
-										)
-									),
-								},
-							],
+		const App = Application.define(
+			{
+				Model: query.Model,
+				Message: Schema.Union([
+					query.Message,
+					Schema.TaggedStruct("ClickedLoad", {}),
+					Schema.TaggedStruct("ResumedApplication", {}),
+				]),
+				update(model: Model, message: Message) {
+					switch (message._tag) {
+						case "ResumedApplication":
+							return AsyncData.isPending(query.read(model))
+								? Update.combine(model, [query.reset, query.loadIfMissing])
+								: { model }
+						case "ClickedLoad": {
+							const loaded = query.loadIfMissing(model)
+							return {
+								...loaded,
+								commands: [
+									...(loaded.commands ?? []),
+									{
+										name: "Save",
+										effect: Effect.sync(function () {
+											writes += 1
+										}).pipe(
+											Effect.andThen(Effect.never),
+											Effect.onInterrupt(() =>
+												Effect.sync(function () {
+													canceledWrites += 1
+												})
+											)
+										),
+									},
+								],
+							}
 						}
+						default:
+							return query.update(model, message)
 					}
-					default:
-						return query.update(model, message)
-				}
+				},
 			},
-		})
+			{
+				onReactivate: (): Message => ({ _tag: "ResumedApplication" }),
+			}
+		)
 		function View() {
 			const result = query.read(App.useModel())
 			const dispatch = App.useDispatch()
@@ -129,15 +138,20 @@ it.live("reports the original reactivation update defect and recovers on a later
 		let shouldFail = false
 		const reported: Cause.Cause<unknown>[] = []
 		const rendered: Cause.Cause<unknown>[] = []
-		const App = defineApplication({
-			Model: Schema.Finite,
-			onReactivate: () => 1,
-			update(model: number, message: number) {
-				if (shouldFail) throw defect
-				return { model: model + message }
+		const App = Application.define(
+			{
+				Model: Schema.Finite,
+				Message: Schema.Finite,
+				update(model: number, message: number) {
+					if (shouldFail) throw defect
+					return { model: model + message }
+				},
 			},
-			onCrash() {},
-		})
+			{
+				onReactivate: () => 1,
+				onCrash() {},
+			}
+		)
 		function View() {
 			return <span>{App.useModel()}</span>
 		}
@@ -186,18 +200,23 @@ it.live.each([false, true])("renders a new callback defect after Activity retain
 		let shouldFail = true
 		const reports: Cause.Cause<unknown>[] = []
 		const rendered: Cause.Cause<unknown>[] = []
-		const App = defineApplication({
-			Model: Schema.Finite,
-			update(model: number, message: number) {
-				if (message === 9) throw previous
-				return { model: model + message }
+		const App = Application.define(
+			{
+				Model: Schema.Finite,
+				Message: Schema.Finite,
+				update(model: number, message: number) {
+					if (message === 9) throw previous
+					return { model: model + message }
+				},
 			},
-			onReactivate(): number {
-				if (shouldFail) throw current
-				return 1
-			},
-			onCrash() {},
-		})
+			{
+				onReactivate(): number {
+					if (shouldFail) throw current
+					return 1
+				},
+				onCrash() {},
+			}
+		)
 		function View() {
 			const dispatch = App.useDispatch()
 			return <button onClick={() => dispatch(9)}>{App.useModel()}</button>

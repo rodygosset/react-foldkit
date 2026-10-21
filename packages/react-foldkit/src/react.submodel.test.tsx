@@ -8,7 +8,7 @@ import { ChildMessage, ChildModel, createSubmodelFixture } from "../test/fixture
 import * as Command from "foldkit/command"
 import { defineMessageUnion } from "foldkit/message"
 import type { ModelSource } from "./modelSource"
-import { defineApplication } from "./react"
+import * as Application from "./application"
 import { modifyFields } from "foldkit/struct"
 import { define, ProviderError } from "./submodel"
 import * as Update from "foldkit/update"
@@ -45,7 +45,7 @@ const update = (model: Model, message: Message): UpdateReturn =>
 		}),
 	})
 
-const Submodel = define<Model, Message>()
+const Submodel = define({ Model, Message })
 
 afterEach(cleanup)
 
@@ -64,7 +64,7 @@ function View(props: { name: string }) {
 describe("define", function () {
 	it("composes inline root, sibling, and nested Providers without parent subscriptions", function () {
 		const fixture = createSubmodelFixture()
-		const NumberView = define<number, string>()
+		const NumberView = define({ Model: Schema.Finite, Message: Schema.String })
 		const count = {
 			read: (model: ChildModel) => model.count,
 			toParentMessage: (_message: string) => ChildMessage.Increment(),
@@ -212,7 +212,7 @@ describe("define", function () {
 	it.live("composes nested lifts and isolates sibling dispatchers under one root", () =>
 		Effect.gen(function* () {
 			const fixture = createSubmodelFixture()
-			const NumberView = define<number, ChildMessage>()
+			const NumberView = define({ Model: Schema.Finite, Message: ChildMessage })
 			const left = {
 				read: (model: Model & { unrelated: number }) => model.count,
 				toParentMessage: (message: ChildMessage) => message,
@@ -434,16 +434,26 @@ describe("define", function () {
 				toParentMessage: (message) => ParentMessage.GotChild({ message }),
 				foldOutMessage: (out) => (model) => ({ model: modifyFields(model, { total: () => out.count }) }),
 			})
-			const First = defineApplication({
-				Model: FirstModel,
-				update: (model: FirstModel, { message }: ParentMessage) => foldFirst(model, message),
-				resources: layer,
-			})
-			const Second = defineApplication({
-				Model: SecondModel,
-				update: (model: SecondModel, { message }: ParentMessage) => foldSecond(model, message),
-				resources: layer,
-			})
+			const First = Application.define(
+				{
+					Model: FirstModel,
+					Message: ParentMessage,
+					update: (model: FirstModel, { message }: ParentMessage) => foldFirst(model, message),
+				},
+				{
+					resources: layer,
+				}
+			)
+			const Second = Application.define(
+				{
+					Model: SecondModel,
+					Message: ParentMessage,
+					update: (model: SecondModel, { message }: ParentMessage) => foldSecond(model, message),
+				},
+				{
+					resources: layer,
+				}
+			)
 			const firstForm = {
 				read: (model: FirstModel) => model.form,
 				toParentMessage: (message: Message) => ParentMessage.GotChild({ message }),
@@ -499,8 +509,9 @@ describe("define", function () {
 		type ParentModel = typeof ParentModel.Type
 		const ParentMessage = defineMessageUnion({ Set: { child: Schema.Option(Model) } })
 		type ParentMessage = typeof ParentMessage.Type
-		const App = defineApplication({
+		const App = Application.define({
 			Model: ParentModel,
+			Message: ParentMessage,
 			update: (model: ParentModel, { child }: ParentMessage) => ({
 				model: modifyFields(model, { child: () => child }),
 			}),
@@ -583,22 +594,28 @@ describe("define", function () {
 						model: modifyFields(model, { reported: () => out.count }),
 					}),
 				})
-			const App = defineApplication({
-				Model: ParentModel,
-				resources: layer,
-				update(model: ParentModel, message: ParentMessage): Update.Return<ParentModel, ParentMessage, Reader> {
-					seen(message)
-					return ParentMessage.match(message, {
-						GotChild: ({ instanceId, message }) => foldChild(instanceId)(model, message),
-						Remove: () => ({ model: modifyFields(model, { child: () => Option.none() }) }),
-						Recreate: ({ instanceId }) => ({
-							model: modifyFields(model, {
-								child: () => Option.some({ instanceId, model: { count: 0 } }),
+			const App = Application.define(
+				{
+					Model: ParentModel,
+					Message: ParentMessage,
+					update(
+						model: ParentModel,
+						message: ParentMessage
+					): Update.Return<ParentModel, ParentMessage, Reader> {
+						seen(message)
+						return ParentMessage.match(message, {
+							GotChild: ({ instanceId, message }) => foldChild(instanceId)(model, message),
+							Remove: () => ({ model: modifyFields(model, { child: () => Option.none() }) }),
+							Recreate: ({ instanceId }) => ({
+								model: modifyFields(model, {
+									child: () => Option.some({ instanceId, model: { count: 0 } }),
+								}),
 							}),
-						}),
-					})
+						})
+					},
 				},
-			})
+				{ resources: layer }
+			)
 			let departing: Option.Option<ModelSource<Model, Message>> = Option.none()
 			let staleDispatch: Option.Option<(message: Message) => void> = Option.none()
 			function Capture(props: { instanceId: string }) {

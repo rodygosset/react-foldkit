@@ -60,9 +60,9 @@
 			"types": "./dist/index.d.ts",
 			"import": "./dist/index.js"
 		},
-		"./react": {
-			"types": "./dist/react.d.ts",
-			"import": "./dist/react.js"
+		"./application": {
+			"types": "./dist/application.d.ts",
+			"import": "./dist/application.js"
 		},
 		"./store": {
 			"types": "./dist/store.d.ts",
@@ -71,6 +71,10 @@
 		"./submodel": {
 			"types": "./dist/submodel.d.ts",
 			"import": "./dist/submodel.js"
+		},
+		"./program": {
+			"types": "./dist/program.d.ts",
+			"import": "./dist/program.js"
 		},
 		"./eslint": {
 			"types": "./eslint/dist/index.d.ts",

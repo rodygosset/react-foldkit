@@ -11,7 +11,7 @@ Create `App.tsx` with the following code. Render its `App` component from your R
 ```tsx
 import { Schema } from "effect"
 import { defineMessageUnion } from "foldkit/message"
-import { defineApplication } from "react-foldkit/react"
+import * as Application from "react-foldkit/application"
 import { modifyFields } from "foldkit/struct"
 import type * as Update from "foldkit/update"
 
@@ -36,18 +36,18 @@ const update = (model: Model, message: Message) =>
     ClickedReset: () => ({ model: modifyFields(model, { count: () => 0 }) }),
   })
 
-const Counter = defineApplication({ Model, update })
+const Counter = Application.define({ Model, Message, update })
 
 function CounterView() {
   const count = Counter.useModel((model) => model.count)
-  const dispatch = Counter.useDispatch()
+  const send = Counter.useSend()
 
   return (
     <div>
       <output>{count}</output>
-      <button onClick={() => dispatch(Message.ClickedDecrement())}>Decrement</button>
-      <button onClick={() => dispatch(Message.ClickedIncrement())}>Increment</button>
-      <button onClick={() => dispatch(Message.ClickedReset())}>Reset</button>
+      <button onClick={() => send.ClickedDecrement()}>Decrement</button>
+      <button onClick={() => send.ClickedIncrement()}>Increment</button>
+      <button onClick={() => send.ClickedReset()}>Reset</button>
     </div>
   )
 }
@@ -117,11 +117,12 @@ const update = (model: Model, message: Message) =>
     }),
   })
 
-const Counter = defineApplication({
-  Model,
-  update,
-  restartInterrupted: (command) => command.name === "WaitToIncrement",
-})
+const Counter = Application.define(
+  { Model, Message, update },
+  {
+    restartInterrupted: (command) => command.name === "WaitToIncrement",
+  }
+)
 ```
 
 Change the Provider's initial Model to `{ count: 0, isWaiting: false }`.
@@ -136,17 +137,17 @@ Replace `CounterView` with this version.
 function CounterView() {
   const count = Counter.useModel((model) => model.count)
   const isWaiting = Counter.useModel((model) => model.isWaiting)
-  const dispatch = Counter.useDispatch()
+  const send = Counter.useSend()
 
   return (
     <div>
       <output>{count}</output>
-      <button onClick={() => dispatch(Message.ClickedDecrement())}>Decrement</button>
-      <button onClick={() => dispatch(Message.ClickedIncrement())}>Increment</button>
-      <button onClick={() => dispatch(Message.ClickedReset())}>Reset</button>
+      <button onClick={() => send.ClickedDecrement()}>Decrement</button>
+      <button onClick={() => send.ClickedIncrement()}>Increment</button>
+      <button onClick={() => send.ClickedReset()}>Reset</button>
       <button
         disabled={isWaiting}
-        onClick={() => dispatch(Message.ClickedDelayedIncrement())}
+        onClick={() => send.ClickedDelayedIncrement()}
       >
         {isWaiting ? "Waiting..." : "Increment after one second"}
       </button>
@@ -183,10 +184,8 @@ Render `SyncStep` inside the Provider. `useInbound` skips the first value, which
 A Command or update that fails crashes the Store. The Provider then renders `crash.view` in place of its children. The view receives the failure, the Model at the time, the Message that triggered it, and `restart`, which remounts the Provider from `init`.
 
 ```tsx
-const Counter = defineApplication({
-  Model,
-  update,
-  crash: {
+const Counter = Application.define({ Model, Message, update }, {
+crash: {
     view: ({ cause, restart }) => (
       <div role="alert">
         <pre>{Cause.pretty(cause)}</pre>

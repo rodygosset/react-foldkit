@@ -46,15 +46,15 @@ export const update = (model: Model, message: Message): UpdateReturn =>
 		ClickedSubmit: () => submit(model),
 	})
 
-export const { Provider, useModel, useDispatch } = Submodel.define<Model, Message>()
+export const { Provider, useModel, useSend } = Submodel.define({ Model, Message })
 
 /** Reads the child view context supplied by the parent. */
 export function View() {
 	const draft = useModel((model) => model.draft)
-	const dispatch = useDispatch()
+	const send = useSend()
 	function onSubmit(event: React.SubmitEvent<HTMLFormElement>) {
 		event.preventDefault()
-		dispatch(Message.ClickedSubmit())
+		send.ClickedSubmit()
 	}
 
 	return (
@@ -74,7 +74,7 @@ export function View() {
 					value={draft}
 					placeholder="What needs doing?"
 					autoComplete="off"
-					onChange={(event) => dispatch(Message.ChangedDraft({ text: event.target.value }))}
+					onChange={(event) => send.ChangedDraft({ text: event.target.value })}
 				/>
 			</div>
 			<Button

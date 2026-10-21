@@ -181,7 +181,7 @@ interface Origin {
 function importedOrigin(module: string, path: ReadonlyArray<string>): Origin {
 	const namespaces: Record<string, string> = {
 		"effect/Effect": "Effect",
-		"react-foldkit/react": "ReactFoldkit",
+		"react-foldkit/application": "Application",
 		"react-foldkit/submodel": "Submodel",
 		"react-foldkit/store": "Store",
 		"foldkit/command": "Command",
@@ -292,8 +292,7 @@ export function applicationMember(value: Origin | undefined): string | undefined
 	if (value?.module !== "react-foldkit") return undefined
 	const path = value.path
 	if (path.length === 3) {
-		if (path[0] === "ReactFoldkit" && (path[1] === "defineApplication()" || path[1] === "defineSubmodel()"))
-			return path[2]
+		if (path[0] === "Application" && path[1] === "define()") return path[2]
 		if (path[0] === "Submodel" && path[1] === "define()") return path[2]
 	}
 	return undefined

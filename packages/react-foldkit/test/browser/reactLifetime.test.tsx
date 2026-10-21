@@ -6,7 +6,7 @@ import React from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, describe, expect } from "vitest"
 import * as AsyncData from "foldkit/asyncData"
-import { defineApplication } from "../../src/react"
+import * as Application from "../../src/application"
 import * as Subscription from "foldkit/subscription"
 
 let root: Root | undefined
@@ -30,8 +30,9 @@ afterEach(function () {
 describe("React activation with the native browser scheduler", function () {
 	it.live.each(["layout", "ref"] as const)("accepts %s Messages under Strict Mode", (phase) =>
 		Effect.gen(function* () {
-			const App = defineApplication({
+			const App = Application.define({
 				Model: Schema.Finite,
+				Message: Schema.Finite,
 				update: (_model: number, message: number) => ({ model: message }),
 			})
 			function View() {
@@ -91,22 +92,31 @@ describe("React activation with the native browser scheduler", function () {
 			})
 			type Model = typeof query.Model.Type
 			type Message = typeof query.Message.Type | { readonly _tag: "Load" } | { readonly _tag: "Resume" }
-			const App = defineApplication({
-				Model: query.Model,
-				onReactivate: (): Message => ({ _tag: "Resume" }),
-				update(model: Model, message: Message) {
-					switch (message._tag) {
-						case "Load":
-							return query.loadIfMissing(model)
-						case "Resume":
-							return AsyncData.isPending(query.read(model))
-								? Update.combine(model, [query.reset, query.loadIfMissing])
-								: { model }
-						default:
-							return query.update(model, message)
-					}
+			const App = Application.define(
+				{
+					Model: query.Model,
+					Message: Schema.Union([
+						query.Message,
+						Schema.TaggedStruct("Load", {}),
+						Schema.TaggedStruct("Resume", {}),
+					]),
+					update(model: Model, message: Message) {
+						switch (message._tag) {
+							case "Load":
+								return query.loadIfMissing(model)
+							case "Resume":
+								return AsyncData.isPending(query.read(model))
+									? Update.combine(model, [query.reset, query.loadIfMissing])
+									: { model }
+							default:
+								return query.update(model, message)
+						}
+					},
 				},
-			})
+				{
+					onReactivate: (): Message => ({ _tag: "Resume" }),
+				}
+			)
 			function View() {
 				const result = query.read(App.useModel())
 				const dispatch = App.useDispatch()
@@ -146,14 +156,19 @@ describe("React activation with the native browser scheduler", function () {
 			const defect = new Error("Reactivation update failed")
 			const reports: Cause.Cause<unknown>[] = []
 			const rendered: Cause.Cause<unknown>[] = []
-			const App = defineApplication({
-				Model: Schema.Finite,
-				onReactivate: () => 1,
-				update(_model: number, _message: number): { model: number } {
-					throw defect
+			const App = Application.define(
+				{
+					Model: Schema.Finite,
+					Message: Schema.Finite,
+					update(_model: number, _message: number): { model: number } {
+						throw defect
+					},
 				},
-				onCrash() {},
-			})
+				{
+					onReactivate: () => 1,
+					onCrash() {},
+				}
+			)
 			function View() {
 				return <span>{App.useModel()}</span>
 			}
@@ -194,16 +209,21 @@ describe("React activation with the native browser scheduler", function () {
 			const current = new Error("Replacement callback failed")
 			const reports: Cause.Cause<unknown>[] = []
 			const rendered: Cause.Cause<unknown>[] = []
-			const App = defineApplication({
-				Model: Schema.Finite,
-				update(_model: number, _message: number): { model: number } {
-					throw previous
+			const App = Application.define(
+				{
+					Model: Schema.Finite,
+					Message: Schema.Finite,
+					update(_model: number, _message: number): { model: number } {
+						throw previous
+					},
 				},
-				onReactivate(): number {
-					throw current
-				},
-				onCrash() {},
-			})
+				{
+					onReactivate(): number {
+						throw current
+					},
+					onCrash() {},
+				}
+			)
 			function View() {
 				const dispatch = App.useDispatch()
 				return <button onClick={() => dispatch(1)}>Crash</button>
@@ -259,12 +279,17 @@ describe("React activation with the native browser scheduler", function () {
 					}
 				),
 			}))
-			const App = defineApplication({
-				Model: Schema.Finite,
-				update: (model: number, _message: number) => ({ model }),
-				subscriptions,
-				onCrash() {},
-			})
+			const App = Application.define(
+				{
+					Model: Schema.Finite,
+					Message: Schema.Finite,
+					update: (model: number, _message: number) => ({ model }),
+					subscriptions,
+				},
+				{
+					onCrash() {},
+				}
+			)
 			function View() {
 				return <span>{App.useModel()}</span>
 			}

@@ -1,10 +1,10 @@
 /**
- * Application Providers, Model hooks, and child lifts.
+ * Application Providers and Model hooks for running a Program in React.
  *
  * @category modules
- * @since 0.1.0
+ * @since 0.2.0
  */
-export * as ReactFoldkit from "./react"
+export * as Application from "./application"
 /**
  * Scoped Model ownership, Message delivery, and lifecycle errors.
  *
@@ -26,3 +26,10 @@ export * as Submodel from "./submodel"
  * @since 0.1.0
  */
 export * as ModelSource from "./modelSource"
+/**
+ * Foldkit applications and child features without their views, shared by React, Stores, and tests.
+ *
+ * @category modules
+ * @since 0.2.0
+ */
+export * as Program from "./program"

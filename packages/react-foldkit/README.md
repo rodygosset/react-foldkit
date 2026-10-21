@@ -32,7 +32,7 @@ Render this `App` from your React entry point:
 ```tsx
 import { Schema } from "effect"
 import { defineMessageUnion } from "foldkit/message"
-import { defineApplication } from "react-foldkit/react"
+import * as Application from "react-foldkit/application"
 import { modifyFields } from "foldkit/struct"
 import type * as Update from "foldkit/update"
 
@@ -47,12 +47,12 @@ const update = (model: Model, message: Message) =>
     ClickedIncrement: () => ({ model: modifyFields(model, { count: (count) => count + 1 }) }),
   })
 
-const Counter = defineApplication({ Model, update })
+const Counter = Application.define({ Model, Message, update })
 
 function CounterView() {
   const count = Counter.useModel((model) => model.count)
-  const dispatch = Counter.useDispatch()
-  return <button onClick={() => dispatch(Message.ClickedIncrement())}>{count}</button>
+  const send = Counter.useSend()
+  return <button onClick={() => send.ClickedIncrement()}>{count}</button>
 }
 
 export function App() {

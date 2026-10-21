@@ -3,21 +3,26 @@
 Generated from the public exports. See the [counter tutorial](examples.md) for usage and [runtime architecture](architecture.md) for ownership. Regenerate with `bun run --filter=react-foldkit docs:generate` from the repository root.
 
 - [react-foldkit](#react-foldkit)
-- [react-foldkit/react](#react-foldkitreact)
+- [react-foldkit/application](#react-foldkitapplication)
 - [react-foldkit/store](#react-foldkitstore)
 - [react-foldkit/submodel](#react-foldkitsubmodel)
+- [react-foldkit/program](#react-foldkitprogram)
 - [react-foldkit/eslint](#react-foldkiteslint)
 - [react-foldkit/modelSource](#react-foldkitmodelSource)
 
 ## react-foldkit
 
+### Application
+
+Application Providers and Model hooks for running a Program in React.
+
 ### ModelSource
 
 Model snapshots, subscriptions, and dispatch contracts shared by React bindings.
 
-### ReactFoldkit
+### Program
 
-Application Providers, Model hooks, and child lifts.
+Foldkit applications and child features without their views, shared by React, Stores, and tests.
 
 ### Store
 
@@ -27,11 +32,11 @@ Scoped Model ownership, Message delivery, and lifecycle errors.
 
 Child Model Providers, hooks, and lifts.
 
-## react-foldkit/react
+## react-foldkit/application
 
 ### Application
 
-The Provider and hooks returned by `defineApplication` for a Foldkit application.
+The Provider and hooks returned by `define` for a Foldkit application.
 Render its Provider above the views that use its hooks. Each mounted Provider owns an
 independent Model and the Commands and Subscriptions that update it.
 
@@ -39,7 +44,7 @@ independent Model and the Commands and Subscriptions that update it.
   Captures `init` on initialization. Remount to replace it.
 
   ```ts
-  (props: ProviderProps<Model, Message, R>) => React.ReactNode
+  (props: ProviderProps<Model, Message, R, HasInit>) => React.ReactNode
   ```
 
 - `useModel` Subscribes the view to the Model or a selected value. Pass a selector to read only the
@@ -56,6 +61,14 @@ independent Model and the Commands and Subscriptions that update it.
 
   ```ts
   () => (message: Message) => void
+  ```
+
+- `useSend` Returns a Send for the Provider's Message union. Call `send.Tag(fields)` to build and
+  dispatch a Message, or `send(message)` to dispatch one you built. Its identity is stable
+  while the Provider's source is. Throws outside the matching Provider.
+
+  ```ts
+  () => Send<Message>
   ```
 
 - `useOptionalModel` Reads `Some(Model)` inside the matching Provider and `None` outside it.
@@ -95,102 +108,10 @@ independent Model and the Commands and Subscriptions that update it.
   <ChildModel, ChildMessage>(projection: OptionalProjection<Model, Message, ChildModel, ChildMessage>) => Option.Option<ModelSource<ChildModel, ChildMessage>>
   ```
 
-### Config
-
-The Model Schema and Program used to create a React application with `defineApplication`.
-Define a pure update function here and return Commands for side effects. Provide services
-needed by Commands or Subscriptions through `resources`.
-
-The Layer must require no additional services and have no typed failures. The Model Schema
-supplies the TypeScript type. Outside production builds, the Provider also checks its initial
-Model against the Schema and freezes published Models.
-
-- `update` Applies a Message to the Model without running side effects. Return Commands for work that
-  runs after the transition.
-
-  ```ts
-  ((model: Schema.Schema.Type<ModelSchema>, message: Message) => Readonly<{ model: Schema.Schema.Type<ModelSchema>; commands?: Update.Commands<Message, R> | undefined; outMessage?: never; }>) | ((model: Schema.Schema.Type<ModelSchema>, message: Message) => Readonly<{ model: Schema.Schema.Type<ModelSchema>; commands?: Update.Commands<Message, R> | undefined; outMessage?: never; }>)
-  ```
-
-- `subscriptions` Declares Streams whose dependencies are derived from the Model. Changed dependencies
-  restart their Streams.
-
-  ```ts
-  Readonly<Record<string, import("foldkit/subscription").Subscription<Schema.Schema.Type<ModelSchema>, Message, any, R>>> | Readonly<Record<string, import("foldkit/subscription").Subscription<Schema.Schema.Type<ModelSchema>, Message, any, R>>> | undefined
-  ```
-
-- `onCrash` Called once on terminal failure, with the original Cause and a Message when one triggered
-  the failure. Runs before `subscribeCrash` listeners. Observer defects are logged.
-
-  ```ts
-  ((cause: Cause.Cause<unknown>, triggeringMessage: Option.Option<Message>) => void) | undefined
-  ```
-
-- `resources` Supplies all required services. Live work finishes before the Layer releases its
-  resources.
-
-  ```ts
-  import("effect/Layer").Layer<never, never, never> | import("effect/Layer").Layer<NoInfer<R>, never, never> | undefined
-  ```
-
-- `onReactivate` Creates a Message when the Provider reactivates with a replacement Store. Use it to retry
-  interrupted work or clear pending state. It is not called on the initial activation or when
-  `retainInactive` kept the previous Store running.
-
-  ```ts
-  ((context: ReactStore.ReactivationContext<Schema.Schema.Type<ModelSchema>, Message, R>) => Message) | undefined
-  ```
-
-- `retainInactive` Keeps the Store, its Layer, Commands, and Subscriptions running for this long after the
-  last activation ends. Reactivating within the window resumes the same Store without
-  interrupting anything. Defaults to zero, which disposes the Store on deactivation.
-  
-  Work started before an unmount can still finish during the window, so keep it short when
-  Commands perform writes or navigation.
-
-  ```ts
-  import("effect/Duration").Input | undefined
-  ```
-
-- `restartInterrupted` Starts Commands interrupted by deactivation again when a replacement Store activates. Pass
-  `true` for all of them or a predicate to choose. Restart only idempotent work, such as
-  Query fetches: an interrupted write may already have reached its server.
-
-  ```ts
-  boolean | ((command: import("foldkit/command").Command<Message, never, R>) => boolean) | undefined
-  ```
-
-- `freezeModel` Freezes every Model the Provider publishes so accidental mutation throws where it happens.
-  Plain objects and arrays are frozen; Effect values and class instances are not. Defaults to
-  `true` outside production builds.
-
-  ```ts
-  boolean | undefined
-  ```
-
-- `Model` Supplies the Model type and checks the initial Model when `validateInit` is on.
-
-  ```ts
-  ModelSchema
-  ```
-
-- `crash` Default failure view and reporting for every Provider of this application.
-
-  ```ts
-  CrashConfig<Schema.Schema.Type<ModelSchema>, Message> | undefined
-  ```
-
-- `validateInit` Checks the initial Model against `Model`. A mismatch fails the Provider with a
-  `SchemaError`. Defaults to `true` outside production builds.
-
-  ```ts
-  boolean | undefined
-  ```
-
 ### CrashConfig
 
 How an application shows and reports failures. Mirrors Foldkit's crash configuration.
-Set it on `defineApplication`, and override either callback on a Provider.
+Set it in the options of `define`, and override either callback on a Provider.
 
 - `view` Renders in place of the Provider's children. Call `restart` to remount the Provider with
   a fresh Store from `init`. The default view shows a typed failure's message, or a generic
@@ -254,6 +175,14 @@ Submodel access to part of that Model.
   () => (message: Message) => void
   ```
 
+- `useSend` Returns a Send for the Provider's Message union. Call `send.Tag(fields)` to build and
+  dispatch a Message, or `send(message)` to dispatch one you built. Its identity is stable
+  while the Provider's source is. Throws outside the matching Provider.
+
+  ```ts
+  () => Send<Message>
+  ```
+
 - `useOptionalModel` Reads `Some(Model)` inside the matching Provider and `None` outside it.
 
   ```ts
@@ -291,22 +220,87 @@ Submodel access to part of that Model.
   <ChildModel, ChildMessage>(projection: OptionalProjection<Model, Message, ChildModel, ChildMessage>) => Option.Option<ModelSource<ChildModel, ChildMessage>>
   ```
 
+### Options
+
+How an application runs its Program in React: the services its Commands and Subscriptions
+need, its failure handling, and its activation behavior. Pass it to `define` after the
+Program.
+
+The `resources` Layer must require no additional services and have no typed failures. It is
+required when the Program needs services, which also makes the options argument required.
+
+- `onReactivate` Creates a Message when the Provider reactivates with a replacement Store. Use it to retry
+  interrupted work or clear pending state. It is not called on the initial activation or when
+  `retainInactive` kept the previous Store running.
+
+  ```ts
+  ReactStore.Config<Model, Message, R>["onReactivate"] | undefined
+  ```
+
+- `retainInactive` Keeps the Store, its Layer, Commands, and Subscriptions running for this long after the
+  last activation ends. Reactivating within the window resumes the same Store without
+  interrupting anything. Defaults to zero, which disposes the Store on deactivation.
+  
+  Work started before an unmount can still finish during the window, so keep it short when
+  Commands perform writes or navigation.
+
+  ```ts
+  ReactStore.Config<Model, Message, R>["retainInactive"] | undefined
+  ```
+
+- `restartInterrupted` Starts Commands interrupted by deactivation again when a replacement Store activates. Pass
+  `true` for all of them or a predicate to choose. Restart only idempotent work, such as
+  Query fetches: an interrupted write may already have reached its server.
+
+  ```ts
+  ReactStore.Config<Model, Message, R>["restartInterrupted"] | undefined
+  ```
+
+- `freezeModel` Freezes every Model the Provider publishes so accidental mutation throws where it happens.
+  Plain objects and arrays are frozen; Effect values and class instances are not. Defaults to
+  `true` outside production builds.
+
+  ```ts
+  ReactStore.Config<Model, Message, R>["freezeModel"] | undefined
+  ```
+
+- `onCrash` Called once on terminal failure, with the original Cause and a Message when one triggered
+  the failure. Runs before `subscribeCrash` listeners. Observer defects are logged.
+
+  ```ts
+  ReactStore.Config<Model, Message, R>["onCrash"] | undefined
+  ```
+
+- `resources` Supplies all required services. Live work finishes before the Layer releases its
+  resources.
+
+  ```ts
+  ReactStore.Config<Model, Message, R>["resources"] | undefined
+  ```
+
+- `crash` Default failure view and reporting for every Provider of this application.
+
+  ```ts
+  CrashConfig<Model, Message> | undefined
+  ```
+
+- `validateInit` Checks the initial Model against the Program's `Model`. A mismatch fails the Provider with
+  a `SchemaError`. Defaults to `true` outside production builds.
+
+  ```ts
+  boolean | undefined
+  ```
+
 ### ProviderProps
 
 Props for the application Provider that supplies the Model and Message handlers to its views.
 `init` supplies the initial Model and Commands, and `crash` overrides how this Provider shows
-and reports failures.
+and reports failures. `init` is optional when the Program has an `init`, and
+replaces it when passed.
 
 The Provider captures `init` on initialization. Changing it later does not replace it.
 Children and crash callbacks follow subsequent renders. Use `useInbound` to send later prop
 changes to update.
-
-- `init` Initial Model and Commands, or a function that creates them. The Provider calls a function
-  once per initialization, including after a crash view's `restart`.
-
-  ```ts
-  Readonly<{ model: Model; commands?: Update.Commands<Message, R> | undefined; outMessage?: never; }> | (() => Update.Return<Model, Message, R>)
-  ```
 
 - `children`
 
@@ -318,6 +312,12 @@ changes to update.
 
   ```ts
   CrashConfig<Model, Message> | undefined
+  ```
+
+- `init`
+
+  ```ts
+  Init<Model, Message, R> | undefined
   ```
 
 ### ReactivationContext
@@ -337,11 +337,17 @@ What the Provider knows when it replaces a Store that deactivation disposed.
   Update.Commands<Message, R>
   ```
 
-### defineApplication
+### Send
 
-Creates a React Provider and hooks for a Foldkit application.
-Define the application once, then render its Provider with an initial Model. Views read
-state with `useModel` and send Messages with `useDispatch`.
+Sends Messages by tag. `send.ChangedTitle({ title })` builds the Message with the union's
+constructor and dispatches it. `send(message)` dispatches a Message you already built.
+
+### define
+
+Creates a React Provider and hooks for a Foldkit Program.
+Define the application once, then render its Provider. Views read state with `useModel` and
+send Messages with `useSend`. The second argument holds React-only options and the
+`resources` that supply the Program's services.
 
 **Details**
 
@@ -357,13 +363,14 @@ rest reach `onReactivate`.
 
 React may repeat or abandon initialization. Keep update and `init` functions pure.
 Remount the Provider to replace `init`, or use `useInbound` to send changing values to update.
+When the Program has an `init`, a Provider's `init` prop replaces it for that Provider.
 
 **Example** (Connecting a counter to React)
 
 ```tsx
 import { Schema } from "effect"
 import { defineMessageUnion } from "foldkit/message"
-import { defineApplication } from "react-foldkit/react"
+import * as Application from "react-foldkit/application"
 import { modifyFields } from "foldkit/struct"
 import type * as Update from "foldkit/update"
 
@@ -378,20 +385,20 @@ const update = (model: Model, message: Message) =>
     ClickedIncrement: () => ({ model: modifyFields(model, { count: (count) => count + 1 }) }),
   })
 
-const Application = defineApplication({ Model, update })
+const Counter = Application.define({ Model, Message, update })
 
 function View() {
-  const count = Application.useModel((model) => model.count)
-  const dispatch = Application.useDispatch()
+  const count = Counter.useModel((model) => model.count)
+  const send = Counter.useSend()
 
-  return <button onClick={() => dispatch(Message.ClickedIncrement())}>{count}</button>
+  return <button onClick={() => send.ClickedIncrement()}>{count}</button>
 }
 
 export function App() {
   return (
-    <Application.Provider init={{ model: { count: 0 } }}>
+    <Counter.Provider init={{ model: { count: 0 } }}>
       <View />
-    </Application.Provider>
+    </Counter.Provider>
   )
 }
 ```
@@ -727,6 +734,24 @@ await Effect.runPromise(program)
 
 ## react-foldkit/submodel
 
+### Config
+
+The child Model Schema and Message union that `define` binds. A child `Program` from
+`Program.make` is one.
+
+- `Model` Supplies the child Model type. The Submodel Provider does not validate it.
+
+  ```ts
+  Schema.Codec<Model, unknown, unknown, unknown>
+  ```
+
+- `Message` The Schema of the Messages the child update handles, usually the union from
+  `defineMessageUnion`. `useSend` builds Messages with its constructors.
+
+  ```ts
+  Schema.Schema<Message>
+  ```
+
 ### Lift
 
 A child stored in one field of its parent Model, described once for both halves of the
@@ -806,7 +831,8 @@ Thrown when a required Submodel hook is called outside its matching Provider.
 ### ProviderProps
 
 Props for a Submodel Provider. Pass the parent hooks and a lift to derive the child source,
-or pass a source you already derived.
+the parent hooks and an `optionalLift` for a child that may be absent, or a source you
+already derived.
 
 - `children`
 
@@ -815,15 +841,29 @@ or pass a source you already derived.
   ```
 
 - `from` The parent application or Submodel whose Model holds this child.
+  The parent application or Submodel whose Model may hold this child.
 
   ```ts
-  Pick<ModelHooks<ParentModel, ParentMessage>, "useSubmodel"> | undefined
+  Pick<ModelHooks<ParentModel, ParentMessage>, "useSubmodel"> | Pick<ModelHooks<ParentModel, ParentMessage>, "useOptionalSubmodel"> | undefined
   ```
 
 - `lift` Reads the child from the parent Model and lifts its Messages. Declare it outside render.
 
   ```ts
   Projection<ParentModel, ParentMessage, Model, Message> | undefined
+  ```
+
+- `optionalLift` Reads the child while the parent Model holds it and lifts its Messages. Declare it
+  outside render.
+
+  ```ts
+  OptionalProjection<ParentModel, ParentMessage, Model, Message> | undefined
+  ```
+
+- `fallback` Rendered in place of the children while the child is absent. Defaults to nothing.
+
+  ```ts
+  React.ReactNode
   ```
 
 - `source` A child source derived with `useSubmodel` or `useOptionalSubmodel`.
@@ -837,8 +877,8 @@ or pass a source you already derived.
 React binding for a child Model owned by its parent, returned by `define`. Use
 its Provider to give child views a lifted source without starting another Store.
 
-- `Provider` Supplies the parent-owned child to child hooks, from a parent and lift or from a source.
-  It does not acquire services or start Commands.
+- `Provider` Supplies the parent-owned child to child hooks, from a parent and lift or optional lift, or
+  from a source. It does not acquire services or start Commands.
 
   ```ts
   <ParentModel = never, ParentMessage = never>(props: ProviderProps<Model, Message, ParentModel, ParentMessage>) => React.ReactNode
@@ -858,6 +898,14 @@ its Provider to give child views a lifted source without starting another Store.
 
   ```ts
   () => (message: Message) => void
+  ```
+
+- `useSend` Returns a Send for the Provider's Message union. Call `send.Tag(fields)` to build and
+  dispatch a Message, or `send(message)` to dispatch one you built. Its identity is stable
+  while the Provider's source is. Throws outside the matching Provider.
+
+  ```ts
+  () => import("../application").Send<Message>
   ```
 
 - `useOptionalModel` Reads `Some(Model)` inside the matching Provider and `None` outside it.
@@ -894,17 +942,18 @@ its Provider to give child views a lifted source without starting another Store.
   parent Provider.
 
   ```ts
-  <ChildModel, ChildMessage>(projection: import("./lift").OptionalProjection<Model, Message, ChildModel, ChildMessage>) => Option.Option<ModelSource<ChildModel, ChildMessage>>
+  <ChildModel, ChildMessage>(projection: OptionalProjection<Model, Message, ChildModel, ChildMessage>) => Option.Option<ModelSource<ChildModel, ChildMessage>>
   ```
 
 ### define
 
 Creates a child Provider and hooks for a parent-owned Model source.
 
-The Provider reads the child from a parent with `from` and `lift`, or takes a `source` you
-already derived, and forwards its snapshots and Messages. It does not create a Store,
-acquire services, or start Commands. Required hooks throw `ProviderError`
-outside this Provider; optional hooks return `None`.
+The Provider reads the child from a parent with `from` and `lift`, from a parent with `from`
+and `optionalLift` while the child is present, or takes a `source` you already derived, and
+forwards its snapshots and Messages. It does not create a Store, acquire services, or start
+Commands. Required hooks throw `ProviderError` outside this Provider; optional hooks return
+`None`.
 
 **Example** (Sharing a parent-owned counter with a child view)
 
@@ -919,12 +968,13 @@ export type Model = typeof Model.Type
 export const Message = defineMessageUnion({ Incremented: {} })
 export type Message = typeof Message.Type
 
-export const { Provider, useModel } = Submodel.define<Model, Message>()
+export const { Provider, useModel, useSend } = Submodel.define({ Model, Message })
 
 export function View() {
   const count = useModel((model) => model.count)
+  const send = useSend()
 
-  return <span>{count}</span>
+  return <button onClick={() => send.Incremented()}>{count}</button>
 }
 ```
 
@@ -972,6 +1022,102 @@ export const form = Submodel.lift<Model>()({
 
 export const update = (model: Model, message: Message) =>
   Message.match(message, { GotFormMessage: ({ message }) => form.fold(model, message) })
+```
+
+## react-foldkit/program
+
+### Program
+
+A Foldkit application or child feature without its view: the Model Schema, Message union,
+update, and optionally an OutMessage union, `init`, and Subscriptions. The field names match
+Foldkit's `Runtime.makeApplication`.
+
+**When to use**
+
+Use a Program to keep a feature's logic in a module without React. Pass an application
+Program to `Application.define`, with React-only options and `resources` as its second
+argument. Pass a child Program to `Submodel.define`, run `update` in Foldkit Story tests, or
+pass the Program to `Store.make` and `Store.boot`.
+
+**Details**
+
+`R` is the services that Commands and Subscriptions require. A Program does not provide
+them: the host that runs it supplies `resources`. An application Program has no
+OutMessage, so its update returns `Update.Return`.
+
+- `Model` Supplies the Model type. `Application.define` also checks initial Models against it.
+
+  ```ts
+  Schema.Codec<Model, unknown, unknown, unknown>
+  ```
+
+- `Message` The Schema of the Messages update handles, usually the union from `defineMessageUnion`.
+
+  ```ts
+  Schema.Schema<Message>
+  ```
+
+- `OutMessage` The union of facts a child reports to its parent. Omit it for an application.
+
+  ```ts
+  Schema.Schema<OutMessage> | undefined
+  ```
+
+- `init` Creates the initial Model and Commands. A child Program usually omits it, because its
+  parent creates the child Model.
+
+  ```ts
+  (() => Update.Return<Model, Message, R>) | undefined
+  ```
+
+- `update` Applies a Message to the Model without running side effects. Return Commands for work that
+  runs after the transition.
+
+  ```ts
+  (model: Model, message: Message) => Update.ReturnWithOutMessage<Model, Message, OutMessage, R>
+  ```
+
+- `subscriptions` Declares Streams whose dependencies are derived from the Model. Changed dependencies
+  restart their Streams.
+
+  ```ts
+  Readonly<Record<string, Subscription.Subscription<Model, Message, any, R>>> | undefined
+  ```
+
+### make
+
+Creates a Program from a Model Schema, a Message union, and Foldkit's `update` and `init`
+functions. It checks that every part agrees on the Model and Message types and returns its
+argument unchanged.
+
+**Details**
+
+When the Program has an `init`, the result keeps it as required, so the Provider of an
+application built from it needs no `init` prop.
+
+**Example** (Sharing a counter Program between React and tests)
+
+```ts
+import { Schema } from "effect"
+import { defineMessageUnion } from "foldkit/message"
+import { modifyFields } from "foldkit/struct"
+import type * as Update from "foldkit/update"
+import * as Program from "react-foldkit/program"
+
+const Model = Schema.Struct({ count: Schema.Finite })
+type Model = typeof Model.Type
+
+const Message = defineMessageUnion({ ClickedIncrement: {} })
+type Message = typeof Message.Type
+
+const init = (): Update.Return<Model, Message> => ({ model: { count: 0 } })
+
+const update = (model: Model, message: Message) =>
+  Message.match<Update.Return<Model, Message>>(message, {
+    ClickedIncrement: () => ({ model: modifyFields(model, { count: (count) => count + 1 }) }),
+  })
+
+export const counter = Program.make({ Model, Message, init, update })
 ```
 
 ## react-foldkit/eslint
