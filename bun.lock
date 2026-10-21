@@ -97,12 +97,10 @@
         "eslint": "^9",
         "foldkit": "^0.168.0",
         "react": "^19.2.6",
-        "vite": "^8.0.0",
       },
       "optionalPeers": [
         "@foldkit/devtools",
         "eslint",
-        "vite",
       ],
     },
     "packages/ui": {

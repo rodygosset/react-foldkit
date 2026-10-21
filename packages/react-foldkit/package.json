@@ -113,17 +113,13 @@
 		"foldkit": "^0.168.0",
 		"eslint": "^9",
 		"react": "^19.2.6",
-		"@foldkit/devtools": "~0.168.0",
-		"vite": "^8.0.0"
+		"@foldkit/devtools": "~0.168.0"
 	},
 	"peerDependenciesMeta": {
 		"eslint": {
 			"optional": true
 		},
 		"@foldkit/devtools": {
-			"optional": true
-		},
-		"vite": {
 			"optional": true
 		}
 	},
