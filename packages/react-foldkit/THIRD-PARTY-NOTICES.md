@@ -1,6 +1,6 @@
 # Third-party notices
 
-React Foldkit depends on [Foldkit](https://github.com/foldkit/foldkit) as a peer dependency and adapts its model freezing. Foldkit is excluded from the bundled output. Its MIT license is reproduced below.
+React Foldkit depends on [Foldkit](https://github.com/foldkit/foldkit) as a peer dependency and adapts its model freezing. Foldkit is excluded from the bundled output, except for a patched copy of the Scene test runner from foldkit 0.168.0 (`dist/test/scene.js`, `internal.js`, `query.js`, and `matchers.js`) that the `react-foldkit/scene` entry bundles. Its MIT license is reproduced below.
 
 ## Foldkit
 

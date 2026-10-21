@@ -12,6 +12,8 @@ export default defineConfig({
 		store: "src/store/public.ts",
 		submodel: "src/submodel/public.ts",
 		program: "src/program/public.ts",
+		scene: "src/scene.ts",
+		"scene/react": "src/scene/react.ts",
 	},
 	format: ["esm"],
 	dts: false,

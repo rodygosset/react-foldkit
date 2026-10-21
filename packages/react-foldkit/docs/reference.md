@@ -9,6 +9,8 @@ Generated from the public exports. See the [counter tutorial](examples.md) for u
 - [react-foldkit/program](#react-foldkitprogram)
 - [react-foldkit/eslint](#react-foldkiteslint)
 - [react-foldkit/modelSource](#react-foldkitmodelSource)
+- [react-foldkit/scene](#react-foldkitscene)
+- [react-foldkit/scene/react](#react-foldkitscenereact)
 
 ## react-foldkit
 
@@ -1200,3 +1202,70 @@ Model and send Messages without depending on the Store implementation.
   ```ts
   (notify: () => void) => () => void
   ```
+
+## react-foldkit/scene
+
+### inside
+
+Runs steps with locators scoped to a parent element, as Foldkit's `inside` does.
+
+**Details**
+
+Scenes of bound React views re-enter the copied runner, so scoped steps render the React view.
+
+### scene
+
+Runs Foldkit Scene steps against a Foldkit view or a React view bound with `bindSceneView`.
+
+**Details**
+
+The signature and steps are Foldkit's `scene` from `foldkit/scene`. A Foldkit view runs on Foldkit's
+runner. A bound React view runs on a copy of that runner, pinned to the tested Foldkit release, that
+renders the component in a private React root and unmounts it when the scene ends or a step throws.
+
+**Gotchas**
+
+- React views produce no Foldkit Mounts or element hooks, so `Mount` steps and `toHaveHook` do not apply.
+
+Foldkit reexports inherit their upstream contracts. See [Foldkit documentation](https://foldkit.dev) and the original editor JSDoc.
+
+`AnyCommand`, `AnyMount`, `Command`, `CustomElement`, `Locator`, `LocatorAll`, `ManagedResource`, `Mount`, `MountMatcher`, `MountResolver`, `OutMessageStep`, `OutMessagesStep`, `PendingMount`, `Resolver`, `SceneSimulation`, `SceneStep`, `Subscription`, `SubscriptionMessageStep`, `all`, `altText`, `attr`, `beforeInput`, `blur`, `change`, `changeFiles`, `click`, `contextMenu`, `displayValue`, `doubleClick`, `dropFiles`, `expect`, `expectAll`, `expectHandled`, `expectIgnored`, `expectNoOutMessage`, `expectOutMessage`, `expectOutMessages`, `filter`, `find`, `findAll`, `first`, `focus`, `focusEnter`, `focusLeave`, `getAllByAltText`, `getAllByDisplayValue`, `getAllByLabel`, `getAllByPlaceholder`, `getAllByRole`, `getAllByTestId`, `getAllByText`, `getAllByTitle`, `getByAltText`, `getByDisplayValue`, `getByLabel`, `getByPlaceholder`, `getByRole`, `getByTestId`, `getByText`, `getByTitle`, `given`, `hover`, `keydown`, `label`, `last`, `nth`, `placeholder`, `pointerDown`, `pointerUp`, `role`, `sceneMatchers`, `selector`, `submit`, `tap`, `testId`, `text`, `textContent`, `title`, `type`, `typeContentEditable`, `withViewInputs`, `within`.
+
+## react-foldkit/scene/react
+
+### bindSceneView
+
+Binds a React component that reads an Application's hooks to Foldkit's Scene view contract.
+
+**When to use**
+
+Export the result as the feature's `view`, then pass it to `scene` from `react-foldkit/scene`
+with the feature's `update`. When the feature moves to a Foldkit view, export that view instead and
+change the test import to `foldkit/scene`.
+
+**Details**
+
+Each `scene` call renders the component in a private React root. `useModel` reads the
+Scene's current Model and `useSend` records Messages for Scene instead of dispatching them to a
+Store. No Store starts, so Commands and Subscriptions run only as Scene steps. React state and
+Effects behave as in React, and the root unmounts when the scene finishes or a step throws.
+
+**Gotchas**
+
+- The component must render one host element at its root.
+- React views produce no Foldkit Mounts or element hooks, so `Mount` steps and `toHaveHook` do not apply.
+
+**Example** (Bind a feature view for Scene tests)
+
+```tsx
+import { bindSceneView } from "react-foldkit/scene/react"
+import { App } from "./application"
+
+function Profile() {
+  const model = App.useModel()
+  const send = App.useSend()
+  return <button onClick={() => send.ClickedLoad()}>{model.name}</button>
+}
+
+export const view = bindSceneView(App, Profile)
+```

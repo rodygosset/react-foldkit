@@ -48,6 +48,7 @@ export default [
 			"**/routeTree.gen.ts",
 			"dist/**",
 			"test/docs/.generated/**",
+			"src/scene/vendor/**",
 			"eslint/**",
 			"vitest.config.ts",
 			"vitest.browser.config.ts",

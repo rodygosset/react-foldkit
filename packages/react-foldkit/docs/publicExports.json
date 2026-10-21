@@ -256,5 +256,515 @@
 		"name": "ModelSource",
 		"owner": "react-foldkit",
 		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "AnyCommand",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "AnyMount",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "Command",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "CustomElement",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "Locator",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "LocatorAll",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "ManagedResource",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "Mount",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "MountMatcher",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "MountResolver",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "OutMessageStep",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "OutMessagesStep",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "PendingMount",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "Resolver",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "SceneSimulation",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "SceneStep",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "Subscription",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "SubscriptionMessageStep",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "all",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "altText",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "attr",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "beforeInput",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "blur",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "change",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "changeFiles",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "click",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "contextMenu",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "displayValue",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "doubleClick",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "dropFiles",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "expect",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "expectAll",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "expectHandled",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "expectIgnored",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "expectNoOutMessage",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "expectOutMessage",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "expectOutMessages",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "filter",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "find",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "findAll",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "first",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "focus",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "focusEnter",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "focusLeave",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "getAllByAltText",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "getAllByDisplayValue",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "getAllByLabel",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "getAllByPlaceholder",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "getAllByRole",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "getAllByTestId",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "getAllByText",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "getAllByTitle",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "getByAltText",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "getByDisplayValue",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "getByLabel",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "getByPlaceholder",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "getByRole",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "getByTestId",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "getByText",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "getByTitle",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "given",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "hover",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "inside",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "keydown",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "label",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "last",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "nth",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "placeholder",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "pointerDown",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "pointerUp",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "role",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "scene",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "sceneMatchers",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "selector",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "submit",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "tap",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "testId",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "text",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "textContent",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "title",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "type",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "typeContentEditable",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "withViewInputs",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene",
+		"name": "within",
+		"owner": "foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/scene/react",
+		"name": "bindSceneView",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
 	}
 ]

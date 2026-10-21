@@ -33,8 +33,9 @@
 		"build": "NODE_OPTIONS=\"--import ../../eslint/ts6-register.mjs\" tsup && NODE_OPTIONS=\"--import ../../eslint/ts6-register.mjs\" tsup --config tsup.eslint.config.ts && bun run build:types",
 		"build:types": "tsc --project tsconfig.build.json",
 		"prepack": "bun run build",
-		"lint": "bun run check:filenames && bun run test:eslint && NODE_OPTIONS=\"--import ../../eslint/ts6-register.mjs\" eslint",
+		"lint": "bun run check:filenames && bun run check:vendor && bun run test:eslint && NODE_OPTIONS=\"--import ../../eslint/ts6-register.mjs\" eslint",
 		"check:filenames": "node scripts/checkFilenames.mjs",
+		"check:vendor": "node scripts/checkSceneVendor.mjs",
 		"format": "prettier --write \"**/*.{ts,tsx}\"",
 		"typecheck": "tsc --noEmit",
 		"test": "vitest run",
@@ -84,6 +85,14 @@
 		"./modelSource": {
 			"types": "./dist/modelSource.d.ts",
 			"import": "./dist/modelSource.js"
+		},
+		"./scene": {
+			"types": "./dist/scene.d.ts",
+			"import": "./dist/scene.js"
+		},
+		"./scene/react": {
+			"types": "./dist/scene/react.d.ts",
+			"import": "./dist/scene/react.js"
 		}
 	},
 	"main": "./dist/index.js",
@@ -112,6 +121,7 @@
 	},
 	"dependencies": {
 		"picomatch": "^4.0.5",
+		"react-reconciler": "0.33.0",
 		"use-sync-external-store": "1.6.0"
 	},
 	"devDependencies": {
@@ -122,6 +132,7 @@
 		"@types/picomatch": "^4.0.3",
 		"@types/react": "^19",
 		"@types/react-dom": "^19.2.4",
+		"@types/react-reconciler": "0.33.1",
 		"@types/use-sync-external-store": "1.5.0",
 		"@vitest/browser-playwright": "5.0.3",
 		"@vitest/coverage-v8": "5.0.3",

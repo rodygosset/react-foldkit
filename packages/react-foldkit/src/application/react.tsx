@@ -206,6 +206,15 @@ export interface Application<Model, Message, R = never, HasInit extends boolean 
 /** The React context that application and Submodel Providers use to pass their source down. */
 export type SourceContext<Model, Message> = React.Context<Option.Option<ModelSource<Model, Message>>>
 
+const sceneSourceContexts = new WeakMap<object, SourceContext<unknown, unknown>>()
+
+/** @internal Returns the source Context owned by an Application for Scene's isolated renderer. */
+export function sceneSourceContext<Model, Message>(application: object): SourceContext<Model, Message> {
+	const Context = sceneSourceContexts.get(application)
+	if (Context === undefined) throw new TypeError("The Scene view binding requires an Application from Application.define")
+	return Context as SourceContext<Model, Message>
+}
+
 export const makeSourceContext = <Model, Message>(): SourceContext<Model, Message> =>
 	React.createContext<Option.Option<ModelSource<Model, Message>>>(Option.none())
 
@@ -481,7 +490,7 @@ export function define<Model, Message, R = never>(
 		)
 	}
 
-	return {
+	const application = {
 		Provider,
 		...modelHooks(
 			Context,
@@ -489,4 +498,6 @@ export function define<Model, Message, R = never>(
 			() => new Error("react-foldkit hooks must be used within a <Provider>")
 		),
 	}
+	sceneSourceContexts.set(application, Context as SourceContext<unknown, unknown>)
+	return application
 }

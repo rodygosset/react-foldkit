@@ -4,6 +4,9 @@ import * as Program from "react-foldkit/program"
 import * as Application from "react-foldkit/application"
 import * as Submodel from "react-foldkit/submodel"
 import * as Store from "react-foldkit/store"
+import * as Scene from "react-foldkit/scene"
+import * as SceneReact from "react-foldkit/scene/react"
+import * as FoldkitScene from "foldkit/scene"
 import { describe, expect, it } from "vitest"
 
 describe("built package entry points", function () {
@@ -35,5 +38,13 @@ describe("built package entry points", function () {
 			expect(committed.failure).toBeInstanceOf(Foldkit.Store.CommitError)
 			expect(committed.failure.reason._tag).toBe("Disposed")
 		}
+	})
+
+	it("mirrors foldkit/scene from the scene entry and binds React views from scene/react", function () {
+		// The scene entry is the one place that reexports Foldkit, so tests migrate by changing the import.
+		expect(Object.keys(Scene).sort()).toEqual(Object.keys(FoldkitScene).sort())
+		expect(Scene.click).toBe(FoldkitScene.click)
+		expect(Scene.scene).not.toBe(FoldkitScene.scene)
+		expect(Object.keys(SceneReact)).toEqual(["bindSceneView"])
 	})
 })

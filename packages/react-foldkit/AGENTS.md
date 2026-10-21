@@ -10,5 +10,6 @@ Import Messages, Commands, `Update`, `AsyncData`, and Query from `foldkit`. Impo
 - Resetting a Query clears cached data and ignores late responses. It does not abort requests.
 - Keep server and client snapshots consistent for hydration.
 - Use the ESLint preset and configure React's hook rules separately.
+- Test React views with Foldkit Scene: export `bindSceneView(App, Component)` as the feature's `view` and import Scene steps from `react-foldkit/scene`. After the view moves to Foldkit, change that import to `foldkit/scene`.
 
 Read the [counter tutorial](docs/examples.md), [API reference](docs/reference.md), [runtime explanation](docs/architecture.md), and [ESLint setup](eslint/README.md).

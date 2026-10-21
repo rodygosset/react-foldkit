@@ -10,6 +10,8 @@ import type { ModelReader } from "react-foldkit/modelSource"
 import * as Application from "react-foldkit/application"
 import * as Store from "react-foldkit/store"
 import * as Submodel from "react-foldkit/submodel"
+import * as Scene from "react-foldkit/scene"
+import { bindSceneView } from "react-foldkit/scene/react"
 
 export type Reader = Foldkit.ModelSource.ModelReader<number>
 export type Program = Foldkit.Store.Program<number, number>
@@ -38,6 +40,17 @@ function View() {
 assert.equal(
 	renderToString(createElement(App.Provider, { init: { model: 7 }, children: createElement(View) })),
 	"<span>7</span>"
+)
+
+function Counter() {
+	const send = App.useSend()
+	return createElement("button", { onClick: () => send(1) }, "Count " + String(App.useModel()))
+}
+Scene.scene(
+	{ update: (model: number, message: number) => ({ model: model + message }), view: bindSceneView(App, Counter) },
+	Scene.given(0),
+	Scene.click(Scene.role("button", { name: "Count 0" })),
+	Scene.expect(Scene.role("button")).toHaveText("Count 1")
 )
 
 const query = Query.define({

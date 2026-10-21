@@ -89,6 +89,7 @@ export interface Application<Model, Message, R = never, HasInit extends boolean 
   readonly Provider: (props: ProviderProps<Model, Message, R, HasInit>) => React.ReactNode;
 }
 export type SourceContext<Model, Message> = React.Context<Option.Option<ModelSource<Model, Message>>>;
+export declare function sceneSourceContext<Model, Message>(application: object): SourceContext<Model, Message>;
 export declare const makeSourceContext: <Model, Message>() => SourceContext<Model, Message>;
 export declare function modelHooks<Model, Message>(Context: SourceContext<Model, Message>, Message: Schema.Schema<Message>, missingProvider: () => Error): {
   useModel: {
@@ -286,6 +287,106 @@ export {};
 ```ts
 export { make } from "./program";
 export type { Program } from "./program";
+```
+
+## dist/scene.d.ts
+
+```ts
+export * from "foldkit/scene";
+export { inside, scene } from "./scene/index";
+```
+
+## dist/scene/index.d.ts
+
+```ts
+import * as FoldkitScene from "foldkit/scene";
+export * from "foldkit/scene";
+export declare const scene: typeof FoldkitScene.scene;
+export declare const inside: typeof FoldkitScene.inside;
+```
+
+## dist/scene/react.d.ts
+
+```ts
+import type { Application } from "../application/react";
+import type { SceneView } from "./sceneView";
+export declare const bindSceneView: <Model, Message, R, HasInit extends boolean>(application: Application<Model, Message, R, HasInit>, Component: React.ComponentType) => SceneView<Model, Message>;
+```
+
+## dist/scene/sceneBinding.d.ts
+
+```ts
+import React from "react";
+import Reconciler from "react-reconciler";
+import type { Scene as SceneNamespace } from "foldkit/test";
+import type { ModelSource } from "../modelSource";
+import type { SceneView } from "./sceneView";
+type VNode = SceneNamespace.SceneSimulation<unknown, unknown>["html"];
+export declare function bindSceneView<Model, Message>(application: object, Component: React.ComponentType): SceneView<Model, Message>;
+interface HostProps extends Record<string, unknown> {
+  readonly children?: React.ReactNode;
+}
+interface HostText {
+  text: string;
+}
+interface HostElement {
+  type: string;
+  props: HostProps;
+  attributes: Record<string, string>;
+  children: Array<HostElement | HostText>;
+  parent?: HostElement;
+  readonly tagName: string;
+  value?: unknown;
+  checked?: boolean;
+  textContent?: string;
+  focus: () => void;
+  blur: () => void;
+  getAttribute: (name: string) => string | null;
+  setAttribute: (name: string, value: string) => void;
+  removeAttribute: (name: string) => void;
+  closest: (selector: string) => HostElement | null;
+}
+interface HostContainer {
+  children: Array<HostElement | HostText>;
+}
+declare const renderer: Reconciler.Reconciler<HostContainer, HostContainer | HostElement, HostText, HostElement | HostText, unknown, HostElement | HostText>;
+type Renderer = typeof renderer;
+interface RenderState {
+  readonly container: HostContainer;
+  readonly root: ReturnType<Renderer["createContainer"]>;
+  readonly source: ModelSource<unknown, unknown>;
+  setInput: (model: unknown, dispatch: (message: unknown) => void) => void;
+}
+export interface SceneRenderSession {
+  state?: RenderState;
+}
+export declare const createSceneRenderSession: () => SceneRenderSession;
+export declare const isBoundSceneView: (view: Function) => boolean;
+export declare const isBoundSceneSimulation: (simulation: unknown) => boolean;
+export declare function renderBoundSceneView<Model, Message>(view: Function, model: Model, dispatch: (message: Message) => void, session: SceneRenderSession): VNode | undefined;
+export declare function disposeSceneRenderSession(session: SceneRenderSession): void;
+export {};
+```
+
+## dist/scene/sceneView.d.ts
+
+```ts
+import type { Html, HtmlBuilder } from "foldkit/html";
+export type SceneView<Model, Message> = (model: Model, html: HtmlBuilder<Message>) => Html;
+```
+
+## dist/scene/vendor/sceneCompat.d.ts
+
+```ts
+export declare const FOLDKIT_MOUNT_KEY = "foldkitMount";
+export declare const FileHandlerSymbol: unique symbol;
+export declare const kebabToPascal: (input: string) => string;
+export declare const tagNameFromSelector: (selector: string) => string;
+export declare const serializedStylePropertyName: (name: string) => string;
+export declare const StringExt: {
+  stripPrefix: (prefix: string) => (input: string) => Option.None<string> | Option.Some<string>;
+};
+import { Option } from "effect";
 ```
 
 ## dist/store.d.ts
