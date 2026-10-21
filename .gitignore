@@ -24,3 +24,6 @@ packages/react-foldkit/test/docs/.generated/
 packages/react-foldkit/coverage/
 
 .release/
+
+# vitest browser failure screenshots
+.vitest

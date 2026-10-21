@@ -32,6 +32,17 @@ const App = Application.define({
 	Message: Schema.Finite,
 	update: (model: number, message: number) => ({ model: model + message }),
 })
+// Foldkit's own DevToolsConfig is accepted unchanged, so the settings carry over to Foldkit's runtime.
+const devToolsSettings = { position: "BottomRight", mode: "TimeTravel", maxEntries: 100, Message: Schema.Finite } as const
+const WithDevTools = Application.define(
+	{ Model: Schema.Finite, Message: Schema.Finite, update: (model: number, message: number) => ({ model: model + message }) },
+	{ devTools: devToolsSettings }
+)
+assert.equal(
+	renderToString(createElement(WithDevTools.Provider, { init: { model: 1 }, children: null })),
+	""
+)
+
 function View() {
 	return createElement("span", null, App.useModel())
 }

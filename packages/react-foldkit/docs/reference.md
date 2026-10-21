@@ -7,6 +7,8 @@ Generated from the public exports. See the [counter tutorial](examples.md) for u
 - [react-foldkit/store](#react-foldkitstore)
 - [react-foldkit/submodel](#react-foldkitsubmodel)
 - [react-foldkit/program](#react-foldkitprogram)
+- [react-foldkit/devtools](#react-foldkitdevtools)
+- [react-foldkit/vite](#react-foldkitvite)
 - [react-foldkit/eslint](#react-foldkiteslint)
 - [react-foldkit/modelSource](#react-foldkitmodelSource)
 
@@ -289,6 +291,19 @@ required when the Program needs services, which also makes the options argument 
 
   ```ts
   boolean | undefined
+  ```
+
+- `devTools` Foldkit's DevTools settings, the same `DevToolsConfig` Foldkit's runtime takes. Add
+  `devTools()` from `react-foldkit/vite` to show Foldkit's panel and connect its MCP relay.
+  
+  Each Provider records its own history. With several Providers on a page, a selector chooses
+  which one the panel shows. Selecting a history entry in `"TimeTravel"` mode renders that
+  entry's Model while Commands and Subscriptions keep running on the live Model, and drops
+  Messages sent from the paused view. Resume renders the latest live Model. React Foldkit
+  records no Mounts, so the panel's Mounts tab stays empty.
+
+  ```ts
+  DevToolsConfig | undefined
   ```
 
 ### ProviderProps
@@ -1118,6 +1133,51 @@ const update = (model: Model, message: Message) =>
   })
 
 export const counter = Program.make({ Model, Message, init, update })
+```
+
+## react-foldkit/devtools
+
+### __configure
+
+Connects the injected native Foldkit overlay and Vite HMR bridge to Provider recorders.
+
+## react-foldkit/vite
+
+### devTools
+
+Creates the Vite plugin that connects Foldkit's DevTools panel and MCP relay to React Foldkit
+Providers.
+
+**When to use**
+
+Add it to `vite.config.ts` next to `@vitejs/plugin-react` when an application sets `devTools`
+in `Application.define`'s options. After migrating to Foldkit's runtime, replace it with
+`@foldkit/vite-plugin`; the `devTools` settings carry over unchanged.
+
+**Details**
+
+During `vite serve`, the plugin loads the panel from `@foldkit/devtools` in the browser, including
+in frameworks that render HTML on the server, and passes the dev server's HMR channel to every
+Provider, which shows the panel with `show: "Development"`. It
+also starts Foldkit's DevTools MCP relay on a loopback port and publishes its address for the
+Foldkit DevTools MCP server. `vite build` includes the panel only when `@foldkit/devtools` is a
+production dependency. Unlike `@foldkit/vite-plugin`, it sends no full-page reloads, so React
+Fast Refresh keeps working.
+
+**Gotchas**
+
+- Install `@foldkit/devtools` and its peer dependencies. Without it, the plugin does nothing.
+
+**Example** (Add DevTools to a React app)
+
+```ts
+import react from "@vitejs/plugin-react"
+import { defineConfig } from "vite"
+import { devTools } from "react-foldkit/vite"
+
+export default defineConfig({
+  plugins: [react(), devTools()],
+})
 ```
 
 ## react-foldkit/eslint

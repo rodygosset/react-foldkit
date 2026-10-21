@@ -4,6 +4,7 @@ import * as Program from "react-foldkit/program"
 import * as Application from "react-foldkit/application"
 import * as Submodel from "react-foldkit/submodel"
 import * as Store from "react-foldkit/store"
+import * as Vite from "react-foldkit/vite"
 import { describe, expect, it } from "vitest"
 
 describe("built package entry points", function () {
@@ -35,5 +36,11 @@ describe("built package entry points", function () {
 			expect(committed.failure).toBeInstanceOf(Foldkit.Store.CommitError)
 			expect(committed.failure.reason._tag).toBe("Disposed")
 		}
+	})
+
+	it("exports the DevTools Vite plugin with its overlay and relay parts", function () {
+		expect(Object.keys(Vite)).toEqual(["devTools"])
+		const plugins = [Vite.devTools()].flat(2) as ReadonlyArray<{ readonly name: string }>
+		expect(plugins.map(({ name }) => name)).toEqual(["react-foldkit:devtools", "react-foldkit:devtools-relay"])
 	})
 })

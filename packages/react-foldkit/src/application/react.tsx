@@ -5,6 +5,7 @@ import type { ModelSource } from "../modelSource"
 import type { OptionalProjection, Projection } from "../submodel/lift"
 import { project, projectOptional } from "../submodel/lift"
 import type * as Update from "foldkit/update"
+import type { DevToolsConfig } from "foldkit/runtime"
 import type { Program } from "../program/program"
 import * as ProviderSession from "./providerSession"
 import * as ReactStore from "./reactStore"
@@ -73,7 +74,7 @@ export interface CrashConfig<Model, Message> {
  */
 export type Options<Model, Message, R = never> = Omit<
 	ReactStore.Config<Model, Message, R>,
-	"update" | "subscriptions"
+	"update" | "subscriptions" | "devTools"
 > & {
 	/**
 	 * Default failure view and reporting for every Provider of this application.
@@ -84,6 +85,17 @@ export type Options<Model, Message, R = never> = Omit<
 	 * a `SchemaError`. Defaults to `true` outside production builds.
 	 */
 	readonly validateInit?: boolean
+	/**
+	 * Foldkit's DevTools settings, the same `DevToolsConfig` Foldkit's runtime takes. Add
+	 * `devTools()` from `react-foldkit/vite` to show Foldkit's panel and connect its MCP relay.
+	 *
+	 * Each Provider records its own history. With several Providers on a page, a selector chooses
+	 * which one the panel shows. Selecting a history entry in `"TimeTravel"` mode renders that
+	 * entry's Model while Commands and Subscriptions keep running on the live Model, and drops
+	 * Messages sent from the paused view. Resume renders the latest live Model. React Foldkit
+	 * records no Mounts, so the panel's Mounts tab stays empty.
+	 */
+	readonly devTools?: DevToolsConfig
 }
 
 type OptionsArgument<Model, Message, R> = [R] extends [never]
@@ -425,7 +437,7 @@ export function define<Model, Message, R = never>(
 					if (source === undefined) return yield* Effect.die(new Error(missingInit))
 					const init = typeof source === "function" ? source() : source
 					if (validateInit) yield* checkModel(init.model)
-					return { store: ReactStore.make(config, init) }
+					return { store: ReactStore.make(config, init, Schema.toType(program.Model)) }
 				})
 			)
 		)
@@ -442,9 +454,9 @@ export function define<Model, Message, R = never>(
 		const [session] = React.useState(() => ProviderSession.make(bootstrap, observeFailure))
 		const [source] = React.useState(() =>
 			Option.map(store, (store): ModelSource<Model, Message> => ({
-				getSnapshot: store.getModel,
+				getSnapshot: store.getDisplayModel,
 				getServerSnapshot: store.getServerModel,
-				subscribe: store.subscribe,
+				subscribe: store.subscribeDisplay,
 				dispatch: store.dispatch,
 			}))
 		)

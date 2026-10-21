@@ -3,6 +3,9 @@ import { deepFreeze, isDevelopment } from "../internal/deepFreeze"
 import * as InitCommand from "../internal/initCommand"
 import * as Store from "../store/store"
 import type * as Update from "foldkit/update"
+import type { DevToolsConfig } from "foldkit/runtime"
+import * as DevTools from "../devToolsIntegration"
+import type { Schema } from "effect"
 
 const ReactStoreTypeId: unique symbol = Symbol.for("react-foldkit/ReactStoreTypeId")
 export type ReactStoreTypeId = typeof ReactStoreTypeId
@@ -12,11 +15,13 @@ type Command<Message, R> = Update.Commands<Message, R>[number]
 export type ReactStore<Model, Message> = Readonly<{
 	[ReactStoreTypeId]: ReactStoreTypeId
 	getModel: () => Model
+	getDisplayModel: () => Model
 	getServerModel: () => Model
 	getCrash: () => Option.Option<Cause.Cause<unknown>>
 	getCrashMessage: () => Option.Option<Message>
 	subscribeCrash: (listener: () => void) => () => void
 	subscribe: (listener: () => void) => () => void
+	subscribeDisplay: (listener: () => void) => () => void
 	dispatch: (message: Message) => void
 	commit: (message: Message) => Result.Result<void, Store.CommitError>
 	/** Holds one lease on the live Store until the Scope closes. */
@@ -69,18 +74,37 @@ export type Config<Model, Message, R = never> = Store.Config<Model, Message, R> 
 	 * `true` outside production builds.
 	 */
 	readonly freezeModel?: boolean
+	/** Foldkit DevTools configuration. The panel and MCP bridge are enabled by the Vite plugin. */
+	readonly devTools?: DevToolsConfig
 }
 
 export function make<Model, Message, R = never>(
 	config: Config<Model, Message, R>,
-	init: Update.Return<Model, Message, R>
+	init: Update.Return<Model, Message, R>,
+	modelSchema?: Schema.Codec<Model, unknown, unknown, unknown>
 ): ReactStore<Model, Message> {
 	const freeze = config.freezeModel ?? isDevelopment
 	if (freeze) deepFreeze(init.model)
 	const program: Store.Config<Model, Message, R> = freeze
 		? { ...config, update: (model, message) => frozen(config.update(model, message)) }
 		: config
-	const runtime = Store.makeRuntime(program, init.model)
+	const display = DevTools.makeDisplay(init.model)
+	let runtime: Store.Runtime<Model, Message, R>
+	const devTools =
+		modelSchema === undefined
+			? undefined
+			: DevTools.makeObserver<Model, Message, R>({
+					config: config.devTools,
+					update: config.update,
+					modelSchema,
+					display,
+					freeze(model) {
+						if (freeze) deepFreeze(model)
+						return model
+					},
+					readLive: () => runtime.getModel(),
+					dispatch: (message) => runtime.dispatch(message),
+				})
 
 	// An init Command that completed does not run again on a later activation.
 	const pendingInitCommands = new Set<Command<Message, R>>()
@@ -93,7 +117,24 @@ export function make<Model, Message, R = never>(
 		Predicate.isBoolean(restartInterrupted) ? restartInterrupted : restartInterrupted(command)
 
 	// None until the first activation ends. Each later activation restarts the Store's live work.
-	let interruptedByLastDeactivation: Option.Option<Update.Commands<Message, R>> = Option.none()
+	let interruptedByLastDeactivation: Option.Option<ReadonlyArray<Store.RuntimeCommand<Message, R>>> = Option.none()
+	const initCommandIds = new WeakMap<object, number>()
+	const observer =
+		devTools === undefined
+			? undefined
+			: {
+					recordInit(model: Model, commands: Update.Commands<Message, R>) {
+						const ids = devTools.observer.recordInit(model, commands)
+						commands.forEach(function (command, index) {
+							const id = ids[index]
+							if (id !== undefined) initCommandIds.set(command, id)
+						})
+						return ids
+					},
+					recordMessage: devTools.observer.recordMessage,
+					recordCommandResult: devTools.observer.recordCommandResult,
+				}
+	runtime = Store.makeRuntime(program, init.model, observer)
 	// RcRef acquires with the Context it was made in, so each lease passes its own Context here.
 	let leaseContext = Context.empty()
 	let leaseExit: Exit.Exit<unknown, unknown> = Exit.void
@@ -101,24 +142,42 @@ export function make<Model, Message, R = never>(
 
 	const acquire = Effect.gen(function* () {
 		const interrupted = Option.getOrElse(interruptedByLastDeactivation, Array.empty)
-		const restarted = interrupted.filter(shouldRestart)
-		const kept = interrupted.filter((command) => !shouldRestart(command))
+		const restarted = interrupted.filter(({ command }) => shouldRestart(command))
+		const kept = interrupted.filter(({ command }) => !shouldRestart(command))
 		const firstMessage = yield* Option.isNone(interruptedByLastDeactivation) || config.onReactivate === undefined
 			? Effect.succeedNone
 			: Effect.sync(() =>
-					Option.fromUndefinedOr(config.onReactivate?.({ model: runtime.getModel(), interrupted: kept }))
+					Option.fromUndefinedOr(
+						config.onReactivate?.({
+							model: runtime.getModel(),
+							interrupted: kept.map(({ command }) => command),
+						})
+					)
 				)
 		const work = yield* Scope.make()
 		// RcRef closes with Exit.void, so pass on the last lease's Exit instead.
 		yield* Effect.addFinalizer((exit) => Scope.close(work, Exit.isFailure(exit) ? exit : leaseExit))
+		if (devTools !== undefined)
+			yield* devTools.install.pipe(
+				Scope.provide(work),
+				Effect.catchCause((cause) => Effect.logError("[react-foldkit] DevTools setup failed", cause))
+			)
 		yield* runtime
-			.activate({ context: leaseContext, commands: [...pendingInitCommands, ...restarted], firstMessage })
+			.activate({
+				context: leaseContext,
+				commands: [...pendingInitCommands, ...restarted.map(({ command }) => command)],
+				commandIds: [
+					...Array.map(Array.fromIterable(pendingInitCommands), (command) => initCommandIds.get(command)),
+					...restarted.map(({ id }) => id),
+				],
+				firstMessage,
+			})
 			.pipe(Scope.provide(work))
 		// Runs before deactivation stops the Commands, while they are still listed as running.
 		yield* Effect.addFinalizer(() =>
 			Effect.sync(function () {
 				interruptedByLastDeactivation = Option.some(
-					runtime.getRunningCommands().filter((command) => !InitCommand.isTracked(command))
+					runtime.getRunningCommandInvocations().filter(({ command }) => !InitCommand.isTracked(command))
 				)
 			})
 		)
@@ -150,6 +209,7 @@ export function make<Model, Message, R = never>(
 	return {
 		[ReactStoreTypeId]: ReactStoreTypeId,
 		getModel: runtime.getModel,
+		getDisplayModel: display.get,
 		getServerModel: () => init.model,
 		getCrash: runtime.getCrash,
 		getCrashMessage: runtime.getCrashMessage,
@@ -161,8 +221,14 @@ export function make<Model, Message, R = never>(
 			if (Result.isFailure(notified)) Effect.runFork(Effect.logError(Cause.die(notified.failure)))
 			return unsubscribe
 		},
-		dispatch: runtime.dispatch,
-		commit: runtime.commit,
+		subscribeDisplay: display.subscribe,
+		dispatch(message) {
+			if (!devTools?.isPaused()) runtime.dispatch(message)
+		},
+		commit: (message) =>
+			devTools?.isPaused()
+				? Result.fail(new Store.CommitError({ reason: new Store.Inactive() }))
+				: runtime.commit(message),
 		activate,
 	}
 }

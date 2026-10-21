@@ -401,6 +401,8 @@ export interface ActivateOptions<Message, R> {
 	 */
 	readonly context: Context.Context<never>
 	readonly commands: Update.Commands<Message, R>
+	/** Optional history identities carried when interrupted work is restarted. */
+	readonly commandIds?: ReadonlyArray<number | undefined>
 	/** Delivered before the Messages that were queued while the Store was inactive. */
 	readonly firstMessage: Option.Option<Message>
 }
@@ -415,32 +417,62 @@ export type Runtime<Model, Message, R> = Omit<Store<Model, Message>, "getRunning
 	readonly activate: (options: ActivateOptions<Message, R>) => Effect.Effect<void, never, Scope.Scope>
 	readonly getCrashMessage: () => Option.Option<Message>
 	readonly getRunningCommands: () => Update.Commands<Message, R>
+	readonly getRunningCommandInvocations: () => ReadonlyArray<RuntimeCommand<Message, R>>
 	/** Like `Store.dispose`, and resource finalizers receive `exit` unless a crash closed them first. */
 	readonly dispose: (exit?: Exit.Exit<unknown, unknown>) => Effect.Effect<void>
 }
 
+export type RuntimeCommand<Message, R> = Readonly<{
+	readonly id: number | undefined
+	readonly command: Update.Commands<Message, R>[number]
+}>
+
+export interface RuntimeObserver<Model, Message, R> {
+	readonly recordInit: (model: Model, commands: Update.Commands<Message, R>) => ReadonlyArray<number>
+	readonly recordMessage: (
+		message: Message,
+		modelBeforeUpdate: Model,
+		modelAfterUpdate: Model,
+		commands: Update.Commands<Message, R>
+	) => ReadonlyArray<number>
+	readonly recordCommandResult: (id: number, message: Message) => void
+}
+
 export function makeRuntime<Model, Message, R>(
 	program: Config<Model, Message, R>,
-	initialModel: Model
+	initialModel: Model,
+	observer?: RuntimeObserver<Model, Message, R>
 ): Runtime<Model, Message, R>
 export function makeRuntime<Model, Message, R>(
 	program: Program<Model, Message, R> & { readonly resources?: Layer.Layer<NoInfer<R>, never, never> },
-	initialModel: Model
+	initialModel: Model,
+	observer?: RuntimeObserver<Model, Message, R>
 ): Runtime<Model, Message, R>
 export function makeRuntime<Model, Message, R>(
 	program: Program<Model, Message, R> & { readonly resources?: Layer.Layer<NoInfer<R>, never, never> },
-	initialModel: Model
+	initialModel: Model,
+	observer?: RuntimeObserver<Model, Message, R>
 ): Runtime<Model, Message, R> {
 	const listeners = new Set<() => void>()
 	const crashListeners = new Set<() => void>()
 	const pendingMessages = MutableList.make<PendingMessage<Message, R>>()
-	const runningCommands = new Map<Fiber.Fiber<void>, Command<Message, R>>()
+	const runningCommands = new Map<Fiber.Fiber<void>, RuntimeCommand<Message, R>>()
 	let model = initialModel
 	let phase: Phase<Model, Message, R> = { _tag: "Inactive", crash: Option.none() }
 	let syncWorkMsSinceYield = 0
 	let lastDrainEndedAt = 0
 	let deferredDrainChannel: MessageChannel | undefined
 	let warnedInactiveOverflow = false
+	let hasRecordedInit = false
+
+	function observe<A>(run: () => A): A | undefined {
+		try {
+			return run()
+		} catch (error) {
+			runFork(Effect.logError(Cause.die(error)))
+			return undefined
+		}
+	}
 
 	// Logs with the live activation's services, such as its Logger, when there is one.
 	function runFork(effect: Effect.Effect<void>): void {
@@ -542,7 +574,8 @@ export function makeRuntime<Model, Message, R>(
 	function startCommand(
 		activation: Activation<Model, R>,
 		command: Command<Message, R>,
-		triggeringMessage: Option.Option<Message>
+		triggeringMessage: Option.Option<Message>,
+		commandId: number | undefined
 	): Effect.Effect<void> {
 		// Foldkit Command accepts a Schema or its Type; this runtime dispatches values.
 		const effect = (command.effect as Effect.Effect<Message, never, R>).pipe(
@@ -550,6 +583,8 @@ export function makeRuntime<Model, Message, R>(
 			activation.provideServices,
 			Effect.flatMap((message) =>
 				Effect.sync(function () {
+					if (isLive(activation) && commandId !== undefined)
+						observe(() => observer?.recordCommandResult(commandId, message))
 					// A result that lands after its activation ended belongs to no Store.
 					if (isLive(activation)) enqueueMessage(message, command)
 				})
@@ -565,7 +600,7 @@ export function makeRuntime<Model, Message, R>(
 		return Effect.forkIn(effect, activation.fiberScope).pipe(
 			Effect.flatMap((fiber) =>
 				Effect.sync(function () {
-					runningCommands.set(fiber, command)
+					runningCommands.set(fiber, { id: commandId, command })
 					fiber.addObserver(() => runningCommands.delete(fiber))
 				})
 			)
@@ -576,9 +611,10 @@ export function makeRuntime<Model, Message, R>(
 	function forkCommand(
 		activation: Activation<Model, R>,
 		command: Command<Message, R>,
-		triggeringMessage: Option.Option<Message>
+		triggeringMessage: Option.Option<Message>,
+		commandId?: number
 	): void {
-		Effect.runForkWith(activation.runtimeContext)(startCommand(activation, command, triggeringMessage))
+		Effect.runForkWith(activation.runtimeContext)(startCommand(activation, command, triggeringMessage, commandId))
 	}
 
 	function processMessage(activation: Activation<Model, R>, { message, command }: PendingMessage<Message, R>): void {
@@ -586,12 +622,14 @@ export function makeRuntime<Model, Message, R>(
 		if (Result.isFailure(updated)) return crashWith(Cause.die(updated.failure), Option.some(message))
 		const previous = model
 		model = updated.success.model
+		const commands = updated.success.commands ?? []
+		const ids = observe(() => observer?.recordMessage(message, previous, model, commands)) ?? []
 		if (command !== undefined) InitCommand.complete(command)
 		if (previous !== model) {
 			PubSub.publishUnsafe(activation.modelPubSub, model)
 			notify(listeners)
 		}
-		for (const next of updated.success.commands ?? []) forkCommand(activation, next, Option.some(message))
+		for (const [index, next] of commands.entries()) forkCommand(activation, next, Option.some(message), ids[index])
 	}
 
 	function drainPendingMessages(until?: PendingMessage<Message, R>): void {
@@ -668,6 +706,7 @@ export function makeRuntime<Model, Message, R>(
 	const activate = ({
 		context,
 		commands,
+		commandIds,
 		firstMessage,
 	}: ActivateOptions<Message, R>): Effect.Effect<void, never, Scope.Scope> =>
 		Effect.gen(function* () {
@@ -728,7 +767,13 @@ export function makeRuntime<Model, Message, R>(
 
 			// Foldkit attaches subscriptions before forking init Commands, so their initial
 			// dependencies come from the current Model.
+			let initCommandIds = commandIds
 			yield* Effect.gen(function* () {
+				if (!hasRecordedInit) {
+					// Init command identities are paired with each occurrence, even when objects repeat.
+					initCommandIds = observe(() => observer?.recordInit(model, commands)) ?? commandIds
+					hasRecordedInit = true
+				}
 				yield* forkSubscriptionFibers(program.subscriptions, {
 					initialModel: model,
 					modelPubSub: activation.modelPubSub,
@@ -741,7 +786,8 @@ export function makeRuntime<Model, Message, R>(
 						if (isLive(activation)) crashWith(cause, message)
 					},
 				})
-				for (const command of commands) yield* startCommand(activation, command, Option.none())
+				for (const [index, command] of commands.entries())
+					yield* startCommand(activation, command, Option.none(), initCommandIds?.[index])
 			}).pipe(Effect.provideContext(activation.runtimeContext))
 
 			if (Option.isNone(firstMessage)) return drainPendingMessages()
@@ -788,7 +834,8 @@ export function makeRuntime<Model, Message, R>(
 				return disposeOnce
 			}),
 		isDisposed: () => phase._tag === "Disposed",
-		getRunningCommands: () => Array.fromIterable(runningCommands.values()),
+		getRunningCommands: () => Array.map(Array.fromIterable(runningCommands.values()), ({ command }) => command),
+		getRunningCommandInvocations: () => Array.fromIterable(runningCommands.values()),
 		activate,
 	}
 }

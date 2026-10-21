@@ -1,11 +1,141 @@
-import { Cause, Deferred, Effect, Exit, Fiber, Function, Layer, Option, Schema, Stream } from "effect"
+import {
+	Cause,
+	Context,
+	Deferred,
+	Effect,
+	Exit,
+	Fiber,
+	Function,
+	Layer,
+	Option,
+	Queue,
+	Result,
+	Schema,
+	Scope,
+	Stream,
+} from "effect"
 import { describe, expect } from "vitest"
 import { it } from "@effect/vitest"
 import * as Store from "./store"
+import * as Runtime from "./store/store"
 import * as Subscription from "foldkit/subscription"
 import { makeLogCapture } from "../test/fixtures/logCapture"
 
 describe("store observers", function () {
+	it.live("records separate IDs for repeated uses of one Command object", () =>
+		Effect.gen(function* () {
+			const Message = Schema.Struct({ _tag: Schema.Literals(["Run", "Done"]) })
+			const results: number[] = []
+			const completed = yield* Queue.unbounded<void>()
+			const command = {
+				name: "Repeated",
+				effect: Effect.succeed({ _tag: "Done" as const }),
+			}
+			const runtime = Runtime.makeRuntime<number, typeof Message.Type, never>(
+				{
+					update: (model: number, message: typeof Message.Type) =>
+						message._tag === "Run" ? { model: model + 1, commands: [command, command] } : { model },
+				},
+				0,
+				{
+					recordInit: () => [],
+					recordMessage: () => [11, 12],
+					recordCommandResult(id) {
+						results.push(id)
+						Queue.offerUnsafe(completed, undefined)
+					},
+				}
+			)
+			const scope = yield* Scope.make()
+			yield* runtime
+				.activate({ context: Context.empty(), commands: [], firstMessage: Option.none() })
+				.pipe(Scope.provide(scope))
+			runtime.dispatch({ _tag: "Run" })
+			yield* Queue.takeN(completed, 2)
+			expect(results).toEqual([11, 12])
+			expect(runtime.getRunningCommands()).toEqual([])
+			yield* Scope.close(scope, Exit.void)
+		})
+	)
+
+	it.live("preserves distinct IDs when repeated Command invocations restart", () =>
+		Effect.gen(function* () {
+			const completed = yield* Queue.unbounded<number>()
+			const started = yield* Queue.unbounded<void>()
+			const done = { _tag: "Done" as const }
+			let starts = 0
+			const command = {
+				name: "Repeated",
+				effect: Effect.suspend(function () {
+					starts++
+					return starts <= 2
+						? Queue.offer(started, undefined).pipe(Effect.andThen(Effect.never))
+						: Effect.succeed(done)
+				}),
+			}
+			const runtime = Runtime.makeRuntime<number, { readonly _tag: "Run" | "Done" }, never>(
+				{
+					update: (model: number, message: { readonly _tag: "Run" | "Done" }) =>
+						message._tag === "Run" ? { model: model + 1, commands: [command, command] } : { model },
+				},
+				0,
+				{
+					recordInit: () => [],
+					recordMessage: () => [21, 22],
+					recordCommandResult(id) {
+						Queue.offerUnsafe(completed, id)
+					},
+				}
+			)
+			const firstScope = yield* Scope.make()
+			yield* runtime
+				.activate({ context: Context.empty(), commands: [], firstMessage: Option.none() })
+				.pipe(Scope.provide(firstScope))
+			runtime.dispatch({ _tag: "Run" })
+			yield* Queue.takeN(started, 2)
+			const invocations = runtime.getRunningCommandInvocations()
+			expect(invocations.map(({ id }) => id)).toEqual([21, 22])
+			yield* Scope.close(firstScope, Exit.void)
+
+			const secondScope = yield* Scope.make()
+			yield* runtime
+				.activate({
+					context: Context.empty(),
+					commands: invocations.map(({ command }) => command),
+					commandIds: invocations.map(({ id }) => id),
+					firstMessage: Option.none(),
+				})
+				.pipe(Scope.provide(secondScope))
+			expect(yield* Queue.takeN(completed, 2)).toEqual([21, 22])
+			yield* Scope.close(secondScope, Exit.void)
+		})
+	)
+
+	it.live("observer defects do not interrupt Message delivery", () =>
+		Effect.gen(function* () {
+			const command = { name: "Run", effect: Effect.never }
+			const runtime = Runtime.makeRuntime(
+				{ update: (model: number, message: number) => ({ model: message, commands: [command] }) },
+				0,
+				{
+					recordInit: () => [],
+					recordMessage() {
+						throw new Error("observer failed")
+					},
+					recordCommandResult: () => undefined,
+				}
+			)
+			const scope = yield* Scope.make()
+			yield* runtime
+				.activate({ context: Context.empty(), commands: [], firstMessage: Option.none() })
+				.pipe(Scope.provide(scope))
+			expect(runtime.commit(1)).toEqual(Result.void)
+			expect(runtime.getModel()).toBe(1)
+			expect(runtime.getRunningCommands()).toEqual([command])
+			yield* Scope.close(scope, Exit.void)
+		})
+	)
+
 	it.live("buffers every model while subscription resources are acquiring", () =>
 		Effect.gen(function* () {
 			const seen: number[] = []
