@@ -4,6 +4,8 @@ React Foldkit depends on [Foldkit](https://github.com/foldkit/foldkit) as a peer
 
 ## Foldkit
 
+The copied recorder's Clear action starts new history at the live Model and clears old init Commands. The patch is recorded in `scripts/checkDevToolsVendor.mjs`. Run `bun run --filter=react-foldkit check:devtools-vendor -- --apply --write-lock` to reapply recorded patches and update their hashes.
+
 The MIT License (MIT)
 
 Copyright (c) 2025 Devin Jameson

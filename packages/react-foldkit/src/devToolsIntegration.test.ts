@@ -7,8 +7,9 @@ import * as ReactStore from "./application/reactStore"
 import * as Overlay from "./devtoolsOverlay"
 import type { DevToolsStore } from "foldkit/devtools-host"
 import { dispatchRequest } from "./devtoolsVendor/devTools/webSocketBridge.js"
+import type * as Update from "foldkit/update"
 
-const makeHarness = (config: Exclude<DevToolsConfig, boolean> = {}) =>
+const makeHarness = (config: Exclude<DevToolsConfig, boolean> = {}, commands: Update.Commands<ValueMessage> = []) =>
 	Effect.gen(function* () {
 		let history: DevToolsStore | undefined
 		yield* Effect.acquireRelease(
@@ -28,7 +29,7 @@ const makeHarness = (config: Exclude<DevToolsConfig, boolean> = {}) =>
 				update: (model, message) => ({ model: model + message.value }),
 				devTools: { show: "Always", ...config },
 			},
-			{ model: 0 },
+			{ model: 0, commands },
 			Schema.Finite
 		)
 		yield* store.activate
@@ -36,6 +37,28 @@ const makeHarness = (config: Exclude<DevToolsConfig, boolean> = {}) =>
 	})
 
 describe("DevTools history integration", function () {
+	it.live("clears history at the live Model and replays later entries from that baseline", () =>
+		Effect.gen(function* () {
+			const { store, history } = yield* makeHarness({}, [{ name: "OldInit", effect: Effect.never }])
+			expect(SubscriptionRef.getUnsafe(history.stateRef).initCommands).toHaveLength(1)
+			store.commit(setValue(5))
+			yield* history.clear
+			expect(yield* history.getModelAtIndex(-1)).toBe(5)
+			expect(SubscriptionRef.getUnsafe(history.stateRef).entries).toEqual([])
+			expect(SubscriptionRef.getUnsafe(history.stateRef).initCommands).toEqual([])
+			store.commit(setValue(1))
+			store.commit(setValue(1))
+			yield* history.jumpTo(0)
+			expect(store.getDisplayModel()).toBe(6)
+			expect(store.getModel()).toBe(7)
+			yield* history.clear
+			expect(store.getDisplayModel()).toBe(6)
+			expect(SubscriptionRef.getUnsafe(history.stateRef).entries).toHaveLength(2)
+			yield* history.resume
+			expect(store.getDisplayModel()).toBe(7)
+		}).pipe(Effect.scoped)
+	)
+
 	it.live("records tagged Messages and replays their original payload", () =>
 		Effect.gen(function* () {
 			const { store, history } = yield* makeHarness()

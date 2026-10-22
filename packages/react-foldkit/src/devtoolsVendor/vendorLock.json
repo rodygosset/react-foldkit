@@ -50,7 +50,7 @@
     {
       "path": "devTools/store.js",
       "sourceSha256": "ba53184f7afb60a1ac1cda1a323e3a29192f387ab9db95c31f032e2c270d32af",
-      "patchedSha256": "9a6dba0d797f89626f789f7ffa1df168296ce88a66ca376fa4a7c971cdd84502"
+      "patchedSha256": "c4dde85b3c01cc9700acae540d81ea8174b20ebd37fca9e7e58e42f055fbe7df"
     },
     {
       "path": "devTools/submodelPath.d.ts",

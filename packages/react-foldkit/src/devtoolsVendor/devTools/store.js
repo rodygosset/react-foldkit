@@ -276,13 +276,15 @@ export const createDevToolsStore = (bridge, options = {}) => Effect.gen(function
         else {
             return modifyFields(state, {
                 entries: () => [],
+                maybeInitModel: () => state.maybeLatestModel,
+                initCommands: () => [],
+                initMountStarts: () => [],
                 startIndex: () => 0,
                 pausedAtIndex: () => 0,
-                keyframes: () => Option.match(state.maybeInitModel, {
+                keyframes: () => Option.match(state.maybeLatestModel, {
                     onNone: () => HashMap.empty(),
                     onSome: model => HashMap.make([0, model]),
                 }),
-                maybeLatestModel: () => state.maybeInitModel,
             });
         }
     });
