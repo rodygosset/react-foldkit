@@ -6,7 +6,7 @@ import * as Query from "foldkit/experimental/query"
 import * as Update from "foldkit/update"
 import React from "react"
 import { afterEach, expect } from "vitest"
-import { ValueMessage, setValue } from "../test/fixtures/valueMessage"
+import { Message } from "../test/fixtures/message"
 import * as Application from "./application"
 
 afterEach(cleanup)
@@ -142,14 +142,14 @@ it.live("reports the original reactivation update defect and recovers on a later
 		const App = Application.define(
 			{
 				Model: Schema.Finite,
-				Message: ValueMessage,
-				update(model: number, message: ValueMessage) {
+				Message,
+				update(model: number, message: Message) {
 					if (shouldFail) throw defect
 					return { model: model + message.value }
 				},
 			},
 			{
-				onReactivate: () => setValue(1),
+				onReactivate: () => Message.SetValue({ value: 1 }),
 				onCrash() {},
 			}
 		)
@@ -204,23 +204,23 @@ it.live.each([false, true])("renders a new callback defect after Activity retain
 		const App = Application.define(
 			{
 				Model: Schema.Finite,
-				Message: ValueMessage,
-				update(model: number, message: ValueMessage) {
+				Message,
+				update(model: number, message: Message) {
 					if (message.value === 9) throw previous
 					return { model: model + message.value }
 				},
 			},
 			{
-				onReactivate(): ValueMessage {
+				onReactivate(): Message {
 					if (shouldFail) throw current
-					return setValue(1)
+					return Message.SetValue({ value: 1 })
 				},
 				onCrash() {},
 			}
 		)
 		function View() {
 			const dispatch = App.useDispatch()
-			return <button onClick={() => dispatch(setValue(9))}>{App.useModel()}</button>
+			return <button onClick={() => dispatch(Message.SetValue({ value: 9 }))}>{App.useModel()}</button>
 		}
 		function Activity({ mode }: { readonly mode: "visible" | "hidden" }) {
 			return (

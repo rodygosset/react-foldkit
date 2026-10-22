@@ -14,14 +14,14 @@ import * as Submodel from "react-foldkit/submodel"
 import * as Scene from "react-foldkit/scene"
 import { bindSceneView } from "react-foldkit/scene/react"
 
-const ValueMessage = defineMessageUnion({ SetValue: { value: Schema.Finite } })
-type ValueMessage = typeof ValueMessage.Type
+const Message = defineMessageUnion({ SetValue: { value: Schema.Finite } })
+type Message = typeof Message.Type
 
 export type Reader = Foldkit.ModelSource.ModelReader<number>
-export type Program = Foldkit.Store.Program<number, ValueMessage>
-export type RuntimeStore = Foldkit.Store.Store<number, ValueMessage>
-export type CounterApplication = Foldkit.Application.Application<number, ValueMessage>
-export type Projection = Foldkit.Submodel.Projection<number, ValueMessage, number, ValueMessage>
+export type Program = Foldkit.Store.Program<number, Message>
+export type RuntimeStore = Foldkit.Store.Store<number, Message>
+export type CounterApplication = Foldkit.Application.Application<number, Message>
+export type Projection = Foldkit.Submodel.Projection<number, Message, number, Message>
 
 const reader: Reader = {
 	getSnapshot: () => 7,
@@ -35,21 +35,21 @@ assert.deepEqual(Object.keys(Foldkit).sort(), ["Application", "ModelSource", "Pr
 
 const App = Application.define({
 	Model: Schema.Finite,
-	Message: ValueMessage,
-	update: (model: number, message: ValueMessage) => ({ model: model + message.value }),
+	Message,
+	update: (model: number, message: Message) => ({ model: model + message.value }),
 })
 // Foldkit's own DevToolsConfig is accepted unchanged, so the settings carry over to Foldkit's runtime.
 const devToolsSettings = {
 	position: "BottomRight",
 	mode: "TimeTravel",
 	maxEntries: 100,
-	Message: ValueMessage,
+	Message,
 } as const
 const WithDevTools = Application.define(
 	{
 		Model: Schema.Finite,
-		Message: ValueMessage,
-		update: (model: number, message: ValueMessage) => ({ model: model + message.value }),
+		Message,
+		update: (model: number, message: Message) => ({ model: model + message.value }),
 	},
 	{ devTools: devToolsSettings }
 )
@@ -77,7 +77,7 @@ function Counter() {
 }
 Scene.scene(
 	{
-		update: (model: number, message: ValueMessage) => ({ model: model + message.value }),
+		update: (model: number, message: Message) => ({ model: model + message.value }),
 		view: bindSceneView(App, Counter),
 	},
 	Scene.given(0),
@@ -85,57 +85,59 @@ Scene.scene(
 	Scene.expect(Scene.role("button")).toHaveText("Count 1")
 )
 
-const Message = defineMessageUnion({ SetText: { text: Schema.String } })
-type Message = typeof Message.Type
+{
+	const Message = defineMessageUnion({ SetText: { text: Schema.String } })
+	type Message = typeof Message.Type
 
-const update = (_model: string, message: Message) => ({ model: message.text })
-const InputApp = Application.define({
-	Model: Schema.String,
-	Message,
-	update,
-})
-function InputView() {
-	const model = InputApp.useModel()
-	const send = InputApp.useDispatch()
-	const [ready, setReady] = useState(false)
-	useEffect(
-		function initialize() {
-			send(Message.SetText({ text: "ready" }))
-			setReady(true)
-		},
-		[send]
-	)
-	return createElement(
-		"main",
-		{
-			onClick: function (event) {
-				const action = (event.target as HTMLElement).getAttribute("data-action") ?? "missing"
-				send(Message.SetText({ text: action }))
+	const update = (_model: string, message: Message) => ({ model: message.text })
+	const InputApp = Application.define({
+		Model: Schema.String,
+		Message,
+		update,
+	})
+	function InputView() {
+		const model = InputApp.useModel()
+		const send = InputApp.useDispatch()
+		const [ready, setReady] = useState(false)
+		useEffect(
+			function initialize() {
+				send(Message.SetText({ text: "ready" }))
+				setReady(true)
 			},
-			onChange: function (event) {
-				send(Message.SetText({ text: (event.target as HTMLInputElement).value }))
+			[send]
+		)
+		return createElement(
+			"main",
+			{
+				onClick: function (event) {
+					const action = (event.target as HTMLElement).getAttribute("data-action") ?? "missing"
+					send(Message.SetText({ text: action }))
+				},
+				onChange: function (event) {
+					send(Message.SetText({ text: (event.target as HTMLInputElement).value }))
+				},
+				onPointerDown: function (event) {
+					send(Message.SetText({ text: (event.target as HTMLElement).dataset.action ?? "missing" }))
+				},
 			},
-			onPointerDown: function (event) {
-				send(Message.SetText({ text: (event.target as HTMLElement).dataset.action ?? "missing" }))
-			},
-		},
-		createElement("input", { value: model, onChange: constVoid }),
-		createElement("button", { "data-action": "saved" }, "Save"),
-		createElement("p", null, String(ready))
+			createElement("input", { value: model, onChange: constVoid }),
+			createElement("button", { "data-action": "saved" }, "Save"),
+			createElement("p", null, String(ready))
+		)
+	}
+	Scene.scene(
+		{ update, view: bindSceneView(InputApp, InputView) },
+		Scene.given("waiting"),
+		Scene.expect(Scene.role("textbox")).toHaveValue("ready"),
+		Scene.expect(Scene.text("true")).toExist(),
+		Scene.type(Scene.role("textbox"), "Ada"),
+		Scene.expect(Scene.role("textbox")).toHaveValue("Ada"),
+		Scene.pointerDown(Scene.role("button")),
+		Scene.expect(Scene.role("textbox")).toHaveValue("saved"),
+		Scene.click(Scene.role("button")),
+		Scene.expect(Scene.role("textbox")).toHaveValue("saved")
 	)
 }
-Scene.scene(
-	{ update, view: bindSceneView(InputApp, InputView) },
-	Scene.given("waiting"),
-	Scene.expect(Scene.role("textbox")).toHaveValue("ready"),
-	Scene.expect(Scene.text("true")).toExist(),
-	Scene.type(Scene.role("textbox"), "Ada"),
-	Scene.expect(Scene.role("textbox")).toHaveValue("Ada"),
-	Scene.pointerDown(Scene.role("button")),
-	Scene.expect(Scene.role("textbox")).toHaveValue("saved"),
-	Scene.click(Scene.role("button")),
-	Scene.expect(Scene.role("textbox")).toHaveValue("saved")
-)
 
 const query = Query.define({
 	name: "Packed",

@@ -3,7 +3,7 @@ import { cleanup, render, waitFor } from "@testing-library/react"
 import { Effect, Schema } from "effect"
 import React from "react"
 import { afterEach, describe, expect } from "vitest"
-import { ValueMessage, setValue } from "../test/fixtures/valueMessage"
+import { Message } from "../test/fixtures/message"
 import * as Application from "./application"
 
 afterEach(cleanup)
@@ -12,8 +12,8 @@ function makeMountingApplication() {
 	const handled: Array<number> = []
 	const App = Application.define({
 		Model: Schema.Finite,
-		Message: ValueMessage,
-		update(_model: number, message: ValueMessage) {
+		Message,
+		update(_model: number, message: Message) {
 			handled.push(message.value)
 			return { model: message.value }
 		},
@@ -23,8 +23,8 @@ function makeMountingApplication() {
 		const model = App.useModel()
 		React.useEffect(
 			function sendMountMessages() {
-				dispatch(setValue(1))
-				dispatch(setValue(2))
+				dispatch(Message.SetValue({ value: 1 }))
+				dispatch(Message.SetValue({ value: 2 }))
 			},
 			[dispatch]
 		)

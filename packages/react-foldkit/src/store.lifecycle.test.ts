@@ -1,5 +1,5 @@
 import { it } from "@effect/vitest"
-import { ValueMessage, setValue } from "../test/fixtures/valueMessage"
+import { Message } from "../test/fixtures/message"
 import { Cause, Context, Deferred, Effect, Exit, Layer, Option, Stream } from "effect"
 import { describe, expect } from "vitest"
 import * as Store from "./store"
@@ -41,7 +41,7 @@ describe("store lifetime", function () {
 							)
 						)
 					})
-				const subscriptions = Subscription.make<number, ValueMessage, Resource>()((entry) => ({
+				const subscriptions = Subscription.make<number, Message, Resource>()((entry) => ({
 					watch: entry(
 						{},
 						{
@@ -52,7 +52,7 @@ describe("store lifetime", function () {
 				}))
 				const store = yield* Store.make(
 					{
-						update: (_model: number, message: ValueMessage) => ({ model: message.value }),
+						update: (_model: number, message: Message) => ({ model: message.value }),
 						resources: layer,
 						subscriptions,
 					},
@@ -72,7 +72,7 @@ describe("store lifetime", function () {
 			Effect.gen(function* () {
 				const defect = new Error("initial projection failed")
 				const crashed = yield* Deferred.make<Cause.Cause<unknown>>()
-				const subscriptions = Subscription.make<number, ValueMessage>()((entry) => ({
+				const subscriptions = Subscription.make<number, Message>()((entry) => ({
 					watch: entry(
 						{},
 						{
@@ -85,7 +85,7 @@ describe("store lifetime", function () {
 				}))
 				const store = yield* Store.make(
 					{
-						update: (_model: number, message: ValueMessage) => ({ model: message.value }),
+						update: (_model: number, message: Message) => ({ model: message.value }),
 						subscriptions,
 						onCrash(cause, message) {
 							expect(Option.isNone(message)).toBe(true)
@@ -97,7 +97,7 @@ describe("store lifetime", function () {
 				const cause = yield* Deferred.await(crashed)
 				expect(cause).toEqual(Cause.die(defect))
 				expect(store.getCrash()).toEqual(Option.some(cause))
-				store.dispatch(setValue(1))
+				store.dispatch(Message.SetValue({ value: 1 }))
 				expect(store.getModel()).toBe(0)
 			})
 		)
@@ -107,7 +107,7 @@ describe("store lifetime", function () {
 		Effect.gen(function* () {
 			const defect = new Error("subscription setup failed")
 			const events: Array<string> = []
-			const subscriptions = Subscription.make<number, ValueMessage>()(function (entry) {
+			const subscriptions = Subscription.make<number, Message>()(function (entry) {
 				const second = entry(
 					{},
 					{
@@ -124,7 +124,7 @@ describe("store lifetime", function () {
 								Stream.fromEffect(
 									Effect.sync(function () {
 										events.push("ran")
-										return setValue(1)
+										return Message.SetValue({ value: 1 })
 									})
 								),
 						}
@@ -140,7 +140,7 @@ describe("store lifetime", function () {
 			const exit = yield* Effect.exit(
 				Effect.sync(() =>
 					Store.boot(
-						{ update: (model: number, _message: ValueMessage) => ({ model }), subscriptions },
+						{ update: (model: number, _message: Message) => ({ model }), subscriptions },
 						{ model: 0 }
 					)
 				)

@@ -1,6 +1,6 @@
 import { it } from "@effect/vitest"
-import { ValueMessage, setValue } from "../test/fixtures/valueMessage"
-import { Array, Cause, Effect, Exit, Result } from "effect"
+import { Array, Cause, Effect, Exit, Result, Schema } from "effect"
+import { defineMessageUnion } from "foldkit/message"
 import { afterEach, beforeEach, describe, expect, vi } from "vitest"
 import * as Store from "./store"
 import { controlledDrains } from "../test/fixtures/controlledDrains"
@@ -238,12 +238,14 @@ describe("synchronous commit", function () {
 
 it.effect("lets Effect.catchReason handle one CommitError reason", () =>
 	Effect.gen(function* () {
+		const Message = defineMessageUnion({ SetValue: { value: Schema.Finite } })
+		type Message = typeof Message.Type
 		const store = Store.boot(
-			{ update: (model: number, message: ValueMessage) => ({ model: model + message.value }) },
+			{ update: (model: number, message: Message) => ({ model: model + message.value }) },
 			{ model: 0 }
 		)
 		yield* store.dispose()
-		const handled = yield* Store.commit(store, setValue(1)).pipe(
+		const handled = yield* Store.commit(store, Message.SetValue({ value: 1 })).pipe(
 			Effect.catchReason("CommitError", "Disposed", (reason) => Effect.succeed(reason._tag)),
 			Effect.catchReason("CommitError", "Inactive", () => Effect.succeed("unexpected"))
 		)

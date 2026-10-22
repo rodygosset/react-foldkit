@@ -1,5 +1,4 @@
 import { describe, it } from "@effect/vitest"
-import { ValueMessage, setValue, TextMessage, setText } from "../test/fixtures/valueMessage"
 import {
 	Array,
 	Cause,
@@ -545,9 +544,12 @@ describe("dispose", function () {
 	// receive the crash Exit, not the success Exit that dispose passes.
 	it.effect("gives finalizers the crash Exit when dispose follows the crash in the same tick", () =>
 		Effect.gen(function* () {
+			const Message = defineMessageUnion({ SetValue: { value: Schema.Finite } })
+			type Message = typeof Message.Type
+
 			const defect = new Error("update failed")
 			const released = yield* Deferred.make<Exit.Exit<unknown, unknown>>()
-			const store = yield* Store.make<number, ValueMessage>(
+			const store = yield* Store.make<number, Message>(
 				{
 					update(_model, message) {
 						if (message.value === 2) throw defect
@@ -560,13 +562,18 @@ describe("dispose", function () {
 				},
 				{
 					model: 0,
-					commands: [{ name: "BuildResources", effect: Effect.succeed(1).pipe(Effect.map(setValue)) }],
+					commands: [
+						{
+							name: "BuildResources",
+							effect: Effect.succeed(1).pipe(Effect.map((value) => Message.SetValue({ value }))),
+						},
+					],
 				}
 			)
 			yield* Store.takeWhen(store, (model) => (model === 1 ? Option.some(model) : Option.none()))
 
 			// commit, unlike dispatch, processes the Message now even when the drain budget is spent.
-			expect(Result.isFailure(store.commit(setValue(2)))).toBe(true)
+			expect(Result.isFailure(store.commit(Message.SetValue({ value: 2 })))).toBe(true)
 			yield* store.dispose()
 
 			expect(yield* Deferred.await(released)).toEqual(Exit.die(defect))
@@ -575,12 +582,15 @@ describe("dispose", function () {
 
 	it.effect("shares pending disposal and its cleanup defect across callers", () =>
 		Effect.gen(function* () {
+			const Message = defineMessageUnion({ SetValue: { value: Schema.Finite } })
+			type Message = typeof Message.Type
+
 			const started = Deferred.makeUnsafe<void>()
 			const gate = Deferred.makeUnsafe<void>()
 			const defect = new Error("resource cleanup")
 			let completed = 0
 			let releases = 0
-			const store = Store.boot<number, ValueMessage>(
+			const store = Store.boot<number, Message>(
 				{
 					update: (_model, message) => ({ model: message.value }),
 					resources: Layer.effectDiscard(
@@ -594,7 +604,15 @@ describe("dispose", function () {
 						)
 					),
 				},
-				{ model: 0, commands: [{ name: "Started", effect: Effect.succeed(1).pipe(Effect.map(setValue)) }] }
+				{
+					model: 0,
+					commands: [
+						{
+							name: "Started",
+							effect: Effect.succeed(1).pipe(Effect.map((value) => Message.SetValue({ value }))),
+						},
+					],
+				}
 			)
 			yield* Store.takeWhen(store, (model) => (model === 1 ? Option.some(model) : Option.none()))
 			const dispose = store.dispose().pipe(
@@ -620,6 +638,9 @@ describe("dispose", function () {
 
 	it.effect("dispose finishes while Layer acquisition is suspended and interrupts the build", () =>
 		Effect.gen(function* () {
+			const Message = defineMessageUnion({ SetValue: { value: Schema.Finite } })
+			type Message = typeof Message.Type
+
 			class SlowService extends Context.Service<SlowService, Readonly<{ value: string }>>()("SlowService") {}
 			const acquired = Deferred.makeUnsafe<void>()
 			const gate = Deferred.makeUnsafe<void>()
@@ -638,14 +659,21 @@ describe("dispose", function () {
 					)
 				)
 			)
-			const store = yield* Store.make<number, ValueMessage, SlowService>(
+			const store = yield* Store.make<number, Message, SlowService>(
 				{
 					update: (model, message) => ({ model: message.value }),
 					resources: SlowLive,
 				},
 				{
 					model: 0,
-					commands: [{ name: "Read", effect: Effect.map(SlowService, () => 1).pipe(Effect.map(setValue)) }],
+					commands: [
+						{
+							name: "Read",
+							effect: Effect.map(SlowService, () => 1).pipe(
+								Effect.map((value) => Message.SetValue({ value }))
+							),
+						},
+					],
 				}
 			)
 			yield* Deferred.await(acquired)
@@ -847,7 +875,10 @@ describe("command message mappers", function () {
 
 	it.effect("interruption stops takeWhen from observing later Models or disposal", () =>
 		Effect.gen(function* () {
-			const store = yield* Store.make<number, ValueMessage>(
+			const Message = defineMessageUnion({ SetValue: { value: Schema.Finite } })
+			type Message = typeof Message.Type
+
+			const store = yield* Store.make<number, Message>(
 				{ update: (_model, message) => ({ model: message.value }) },
 				{ model: 0 }
 			)
@@ -856,7 +887,7 @@ describe("command message mappers", function () {
 			yield* Effect.yieldNow
 			expect(pick).toHaveBeenCalledTimes(1)
 			yield* Fiber.interrupt(waiting)
-			store.dispatch(setValue(1))
+			store.dispatch(Message.SetValue({ value: 1 }))
 			yield* store.dispose()
 			expect(pick).toHaveBeenCalledTimes(1)
 		})
@@ -890,8 +921,11 @@ describe("command message mappers", function () {
 	// explain the failure, so `Crashed` wins over `Disposed`, and both win over a matching Model.
 	it.effect("takeWhen fails with Crashed when a crashed Store has been disposed", () =>
 		Effect.gen(function* () {
+			const Message = defineMessageUnion({ SetValue: { value: Schema.Finite } })
+			type Message = typeof Message.Type
+
 			const defect = new Error("update failed")
-			const store = yield* Store.make<number, ValueMessage>(
+			const store = yield* Store.make<number, Message>(
 				{
 					update() {
 						throw defect
@@ -900,7 +934,7 @@ describe("command message mappers", function () {
 				},
 				{ model: 0 }
 			)
-			store.dispatch(setValue(1))
+			store.dispatch(Message.SetValue({ value: 1 }))
 			yield* store.dispose()
 
 			const error = yield* Effect.flip(Store.takeWhen(store, Option.some))
@@ -913,11 +947,13 @@ describe("command message mappers", function () {
 describe("Effect store construction", function () {
 	it.effect("allocates independent stores on each execution", () =>
 		Effect.gen(function* () {
-			const update = (model: number, _message: TextMessage) => ({ model: model + 1 })
+			const Message = defineMessageUnion({ Incremented: {} })
+			type Message = typeof Message.Type
+			const update = (model: number, _message: Message) => ({ model: model + 1 })
 			const make = Store.make({ update }, { model: 0 })
 			const first = yield* make
 			const second = yield* make
-			first.dispatch(setText("increment"))
+			first.dispatch(Message.Incremented())
 			expect(first.getModel()).toBe(1)
 			expect(second.getModel()).toBe(0)
 			expect(second).not.toBe(first)
@@ -926,6 +962,9 @@ describe("Effect store construction", function () {
 
 	it.effect("disposes the store and releases services when the caller's Scope closes", () =>
 		Effect.gen(function* () {
+			const Message = defineMessageUnion({ SetValue: { value: Schema.Finite } })
+			type Message = typeof Message.Type
+
 			class Resource extends Context.Service<Resource, number>()("ScopedStoreResource") {}
 			let releases = 0
 			const layer = Layer.effect(
@@ -938,9 +977,17 @@ describe("Effect store construction", function () {
 			)
 			const store = yield* Effect.scoped(
 				Effect.gen(function* () {
-					const store = yield* Store.make<number, ValueMessage, Resource>(
+					const store = yield* Store.make<number, Message, Resource>(
 						{ resources: layer, update: (_model, message) => ({ model: message.value }) },
-						{ model: 0, commands: [{ name: "ReadResource", effect: Resource.pipe(Effect.map(setValue)) }] }
+						{
+							model: 0,
+							commands: [
+								{
+									name: "ReadResource",
+									effect: Resource.pipe(Effect.map((value) => Message.SetValue({ value }))),
+								},
+							],
+						}
 					)
 					yield* Store.takeWhen(store, (model) => (model === 1 ? Option.some(model) : Option.none()))
 					return store
@@ -948,7 +995,7 @@ describe("Effect store construction", function () {
 			)
 			expect(store.isDisposed()).toBe(true)
 			expect(releases).toBe(1)
-			expect(store.commit(setValue(2))).toEqual(
+			expect(store.commit(Message.SetValue({ value: 2 }))).toEqual(
 				Result.fail(new Store.CommitError({ reason: new Store.Disposed() }))
 			)
 			expect(store.getModel()).toBe(1)
@@ -957,12 +1004,15 @@ describe("Effect store construction", function () {
 
 	it.effect("passes failed and interrupted caller Exits to resource finalizers", () =>
 		Effect.gen(function* () {
+			const Message = defineMessageUnion({ SetValue: { value: Schema.Finite } })
+			type Message = typeof Message.Type
+
 			for (const outcome of [Effect.fail("caller failed"), Effect.interrupt]) {
 				let resourceExit: Exit.Exit<unknown, unknown> | undefined
 				const callerExit = yield* Effect.exit(
 					Effect.scoped(
 						Effect.gen(function* () {
-							const store = yield* Store.make<number, ValueMessage>(
+							const store = yield* Store.make<number, Message>(
 								{
 									update: (_model, message) => ({ model: message.value }),
 									resources: Layer.effectDiscard(
@@ -976,7 +1026,12 @@ describe("Effect store construction", function () {
 								{
 									model: 0,
 									commands: [
-										{ name: "Started", effect: Effect.succeed(1).pipe(Effect.map(setValue)) },
+										{
+											name: "Started",
+											effect: Effect.succeed(1).pipe(
+												Effect.map((value) => Message.SetValue({ value }))
+											),
+										},
 									],
 								}
 							)
@@ -993,10 +1048,13 @@ describe("Effect store construction", function () {
 
 	it.effect("releases resources even when a disposal listener throws", () =>
 		Effect.gen(function* () {
+			const Message = defineMessageUnion({ SetValue: { value: Schema.Finite } })
+			type Message = typeof Message.Type
+
 			const scope = yield* Scope.make()
 			const defect = new Error("disposal listener")
 			let releases = 0
-			const store = yield* Store.make<number, ValueMessage>(
+			const store = yield* Store.make<number, Message>(
 				{
 					update: (_model, message) => ({ model: message.value }),
 					resources: Layer.effectDiscard(
@@ -1007,7 +1065,15 @@ describe("Effect store construction", function () {
 						)
 					),
 				},
-				{ model: 0, commands: [{ name: "Started", effect: Effect.succeed(1).pipe(Effect.map(setValue)) }] }
+				{
+					model: 0,
+					commands: [
+						{
+							name: "Started",
+							effect: Effect.succeed(1).pipe(Effect.map((value) => Message.SetValue({ value }))),
+						},
+					],
+				}
 			).pipe(Scope.provide(scope))
 			yield* Store.takeWhen(store, (model) => (model === 1 ? Option.some(model) : Option.none()))
 			store.subscribe(function () {
@@ -1025,11 +1091,14 @@ describe("Effect store construction", function () {
 
 it.effect("retains the authoritative crash after disposal and isolates crash observers from onCrash", () =>
 	Effect.gen(function* () {
+		const Message = defineMessageUnion({ SetValue: { value: Schema.Finite } })
+		type Message = typeof Message.Type
+
 		const defect = new Error("update")
 		const observed: Array<Cause.Cause<unknown>> = []
 		const configured: Array<Cause.Cause<unknown>> = []
 		let modelNotifications = 0
-		const store = yield* Store.make<number, ValueMessage>(
+		const store = yield* Store.make<number, Message>(
 			{
 				update() {
 					throw defect
@@ -1049,14 +1118,14 @@ it.effect("retains the authoritative crash after disposal and isolates crash obs
 		store.subscribeCrash(function () {
 			observed.push(Option.getOrThrow(store.getCrash()))
 		})
-		store.dispatch(setValue(1))
+		store.dispatch(Message.SetValue({ value: 1 }))
 		const original = Option.getOrThrow(store.getCrash())
 		expect(observed).toEqual([Cause.die(defect)])
 		expect(configured).toEqual([Cause.die(defect)])
 		expect(configured[0]).toBe(original)
 		expect(modelNotifications).toBe(0)
-		store.dispatch(setValue(2))
-		expect(store.commit(setValue(3))).toEqual(
+		store.dispatch(Message.SetValue({ value: 2 }))
+		expect(store.commit(Message.SetValue({ value: 3 }))).toEqual(
 			Result.fail(new Store.CommitError({ reason: new Store.Crashed({ cause: original }) }))
 		)
 		yield* store.dispose()
@@ -1072,11 +1141,14 @@ it.effect("retains the authoritative crash after disposal and isolates crash obs
 
 it.effect("healthy disposal retains no terminal crash", () =>
 	Effect.gen(function* () {
-		const store = yield* Store.make<number, ValueMessage>(
+		const Message = defineMessageUnion({ SetValue: { value: Schema.Finite } })
+		type Message = typeof Message.Type
+
+		const store = yield* Store.make<number, Message>(
 			{ update: (_model, message) => ({ model: message.value }) },
 			{ model: 0 }
 		)
-		expect(store.commit(setValue(1))).toEqual(Result.void)
+		expect(store.commit(Message.SetValue({ value: 1 }))).toEqual(Result.void)
 		yield* store.dispose()
 		expect({ model: store.getModel(), crash: store.getCrash(), disposed: store.isDisposed() }).toEqual({
 			model: 1,
