@@ -4,6 +4,7 @@ import { expect, it } from "@effect/vitest"
 import { Cause, Deferred, Effect, Exit, Fiber, Layer, Logger, Option, Result, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import * as Subscription from "foldkit/subscription"
+import { ValueMessage, setValue } from "../../test/fixtures/valueMessage"
 import * as Session from "./providerSession"
 import * as ReactStore from "./reactStore"
 
@@ -13,11 +14,11 @@ for (const delivery of ["dispatch", "commit"] as const) {
 			const defect = new Error(delivery)
 			const observed: Array<Cause.Cause<unknown>> = []
 			const crashed: Array<Cause.Cause<unknown>> = []
-			const store = ReactStore.make<number, number>(
+			const store = ReactStore.make<number, ValueMessage>(
 				{
 					update(_model, message) {
-						if (message === 9) throw defect
-						return { model: message }
+						if (message.value === 9) throw defect
+						return { model: message.value }
 					},
 					onCrash(cause) {
 						crashed.push(cause)
@@ -31,10 +32,10 @@ for (const delivery of ["dispatch", "commit"] as const) {
 				})
 			)
 			yield* session.start
-			if (delivery === "dispatch") store.dispatch(9)
-			if (delivery === "commit") store.commit(9)
-			store.dispatch(1)
-			store.commit(1)
+			if (delivery === "dispatch") store.dispatch(setValue(9))
+			if (delivery === "commit") store.commit(setValue(9))
+			store.dispatch(setValue(1))
+			store.commit(setValue(1))
 			expect(observed).toEqual([Cause.die(defect)])
 			expect(crashed).toEqual([Cause.die(defect)])
 			expect(session.getSnapshot().cause).toEqual(Option.some(Cause.die(defect)))
@@ -53,7 +54,7 @@ for (const command of ["init", "update", "subscription"] as const) {
 			const notified = Deferred.makeUnsafe<Cause.Cause<unknown>>()
 			const crashed = Deferred.makeUnsafe<Cause.Cause<unknown>>()
 			const failedCommand = { name: "Fail", effect: Effect.die(defect) }
-			const subscriptions = Subscription.make<number, number>()((entry) => ({
+			const subscriptions = Subscription.make<number, ValueMessage>()((entry) => ({
 				failed: entry(
 					{},
 					{
@@ -62,10 +63,10 @@ for (const command of ["init", "update", "subscription"] as const) {
 					}
 				),
 			}))
-			const store = ReactStore.make<number, number>(
+			const store = ReactStore.make<number, ValueMessage>(
 				{
 					update: (_model, message) => ({
-						model: message,
+						model: message.value,
 						commands: command === "update" ? [failedCommand] : [],
 					}),
 					...(command === "subscription" ? { subscriptions } : {}),
@@ -77,7 +78,7 @@ for (const command of ["init", "update", "subscription"] as const) {
 			)
 			const session = Session.make(Exit.succeed({ store }), (cause) => Deferred.succeed(notified, cause))
 			yield* session.start
-			if (command === "update") store.dispatch(1)
+			if (command === "update") store.dispatch(setValue(1))
 			const actual = yield* Deferred.await(notified)
 			const configCause = yield* Deferred.await(crashed)
 			expect(Result.getOrThrow(Cause.findDefect(actual))).toBe(defect)
@@ -90,35 +91,35 @@ for (const command of ["init", "update", "subscription"] as const) {
 }
 
 it.effect("reports a startup subscription crash once", () =>
-		Effect.gen(function* () {
-			const defect = new Error("startup")
-			const observations: Array<Cause.Cause<unknown>> = []
-			const notified = Deferred.makeUnsafe<void>()
-			const store = ReactStore.make<number, number>(
-				{
-					update: (_model, message) => ({ model: message }),
-					onCrash() {},
-					subscriptions: Subscription.make<number, number>()((entry) => ({
-						fail: entry(
-							{},
-							{ modelToDependencies: () => ({}), dependenciesToStream: () => Stream.die(defect) }
-						),
-					})),
-				},
-				{ model: 0 }
-			)
-			const session = Session.make(Exit.succeed({ store }), (cause) =>
-				Effect.sync(function () {
-					observations.push(cause)
-				}).pipe(Effect.andThen(Deferred.succeed(notified, undefined)))
-			)
-			yield* session.start
-			yield* Deferred.await(notified)
-			store.dispatch(2)
-			expect(observations).toEqual([Cause.die(defect)])
-			expect(session.getSnapshot().cause).toEqual(Option.some(Cause.die(defect)))
-			yield* session.stop
-		})
+	Effect.gen(function* () {
+		const defect = new Error("startup")
+		const observations: Array<Cause.Cause<unknown>> = []
+		const notified = Deferred.makeUnsafe<void>()
+		const store = ReactStore.make<number, ValueMessage>(
+			{
+				update: (_model, message) => ({ model: message.value }),
+				onCrash() {},
+				subscriptions: Subscription.make<number, ValueMessage>()((entry) => ({
+					fail: entry(
+						{},
+						{ modelToDependencies: () => ({}), dependenciesToStream: () => Stream.die(defect) }
+					),
+				})),
+			},
+			{ model: 0 }
+		)
+		const session = Session.make(Exit.succeed({ store }), (cause) =>
+			Effect.sync(function () {
+				observations.push(cause)
+			}).pipe(Effect.andThen(Deferred.succeed(notified, undefined)))
+		)
+		yield* session.start
+		yield* Deferred.await(notified)
+		store.dispatch(setValue(2))
+		expect(observations).toEqual([Cause.die(defect)])
+		expect(session.getSnapshot().cause).toEqual(Option.some(Cause.die(defect)))
+		yield* session.stop
+	})
 )
 
 it.effect("a healthy replacement activation clears a terminal crash and ignores old observer completion", () =>
@@ -127,11 +128,11 @@ it.effect("a healthy replacement activation clears a terminal crash and ignores 
 		const observerStarted = Deferred.makeUnsafe<void>()
 		const observerInterrupted = Deferred.makeUnsafe<void>()
 		const observerGate = Deferred.makeUnsafe<void>()
-		const store = ReactStore.make<number, number>(
+		const store = ReactStore.make<number, ValueMessage>(
 			{
 				update(_model, message) {
-					if (message === 9) throw defect
-					return { model: message }
+					if (message.value === 9) throw defect
+					return { model: message.value }
 				},
 				onCrash() {},
 			},
@@ -149,13 +150,13 @@ it.effect("a healthy replacement activation clears a terminal crash and ignores 
 			})
 		)
 		yield* session.start
-		store.dispatch(9)
+		store.dispatch(setValue(9))
 		yield* Deferred.await(observerStarted)
 		expect(session.getSnapshot().cause).toEqual(Option.some(Cause.die(defect)))
 		yield* session.stop
 		yield* Deferred.await(observerInterrupted)
 		yield* session.start
-		expect(store.commit(2)).toEqual(Result.void)
+		expect(store.commit(setValue(2))).toEqual(Result.void)
 		expect(store.getModel()).toBe(2)
 		yield* Deferred.succeed(observerGate, undefined)
 		expect(observations).toEqual([Cause.die(defect)])
@@ -165,9 +166,9 @@ it.effect("a healthy replacement activation clears a terminal crash and ignores 
 )
 
 const cleanupStore = (acquired: Deferred.Deferred<void>, finalize: Effect.Effect<void>) =>
-	ReactStore.make<number, number>(
+	ReactStore.make<number, ValueMessage>(
 		{
-			update: (_model, message) => ({ model: message }),
+			update: (_model, message) => ({ model: message.value }),
 			resources: Layer.effectDiscard(Effect.acquireRelease(Effect.void, () => finalize)),
 		},
 		{
@@ -175,7 +176,7 @@ const cleanupStore = (acquired: Deferred.Deferred<void>, finalize: Effect.Effect
 			commands: [
 				{
 					name: "BuildResources",
-					effect: Deferred.succeed(acquired, undefined).pipe(Effect.andThen(Effect.succeed(1))),
+					effect: Deferred.succeed(acquired, undefined).pipe(Effect.as(setValue(1))),
 				},
 			],
 		}
@@ -285,8 +286,8 @@ it.effect("logs nonterminal setup cleanup failure once before observing the comb
 	Effect.gen(function* () {
 		const failure = new Error("setup failure")
 		const defect = new Error("setup cleanup")
-		const original = ReactStore.make<number, number>(
-			{ update: (_model, message) => ({ model: message }) },
+		const original = ReactStore.make<number, ValueMessage>(
+			{ update: (_model, message) => ({ model: message.value }) },
 			{ model: 0 }
 		)
 		const store = {
@@ -337,7 +338,7 @@ it.effect("replays failures published while readers were detached before a healt
 		})
 		yield* session.start
 		expect(snapshots).toEqual([Option.some(Cause.die(defect)), Option.none()])
-		expect(store.commit(2)).toEqual(Result.void)
+		expect(store.commit(setValue(2))).toEqual(Result.void)
 		expect(store.getModel()).toBe(2)
 		unsubscribe()
 		yield* session.stop
@@ -349,15 +350,15 @@ it.effect.each([false, true])("reports a replacement callback failure after prev
 		const previous = new Error("previous update defect")
 		const current = new Error("replacement callback defect")
 		let shouldFail = true
-		const store = ReactStore.make<number, number>(
+		const store = ReactStore.make<number, ValueMessage>(
 			{
 				update(model, message) {
-					if (message === 9) throw previous
-					return { model: model + message }
+					if (message.value === 9) throw previous
+					return { model: model + message.value }
 				},
 				onReactivate() {
 					if (shouldFail) throw current
-					return 1
+					return setValue(1)
 				},
 				onCrash() {},
 			},
@@ -370,7 +371,7 @@ it.effect.each([false, true])("reports a replacement callback failure after prev
 			})
 		)
 		yield* session.start
-		if (previousCrash) store.dispatch(9)
+		if (previousCrash) store.dispatch(setValue(9))
 		yield* session.stop
 		expect(session.getSnapshot().cause).toEqual(previousCrash ? Option.some(Cause.die(previous)) : Option.none())
 		expect(store.getCrash()).toEqual(previousCrash ? Option.some(Cause.die(previous)) : Option.none())

@@ -1,13 +1,13 @@
 // @vitest-environment node
 import { Effect, Layer, Schema, Stream } from "effect"
-import { renderToString } from "react-dom/server"
-import { describe, expect, it } from "vitest"
 import type * as Command from "foldkit/command"
 import { defineMessageUnion } from "foldkit/message"
-import * as Application from "./application"
 import { modifyFields } from "foldkit/struct"
 import * as Subscription from "foldkit/subscription"
 import type * as Update from "foldkit/update"
+import { renderToString } from "react-dom/server"
+import { describe, expect, it } from "vitest"
+import * as Application from "./application"
 
 const Message = defineMessageUnion({
 	CompletedLoad: { value: Schema.String },

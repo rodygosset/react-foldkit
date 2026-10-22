@@ -79,44 +79,72 @@ export interface Step {
 export type Tagged = { readonly _tag: string }
 
 /** A plain Foldkit program, plus how to observe and drive it. */
-export interface Program<Model, Message extends Tagged, R = never> {
-	readonly Model: Schema.Codec<Model, unknown>
-	readonly Message: Schema.Codec<Message, unknown>
-	readonly init: () => Update.Return<Model, Message, R>
-	readonly update: (model: Model, message: Message) => Update.Return<Model, Message, R>
-	readonly subscriptions?: Subscription.Subscriptions<Model, Message, R>
+export interface Program<
+	ModelSchema extends Schema.Codec<unknown, unknown>,
+	MessageSchema extends Schema.Codec<Tagged, unknown>,
+	R = never,
+> {
+	readonly Model: ModelSchema
+	readonly Message: MessageSchema
+	readonly init: () => Update.Return<ModelSchema["Type"], MessageSchema["Type"], R>
+	readonly update: (
+		model: ModelSchema["Type"],
+		message: MessageSchema["Type"]
+	) => Update.Return<ModelSchema["Type"], MessageSchema["Type"], R>
+	readonly subscriptions?: Subscription.Subscriptions<ModelSchema["Type"], MessageSchema["Type"], R>
 	/** Services for Commands and Subscriptions. Each runtime builds it as its own resources Layer. */
 	readonly resources: Layer.Layer<R>
 	/** Projects each update into the value its `Updated` event records. */
-	readonly observe: (message: Message, model: Model) => unknown
+	readonly observe: (message: MessageSchema["Type"], model: ModelSchema["Type"]) => unknown
 	readonly initialized: (events: ReadonlyArray<Event>) => boolean
 	readonly steps: ReadonlyArray<Step>
 }
 
-export interface Case<Model, Message extends Tagged, R = never> {
+export interface Case<
+	ModelSchema extends Schema.Codec<unknown, unknown>,
+	MessageSchema extends Schema.Codec<Tagged, unknown>,
+	R = never,
+> {
 	/** Builds a fresh program for each run, so per-run resources such as Queues are not shared. */
-	readonly program: Effect.Effect<Program<Model, Message, R>, never, Trace | Scope.Scope>
+	readonly program: Effect.Effect<Program<ModelSchema, MessageSchema, R>, never, Trace | Scope.Scope>
 	readonly expected: ReadonlyArray<Event>
 	/** Removes order the contract does not promise before comparing. */
 	readonly normalize?: (events: ReadonlyArray<Event>) => ReadonlyArray<Event>
 }
 
 /** Starts a program on one runtime for the enclosing Scope. */
-export type Runtime = <Model, Message extends Tagged, R>(
-	program: Program<Model, Message, R>
+export type Runtime = <
+	ModelSchema extends Schema.Codec<unknown, unknown>,
+	MessageSchema extends Schema.Codec<Tagged, unknown>,
+	R,
+>(
+	program: Program<ModelSchema, MessageSchema, R>
 ) => Effect.Effect<Driver["Service"], never, Trace | Scope.Scope>
 
-const traced = <Model, Message extends Tagged, R>(
+const traced = <
+	ModelSchema extends Schema.Codec<unknown, unknown>,
+	MessageSchema extends Schema.Codec<Tagged, unknown>,
+	R,
+>(
 	record: (event: Event) => void,
-	program: Program<Model, Message, R>
+	program: Program<ModelSchema, MessageSchema, R>
 ) =>
-	function (model: Model, message: Message): Update.Return<Model, Message, R> {
+	function (
+		model: ModelSchema["Type"],
+		message: MessageSchema["Type"]
+	): Update.Return<ModelSchema["Type"], MessageSchema["Type"], R> {
 		const next = program.update(model, message)
 		record(Event.cases.Updated.make({ observed: program.observe(message, next.model) }))
 		return next
 	}
 
-export const storeRuntime: Runtime = <Model, Message extends Tagged, R>(program: Program<Model, Message, R>) =>
+export const storeRuntime: Runtime = <
+	ModelSchema extends Schema.Codec<unknown, unknown>,
+	MessageSchema extends Schema.Codec<Tagged, unknown>,
+	R,
+>(
+	program: Program<ModelSchema, MessageSchema, R>
+) =>
 	Effect.gen(function* () {
 		const { record } = yield* Trace
 		const store = yield* Store.make(
@@ -134,9 +162,16 @@ export const storeRuntime: Runtime = <Model, Message extends Tagged, R>(program:
 		}
 	})
 
-export const foldkitRuntime: Runtime = <Model, Message extends Tagged, R>(program: Program<Model, Message, R>) =>
+export const foldkitRuntime: Runtime = <
+	ModelSchema extends Schema.Codec<unknown, unknown>,
+	MessageSchema extends Schema.Codec<Tagged, unknown>,
+	R,
+>(
+	program: Program<ModelSchema, MessageSchema, R>
+) =>
 	Effect.gen(function* () {
 		const { record } = yield* Trace
+
 		const ports = { inbound: { input: Port.inbound(program.Message) } }
 		const container = yield* Effect.acquireRelease(
 			Effect.sync(() =>
@@ -147,14 +182,14 @@ export const foldkitRuntime: Runtime = <Model, Message extends Tagged, R>(progra
 		const handle = yield* Effect.acquireRelease(
 			Effect.sync(() =>
 				embed(
-					makeElement({
+					makeElement<ModelSchema["Type"], MessageSchema["Type"], R, never, typeof ports>({
 						Model: program.Model,
 						init: program.init,
 						update: traced(record, program),
 						view: (_model, h) => h.div([], []),
 						subscriptions: {
 							...program.subscriptions,
-							...Subscription.make<Model, Message, R>()(() => ({
+							...Subscription.make<ModelSchema["Type"], MessageSchema["Type"], R>()(() => ({
 								input: Port.subscriptionEntry(ports.inbound.input, Function.identity),
 							})),
 						},
@@ -178,9 +213,13 @@ export const foldkitRuntime: Runtime = <Model, Message extends Tagged, R>(progra
 	})
 
 /** Runs a case's program on one runtime and returns its trace before teardown. */
-export const run = <Model, Message extends Tagged, R>(
+export const run = <
+	ModelSchema extends Schema.Codec<unknown, unknown>,
+	MessageSchema extends Schema.Codec<Tagged, unknown>,
+	R,
+>(
 	runtime: Runtime,
-	{ program }: Case<Model, Message, R>
+	{ program }: Case<ModelSchema, MessageSchema, R>
 ): Effect.Effect<ReadonlyArray<Event>, Unsettled> =>
 	Effect.gen(function* () {
 		const trace = yield* Trace

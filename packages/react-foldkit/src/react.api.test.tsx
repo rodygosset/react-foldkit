@@ -1,15 +1,15 @@
 import { it as effectIt } from "@effect/vitest"
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { Effect, Function, Option, Schema } from "effect"
+import { defineMessageUnion } from "foldkit/message"
+import { modifyFields } from "foldkit/struct"
+import type * as Update from "foldkit/update"
 import React from "react"
 import { hydrateRoot } from "react-dom/client"
 import { renderToString } from "react-dom/server"
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { defineMessageUnion } from "foldkit/message"
-import type { ModelSource } from "./modelSource"
 import * as Application from "./application"
-import { modifyFields } from "foldkit/struct"
-import type * as Update from "foldkit/update"
+import type { ModelSource } from "./modelSource"
 
 afterEach(cleanup)
 

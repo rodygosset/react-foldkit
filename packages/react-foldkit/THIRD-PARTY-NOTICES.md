@@ -1,8 +1,10 @@
 # Third-party notices
 
-React Foldkit depends on [Foldkit](https://github.com/foldkit/foldkit) as a peer dependency and adapts its model freezing. Foldkit is excluded from the bundled output. Its MIT license is reproduced below.
+React Foldkit depends on [Foldkit](https://github.com/foldkit/foldkit) as a peer dependency and adapts its model freezing. Foldkit is excluded from the bundled output, except for copies the DevTools integration bundles: the DevTools recorder and MCP bridge modules from foldkit 0.168.0 (`dist/devTools`, with three private import paths redirected to public `foldkit` entries), and the relay registry modules from @foldkit/vite-plugin 0.28.0. `devToolsRelay.ts` and `devToolsPlugin.ts` adapt that plugin's relay and overlay injection. `bun run --filter=react-foldkit check:devtools-vendor` checks every copy against the recorded release. Both packages use the MIT license reproduced below.
 
 ## Foldkit
+
+The copied recorder's Clear action starts new history at the live Model and clears old init Commands. The patch is recorded in `scripts/checkDevToolsVendor.mjs`. Run `bun run --filter=react-foldkit check:devtools-vendor -- --apply --write-lock` to reapply recorded patches and update their hashes.
 
 The MIT License (MIT)
 

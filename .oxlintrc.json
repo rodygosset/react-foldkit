@@ -14,9 +14,27 @@
 		"**/.turbo/**",
 		"**/coverage/**",
 		"packages/react-foldkit/test/docs/.generated/**",
+		"packages/react-foldkit/src/devtoolsVendor/**",
+		"packages/react-foldkit/src/vite/vendor/**",
+		"packages/react-foldkit/src/vite/fixtures/**",
 		"**/routeTree.gen.ts"
 	],
 	"overrides": [
+		{
+			"files": ["packages/react-foldkit/src/vite/**"],
+			"rules": {
+				// The Vite plugin runs in Node at the dev-server boundary. It follows Vite's Promise-based
+				// hook API and owns Node HTTP and WebSocket servers, adapted from @foldkit/vite-plugin.
+				"effecttsgo/async-function": "off",
+				"effecttsgo/new-promise": "off",
+				"effecttsgo/node-builtin-import": "off",
+				"effecttsgo/global-date": "off",
+				"effecttsgo/global-console": "off",
+				"effecttsgo/global-fetch": "off",
+				"effecttsgo/process-env": "off",
+				"effecttsgo/schema-sync": "off"
+			}
+		},
 		{
 			"files": ["packages/react-foldkit/scripts/*.mjs"],
 			"rules": {

@@ -2,6 +2,8 @@ import type { Schema } from "effect"
 import type * as Subscription from "foldkit/subscription"
 import type * as Update from "foldkit/update"
 
+type Tagged = { readonly _tag: string }
+
 /**
  * A Foldkit application or child feature without its view: the Model Schema, Message union,
  * update, and optionally an OutMessage union, `init`, and Subscriptions. The field names match
@@ -24,15 +26,21 @@ import type * as Update from "foldkit/update"
  * @category models
  * @since 0.2.0
  */
-export interface Program<Model, Message, OutMessage = never, R = never> {
+export interface Program<
+	ModelSchema extends Schema.Constraint,
+	MessageSchema extends Schema.Schema<Tagged>,
+	OutMessage = never,
+	R = never,
+> {
 	/**
 	 * Supplies the Model type. `Application.define` also checks initial Models against it.
 	 */
-	readonly Model: Schema.Codec<Model, unknown, unknown, unknown>
+	readonly Model: ModelSchema
 	/**
-	 * The Schema of the Messages update handles, usually the union from `defineMessageUnion`.
+	 * The Schema of the Messages update handles. Every Message has a string `_tag`.
+	 * Use `defineMessageUnion` to define the variants and their constructors.
 	 */
-	readonly Message: Schema.Schema<Message>
+	readonly Message: MessageSchema
 	/**
 	 * The union of facts a child reports to its parent. Omit it for an application.
 	 */
@@ -41,24 +49,33 @@ export interface Program<Model, Message, OutMessage = never, R = never> {
 	 * Creates the initial Model and Commands. A child Program usually omits it, because its
 	 * parent creates the child Model.
 	 */
-	readonly init?: () => Update.Return<Model, Message, R>
+	readonly init?: () => Update.Return<ModelSchema["Type"], MessageSchema["Type"], R>
 	/**
 	 * Applies a Message to the Model without running side effects. Return Commands for work that
 	 * runs after the transition.
 	 */
-	readonly update: (model: Model, message: Message) => Update.ReturnWithOutMessage<Model, Message, OutMessage, R>
+	readonly update: (
+		model: ModelSchema["Type"],
+		message: MessageSchema["Type"]
+	) => Update.ReturnWithOutMessage<ModelSchema["Type"], MessageSchema["Type"], OutMessage, R>
 	/**
 	 * Declares Streams whose dependencies are derived from the Model. Changed dependencies
 	 * restart their Streams.
 	 */
-	readonly subscriptions?: Subscription.Subscriptions<Model, Message, R>
+	readonly subscriptions?: Subscription.Subscriptions<ModelSchema["Type"], MessageSchema["Type"], R>
 }
 
 // An application Program reports no OutMessages, so OutMessage stays `never` rather than
 // being inferred from update's optional `outMessage` field.
-type ApplicationProgram<Model, Message, R> = Omit<Program<Model, Message, never, R>, "OutMessage" | "update"> & {
+type ApplicationProgram<ModelSchema extends Schema.Constraint, MessageSchema extends Schema.Schema<Tagged>, R> = Omit<
+	Program<ModelSchema, MessageSchema, never, R>,
+	"OutMessage" | "update"
+> & {
 	readonly OutMessage?: undefined
-	readonly update: (model: Model, message: Message) => Update.Return<Model, Message, R>
+	readonly update: (
+		model: ModelSchema["Type"],
+		message: MessageSchema["Type"]
+	) => Update.Return<ModelSchema["Type"], MessageSchema["Type"], R>
 }
 
 /**
@@ -99,18 +116,27 @@ type ApplicationProgram<Model, Message, R> = Omit<Program<Model, Message, never,
  * @category constructors
  * @since 0.2.0
  */
-export function make<Model, Message, OutMessage, R = never>(
-	program: Program<Model, Message, OutMessage, R> & { readonly OutMessage: Schema.Schema<OutMessage> }
-): Program<Model, Message, OutMessage, R>
-export function make<Model, Message, R = never>(
-	program: ApplicationProgram<Model, Message, R> & { readonly init: () => Update.Return<Model, Message, R> }
-): Program<Model, Message, never, R> & { readonly init: () => Update.Return<Model, Message, R> }
-export function make<Model, Message, R = never>(
-	program: ApplicationProgram<Model, Message, R>
-): Program<Model, Message, never, R>
+export function make<
+	ModelSchema extends Schema.Constraint,
+	MessageSchema extends Schema.Schema<Tagged>,
+	OutMessage,
+	R = never,
+>(
+	program: Program<ModelSchema, MessageSchema, OutMessage, R> & { readonly OutMessage: Schema.Schema<OutMessage> }
+): Program<ModelSchema, MessageSchema, OutMessage, R>
+export function make<ModelSchema extends Schema.Constraint, MessageSchema extends Schema.Schema<Tagged>, R = never>(
+	program: ApplicationProgram<ModelSchema, MessageSchema, R> & {
+		readonly init: () => Update.Return<ModelSchema["Type"], MessageSchema["Type"], R>
+	}
+): Program<ModelSchema, MessageSchema, never, R> & {
+	readonly init: () => Update.Return<ModelSchema["Type"], MessageSchema["Type"], R>
+}
+export function make<ModelSchema extends Schema.Constraint, MessageSchema extends Schema.Schema<Tagged>, R = never>(
+	program: ApplicationProgram<ModelSchema, MessageSchema, R>
+): Program<ModelSchema, MessageSchema, never, R>
 // eslint-disable-next-line foldkit-style/prefer-arrow-for-expression-return -- Overloads keep a required init and a `never` OutMessage.
-export function make<Model, Message, OutMessage, R>(
-	program: Program<Model, Message, OutMessage, R>
-): Program<Model, Message, OutMessage, R> {
+export function make<ModelSchema extends Schema.Constraint, MessageSchema extends Schema.Schema<Tagged>, OutMessage, R>(
+	program: Program<ModelSchema, MessageSchema, OutMessage, R>
+): Program<ModelSchema, MessageSchema, OutMessage, R> {
 	return program
 }

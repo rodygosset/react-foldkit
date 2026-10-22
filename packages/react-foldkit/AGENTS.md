@@ -10,5 +10,6 @@ Import Messages, Commands, `Update`, `AsyncData`, and Query from `foldkit`. Impo
 - Resetting a Query clears cached data and ignores late responses. It does not abort requests.
 - Keep server and client snapshots consistent for hydration.
 - Use the ESLint preset and configure React's hook rules separately.
+- For DevTools, pass Foldkit's `devTools` settings to `Application.define`'s options and add `devTools()` from `react-foldkit/vite` to the Vite config.
 
 Read the [counter tutorial](docs/examples.md), [API reference](docs/reference.md), [runtime explanation](docs/architecture.md), and [ESLint setup](eslint/README.md).

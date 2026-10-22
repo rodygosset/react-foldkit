@@ -33,7 +33,7 @@
 		"build": "NODE_OPTIONS=\"--import ../../eslint/ts6-register.mjs\" tsup && NODE_OPTIONS=\"--import ../../eslint/ts6-register.mjs\" tsup --config tsup.eslint.config.ts && bun run build:types",
 		"build:types": "tsc --project tsconfig.build.json",
 		"prepack": "bun run build",
-		"lint": "bun run check:filenames && bun run test:eslint && NODE_OPTIONS=\"--import ../../eslint/ts6-register.mjs\" eslint",
+		"lint": "bun run check:filenames && bun run check:devtools-vendor && bun run test:eslint && NODE_OPTIONS=\"--import ../../eslint/ts6-register.mjs\" eslint",
 		"check:filenames": "node scripts/checkFilenames.mjs",
 		"format": "prettier --write \"**/*.{ts,tsx}\"",
 		"typecheck": "tsc --noEmit",
@@ -51,6 +51,7 @@
 		"docs:generate": "node scripts/publicApi.mjs generate",
 		"check:docs": "node scripts/publicApi.mjs check",
 		"check:api": "node scripts/publicApi.mjs api",
+		"check:devtools-vendor": "node scripts/checkDevToolsVendor.mjs",
 		"test:consumer": "node scripts/testConsumer.mjs",
 		"test:browser:cold": "node scripts/testBrowserCold.mjs",
 		"browser:install": "playwright install chromium"
@@ -75,6 +76,14 @@
 		"./program": {
 			"types": "./dist/program.d.ts",
 			"import": "./dist/program.js"
+		},
+		"./devtools": {
+			"types": "./dist/devtools.d.ts",
+			"import": "./dist/devtools.js"
+		},
+		"./vite": {
+			"types": "./dist/vite.d.ts",
+			"import": "./dist/vite.js"
 		},
 		"./eslint": {
 			"types": "./eslint/dist/index.d.ts",
@@ -103,19 +112,29 @@
 		"effect": "^4.0.0",
 		"foldkit": "^0.168.0",
 		"eslint": "^9",
-		"react": "^19.2.6"
+		"react": "^19.2.6",
+		"@foldkit/devtools": "~0.168.0"
 	},
 	"peerDependenciesMeta": {
 		"eslint": {
 			"optional": true
+		},
+		"@foldkit/devtools": {
+			"optional": true
 		}
 	},
 	"dependencies": {
+		"@effect/platform-node-shared": "4.0.0",
 		"picomatch": "^4.0.5",
-		"use-sync-external-store": "1.6.0"
+		"use-sync-external-store": "1.6.0",
+		"ws": "8.21.3"
 	},
 	"devDependencies": {
+		"@effect/platform-browser": "4.0.0",
 		"@effect/vitest": "4.0.0",
+		"@foldkit/devtools": "0.168.0",
+		"@foldkit/ui": "0.168.0",
+		"@foldkit/vite-plugin": "0.28.0",
 		"@tanstack/react-router": "1.170.33",
 		"@testing-library/react": "^16.3.2",
 		"@types/estree": "^1.0.8",
@@ -123,6 +142,7 @@
 		"@types/react": "^19",
 		"@types/react-dom": "^19.2.4",
 		"@types/use-sync-external-store": "1.5.0",
+		"@types/ws": "8.18.1",
 		"@vitest/browser-playwright": "5.0.3",
 		"@vitest/coverage-v8": "5.0.3",
 		"effect": "4.0.0",

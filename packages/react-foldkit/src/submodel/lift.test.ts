@@ -1,5 +1,6 @@
 // @vitest-environment node
 
+import { ValueMessage } from "../../test/fixtures/valueMessage"
 import { expect, it } from "@effect/vitest"
 import { Effect, Option, Result, Schema } from "effect"
 import { defineMessageUnion } from "foldkit/message"
@@ -45,7 +46,7 @@ it("constructs optional sources only after presence and retains live and server 
 			subscribe: () => function () {},
 			dispatch() {},
 		},
-		{ read: (model) => model, toParentMessage: (message: number) => message }
+		{ read: (model) => model, toParentMessage: (message: ValueMessage) => message.value }
 	)
 	expect(projected.source()).toEqual(Option.none())
 	expect(projected.presence.getSnapshot()).toBe(false)

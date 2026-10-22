@@ -38,11 +38,11 @@ export type { Application, CrashConfig, CrashContext, ModelHooks, Options, Provi
 
 ```ts
 import { Cause, Effect, Option, Schema } from "effect";
+import type * as Update from "foldkit/update";
 import React from "react";
 import type { ModelSource } from "../modelSource";
-import type { OptionalProjection, Projection } from "../submodel/lift";
-import type * as Update from "foldkit/update";
 import type { Program } from "../program/program";
+import type { OptionalProjection, Projection } from "../submodel/lift";
 import * as ReactStore from "./reactStore";
 import { type Send } from "./send";
 export type { ReactivationContext } from "./reactStore";
@@ -58,9 +58,10 @@ export interface CrashConfig<Model, Message> {
   }) => React.ReactNode;
   readonly report?: (context: CrashContext<Model, Message>) => Effect.Effect<void, unknown>;
 }
-export type Options<Model, Message, R = never> = Omit<ReactStore.Config<Model, Message, R>, "update" | "subscriptions"> & {
+export type Options<Model, Message, R = never> = Omit<ReactStore.Config<Model, Message, R>, "update" | "subscriptions" | "devTools"> & {
   readonly crash?: CrashConfig<Model, Message>;
   readonly validateInit?: boolean;
+  readonly devTools?: ReactStore.Config<Model, Message, R>["devTools"];
 };
 type OptionsArgument<Model, Message, R> = [R] extends [never] ? [options?: Options<Model, Message, R>] : [options: Options<Model, Message, R>];
 export type ProviderProps<Model, Message, R = never, HasInit extends boolean = false> = {
@@ -103,28 +104,35 @@ export declare function modelHooks<Model, Message>(Context: SourceContext<Model,
   useSubmodel: <Model_1, Message_1>({ read, toParentMessage, }: Projection<Model, Message, Model_1, Message_1>) => ModelSource<Model_1, Message_1>;
   useOptionalSubmodel: <Model_1, Message_1>({ read, toParentMessage, }: OptionalProjection<Model, Message, Model_1, Message_1>) => Option.Option<ModelSource<Model_1, Message_1>>;
 };
-export declare function define<Model, Message, R = never>(program: Program<Model, Message, never, R> & {
-  readonly init: () => Update.Return<Model, Message, R>;
-}, ...options: OptionsArgument<Model, Message, R>): Application<Model, Message, R, true>;
-export declare function define<Model, Message, R = never>(program: Program<Model, Message, never, R>, ...options: OptionsArgument<Model, Message, R>): Application<Model, Message, R>;
+type Tagged = {
+  readonly _tag: string;
+};
+export declare function define<ModelSchema extends Schema.Constraint, MessageSchema extends Schema.Schema<Tagged>, R = never>(program: Program<ModelSchema, MessageSchema, never, R> & {
+  readonly init: () => Update.Return<ModelSchema["Type"], MessageSchema["Type"], R>;
+}, ...options: OptionsArgument<ModelSchema["Type"], MessageSchema["Type"], R>): Application<ModelSchema["Type"], MessageSchema["Type"], R, true>;
+export declare function define<ModelSchema extends Schema.Constraint, MessageSchema extends Schema.Schema<Tagged>, R = never>(program: Program<ModelSchema, MessageSchema, never, R>, ...options: OptionsArgument<ModelSchema["Type"], MessageSchema["Type"], R>): Application<ModelSchema["Type"], MessageSchema["Type"], R>;
 ```
 
 ## dist/application/reactStore.d.ts
 
 ```ts
+import type { Schema } from "effect";
 import { Cause, Duration, Effect, Option, Result, Scope } from "effect";
-import * as Store from "../store/store";
 import type * as Update from "foldkit/update";
+import * as DevTools from "../devToolsIntegration";
+import * as Store from "../store/store";
 declare const ReactStoreTypeId: unique symbol;
 export type ReactStoreTypeId = typeof ReactStoreTypeId;
 export type ReactStore<Model, Message> = Readonly<{
   [ReactStoreTypeId]: ReactStoreTypeId;
   getModel: () => Model;
+  getDisplayModel: () => Model;
   getServerModel: () => Model;
   getCrash: () => Option.Option<Cause.Cause<unknown>>;
   getCrashMessage: () => Option.Option<Message>;
   subscribeCrash: (listener: () => void) => () => void;
   subscribe: (listener: () => void) => () => void;
+  subscribeDisplay: (listener: () => void) => () => void;
   dispatch: (message: Message) => void;
   commit: (message: Message) => Result.Result<void, Store.CommitError>;
   activate: Effect.Effect<void, never, Scope.Scope>;
@@ -138,8 +146,11 @@ export type Config<Model, Message, R = never> = Store.Config<Model, Message, R> 
   readonly retainInactive?: Duration.Input;
   readonly restartInterrupted?: boolean | ((command: Update.Commands<Message, R>[number]) => boolean);
   readonly freezeModel?: boolean;
+  readonly devTools?: DevTools.Config<Message>;
 };
-export declare function make<Model, Message, R = never>(config: Config<Model, Message, R>, init: Update.Return<Model, Message, R>): ReactStore<Model, Message>;
+export declare function make<Model, Message extends {
+  readonly _tag: string;
+}, ModelSchema extends Schema.Codec<Model, unknown> = Schema.Codec<Model, unknown>, R = never>(config: Config<Model, Message, R>, init: Update.Return<Model, Message, R>, Model?: ModelSchema): ReactStore<Model, Message>;
 export {};
 ```
 
@@ -169,6 +180,64 @@ export declare function useModel<Model>(source: ModelReader<Model>): Model;
 export declare function useModel<Model, Selected>(source: ModelReader<Model>, selector: (model: Model) => Selected, isEqual?: (a: Selected, b: Selected) => boolean): Selected;
 export declare function useModel<Model, Selected>(source: ModelReader<Model>, selector?: (model: Model) => Selected, isEqual?: (a: Selected, b: Selected) => boolean): Model | Selected;
 export declare function useOptionalModel<Model>(source: Option.Option<ModelReader<Model>>): Option.Option<Model>;
+```
+
+## dist/devToolsIntegration.d.ts
+
+```ts
+import { Effect, Schema } from "effect";
+import type { DevToolsConfig } from "foldkit/runtime";
+import type * as Store from "./store/store";
+export type Config<Message> = false | (Exclude<DevToolsConfig, false> & {
+  readonly Message?: Schema.Codec<NoInfer<Message>, unknown, unknown, unknown>;
+});
+export type Display<Model> = Readonly<{
+  get: () => Model;
+  subscribe: (listener: () => void) => () => void;
+  set: (model: Model) => void;
+}>;
+export declare function makeDisplay<Model>(initial: Model): Display<Model>;
+export declare function makeObserver<ModelSchema extends Schema.Codec<unknown, unknown>, Message extends {
+  readonly _tag: string;
+}, R>(options: {
+  readonly config: Config<Message> | undefined;
+  readonly update: (model: ModelSchema["Type"], message: Message) => {
+    readonly model: ModelSchema["Type"];
+  };
+  readonly Model: ModelSchema;
+  readonly display: Display<ModelSchema["Type"]>;
+  readonly freeze: (model: ModelSchema["Type"]) => ModelSchema["Type"];
+  readonly readLive: () => ModelSchema["Type"];
+  readonly dispatch: (message: Message) => void;
+}): Readonly<{
+  readonly observer: Store.RuntimeObserver<ModelSchema["Type"], Message, R>;
+  readonly install: Effect.Effect<void, never, import("effect").Scope.Scope>;
+  readonly isPaused: () => boolean;
+}>;
+```
+
+## dist/devtools.d.ts
+
+```ts
+export { __configure } from "./devtoolsOverlay";
+```
+
+## dist/devtoolsOverlay.d.ts
+
+```ts
+import { Effect, Option, Scope } from "effect";
+import type { DevToolsOverlay } from "foldkit/devtools-host";
+import type { DevToolsMode, DevToolsPosition } from "foldkit/runtime";
+import type { DevToolsStore } from "./devtoolsVendor/devTools/store.js";
+export type Hot = Readonly<{
+  send: (event: string, data?: unknown) => void;
+  on: (event: string, listener: (data: never) => void) => void;
+  off: (event: string, listener: (data: never) => void) => void;
+  dispose: (callback: (data: unknown) => void) => void;
+}>;
+export declare function __configure(overlayFactory: DevToolsOverlay, devServerHot: Hot | undefined): () => void;
+export declare const getHot: () => Hot | undefined;
+export declare const register: (store: DevToolsStore, position: DevToolsPosition, mode: DevToolsMode, banner: Option.Option<string>) => Effect.Effect<void, never, Scope.Scope>;
 ```
 
 ## dist/index.d.ts
@@ -257,27 +326,30 @@ export * from "./program/public";
 import type { Schema } from "effect";
 import type * as Subscription from "foldkit/subscription";
 import type * as Update from "foldkit/update";
-export interface Program<Model, Message, OutMessage = never, R = never> {
-  readonly Model: Schema.Codec<Model, unknown, unknown, unknown>;
-  readonly Message: Schema.Schema<Message>;
+type Tagged = {
+  readonly _tag: string;
+};
+export interface Program<ModelSchema extends Schema.Constraint, MessageSchema extends Schema.Schema<Tagged>, OutMessage = never, R = never> {
+  readonly Model: ModelSchema;
+  readonly Message: MessageSchema;
   readonly OutMessage?: Schema.Schema<OutMessage>;
-  readonly init?: () => Update.Return<Model, Message, R>;
-  readonly update: (model: Model, message: Message) => Update.ReturnWithOutMessage<Model, Message, OutMessage, R>;
-  readonly subscriptions?: Subscription.Subscriptions<Model, Message, R>;
+  readonly init?: () => Update.Return<ModelSchema["Type"], MessageSchema["Type"], R>;
+  readonly update: (model: ModelSchema["Type"], message: MessageSchema["Type"]) => Update.ReturnWithOutMessage<ModelSchema["Type"], MessageSchema["Type"], OutMessage, R>;
+  readonly subscriptions?: Subscription.Subscriptions<ModelSchema["Type"], MessageSchema["Type"], R>;
 }
-type ApplicationProgram<Model, Message, R> = Omit<Program<Model, Message, never, R>, "OutMessage" | "update"> & {
+type ApplicationProgram<ModelSchema extends Schema.Constraint, MessageSchema extends Schema.Schema<Tagged>, R> = Omit<Program<ModelSchema, MessageSchema, never, R>, "OutMessage" | "update"> & {
   readonly OutMessage?: undefined;
-  readonly update: (model: Model, message: Message) => Update.Return<Model, Message, R>;
+  readonly update: (model: ModelSchema["Type"], message: MessageSchema["Type"]) => Update.Return<ModelSchema["Type"], MessageSchema["Type"], R>;
 };
-export declare function make<Model, Message, OutMessage, R = never>(program: Program<Model, Message, OutMessage, R> & {
+export declare function make<ModelSchema extends Schema.Constraint, MessageSchema extends Schema.Schema<Tagged>, OutMessage, R = never>(program: Program<ModelSchema, MessageSchema, OutMessage, R> & {
   readonly OutMessage: Schema.Schema<OutMessage>;
-}): Program<Model, Message, OutMessage, R>;
-export declare function make<Model, Message, R = never>(program: ApplicationProgram<Model, Message, R> & {
-  readonly init: () => Update.Return<Model, Message, R>;
-}): Program<Model, Message, never, R> & {
-  readonly init: () => Update.Return<Model, Message, R>;
+}): Program<ModelSchema, MessageSchema, OutMessage, R>;
+export declare function make<ModelSchema extends Schema.Constraint, MessageSchema extends Schema.Schema<Tagged>, R = never>(program: ApplicationProgram<ModelSchema, MessageSchema, R> & {
+  readonly init: () => Update.Return<ModelSchema["Type"], MessageSchema["Type"], R>;
+}): Program<ModelSchema, MessageSchema, never, R> & {
+  readonly init: () => Update.Return<ModelSchema["Type"], MessageSchema["Type"], R>;
 };
-export declare function make<Model, Message, R = never>(program: ApplicationProgram<Model, Message, R>): Program<Model, Message, never, R>;
+export declare function make<ModelSchema extends Schema.Constraint, MessageSchema extends Schema.Schema<Tagged>, R = never>(program: ApplicationProgram<ModelSchema, MessageSchema, R>): Program<ModelSchema, MessageSchema, never, R>;
 export {};
 ```
 
@@ -377,23 +449,40 @@ export declare const takeWhen: {
 export interface ActivateOptions<Message, R> {
   readonly context: Context.Context<never>;
   readonly commands: Update.Commands<Message, R>;
+  readonly commandIds?: ReadonlyArray<number | undefined>;
   readonly firstMessage: Option.Option<Message>;
 }
 export type Runtime<Model, Message, R> = Omit<Store<Model, Message>, "getRunningCommands" | "dispose"> & {
   readonly activate: (options: ActivateOptions<Message, R>) => Effect.Effect<void, never, Scope.Scope>;
   readonly getCrashMessage: () => Option.Option<Message>;
   readonly getRunningCommands: () => Update.Commands<Message, R>;
+  readonly getRunningCommandInvocations: () => ReadonlyArray<RuntimeCommand<Message, R>>;
   readonly dispose: (exit?: Exit.Exit<unknown, unknown>) => Effect.Effect<void>;
 };
-export declare function makeRuntime<Model, Message, R>(program: Config<Model, Message, R>, initialModel: Model): Runtime<Model, Message, R>;
+export type RuntimeCommand<Message, R> = Readonly<{
+  readonly id: number | undefined;
+  readonly command: Update.Commands<Message, R>[number];
+}>;
+export interface RuntimeObserver<Model, Message, R> {
+  readonly recordInit: (model: Model, commands: Update.Commands<Message, R>) => ReadonlyArray<number>;
+  readonly recordMessage: (message: Message, modelBeforeUpdate: Model, modelAfterUpdate: Model, commands: Update.Commands<Message, R>) => ReadonlyArray<number>;
+  readonly recordCommandResult: (id: number, message: Message) => void;
+}
+export declare function makeRuntime<Model, Message, R>(program: Config<Model, Message, R>, initialModel: Model, observer?: RuntimeObserver<Model, Message, R>): Runtime<Model, Message, R>;
 export declare function makeRuntime<Model, Message, R>(program: Program<Model, Message, R> & {
   readonly resources?: Layer.Layer<NoInfer<R>, never, never>;
-}, initialModel: Model): Runtime<Model, Message, R>;
-export declare function make<Model, Message, R = never>(config: Config<Model, Message, R>, init: Update.Return<Model, Message, R>): Effect.Effect<Store<Model, Message>, never, Scope.Scope>;
-export declare function make<Model, Message, R = never>(config: Program<Model, Message, R> & {
+}, initialModel: Model, observer?: RuntimeObserver<Model, Message, R>): Runtime<Model, Message, R>;
+export declare function make<Model, Message extends {
+  readonly _tag: string;
+}, R = never>(config: Config<Model, Message, R>, init: Update.Return<Model, Message, R>): Effect.Effect<Store<Model, Message>, never, Scope.Scope>;
+export declare function make<Model, Message extends {
+  readonly _tag: string;
+}, R = never>(config: Program<Model, Message, R> & {
   readonly resources?: never;
 }, init: Update.Return<Model, Message, R>): Effect.Effect<Store<Model, Message>, never, R | Scope.Scope>;
-export declare function boot<Model, Message, R = never>(config: Config<Model, Message, R>, init: Update.Return<Model, Message, R>): Store<Model, Message>;
+export declare function boot<Model, Message extends {
+  readonly _tag: string;
+}, R = never>(config: Config<Model, Message, R>, init: Update.Return<Model, Message, R>): Store<Model, Message>;
 export {};
 ```
 
@@ -510,12 +599,36 @@ declare const ProviderError_base: Schema.Class<ProviderError, Schema.Struct<{
 export declare class ProviderError extends ProviderError_base {
   get message(): string;
 }
-export interface Config<Model, Message> {
-  readonly Model: Schema.Codec<Model, unknown, unknown, unknown>;
-  readonly Message: Schema.Schema<Message>;
+type Tagged = {
+  readonly _tag: string;
+};
+export interface Config<ModelSchema extends Schema.Codec<unknown, unknown>, MessageSchema extends Schema.Schema<Tagged>> {
+  readonly Model: ModelSchema;
+  readonly Message: MessageSchema;
 }
-export declare function define<Model, Message>(config: Config<Model, Message>): Submodel<Model, Message>;
+export declare function define<ModelSchema extends Schema.Codec<unknown, unknown>, MessageSchema extends Schema.Codec<Tagged, unknown>>(config: Config<ModelSchema, MessageSchema>): Submodel<ModelSchema["Type"], MessageSchema["Type"]>;
 export {};
+```
+
+## dist/vite.d.ts
+
+```ts
+import type { PluginOption } from "vite";
+export declare const devTools: () => PluginOption;
+```
+
+## dist/vite/devToolsPlugin.d.ts
+
+```ts
+import type { PluginOption } from "vite";
+export declare const devToolsPlugin: () => PluginOption;
+```
+
+## dist/vite/devToolsRelay.d.ts
+
+```ts
+import type { Plugin } from "vite";
+export declare const devToolsRelayPlugin: () => Plugin;
 ```
 
 ## eslint/dist/index.d.ts

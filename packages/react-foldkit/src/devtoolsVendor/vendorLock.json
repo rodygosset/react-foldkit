@@ -1,0 +1,101 @@
+{
+  "package": "foldkit",
+  "version": "0.168.0",
+  "files": [
+    {
+      "path": "devTools/historyQuery.d.ts",
+      "sourceSha256": "3eed7562f3c8c4915614ebdb438d37d0e486ddf6b0886e9922cd18757ecbb359",
+      "patchedSha256": "3eed7562f3c8c4915614ebdb438d37d0e486ddf6b0886e9922cd18757ecbb359"
+    },
+    {
+      "path": "devTools/historyQuery.js",
+      "sourceSha256": "8f79e7087b626a8b6d83d441ce071b8a897cdb5ffd626ff4f4932d7f6846cfea",
+      "patchedSha256": "8f79e7087b626a8b6d83d441ce071b8a897cdb5ffd626ff4f4932d7f6846cfea"
+    },
+    {
+      "path": "devTools/protocol.d.ts",
+      "sourceSha256": "511025f09f56b8eba3c27a9731b2a42e1c8ce472182cd5c24d940c425e05cd35",
+      "patchedSha256": "511025f09f56b8eba3c27a9731b2a42e1c8ce472182cd5c24d940c425e05cd35"
+    },
+    {
+      "path": "devTools/protocol.js",
+      "sourceSha256": "242e6590456a69842cf6a16983956ab8f829587c7af0714e498220900cea1940",
+      "patchedSha256": "b2f603c30633fe20f63c6cbc462e69c265b92195c1592274f28ea46cd7c9041e"
+    },
+    {
+      "path": "devTools/schemaSummarize.d.ts",
+      "sourceSha256": "6c00ecc991cef86768d06f665203863598fb1e4cffab1194d521d96a9c3393fc",
+      "patchedSha256": "6c00ecc991cef86768d06f665203863598fb1e4cffab1194d521d96a9c3393fc"
+    },
+    {
+      "path": "devTools/schemaSummarize.js",
+      "sourceSha256": "11e4c160d55225485361ec39951f1fe06abc164b559f512aa96b45d8887410f6",
+      "patchedSha256": "11e4c160d55225485361ec39951f1fe06abc164b559f512aa96b45d8887410f6"
+    },
+    {
+      "path": "devTools/serialize.d.ts",
+      "sourceSha256": "2f0085cab352a84f62a9a73a31e7ea2acd8065558826facc95356cb9a5dac88c",
+      "patchedSha256": "2f0085cab352a84f62a9a73a31e7ea2acd8065558826facc95356cb9a5dac88c"
+    },
+    {
+      "path": "devTools/serialize.js",
+      "sourceSha256": "908984b33bf3bbbe9cf43c3b1a3995b832d1862b32d4e5d5e4fe0c1a8d00402e",
+      "patchedSha256": "908984b33bf3bbbe9cf43c3b1a3995b832d1862b32d4e5d5e4fe0c1a8d00402e"
+    },
+    {
+      "path": "devTools/store.d.ts",
+      "sourceSha256": "d2baa23e44ed8dfb60bc442cd7bcaef297ac15b73cecfa5afd89970447ea6da1",
+      "patchedSha256": "d2baa23e44ed8dfb60bc442cd7bcaef297ac15b73cecfa5afd89970447ea6da1"
+    },
+    {
+      "path": "devTools/store.js",
+      "sourceSha256": "ba53184f7afb60a1ac1cda1a323e3a29192f387ab9db95c31f032e2c270d32af",
+      "patchedSha256": "c4dde85b3c01cc9700acae540d81ea8174b20ebd37fca9e7e58e42f055fbe7df"
+    },
+    {
+      "path": "devTools/submodelPath.d.ts",
+      "sourceSha256": "afd3b15795f18347592685e13a9ef2a6413a6e453ba31daa2948995388b6ec3e",
+      "patchedSha256": "afd3b15795f18347592685e13a9ef2a6413a6e453ba31daa2948995388b6ec3e"
+    },
+    {
+      "path": "devTools/submodelPath.js",
+      "sourceSha256": "a6b65d57ca9d88182d92eb15f240c747c5fff13b10dd23d9b788e8543ee73ea1",
+      "patchedSha256": "a6b65d57ca9d88182d92eb15f240c747c5fff13b10dd23d9b788e8543ee73ea1"
+    },
+    {
+      "path": "devTools/summarize.d.ts",
+      "sourceSha256": "5092ea2dba802d8cf4763598cb5ba9756aa6d529d9dbc2abac72f8f98c7e3d6c",
+      "patchedSha256": "5092ea2dba802d8cf4763598cb5ba9756aa6d529d9dbc2abac72f8f98c7e3d6c"
+    },
+    {
+      "path": "devTools/summarize.js",
+      "sourceSha256": "8a512201eb889c60d61d1eb9a3daf6ab7a401ce3848a943730667d387b882632",
+      "patchedSha256": "9a213e3f2a168a07df48419b018ec602a8f16600b1364e2edc73cb6eb7497013"
+    },
+    {
+      "path": "devTools/webSocketBridge.d.ts",
+      "sourceSha256": "c4da940e0f86531f80028646c995a9fea5abc706be60698f450f8be4598001e4",
+      "patchedSha256": "c4da940e0f86531f80028646c995a9fea5abc706be60698f450f8be4598001e4"
+    },
+    {
+      "path": "devTools/webSocketBridge.js",
+      "sourceSha256": "89d3153c858d0a521dd5c073c4f987838cfe85602af13fd27ab23eee84724fbb",
+      "patchedSha256": "89d3153c858d0a521dd5c073c4f987838cfe85602af13fd27ab23eee84724fbb"
+    },
+    {
+      "path": "effectExtensions/index.js",
+      "sourceSha256": "b360fcf2d2a3566e68e265a2f8d218c8233efaa9ec6403b9ee8419ea4921ceee",
+      "patchedSha256": "b360fcf2d2a3566e68e265a2f8d218c8233efaa9ec6403b9ee8419ea4921ceee"
+    },
+    {
+      "path": "effectExtensions/optionExtensions.js",
+      "sourceSha256": "9f29b4a27ad0417d38db0ed0fa12f5fb514d89a4667d4f363c79447cc4e21ec1",
+      "patchedSha256": "9f29b4a27ad0417d38db0ed0fa12f5fb514d89a4667d4f363c79447cc4e21ec1"
+    },
+    {
+      "path": "effectExtensions/stringExtensions.js",
+      "sourceSha256": "2bc09e984ad02097b999fd788c267ef3b872f9183f494e4a86fb18e7b964ba84",
+      "patchedSha256": "2bc09e984ad02097b999fd788c267ef3b872f9183f494e4a86fb18e7b964ba84"
+    }
+  ]
+}

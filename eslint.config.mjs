@@ -12,6 +12,10 @@ export default [
 			"**/.turbo/**",
 			"**/coverage/**",
 			"packages/react-foldkit/test/docs/.generated/**",
+			// Copied from Foldkit and verified by check:devtools-vendor.
+			"packages/react-foldkit/src/devtoolsVendor/**",
+			"packages/react-foldkit/src/vite/vendor/**",
+			"packages/react-foldkit/src/vite/fixtures/**",
 			"**/routeTree.gen.ts",
 		],
 	},

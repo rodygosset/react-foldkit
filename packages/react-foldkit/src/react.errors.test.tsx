@@ -1,12 +1,12 @@
 import { it } from "@effect/vitest"
 import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react"
 import { Cause, Effect, Layer, Option, Result, Schema, Stream } from "effect"
+import { defineMessageUnion } from "foldkit/message"
+import * as Subscription from "foldkit/subscription"
 import React from "react"
 import { hydrateRoot } from "react-dom/client"
 import { renderToString } from "react-dom/server"
 import { afterEach, expect, vi } from "vitest"
-import { defineMessageUnion } from "foldkit/message"
-import * as Subscription from "foldkit/subscription"
 import * as Application from "./application"
 import { define } from "./submodel"
 
@@ -157,7 +157,11 @@ it.live("reports cleanup defects without throwing from unmount", () =>
 	Effect.gen(function* () {
 		const defect = new Error("unmount defect")
 		const App = Application.define(
-			{ Model: Schema.Finite, Message, update: (model: number, _message: Message) => ({ model: model + 1 }) },
+			{
+				Model: Schema.Finite,
+				Message,
+				update: (model: number, _message: Message) => ({ model: model + 1 }),
+			},
 			{
 				resources: releaseFailingLayer(() => Effect.die(defect)),
 			}
@@ -288,7 +292,11 @@ it.live("recovers a cleanup failure after Activity reconnects", () =>
 	Effect.gen(function* () {
 		let releases = 0
 		const App = Application.define(
-			{ Model: Schema.Finite, Message, update: (model: number, _message: Message) => ({ model: model + 1 }) },
+			{
+				Model: Schema.Finite,
+				Message,
+				update: (model: number, _message: Message) => ({ model: model + 1 }),
+			},
 			{
 				resources: releaseFailingLayer(() =>
 					Effect.suspend(() => (++releases === 1 ? Effect.die(new Error("cleanup failed")) : Effect.void))

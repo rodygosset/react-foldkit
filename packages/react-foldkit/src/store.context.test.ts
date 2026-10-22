@@ -1,4 +1,5 @@
 import { it } from "@effect/vitest"
+import { ValueMessage, setValue } from "../test/fixtures/valueMessage"
 import { Deferred, Effect, Logger, Option, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { expect } from "vitest"
@@ -13,18 +14,18 @@ it.effect("preserves the acquisition logger and clock in commands and subscripti
 				logged.push(options.message)
 			})
 			const started = yield* Deferred.make<void>()
-			const subscriptions = Subscription.make<number, number>()((entry) => ({
+			const subscriptions = Subscription.make<number, ValueMessage>()((entry) => ({
 				watch: entry(
 					{},
 					{
 						modelToDependencies: () => ({}),
 						dependenciesToStream: () =>
-							Stream.fromEffect(Effect.logInfo("subscription-context").pipe(Effect.as(1))),
+							Stream.fromEffect(Effect.logInfo("subscription-context").pipe(Effect.as(setValue(1)))),
 					}
 				),
 			}))
 			const store = yield* Store.make(
-				{ update: (model: number, message: number) => ({ model: model + message }), subscriptions },
+				{ update: (model: number, message: ValueMessage) => ({ model: model + message.value }), subscriptions },
 				{
 					model: 0,
 					commands: [
@@ -33,7 +34,7 @@ it.effect("preserves the acquisition logger and clock in commands and subscripti
 							effect: Deferred.succeed(started, undefined).pipe(
 								Effect.andThen(Effect.sleep("1 second")),
 								Effect.andThen(Effect.logInfo("command-context")),
-								Effect.as(1)
+								Effect.as(setValue(1))
 							),
 						},
 					],

@@ -1,24 +1,25 @@
-import { afterEach, expect } from "vitest"
 import { it } from "@effect/vitest"
-import React from "react"
 import { cleanup, render, waitFor } from "@testing-library/react"
 import { Cause, Effect, Schema, Stream } from "effect"
-import * as Application from "./application"
 import * as Subscription from "foldkit/subscription"
+import React from "react"
+import { afterEach, expect } from "vitest"
+import { ValueMessage, setValue } from "../test/fixtures/valueMessage"
+import * as Application from "./application"
 afterEach(cleanup)
 it.live("repeated subscription Cause after Activity reconnect", () =>
 	Effect.gen(function* () {
 		const stream = Stream.die(new Error("same-subscription-defect"))
 		const crashes: Cause.Cause<unknown>[] = []
 		const reports: Cause.Cause<unknown>[] = []
-		const subscriptions = Subscription.make<number, number>()((entry) => ({
+		const subscriptions = Subscription.make<number, ValueMessage>()((entry) => ({
 			fail: entry({}, { modelToDependencies: () => ({}), dependenciesToStream: () => stream }),
 		}))
 		const App = Application.define(
 			{
 				Model: Schema.Finite,
-				Message: Schema.Finite,
-				update: (model: number, message: number) => ({ model: message }),
+				Message: ValueMessage,
+				update: (model: number, message: ValueMessage) => ({ model: message.value }),
 				subscriptions,
 			},
 			{
@@ -59,7 +60,7 @@ it.live("repeated subscription Cause after Activity reconnect", () =>
 		expect(mounted.getByRole("alert").textContent).toBe("crashed")
 		expect(mounted.container.textContent).toBe("crashed")
 		// A crashed Store ignores further Messages.
-		dispatch!(3)
+		dispatch!(setValue(3))
 		expect(crashes).toHaveLength(2)
 		expect(mounted.container.textContent).toBe("crashed")
 	})

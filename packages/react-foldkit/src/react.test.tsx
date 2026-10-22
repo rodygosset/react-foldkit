@@ -1,16 +1,16 @@
 import { it } from "@effect/vitest"
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { Effect, Latch, Layer, Schema, Stream } from "effect"
+import type * as Command from "foldkit/command"
+import { defineMessageUnion } from "foldkit/message"
+import { modifyFields } from "foldkit/struct"
+import * as Subscription from "foldkit/subscription"
+import type * as Update from "foldkit/update"
 import React, { StrictMode } from "react"
 import { hydrateRoot, type Root } from "react-dom/client"
 import { renderToString } from "react-dom/server"
 import { afterEach, describe, expect, vi } from "vitest"
-import { modifyFields } from "foldkit/struct"
-import type * as Command from "foldkit/command"
-import { defineMessageUnion } from "foldkit/message"
 import * as Application from "./application"
-import * as Subscription from "foldkit/subscription"
-import type * as Update from "foldkit/update"
 
 const Message = defineMessageUnion({
 	CompletedLoad: { value: Schema.String },
