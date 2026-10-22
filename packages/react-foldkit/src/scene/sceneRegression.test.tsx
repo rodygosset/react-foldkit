@@ -443,3 +443,53 @@ it("notifies memoized Submodel readers when the parent changes", function () {
 		Scene.expect(Scene.text("updated")).toExist()
 	)
 })
+
+it("keeps Commands pending while effects deliver more messages within the same step", function () {
+	const Message = defineMessageUnion({ Load: {}, Visible: {}, Loaded: {} })
+	const Load = Command.define("LoadDuringEffect", {
+		messages: [Message.Loaded],
+		execute: Effect.succeed(Message.Loaded()),
+	})
+	const updateEffect = (_model: string, message: typeof Message.Type) =>
+		message._tag === "Load"
+			? { model: "loading", commands: [Load()] }
+			: { model: message._tag === "Visible" ? "visible" : "ready" }
+	const EffectApp = Application.define({ Model: Schema.String, Message, update: updateEffect })
+	function View() {
+		const model = EffectApp.useModel()
+		const send = EffectApp.useSend()
+		React.useEffect(
+			function showLoading() {
+				if (model === "loading") send.Visible()
+			},
+			[model, send]
+		)
+		return (
+			<main>
+				<button onClick={() => send.Load()}>Load</button>
+				<p>{model}</p>
+			</main>
+		)
+	}
+	Scene.scene(
+		{ update: updateEffect, view: bindSceneView(EffectApp, View) },
+		Scene.given("idle"),
+		Scene.click(Scene.role("button")),
+		Scene.expect(Scene.text("visible")).toExist(),
+		Scene.Command.expectExact(Load()),
+		Scene.Command.resolve(Load, Message.Loaded()),
+		Scene.expect(Scene.text("ready")).toExist()
+	)
+	function WithoutEffect() {
+		const send = EffectApp.useSend()
+		return <button onClick={() => send.Load()}>Load</button>
+	}
+	expect(() =>
+		Scene.scene(
+			{ update: updateEffect, view: bindSceneView(EffectApp, WithoutEffect) },
+			Scene.given("idle"),
+			Scene.click(Scene.role("button")),
+			Scene.Subscription.emit(Message.Visible())
+		)
+	).toThrow(/unresolved Commands/)
+})

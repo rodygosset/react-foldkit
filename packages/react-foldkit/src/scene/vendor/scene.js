@@ -1,7 +1,7 @@
 import { Array, Effect, Equal, Function, Match, Option, Predicate, String, pipe, } from 'effect';
 import { dual } from 'effect/Function';
 import { kebabToPascal, serializedStylePropertyName, FOLDKIT_MOUNT_KEY, FileHandlerSymbol, tagNameFromSelector } from './sceneCompat.js';
-import { createSceneRenderSession, disposeSceneRenderSession, isBoundSceneView, renderBoundSceneView, runSceneInteraction } from '../sceneBinding.js';
+import { createSceneRenderSession, disposeSceneRenderSession, isBoundSceneView, renderBoundSceneView, runSceneInteraction, getSceneEventHandler } from '../sceneBinding.js';
 import { assertAllCommandsResolved, assertAllMountsResolved, assertAllUnmountsAcknowledged, assertExactCommands, assertExactMounts, assertHasCommands, assertHasMounts, assertNoUnacknowledgedUnmounts, assertNoUnresolvedCommands, assertNoUnresolvedMounts, assertResolveUnambiguous, assertZeroCommands, assertZeroMounts, formatCommand, formatMatcher, formatMountList, formatMountMatcher, mountMatches, resolveAllExactInternal, resolveAllInternal, resolveByMatcher, resolveMountByMatcher, } from './internal.js';
 import { accessibleDescription, accessibleName, ancestorsOf, attr, isHidden, resolveTarget, selector, textContent, within, } from './query.js';
 import { allAltText, allDisplayValue, allLabel, allPlaceholder, allRole, allSelector, allTestId, allText, allTitle, } from './query.js';
@@ -180,7 +180,7 @@ const EVENT_NAMES = {
 };
 const maybeCaptureFromElement = (simulation, element, description, eventName, invokeHandler) => {
     const internal = toInternal(simulation);
-    const maybeHandler = Option.fromNullishOr(element.data?.on?.[eventName]);
+    const maybeHandler = Option.fromNullishOr(getSceneEventHandler(element, eventName));
     if (Option.isNone(maybeHandler)) {
         const attributeName = EVENT_NAMES[eventName] ?? eventName;
         throw new Error(`I found an element matching ${description} but it has no ${eventName} handler.\n\n` +
@@ -849,7 +849,7 @@ const settleRender = (simulation) => {
         const messages = internal.capturingDispatch.getCapturedMessages();
         internal.capturingDispatch.reset();
         if (messages.length === 0) return internal;
-        internal = applyExternalMessages(internal, messages, 'when a React Effect dispatched a new Message');
+        internal = Array.reduce(messages, internal, applyMessageWithoutBoundaryChecks);
     }
     throw new Error('React Scene did not settle after 100 renders. Check Effects that dispatch on every render.');
 };
@@ -965,26 +965,19 @@ export const click = (target) => (simulation) => {
         for (const [radio] of previousGroup) radio.checked = radio === clickTarget;
     }
     if (isCheckable) clickTarget.checked = inputType === 'radio' || !previousChecked;
-    let isClickHandled = isCheckable && element.data?.on?.change !== undefined;
+    const changeHandler = isCheckable ? getSceneEventHandler(element, 'change') : undefined;
+    let isClickHandled = changeHandler !== undefined;
     let isSubmitHandled = false;
     internal.capturingDispatch.reset();
     runSceneInteraction(() => {
-    for (const currentElement of propagationPath) {
-        const maybeClickHandler = Option.fromNullishOr(currentElement.data?.on?.['click']);
-        if (Option.isNone(maybeClickHandler)) {
-            continue;
+        const clickHandler = getSceneEventHandler(element, 'click');
+        if (clickHandler !== undefined) {
+            isClickHandled = true;
+            clickHandler(simulatedClick.event);
         }
+    if (isCheckable && clickTarget.checked !== previousChecked && changeHandler !== undefined) {
         isClickHandled = true;
-        // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
-        const clickHandler = maybeClickHandler.value;
-        clickHandler(simulatedClick.event);
-        if (simulatedClick.isPropagationStopped()) {
-            break;
-        }
-    }
-    if (isCheckable && clickTarget.checked !== previousChecked && element.data?.on?.change !== undefined) {
-        isClickHandled = true;
-        element.data.on.change(simulatedClick.event);
+        changeHandler(simulatedClick.event);
     }
     if (simulatedClick.isDefaultPrevented()) {
         for (const [radio, checked] of previousGroup) radio.checked = checked;
@@ -993,7 +986,7 @@ export const click = (target) => (simulation) => {
         const maybeSubmitter = Array.findFirst(propagationPath, isSubmitButton);
         const maybeForm = pipe(maybeSubmitter, Option.flatMap(submitter => formOwnerOf(internal.html, submitter)));
         if (Option.isSome(maybeForm)) {
-            const maybeSubmitHandler = Option.fromNullishOr(maybeForm.value.data?.on?.['submit']);
+            const maybeSubmitHandler = Option.fromNullishOr(getSceneEventHandler(maybeForm.value, 'submit'));
             if (Option.isSome(maybeSubmitHandler)) {
                 isSubmitHandled = true;
                 // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
@@ -1022,7 +1015,7 @@ export const doubleClick = (target) => (simulation) => {
             'Check that your selector matches an element in the current view.');
     }
     const { value: element } = maybeElement;
-    const hasHandler = element.data?.on?.['dblclick'] !== undefined;
+    const hasHandler = getSceneEventHandler(element, 'dblclick') !== undefined;
     if (hasHandler) {
         return captureFromElement(simulation, element, description, 'dblclick', handler => {
             handler();
@@ -1053,7 +1046,7 @@ export const contextMenu = (target) => (simulation) => {
     const invokeHandler = (handler) => {
         handler({ preventDefault: Function.constVoid });
     };
-    if (element.data?.on?.['contextmenu'] !== undefined) {
+    if (getSceneEventHandler(element, 'contextmenu') !== undefined) {
         return captureFromElement(simulation, element, description, 'contextmenu', invokeHandler);
     }
     const maybeAncestor = findAncestorWithHandler(internal.html, element, 'contextmenu');
@@ -1073,23 +1066,7 @@ const DEFAULT_POINTER_DOWN_OPTIONS = {
     clientY: 0,
     pointerId: 0,
 };
-const simulatedPointerTarget = (root, target) => {
-    const createElement = (vnode) => {
-        const element = document.createElement(tagNameFromSelector(vnode.sel ?? 'div'));
-        for (const [name, value] of Object.entries(vnode.data?.attrs ?? {})) {
-            element.setAttribute(name, globalThis.String(value));
-        }
-        return element;
-    };
-    const targetElement = createElement(target);
-    let child = targetElement;
-    for (const ancestor of pipe(root, ancestorsOf(target), Array.reverse)) {
-        const parent = createElement(ancestor);
-        parent.appendChild(child);
-        child = parent;
-    }
-    return targetElement;
-};
+const simulatedPointerTarget = (_root, target) => target.elm;
 /** Simulates a pointerdown event on the element matching the target.
  *  When the element has no pointerdown handler, the event bubbles up to
  *  the nearest ancestor with one, mirroring browser event propagation.
@@ -1123,7 +1100,7 @@ export const pointerDown = (target, options) => (simulation) => {
             target: simulatedPointerTarget(internal.html, element),
         });
     };
-    if (element.data?.on?.['pointerdown'] !== undefined) {
+    if (getSceneEventHandler(element, 'pointerdown') !== undefined) {
         return captureFromElement(simulation, element, description, 'pointerdown', invokeHandler);
     }
     const maybeAncestor = findAncestorWithHandler(internal.html, element, 'pointerdown');
@@ -1158,7 +1135,7 @@ export const pointerUp = (target, options) => (simulation) => {
     const invokeHandler = (handler) => {
         handler({ screenX, screenY, pointerType, timeStamp: 0 });
     };
-    if (element.data?.on?.['pointerup'] !== undefined) {
+    if (getSceneEventHandler(element, 'pointerup') !== undefined) {
         return captureFromElement(simulation, element, description, 'pointerup', invokeHandler);
     }
     const maybeAncestor = findAncestorWithHandler(internal.html, element, 'pointerup');
@@ -1170,18 +1147,8 @@ export const pointerUp = (target, options) => (simulation) => {
 };
 /** Simulates a hover (mouseenter) on the element matching the target.
  *  Dispatches the `mouseenter` handler, falling back to `mouseover`. */
-export const hover = (target) => (simulation) => {
-    const internal = toInternal(simulation);
-    const scopedTarget = applyScopeToTarget(internal.scope, target);
-    const { maybeElement } = resolveTarget(internal.html, scopedTarget);
-    const eventName = Option.match(maybeElement, {
-        onNone: () => 'mouseenter',
-        onSome: element => element.data?.on?.['mouseenter'] ? 'mouseenter' : 'mouseover',
-    });
-    return invokeAndCapture(simulation, target, eventName, handler => {
-        handler();
-    });
-};
+export const hover = (target) => (simulation) =>
+    invokeAndCapture(simulation, target, 'hover', handler => handler());
 /** Simulates a focus event on the element matching the target. */
 export const focus = (target) => (simulation) => invokeAndCapture(simulation, target, 'focus', handler => {
     handler();

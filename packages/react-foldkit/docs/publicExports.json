@@ -386,25 +386,25 @@
 	{
 		"entryPoint": "react-foldkit/scene",
 		"name": "beforeInput",
-		"owner": "foldkit",
+		"owner": "react-foldkit",
 		"introduced": "0.1.0"
 	},
 	{
 		"entryPoint": "react-foldkit/scene",
 		"name": "blur",
-		"owner": "foldkit",
+		"owner": "react-foldkit",
 		"introduced": "0.1.0"
 	},
 	{
 		"entryPoint": "react-foldkit/scene",
 		"name": "change",
-		"owner": "foldkit",
+		"owner": "react-foldkit",
 		"introduced": "0.1.0"
 	},
 	{
 		"entryPoint": "react-foldkit/scene",
 		"name": "changeFiles",
-		"owner": "foldkit",
+		"owner": "react-foldkit",
 		"introduced": "0.1.0"
 	},
 	{
@@ -416,7 +416,7 @@
 	{
 		"entryPoint": "react-foldkit/scene",
 		"name": "contextMenu",
-		"owner": "foldkit",
+		"owner": "react-foldkit",
 		"introduced": "0.1.0"
 	},
 	{
@@ -428,13 +428,13 @@
 	{
 		"entryPoint": "react-foldkit/scene",
 		"name": "doubleClick",
-		"owner": "foldkit",
+		"owner": "react-foldkit",
 		"introduced": "0.1.0"
 	},
 	{
 		"entryPoint": "react-foldkit/scene",
 		"name": "dropFiles",
-		"owner": "foldkit",
+		"owner": "react-foldkit",
 		"introduced": "0.1.0"
 	},
 	{
@@ -506,19 +506,19 @@
 	{
 		"entryPoint": "react-foldkit/scene",
 		"name": "focus",
-		"owner": "foldkit",
+		"owner": "react-foldkit",
 		"introduced": "0.1.0"
 	},
 	{
 		"entryPoint": "react-foldkit/scene",
 		"name": "focusEnter",
-		"owner": "foldkit",
+		"owner": "react-foldkit",
 		"introduced": "0.1.0"
 	},
 	{
 		"entryPoint": "react-foldkit/scene",
 		"name": "focusLeave",
-		"owner": "foldkit",
+		"owner": "react-foldkit",
 		"introduced": "0.1.0"
 	},
 	{
@@ -626,7 +626,7 @@
 	{
 		"entryPoint": "react-foldkit/scene",
 		"name": "hover",
-		"owner": "foldkit",
+		"owner": "react-foldkit",
 		"introduced": "0.1.0"
 	},
 	{
@@ -638,7 +638,7 @@
 	{
 		"entryPoint": "react-foldkit/scene",
 		"name": "keydown",
-		"owner": "foldkit",
+		"owner": "react-foldkit",
 		"introduced": "0.1.0"
 	},
 	{
@@ -668,13 +668,13 @@
 	{
 		"entryPoint": "react-foldkit/scene",
 		"name": "pointerDown",
-		"owner": "foldkit",
+		"owner": "react-foldkit",
 		"introduced": "0.1.0"
 	},
 	{
 		"entryPoint": "react-foldkit/scene",
 		"name": "pointerUp",
-		"owner": "foldkit",
+		"owner": "react-foldkit",
 		"introduced": "0.1.0"
 	},
 	{
@@ -704,7 +704,7 @@
 	{
 		"entryPoint": "react-foldkit/scene",
 		"name": "submit",
-		"owner": "foldkit",
+		"owner": "react-foldkit",
 		"introduced": "0.1.0"
 	},
 	{
@@ -740,13 +740,13 @@
 	{
 		"entryPoint": "react-foldkit/scene",
 		"name": "type",
-		"owner": "foldkit",
+		"owner": "react-foldkit",
 		"introduced": "0.1.0"
 	},
 	{
 		"entryPoint": "react-foldkit/scene",
 		"name": "typeContentEditable",
-		"owner": "foldkit",
+		"owner": "react-foldkit",
 		"introduced": "0.1.0"
 	},
 	{

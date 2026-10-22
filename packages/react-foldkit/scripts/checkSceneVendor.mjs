@@ -53,7 +53,7 @@ scene = replaceOnce(scene,
 	"Effect import")
 scene = replaceOnce(scene,
 	"import { kebabToPascal } from '../customElement/index.js';\nimport { serializedStylePropertyName } from '../domReflection.js';\nimport { FOLDKIT_MOUNT_KEY, FileHandlerSymbol, __clearRuntime as clearHtmlRuntime, __htmlBuilder as htmlBuilderFor, __setRuntime as setHtmlRuntime, } from '../html/index.js';\nimport { MountTracker } from '../mount/index.js';\nimport { Dispatch } from '../runtime/dispatch.js';\nimport { tagNameFromSelector } from '../tagName.js';",
-	"import { kebabToPascal, serializedStylePropertyName, FOLDKIT_MOUNT_KEY, FileHandlerSymbol, tagNameFromSelector } from './sceneCompat.js';\nimport { createSceneRenderSession, disposeSceneRenderSession, isBoundSceneView, renderBoundSceneView, runSceneInteraction } from '../sceneBinding.js';",
+	"import { kebabToPascal, serializedStylePropertyName, FOLDKIT_MOUNT_KEY, FileHandlerSymbol, tagNameFromSelector } from './sceneCompat.js';\nimport { createSceneRenderSession, disposeSceneRenderSession, isBoundSceneView, renderBoundSceneView, runSceneInteraction, getSceneEventHandler } from '../sceneBinding.js';",
 	"private helper import")
 const renderViewStart = scene.indexOf("const renderView = (viewFn, model, dispatch) => {")
 const renderViewEnd = scene.indexOf("\nconst isDocument", renderViewStart)
@@ -81,7 +81,7 @@ scene = replaceOnce(scene,
         const messages = internal.capturingDispatch.getCapturedMessages();
         internal.capturingDispatch.reset();
         if (messages.length === 0) return internal;
-        internal = applyExternalMessages(internal, messages, 'when a React Effect dispatched a new Message');
+        internal = Array.reduce(messages, internal, applyMessageWithoutBoundaryChecks);
     }
     throw new Error('React Scene did not settle after 100 renders. Check Effects that dispatch on every render.');
 };
@@ -126,17 +126,34 @@ scene = replaceOnce(scene,
 	"React click target and activation")
 scene = replaceOnce(scene,
 	"    let isClickHandled = false;",
-	"    let isClickHandled = isCheckable && element.data?.on?.change !== undefined;",
+	"    const changeHandler = isCheckable ? getSceneEventHandler(element, 'change') : undefined;\n    let isClickHandled = changeHandler !== undefined;",
 	"React radio clicks with no value change")
 scene = replaceOnce(scene,
-	"    internal.capturingDispatch.reset();\n    for (const currentElement of propagationPath) {",
-	"    internal.capturingDispatch.reset();\n    runSceneInteraction(() => {\n    for (const currentElement of propagationPath) {",
-	"batch React click handlers")
+	`    for (const currentElement of propagationPath) {
+        const maybeClickHandler = Option.fromNullishOr(currentElement.data?.on?.['click']);
+        if (Option.isNone(maybeClickHandler)) {
+            continue;
+        }
+        isClickHandled = true;
+        // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+        const clickHandler = maybeClickHandler.value;
+        clickHandler(simulatedClick.event);
+        if (simulatedClick.isPropagationStopped()) {
+            break;
+        }
+    }`,
+	`    runSceneInteraction(() => {
+        const clickHandler = getSceneEventHandler(element, 'click');
+        if (clickHandler !== undefined) {
+            isClickHandled = true;
+            clickHandler(simulatedClick.event);
+        }`,
+	"React click capture and bubbling")
 scene = replaceOnce(scene,
 	"    if (!simulatedClick.isDefaultPrevented()) {",
-	`    if (isCheckable && clickTarget.checked !== previousChecked && element.data?.on?.change !== undefined) {
+	`    if (isCheckable && clickTarget.checked !== previousChecked && changeHandler !== undefined) {
         isClickHandled = true;
-        element.data.on.change(simulatedClick.event);
+        changeHandler(simulatedClick.event);
     }
     if (simulatedClick.isDefaultPrevented()) {
         for (const [radio, checked] of previousGroup) radio.checked = checked;
@@ -147,6 +164,33 @@ scene = replaceOnce(scene,
 	"    if (!isClickHandled && !isSubmitHandled) {",
 	"    });\n    if (!isClickHandled && !isSubmitHandled) {",
 	"flush React click work before capturing Messages")
+scene = replaceOnce(scene,
+	"const maybeHandler = Option.fromNullishOr(element.data?.on?.[eventName]);",
+	"const maybeHandler = Option.fromNullishOr(getSceneEventHandler(element, eventName));",
+	"React event capture and bubbling")
+scene = replaceOnce(scene,
+	"const hasHandler = element.data?.on?.['dblclick'] !== undefined;",
+	"const hasHandler = getSceneEventHandler(element, 'dblclick') !== undefined;",
+	"React double click target")
+for (const name of ["contextmenu", "pointerdown", "pointerup"]) {
+	scene = replaceOnce(scene,
+		`if (element.data?.on?.['${name}'] !== undefined) {`,
+		`if (getSceneEventHandler(element, '${name}') !== undefined) {`,
+		`React ${name} target`)
+}
+const hoverStart = scene.indexOf("export const hover = (target) => (simulation) => {")
+const hoverEnd = scene.indexOf("\n/** Simulates a focus event", hoverStart)
+if (hoverStart < 0 || hoverEnd < 0) throw new Error("Scene hover patch anchor changed")
+scene = scene.slice(0, hoverStart) + `export const hover = (target) => (simulation) =>
+    invokeAndCapture(simulation, target, 'hover', handler => handler());` + scene.slice(hoverEnd)
+const pointerTargetStart = scene.indexOf("const simulatedPointerTarget = (root, target) => {")
+const pointerTargetEnd = scene.indexOf("\n/** Simulates a pointerdown", pointerTargetStart)
+if (pointerTargetStart < 0 || pointerTargetEnd < 0) throw new Error("Scene pointer target patch anchor changed")
+scene = scene.slice(0, pointerTargetStart) + "const simulatedPointerTarget = (_root, target) => target.elm;" + scene.slice(pointerTargetEnd)
+scene = replaceOnce(scene,
+	"const maybeSubmitHandler = Option.fromNullishOr(maybeForm.value.data?.on?.['submit']);",
+	"const maybeSubmitHandler = Option.fromNullishOr(getSceneEventHandler(maybeForm.value, 'submit'));",
+	"React submit handlers")
 scene = replaceOnce(scene,
 	"export const scene = (config, ...steps) => {\n    const capturingDispatch = createCapturingDispatch();",
 	"export const scene = (config, ...steps) => {\n    const capturingDispatch = createCapturingDispatch();\n    const sceneRenderSession = createSceneRenderSession();",

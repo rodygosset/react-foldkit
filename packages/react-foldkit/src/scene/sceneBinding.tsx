@@ -4,6 +4,7 @@ import Reconciler from "react-reconciler"
 import type ReactReconciler from "react-reconciler"
 import { DiscreteEventPriority, NoEventPriority } from "react-reconciler/constants.js"
 import type { Scene as SceneNamespace } from "foldkit/test"
+import { all as sceneLocators } from "foldkit/scene"
 import { sceneSourceContext } from "../application/react"
 import type { ModelSource } from "../modelSource"
 import type { SceneView } from "./sceneView"
@@ -40,6 +41,7 @@ interface HostElement {
 	readonly type: string
 	readonly name: string
 	readonly id: string
+	readonly dataset: Readonly<Record<string, string>>
 	props: HostProps
 	attributes: Record<string, string>
 	children: Array<HostElement | HostText>
@@ -47,6 +49,8 @@ interface HostElement {
 	readonly tagName: string
 	value?: unknown
 	checked?: boolean
+	selected?: boolean
+	selectedValues?: ReadonlyArray<string>
 	textContent?: string
 	focus: () => void
 	blur: () => void
@@ -54,6 +58,7 @@ interface HostElement {
 	setAttribute: (name: string, value: string) => void
 	removeAttribute: (name: string) => void
 	closest: (selector: string) => HostElement | null
+	contains: (node: unknown) => boolean
 }
 
 interface HostContainer {
@@ -134,8 +139,6 @@ const eventProps: Readonly<Record<string, string>> = {
 	onMouseMove: "mousemove",
 	onMouseLeave: "mouseleave",
 	onMouseOut: "mouseout",
-	onFocusCapture: "focusin",
-	onBlurCapture: "focusout",
 	onReset: "reset",
 	onWheel: "wheel",
 	onCopy: "copy",
@@ -223,12 +226,23 @@ const hostConfig = {
 			get id() {
 				return hostString(this.props.id)
 			},
+			get dataset() {
+				return Object.fromEntries(
+					Object.entries(this.props)
+						.filter(([name]) => name.startsWith("data-"))
+						.map(([name, value]) => [
+							name.slice(5).replace(/-([a-z])/g, (_match, letter: string) => letter.toUpperCase()),
+							hostString(value),
+						])
+				)
+			},
 			props,
 			attributes: {},
 			children: [],
 			tagName: type.toUpperCase(),
 			value: props.value ?? props.defaultValue,
 			checked: Boolean(props.checked ?? props.defaultChecked),
+			selected: Boolean(props.selected),
 			get textContent() {
 				return this.children.map((child) => ("text" in child ? child.text : (child.textContent ?? ""))).join("")
 			},
@@ -252,6 +266,14 @@ const hostConfig = {
 					current = current.parent
 				}
 				return null
+			},
+			contains(node) {
+				let current = node
+				while (current !== null && typeof current === "object" && "tag" in current) {
+					if (current === instance) return true
+					current = (current as HostElement).parent
+				}
+				return false
 			},
 		}
 		return instance
@@ -459,8 +481,9 @@ export function renderBoundSceneView<Model, Message>(
 	})
 	renderer.flushSyncWork()
 	renderer.flushPassiveEffects()
+	restoreControlledInputs(state.container.children)
 	const root = state.container.children[0]
-	if (root === undefined || "text" in root) {
+	if (state.container.children.length !== 1 || root === undefined || "text" in root) {
 		throw new Error("A bound React Scene view must render one host element at its root")
 	}
 	return toVNode(root)
@@ -478,15 +501,13 @@ export function disposeSceneRenderSession(session: SceneRenderSession): void {
 	}
 }
 
-function toVNode(node: HostElement): VNode {
-	const attrs: Record<string, unknown> = {}
-	const props: Record<string, unknown> = {}
-	const on: Record<string, (event?: unknown) => void> = {}
-	const classes: Record<string, boolean> = {}
-	const style: Record<string, string> = {}
+type EventHandler = (event?: unknown) => void
+
+function hostEventHandlers(node: HostElement): Record<string, EventHandler> {
+	const on: Record<string, EventHandler> = {}
 	for (const [name, value] of Object.entries(node.props)) {
-		if (name === "children" || name === "key" || name === "ref") continue
-		const eventName = eventProps[name]
+		const capture = name.endsWith("Capture")
+		const eventName = eventProps[capture ? name.slice(0, -7) : name]
 		if (eventName !== undefined && typeof value === "function") {
 			const handler = (event: unknown) =>
 				runSceneInteraction(function () {
@@ -496,9 +517,21 @@ function toVNode(node: HostElement): VNode {
 				Object.defineProperty(handler, FileHandlerSymbol, { value: "OnFileChange" })
 			}
 			if (name === "onDrop") Object.defineProperty(handler, FileHandlerSymbol, { value: "OnDropFiles" })
-			on[eventName] = handler
-			continue
+			on[capture ? `${eventName}Capture` : eventName] = handler
 		}
+	}
+	return on
+}
+
+function toVNode(node: HostElement): VNode {
+	const attrs: Record<string, unknown> = {}
+	const props: Record<string, unknown> = {}
+	const on = hostEventHandlers(node)
+	const classes: Record<string, boolean> = {}
+	const style: Record<string, string> = {}
+	for (const [name, value] of Object.entries(node.props)) {
+		if (name === "children" || name === "key" || name === "ref") continue
+
 		if (
 			name.startsWith("aria-") ||
 			name.startsWith("data-") ||
@@ -535,20 +568,10 @@ function toVNode(node: HostElement): VNode {
 			if (name === "htmlFor") attrs.for = value
 		}
 	}
-	if (isTextInput(node) && on.change !== undefined) {
-		const inputHandler = on.input
-		const changeHandler = on.change
-		on.input = function (event) {
-			// Batch both handlers so neither observes a partial React state update.
-			runSceneInteraction(function () {
-				inputHandler?.(event)
-				changeHandler(event)
-			})
-		}
-	}
 	if (node.value !== undefined) props.value = node.value
 	if (node.tag === "input" && (node.props.type === "checkbox" || node.props.type === "radio"))
 		props.checked = node.checked
+	if (node.tag === "option") props.selected = node.selected
 	const data = {
 		...(Object.keys(attrs).length > 0 ? { attrs } : {}),
 		...(Object.keys(props).length > 0 ? { props } : {}),
@@ -565,6 +588,125 @@ function toVNode(node: HostElement): VNode {
 		text: undefined,
 		key: undefined,
 	}
+}
+
+function restoreControlledInputs(children: ReadonlyArray<HostElement | HostText>): void {
+	for (const node of children) {
+		if (!("tag" in node)) continue
+		if (node.props.value !== undefined && node.props.value !== null) node.value = node.props.value
+		if (node.props.checked !== undefined && node.props.checked !== null) node.checked = Boolean(node.props.checked)
+		restoreControlledInputs(node.children)
+		if (node.tag === "select") {
+			const selection = node.props.value ?? node.selectedValues ?? node.value
+			syncSelect(node, selection, selection === undefined || node.props.value !== undefined)
+		}
+	}
+}
+
+const selectOptions = (
+	children: ReadonlyArray<HostElement | HostText>,
+	disabled = false
+): Array<{ node: HostElement; disabled: boolean }> =>
+	children.flatMap(function (node) {
+		if (!("tag" in node)) return []
+		const inactive = disabled || node.props.disabled === true
+		if (node.tag === "option") return [{ node, disabled: inactive }]
+		return selectOptions(node.children, inactive)
+	})
+
+function syncSelect(node: HostElement, selection: unknown, fallback: boolean): void {
+	const options = selectOptions(node.children)
+	const values =
+		selection === undefined
+			? options
+					.filter(({ node }) => node.selected)
+					.map(({ node }) => hostString(node.props.value ?? node.textContent))
+			: (Array.isArray(selection) ? selection : [selection]).map(hostString)
+	let selected = false
+	for (const option of options) {
+		option.node.value = hostString(option.node.props.value ?? option.node.textContent)
+		option.node.selected =
+			values.includes(option.node.value as string) && (!selected || Boolean(node.props.multiple))
+		selected ||= option.node.selected
+	}
+	if (!selected && fallback && !node.props.multiple) {
+		const first = options.find((option) => !option.disabled)
+		if (first !== undefined) first.node.selected = true
+	}
+	node.selectedValues = options.filter(({ node }) => node.selected).map(({ node }) => hostString(node.value))
+	node.value = node.selectedValues[0] ?? ""
+}
+
+/** Finds React handlers on the original target's path without starting an interaction. */
+export function getSceneEventHandler(element: VNode, eventName: string): EventHandler | undefined {
+	const target = element.elm as unknown as HostElement
+	const path: Array<Record<string, EventHandler>> = []
+	let current: HostElement | undefined = target
+	while (current !== undefined) {
+		path.push(hostEventHandlers(current))
+		current = current.parent
+	}
+	const name = eventName === "focusin" ? "focus" : eventName === "focusout" ? "blur" : eventName
+	const names =
+		name === "input" && isTextInput(target)
+			? ["input", "change"]
+			: name === "hover"
+				? ["mouseover", "mouseenter"]
+				: [name]
+	if (
+		!path.some((handlers) =>
+			names.some((name) => handlers[name] !== undefined || handlers[`${name}Capture`] !== undefined)
+		)
+	)
+		return undefined
+	const handler: EventHandler = (value) =>
+		runSceneInteraction(function () {
+			const source = value !== null && typeof value === "object" ? (value as Record<string, unknown>) : {}
+			if (
+				(name === "input" || name === "change") &&
+				source.target !== null &&
+				typeof source.target === "object" &&
+				!("tagName" in source.target)
+			) {
+				Object.assign(target, source.target)
+				if (target.tag === "select") syncSelect(target, target.value, false)
+			}
+			let defaultPrevented = source.defaultPrevented === true
+			let stopped = false
+			const event = {
+				...source,
+				target,
+				relatedTarget: source.relatedTarget ?? null,
+				get defaultPrevented() {
+					return defaultPrevented
+				},
+				preventDefault() {
+					defaultPrevented = true
+					if (typeof source.preventDefault === "function") (source.preventDefault as () => void)()
+				},
+				stopPropagation() {
+					stopped = true
+					if (typeof source.stopPropagation === "function") (source.stopPropagation as () => void)()
+				},
+			}
+			for (const name of names) {
+				stopped = false
+				for (const handlers of [...path].reverse()) {
+					handlers[`${name}Capture`]?.(event)
+					if (stopped) break
+				}
+				if (stopped) continue
+				for (const handlers of name === "mouseenter" ? [...path].reverse() : path) {
+					handlers[name]?.(event)
+					if (stopped) break
+				}
+			}
+		})
+	if (name === "change" && target.tag === "input" && target.props.type === "file") {
+		Object.defineProperty(handler, FileHandlerSymbol, { value: "OnFileChange" })
+	}
+	if (name === "drop") Object.defineProperty(handler, FileHandlerSymbol, { value: "OnDropFiles" })
+	return handler
 }
 
 function reactEvent(node: HostElement, type: string, value: unknown): Record<string, unknown> {
@@ -624,7 +766,9 @@ const isTextInput = (node: HostElement): boolean =>
 	node.tag === "textarea" || (node.tag === "input" && textInputTypes.has(hostString(node.props.type ?? "text")))
 
 function matchesSelector(node: HostElement, selector: string): boolean {
-	if (selector.startsWith("#")) return node.props.id === selector.slice(1)
-	if (selector.startsWith(".")) return hostString(node.props.className).split(/\s+/).includes(selector.slice(1))
-	return node.tag.toLowerCase() === selector.toLowerCase()
+	let root = node
+	while (root.parent !== undefined) root = root.parent
+	return sceneLocators
+		.selector(selector)(toVNode(root))
+		.some((match) => match.elm === (node as unknown as Node))
 }

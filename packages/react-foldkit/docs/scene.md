@@ -54,7 +54,7 @@ test("loads a user", () => {
 
 There is no `render`, `act`, or cleanup. Each `scene` renders the component in a private React root and unmounts it when the scene ends, including when a step throws. The scene fails if a Command is left unresolved, as it does in Foldkit.
 
-Synchronous React effects and local state updates finish before the next step. Messages from effects pass through `update`, and their Commands stay pending until the test resolves them. Scene fails after 100 renders if effect messages keep changing the Model without settling. Timers, promises, transitions, and suspended work require an asynchronous test outside Scene.
+Synchronous React effects and local state updates finish before the next step. Messages from effects pass through `update` as part of the current step, and their Commands stay pending until the test resolves them. Scene fails after 100 renders if effect messages keep changing the Model without settling. Timers, promises, transitions, and suspended work require an asynchronous test outside Scene.
 
 ## Migrate to Foldkit
 
@@ -78,5 +78,7 @@ When `./view` exports a Foldkit view instead, change the import and keep the tes
 | `Mount` steps and `toHaveHook` | Not applicable: React views produce no Foldkit Mounts or element hooks |
 
 Scene reads React's rendered host elements, not a browser DOM. Components that need layout, refs to real DOM nodes, or browser APIs in render belong in browser tests. The bound component must render one host element at its root.
+
+Interactions use the original host element as `target` and the element owning each handler as `currentTarget`. Capture handlers run before bubble handlers, and `stopPropagation` stops delivery along that path. Controlled inputs restore their React values when a handler rejects an edit. Option selection follows the select's value.
 
 Bound scenes run a copy of Foldkit's Scene runner pinned to the tested Foldkit release. See [the copy's notes](https://github.com/rodygosset/react-foldkit/blob/main/packages/react-foldkit/src/scene/vendor/README.md).

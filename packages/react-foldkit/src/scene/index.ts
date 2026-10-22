@@ -1,12 +1,8 @@
 import * as FoldkitScene from "foldkit/scene"
 import { isBoundSceneSimulation, isBoundSceneView } from "./sceneBinding"
-import {
-	click as clickBoundReactScene,
-	inside as insideBoundReactScene,
-	scene as runBoundReactScene,
-} from "./vendor/scene.js"
+import { inside as insideBoundReactScene, scene as runBoundReactScene } from "./vendor/scene.js"
 
-// Only the runners and click dispatch on the view. Other names are Foldkit's own Scene API.
+// Runners and interactions dispatch on the view. Other names remain Foldkit's own API.
 export * from "foldkit/scene"
 
 type UntypedScene = (config: Readonly<{ view: Function }>, ...steps: ReadonlyArray<unknown>) => void
@@ -57,17 +53,23 @@ export const inside: typeof FoldkitScene.inside = ((parent: unknown, ...steps: R
 			...steps
 		)(simulation)) as unknown as typeof FoldkitScene.inside
 
-/**
- * Clicks an element with React event targets and checkbox activation in a bound React Scene.
- *
- * **Details**
- *
- * Foldkit views use Foldkit's click step. React views preserve the clicked element as `target`
- * while each handler receives its own element as `currentTarget`. Checkbox and radio change
- * handlers read the activated value. A canceled click restores the previous checked state.
- *
- * @category testing
- * @since 0.2.0
- */
-export const click: typeof FoldkitScene.click = (target) => (simulation) =>
-	(isBoundSceneSimulation(simulation) ? clickBoundReactScene : FoldkitScene.click)(target)(simulation)
+export {
+	click,
+	doubleClick,
+	contextMenu,
+	pointerDown,
+	pointerUp,
+	hover,
+	focus,
+	blur,
+	focusEnter,
+	focusLeave,
+	submit,
+	change,
+	changeFiles,
+	dropFiles,
+	type,
+	typeContentEditable,
+	beforeInput,
+	keydown,
+} from "./sceneInteractions"

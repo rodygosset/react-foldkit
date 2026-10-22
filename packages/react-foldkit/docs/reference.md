@@ -1205,6 +1205,26 @@ Model and send Messages without depending on the Store implementation.
 
 ## react-foldkit/scene
 
+### beforeInput
+
+Simulates a before-input event with React capture, bubbling, and the original host target.
+Foldkit views use Foldkit's step. Any data-last form is preserved.
+
+### blur
+
+Simulates a blur event with React capture, bubbling, and the original host target.
+Foldkit views use Foldkit's step. Any data-last form is preserved.
+
+### change
+
+Simulates a value change with React capture, bubbling, and the original host target.
+Foldkit views use Foldkit's step. Any data-last form is preserved.
+
+### changeFiles
+
+Simulates a file selection with React capture, bubbling, and the original host target.
+Foldkit views use Foldkit's step. Any data-last form is preserved.
+
 ### click
 
 Clicks an element with React event targets and checkbox activation in a bound React Scene.
@@ -1215,6 +1235,41 @@ Foldkit views use Foldkit's click step. React views preserve the clicked element
 while each handler receives its own element as `currentTarget`. Checkbox and radio change
 handlers read the activated value. A canceled click restores the previous checked state.
 
+### contextMenu
+
+Simulates a context-menu event with React capture, bubbling, and the original host target.
+Foldkit views use Foldkit's step. Any data-last form is preserved.
+
+### doubleClick
+
+Simulates a double-click with React capture, bubbling, and the original host target.
+Foldkit views use Foldkit's step. Any data-last form is preserved.
+
+### dropFiles
+
+Simulates a file drop with React capture, bubbling, and the original host target.
+Foldkit views use Foldkit's step. Any data-last form is preserved.
+
+### focus
+
+Simulates a focus event with React capture, bubbling, and the original host target.
+Foldkit views use Foldkit's step. Any data-last form is preserved.
+
+### focusEnter
+
+Simulates focus entering a subtree with React capture, bubbling, and the original host target.
+Foldkit views use Foldkit's step. Any data-last form is preserved.
+
+### focusLeave
+
+Simulates focus leaving a subtree with React capture, bubbling, and the original host target.
+Foldkit views use Foldkit's step. Any data-last form is preserved.
+
+### hover
+
+Simulates mouseover followed by parent-first mouseenter handlers for a React view.
+Foldkit views use Foldkit's hover step.
+
 ### inside
 
 Runs steps with locators scoped to a parent element, as Foldkit's `inside` does.
@@ -1222,6 +1277,21 @@ Runs steps with locators scoped to a parent element, as Foldkit's `inside` does.
 **Details**
 
 Scenes of bound React views re-enter the copied runner, so scoped steps render the React view.
+
+### keydown
+
+Simulates a key press with React capture, bubbling, and the original host target.
+Foldkit views use Foldkit's step. Any data-last form is preserved.
+
+### pointerDown
+
+Simulates a pointer press with React capture, bubbling, and the original host target.
+Foldkit views use Foldkit's step. Any data-last form is preserved.
+
+### pointerUp
+
+Simulates a pointer release with React capture, bubbling, and the original host target.
+Foldkit views use Foldkit's step. Any data-last form is preserved.
 
 ### scene
 
@@ -1237,9 +1307,24 @@ renders the component in a private React root and unmounts it when the scene end
 
 - React views produce no Foldkit Mounts or element hooks, so `Mount` steps and `toHaveHook` do not apply.
 
+### submit
+
+Simulates a form submission with React capture, bubbling, and the original host target.
+Foldkit views use Foldkit's step. Any data-last form is preserved.
+
+### type
+
+Simulates a typed value with React capture, bubbling, and the original host target.
+Foldkit views use Foldkit's step. Any data-last form is preserved.
+
+### typeContentEditable
+
+Simulates a contenteditable input with React capture, bubbling, and the original host target.
+Foldkit views use Foldkit's step. Any data-last form is preserved.
+
 Foldkit reexports inherit their upstream contracts. See [Foldkit documentation](https://foldkit.dev) and the original editor JSDoc.
 
-`AnyCommand`, `AnyMount`, `Command`, `CustomElement`, `Locator`, `LocatorAll`, `ManagedResource`, `Mount`, `MountMatcher`, `MountResolver`, `OutMessageStep`, `OutMessagesStep`, `PendingMount`, `Resolver`, `SceneSimulation`, `SceneStep`, `Subscription`, `SubscriptionMessageStep`, `all`, `altText`, `attr`, `beforeInput`, `blur`, `change`, `changeFiles`, `contextMenu`, `displayValue`, `doubleClick`, `dropFiles`, `expect`, `expectAll`, `expectHandled`, `expectIgnored`, `expectNoOutMessage`, `expectOutMessage`, `expectOutMessages`, `filter`, `find`, `findAll`, `first`, `focus`, `focusEnter`, `focusLeave`, `getAllByAltText`, `getAllByDisplayValue`, `getAllByLabel`, `getAllByPlaceholder`, `getAllByRole`, `getAllByTestId`, `getAllByText`, `getAllByTitle`, `getByAltText`, `getByDisplayValue`, `getByLabel`, `getByPlaceholder`, `getByRole`, `getByTestId`, `getByText`, `getByTitle`, `given`, `hover`, `keydown`, `label`, `last`, `nth`, `placeholder`, `pointerDown`, `pointerUp`, `role`, `sceneMatchers`, `selector`, `submit`, `tap`, `testId`, `text`, `textContent`, `title`, `type`, `typeContentEditable`, `withViewInputs`, `within`.
+`AnyCommand`, `AnyMount`, `Command`, `CustomElement`, `Locator`, `LocatorAll`, `ManagedResource`, `Mount`, `MountMatcher`, `MountResolver`, `OutMessageStep`, `OutMessagesStep`, `PendingMount`, `Resolver`, `SceneSimulation`, `SceneStep`, `Subscription`, `SubscriptionMessageStep`, `all`, `altText`, `attr`, `displayValue`, `expect`, `expectAll`, `expectHandled`, `expectIgnored`, `expectNoOutMessage`, `expectOutMessage`, `expectOutMessages`, `filter`, `find`, `findAll`, `first`, `getAllByAltText`, `getAllByDisplayValue`, `getAllByLabel`, `getAllByPlaceholder`, `getAllByRole`, `getAllByTestId`, `getAllByText`, `getAllByTitle`, `getByAltText`, `getByDisplayValue`, `getByLabel`, `getByPlaceholder`, `getByRole`, `getByTestId`, `getByText`, `getByTitle`, `given`, `label`, `last`, `nth`, `placeholder`, `role`, `sceneMatchers`, `selector`, `tap`, `testId`, `text`, `textContent`, `title`, `withViewInputs`, `within`.
 
 ## react-foldkit/scene/react
 

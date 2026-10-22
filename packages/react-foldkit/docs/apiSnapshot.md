@@ -293,7 +293,7 @@ export type { Program } from "./program";
 
 ```ts
 export * from "foldkit/scene";
-export { click, inside, scene } from "./scene/index";
+export { scene, inside, click, doubleClick, contextMenu, pointerDown, pointerUp, hover, focus, blur, focusEnter, focusLeave, submit, change, changeFiles, dropFiles, type, typeContentEditable, beforeInput, keydown, } from "./scene/index";
 ```
 
 ## dist/scene/index.d.ts
@@ -303,7 +303,7 @@ import * as FoldkitScene from "foldkit/scene";
 export * from "foldkit/scene";
 export declare const scene: typeof FoldkitScene.scene;
 export declare const inside: typeof FoldkitScene.inside;
-export declare const click: typeof FoldkitScene.click;
+export { click, doubleClick, contextMenu, pointerDown, pointerUp, hover, focus, blur, focusEnter, focusLeave, submit, change, changeFiles, dropFiles, type, typeContentEditable, beforeInput, keydown, } from "./sceneInteractions";
 ```
 
 ## dist/scene/react.d.ts
@@ -335,6 +335,7 @@ interface HostElement {
   readonly type: string;
   readonly name: string;
   readonly id: string;
+  readonly dataset: Readonly<Record<string, string>>;
   props: HostProps;
   attributes: Record<string, string>;
   children: Array<HostElement | HostText>;
@@ -342,6 +343,8 @@ interface HostElement {
   readonly tagName: string;
   value?: unknown;
   checked?: boolean;
+  selected?: boolean;
+  selectedValues?: ReadonlyArray<string>;
   textContent?: string;
   focus: () => void;
   blur: () => void;
@@ -349,6 +352,7 @@ interface HostElement {
   setAttribute: (name: string, value: string) => void;
   removeAttribute: (name: string) => void;
   closest: (selector: string) => HostElement | null;
+  contains: (node: unknown) => boolean;
 }
 interface HostContainer {
   children: Array<HostElement | HostText>;
@@ -371,7 +375,33 @@ export declare const isBoundSceneView: (view: Function) => boolean;
 export declare const isBoundSceneSimulation: (simulation: unknown) => boolean;
 export declare function renderBoundSceneView<Model, Message>(view: Function, model: Model, dispatch: (message: Message) => void, session: SceneRenderSession): VNode | undefined;
 export declare function disposeSceneRenderSession(session: SceneRenderSession): void;
+type EventHandler = (event?: unknown) => void;
+export declare function getSceneEventHandler(element: VNode, eventName: string): EventHandler | undefined;
 export {};
+```
+
+## dist/scene/sceneInteractions.d.ts
+
+```ts
+import * as FoldkitScene from "foldkit/scene";
+export declare const click: typeof FoldkitScene.click;
+export declare const doubleClick: typeof FoldkitScene.doubleClick;
+export declare const contextMenu: typeof FoldkitScene.contextMenu;
+export declare const pointerDown: typeof FoldkitScene.pointerDown;
+export declare const pointerUp: typeof FoldkitScene.pointerUp;
+export declare const hover: typeof FoldkitScene.hover;
+export declare const focus: typeof FoldkitScene.focus;
+export declare const blur: typeof FoldkitScene.blur;
+export declare const focusEnter: typeof FoldkitScene.focusEnter;
+export declare const focusLeave: typeof FoldkitScene.focusLeave;
+export declare const submit: typeof FoldkitScene.submit;
+export declare const change: typeof FoldkitScene.change;
+export declare const changeFiles: typeof FoldkitScene.changeFiles;
+export declare const dropFiles: typeof FoldkitScene.dropFiles;
+export declare const type: typeof FoldkitScene.type;
+export declare const typeContentEditable: typeof FoldkitScene.typeContentEditable;
+export declare const beforeInput: typeof FoldkitScene.beforeInput;
+export declare const keydown: typeof FoldkitScene.keydown;
 ```
 
 ## dist/scene/sceneView.d.ts

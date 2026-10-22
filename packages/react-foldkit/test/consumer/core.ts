@@ -71,8 +71,12 @@ function InputView() {
 	)
 	return createElement(
 		"main",
-		{ onClick: (event) => send((event.target as HTMLElement).getAttribute("data-action") ?? "missing") },
-		createElement("input", { value: model, onChange: (event) => send(event.currentTarget.value) }),
+		{
+			onClick: (event) => send((event.target as HTMLElement).getAttribute("data-action") ?? "missing"),
+			onChange: (event) => send((event.target as HTMLInputElement).value),
+			onPointerDown: (event) => send((event.target as HTMLElement).dataset.action ?? "missing"),
+		},
+		createElement("input", { value: model, onChange: constVoid }),
 		createElement("button", { "data-action": "saved" }, "Save"),
 		createElement("p", null, String(ready))
 	)
@@ -84,6 +88,8 @@ Scene.scene(
 	Scene.expect(Scene.text("true")).toExist(),
 	Scene.type(Scene.role("textbox"), "Ada"),
 	Scene.expect(Scene.role("textbox")).toHaveValue("Ada"),
+	Scene.pointerDown(Scene.role("button")),
+	Scene.expect(Scene.role("textbox")).toHaveValue("saved"),
 	Scene.click(Scene.role("button")),
 	Scene.expect(Scene.role("textbox")).toHaveValue("saved")
 )
