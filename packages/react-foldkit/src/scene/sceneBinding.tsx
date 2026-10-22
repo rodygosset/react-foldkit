@@ -570,10 +570,12 @@ function toVNode(node: HostElement): VNode {
 function reactEvent(node: HostElement, type: string, value: unknown): Record<string, unknown> {
 	const source = value !== null && typeof value === "object" ? (value as Record<string, unknown>) : {}
 	const isValueEvent = type === "change" || type === "input"
+	const normalizedTarget =
+		source.target !== undefined && source.target === source.currentTarget ? node : (source.target ?? node)
 	const target =
 		isValueEvent && source.target !== null && typeof source.target === "object" && !("tagName" in source.target)
 			? Object.assign(node, source.target)
-			: (source.target ?? node)
+			: normalizedTarget
 	const nativeEvent = { ...source, type, target, currentTarget: node }
 	let defaultPrevented = source.defaultPrevented === true
 	let propagationStopped = false

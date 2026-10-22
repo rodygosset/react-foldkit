@@ -953,6 +953,17 @@ export const click = (target) => (simulation) => {
     const inputType = lookupStringAttribute(element, 'type');
     const isCheckable = element.sel === 'input' && (inputType === 'checkbox' || inputType === 'radio');
     const previousChecked = clickTarget?.checked;
+    const name = lookupStringAttribute(element, 'name');
+    const form = Option.getOrUndefined(formOwnerOf(internal.html, element));
+    const group = inputType === 'radio' && name !== undefined && name !== ''
+        ? allSelector('input[type="radio"]')(internal.html).filter(radio =>
+            lookupStringAttribute(radio, 'name') === name &&
+            Option.getOrUndefined(formOwnerOf(internal.html, radio)) === form)
+        : isCheckable ? [element] : [];
+    const previousGroup = group.map(radio => [radio.elm, radio.elm.checked]);
+    if (isCheckable && inputType === 'radio') {
+        for (const [radio] of previousGroup) radio.checked = radio === clickTarget;
+    }
     if (isCheckable) clickTarget.checked = inputType === 'radio' || !previousChecked;
     let isClickHandled = isCheckable && element.data?.on?.change !== undefined;
     let isSubmitHandled = false;
@@ -975,7 +986,9 @@ export const click = (target) => (simulation) => {
         isClickHandled = true;
         element.data.on.change(simulatedClick.event);
     }
-    if (isCheckable && simulatedClick.isDefaultPrevented()) clickTarget.checked = previousChecked;
+    if (simulatedClick.isDefaultPrevented()) {
+        for (const [radio, checked] of previousGroup) radio.checked = checked;
+    }
     if (!simulatedClick.isDefaultPrevented()) {
         const maybeSubmitter = Array.findFirst(propagationPath, isSubmitButton);
         const maybeForm = pipe(maybeSubmitter, Option.flatMap(submitter => formOwnerOf(internal.html, submitter)));
