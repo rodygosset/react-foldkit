@@ -11,9 +11,7 @@ import * as Submodel from "../submodel"
 const Message = defineMessageUnion({ SetText: { text: Schema.String } })
 type Message = typeof Message.Type
 
-function update(_model: string, message: Message) {
-	return { model: message.text }
-}
+const update = (_model: string, message: Message) => ({ model: message.text })
 
 const App = Application.define({ Model: Schema.String, Message, update })
 
@@ -94,9 +92,7 @@ it("captures OutMessages produced by effect messages", function () {
 	}
 	Scene.scene(
 		{
-			update: function (_model: string, message: Message) {
-				return { model: message.text, outMessage: message.text }
-			},
+			update: (_model: string, message: Message) => ({ model: message.text, outMessage: message.text }),
 			view: bindSceneView(App, View),
 		},
 		Scene.given("waiting"),

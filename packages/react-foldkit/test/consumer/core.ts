@@ -68,7 +68,7 @@ function Counter() {
 	return createElement(
 		"button",
 		{
-			onClick: function () {
+			onClick() {
 				send.SetValue({ value: 1 })
 			},
 		},
@@ -109,14 +109,14 @@ Scene.scene(
 		return createElement(
 			"main",
 			{
-				onClick: function (event) {
+				onClick(event) {
 					const action = (event.target as HTMLElement).getAttribute("data-action") ?? "missing"
 					send(Message.SetText({ text: action }))
 				},
-				onChange: function (event) {
+				onChange(event) {
 					send(Message.SetText({ text: (event.target as HTMLInputElement).value }))
 				},
-				onPointerDown: function (event) {
+				onPointerDown(event) {
 					send(Message.SetText({ text: (event.target as HTMLElement).dataset.action ?? "missing" }))
 				},
 			},

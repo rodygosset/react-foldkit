@@ -12,9 +12,7 @@ afterEach(cleanup)
 const Message = defineMessageUnion({ SetText: { text: Schema.String } })
 type Message = typeof Message.Type
 
-function update(_model: string, message: Message) {
-	return { model: message.text }
-}
+const update = (_model: string, message: Message) => ({ model: message.text })
 
 const App = Application.define({ Model: Schema.String, Message, update })
 

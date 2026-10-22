@@ -13,9 +13,7 @@ afterEach(cleanup)
 const Message = defineMessageUnion({ SetText: { text: Schema.String } })
 type Message = typeof Message.Type
 
-function update(_model: string, message: Message) {
-	return { model: message.text }
-}
+const update = (_model: string, message: Message) => ({ model: message.text })
 
 const App = Application.define({ Model: Schema.String, Message, update })
 
@@ -380,17 +378,9 @@ it("rejects multiple host roots rather than silently dropping their siblings", f
 })
 
 it("native Foldkit views keep upstream behavior for adapted data-last interactions", function () {
-	function update(_model: string, message: string) {
-		return { model: message }
-	}
-	function view(model: string, h: HtmlBuilder<string>) {
-		return h.input([
-			h.Value(model),
-			h.OnInput((value) => value),
-			h.OnChange((value) => value),
-			h.OnKeyDown((key) => key),
-		])
-	}
+	const update = (_model: string, message: string) => ({ model: message })
+	const view = (model: string, h: HtmlBuilder<string>) =>
+		h.input([h.Value(model), h.OnInput((value) => value), h.OnChange((value) => value), h.OnKeyDown((key) => key)])
 	Scene.scene(
 		{ update, view },
 		Scene.given(""),
