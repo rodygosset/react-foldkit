@@ -238,7 +238,7 @@ required when the Program needs services, which also makes the options argument 
   `retainInactive` kept the previous Store running.
 
   ```ts
-  ReactStore.Config<Model, Message, R>["onReactivate"] | undefined
+  ReactStore.Config<Model, Message, R, MessageSchema>["onReactivate"] | undefined
   ```
 
 - `retainInactive` Keeps the Store, its Layer, Commands, and Subscriptions running for this long after the
@@ -249,7 +249,7 @@ required when the Program needs services, which also makes the options argument 
   Commands perform writes or navigation.
 
   ```ts
-  ReactStore.Config<Model, Message, R>["retainInactive"] | undefined
+  ReactStore.Config<Model, Message, R, MessageSchema>["retainInactive"] | undefined
   ```
 
 - `restartInterrupted` Starts Commands interrupted by deactivation again when a replacement Store activates. Pass
@@ -257,7 +257,7 @@ required when the Program needs services, which also makes the options argument 
   Query fetches: an interrupted write may already have reached its server.
 
   ```ts
-  ReactStore.Config<Model, Message, R>["restartInterrupted"] | undefined
+  ReactStore.Config<Model, Message, R, MessageSchema>["restartInterrupted"] | undefined
   ```
 
 - `freezeModel` Freezes every Model the Provider publishes so accidental mutation throws where it happens.
@@ -265,21 +265,21 @@ required when the Program needs services, which also makes the options argument 
   `true` outside production builds.
 
   ```ts
-  ReactStore.Config<Model, Message, R>["freezeModel"] | undefined
+  ReactStore.Config<Model, Message, R, MessageSchema>["freezeModel"] | undefined
   ```
 
 - `onCrash` Called once on terminal failure, with the original Cause and a Message when one triggered
   the failure. Runs before `subscribeCrash` listeners. Observer defects are logged.
 
   ```ts
-  ReactStore.Config<Model, Message, R>["onCrash"] | undefined
+  ReactStore.Config<Model, Message, R, MessageSchema>["onCrash"] | undefined
   ```
 
 - `resources` Supplies all required services. Live work finishes before the Layer releases its
   resources.
 
   ```ts
-  ReactStore.Config<Model, Message, R>["resources"] | undefined
+  ReactStore.Config<Model, Message, R, MessageSchema>["resources"] | undefined
   ```
 
 - `crash` Default failure view and reporting for every Provider of this application.
@@ -305,7 +305,7 @@ required when the Program needs services, which also makes the options argument 
   records no Mounts, so the panel's Mounts tab stays empty.
 
   ```ts
-  ReactStore.Config<Model, Message, R>["devTools"] | undefined
+  ReactStore.Config<Model, Message, R, MessageSchema>["devTools"] | undefined
   ```
 
 ### ProviderProps

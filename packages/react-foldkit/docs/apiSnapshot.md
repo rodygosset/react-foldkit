@@ -58,12 +58,12 @@ export interface CrashConfig<Model, Message> {
   }) => React.ReactNode;
   readonly report?: (context: CrashContext<Model, Message>) => Effect.Effect<void, unknown>;
 }
-export type Options<Model, Message, R = never> = Omit<ReactStore.Config<Model, Message, R>, "update" | "subscriptions" | "devTools"> & {
+export type Options<Model, Message, R = never, MessageSchema extends Schema.Codec<Message, unknown> = Schema.Codec<Message>> = Omit<ReactStore.Config<Model, Message, R, MessageSchema>, "update" | "subscriptions" | "devTools"> & {
   readonly crash?: CrashConfig<Model, Message>;
   readonly validateInit?: boolean;
-  readonly devTools?: ReactStore.Config<Model, Message, R>["devTools"];
+  readonly devTools?: ReactStore.Config<Model, Message, R, MessageSchema>["devTools"];
 };
-type OptionsArgument<Model, Message, R> = [R] extends [never] ? [options?: Options<Model, Message, R>] : [options: Options<Model, Message, R>];
+type OptionsArgument<Model, Message, R, MessageSchema extends Schema.Codec<Message, unknown> = Schema.Codec<Message>> = [R] extends [never] ? [options?: Options<Model, Message, R, MessageSchema>] : [options: Options<Model, Message, R, MessageSchema>];
 export type ProviderProps<Model, Message, R = never, HasInit extends boolean = false> = {
   readonly children?: React.ReactNode;
   readonly crash?: CrashConfig<Model, Message>;
@@ -110,10 +110,10 @@ export declare function modelHooks<Model, Message>(Context: SourceContext<Model,
 type Tagged = {
   readonly _tag: string;
 };
-export declare function define<ModelSchema extends Schema.Constraint, MessageSchema extends Schema.Schema<Tagged>, R = never>(program: Program<ModelSchema, MessageSchema, never, R> & {
+export declare function define<ModelSchema extends Schema.Constraint, MessageSchema extends Schema.Codec<Tagged, unknown>, R = never>(program: Program<ModelSchema, MessageSchema, never, R> & {
   readonly init: () => Update.Return<ModelSchema["Type"], MessageSchema["Type"], R>;
-}, ...options: OptionsArgument<ModelSchema["Type"], MessageSchema["Type"], R>): Application<ModelSchema["Type"], MessageSchema["Type"], R, true>;
-export declare function define<ModelSchema extends Schema.Constraint, MessageSchema extends Schema.Schema<Tagged>, R = never>(program: Program<ModelSchema, MessageSchema, never, R>, ...options: OptionsArgument<ModelSchema["Type"], MessageSchema["Type"], R>): Application<ModelSchema["Type"], MessageSchema["Type"], R>;
+}, ...options: OptionsArgument<ModelSchema["Type"], MessageSchema["Type"], R, MessageSchema>): Application<ModelSchema["Type"], MessageSchema["Type"], R, true>;
+export declare function define<ModelSchema extends Schema.Constraint, MessageSchema extends Schema.Codec<Tagged, unknown>, R = never>(program: Program<ModelSchema, MessageSchema, never, R>, ...options: OptionsArgument<ModelSchema["Type"], MessageSchema["Type"], R, MessageSchema>): Application<ModelSchema["Type"], MessageSchema["Type"], R>;
 ```
 
 ## dist/application/reactStore.d.ts
@@ -129,13 +129,12 @@ export type ReactStoreTypeId = typeof ReactStoreTypeId;
 export type ReactStore<Model, Message> = Readonly<{
   [ReactStoreTypeId]: ReactStoreTypeId;
   getModel: () => Model;
-  getDisplayModel: () => Model;
+  readView: () => Model;
   getServerModel: () => Model;
   getCrash: () => Option.Option<Cause.Cause<unknown>>;
   getCrashMessage: () => Option.Option<Message>;
   subscribeCrash: (listener: () => void) => () => void;
   subscribe: (listener: () => void) => () => void;
-  subscribeDisplay: (listener: () => void) => () => void;
   dispatch: (message: Message) => void;
   commit: (message: Message) => Result.Result<void, Store.CommitError>;
   activate: Effect.Effect<void, never, Scope.Scope>;
@@ -144,16 +143,18 @@ export interface ReactivationContext<Model, Message, R = never> {
   readonly model: Model;
   readonly interrupted: Update.Commands<Message, R>;
 }
-export type Config<Model, Message, R = never> = Store.Config<Model, Message, R> & {
+export type Config<Model, Message, R = never, MessageSchema extends Schema.Codec<Message, unknown> = Schema.Codec<Message>> = Store.Config<Model, Message, R> & {
   readonly onReactivate?: (context: ReactivationContext<Model, Message, R>) => Message;
   readonly retainInactive?: Duration.Input;
   readonly restartInterrupted?: boolean | ((command: Update.Commands<Message, R>[number]) => boolean);
   readonly freezeModel?: boolean;
-  readonly devTools?: DevTools.Config<Message>;
+  readonly devTools?: DevTools.Config<MessageSchema>;
 };
 export declare function make<Model, Message extends {
   readonly _tag: string;
-}, ModelSchema extends Schema.Codec<Model, unknown> = Schema.Codec<Model, unknown>, R = never>(config: Config<Model, Message, R>, init: Update.Return<Model, Message, R>, Model?: ModelSchema): ReactStore<Model, Message>;
+}, ModelSchema extends Schema.Codec<unknown, unknown> & {
+  readonly Type: Model;
+} = Schema.Codec<Model>, MessageSchema extends Schema.Codec<Message, unknown> = Schema.Codec<Message>, R = never>(config: Config<Model, Message, R, MessageSchema>, init: Update.Return<Model, Message, R>, Model?: ModelSchema): ReactStore<Model, Message>;
 export {};
 ```
 
@@ -191,31 +192,24 @@ export declare function useOptionalModel<Model>(source: Option.Option<ModelReade
 import { Effect, Schema } from "effect";
 import type { DevToolsConfig } from "foldkit/runtime";
 import type * as Store from "./store/store";
-export type Config<Message> = false | (Exclude<DevToolsConfig, false> & {
-  readonly Message?: Schema.Codec<NoInfer<Message>, unknown, unknown, unknown>;
+export type Config<MessageSchema extends Schema.Codec<unknown, unknown>> = false | (Omit<Exclude<DevToolsConfig, false>, "Message"> & {
+  readonly Message?: MessageSchema;
 });
-export type Display<Model> = Readonly<{
-  get: () => Model;
-  subscribe: (listener: () => void) => () => void;
-  set: (model: Model) => void;
-}>;
-export declare function makeDisplay<Model>(initial: Model): Display<Model>;
-export declare function makeObserver<ModelSchema extends Schema.Codec<unknown, unknown>, Message extends {
-  readonly _tag: string;
-}, R>(options: {
-  readonly config: Config<Message> | undefined;
-  readonly update: (model: ModelSchema["Type"], message: Message) => {
+export declare function makeObserver<ModelSchema extends Schema.Codec<unknown, unknown>, MessageSchema extends Schema.Codec<unknown, unknown>, R>(options: {
+  readonly config: Exclude<Config<MessageSchema>, false>;
+  readonly update: (model: ModelSchema["Type"], message: MessageSchema["Type"]) => {
     readonly model: ModelSchema["Type"];
   };
   readonly Model: ModelSchema;
-  readonly display: Display<ModelSchema["Type"]>;
   readonly freeze: (model: ModelSchema["Type"]) => ModelSchema["Type"];
   readonly readLive: () => ModelSchema["Type"];
-  readonly dispatch: (message: Message) => void;
+  readonly dispatch: (message: MessageSchema["Type"]) => void;
 }): Readonly<{
-  readonly observer: Store.RuntimeObserver<ModelSchema["Type"], Message, R>;
+  readonly observer: Store.RuntimeObserver<ModelSchema["Type"], MessageSchema["Type"], R>;
   readonly install: Effect.Effect<void, never, import("effect").Scope.Scope>;
   readonly isPaused: () => boolean;
+  readonly pausedModel: () => ModelSchema["Type"] | undefined;
+  readonly subscribePause: (listener: () => void) => () => void;
 }>;
 ```
 
@@ -446,6 +440,16 @@ export declare function sceneListeners(node: HostElement): Record<string, (event
 export declare function sceneEventNames(eventName: string, target: HostElement): ReadonlyArray<string>;
 export declare function hostPath(target: HostElement): ReadonlyArray<HostElement>;
 export declare function hasSceneListener(target: HostElement, eventName: string): boolean;
+export type HostUpdate = {
+  readonly _tag: "Value";
+  readonly value: unknown;
+} | {
+  readonly _tag: "Files";
+  readonly files: unknown;
+} | {
+  readonly _tag: "Text";
+  readonly text: string;
+};
 export declare function makeHostEvent(target: HostElement, fields: Readonly<Record<string, unknown>>): HostEvent;
 export declare function invokeHandlers(path: ReadonlyArray<HostElement>, eventName: string, event: HostEvent): void;
 export declare function dispatchSceneEvent(target: HostElement, eventName: string, fields: Readonly<Record<string, unknown>>): HostEvent;
@@ -475,10 +479,12 @@ export interface HostElement {
   parent?: HostElement;
   readonly tagName: string;
   value?: unknown;
+  files?: unknown;
   checked?: boolean;
   selected?: boolean;
   selectedValues?: ReadonlyArray<string>;
   textContent?: string;
+  innerText?: string;
   focus: () => void;
   blur: () => void;
   getAttribute: (name: string) => string | null;
@@ -675,40 +681,28 @@ export declare const takeWhen: {
 export interface ActivateOptions<Message, R> {
   readonly context: Context.Context<never>;
   readonly commands: Update.Commands<Message, R>;
-  readonly commandIds?: ReadonlyArray<number | undefined>;
   readonly firstMessage: Option.Option<Message>;
 }
 export type Runtime<Model, Message, R> = Omit<Store<Model, Message>, "getRunningCommands" | "dispose"> & {
   readonly activate: (options: ActivateOptions<Message, R>) => Effect.Effect<void, never, Scope.Scope>;
   readonly getCrashMessage: () => Option.Option<Message>;
   readonly getRunningCommands: () => Update.Commands<Message, R>;
-  readonly getRunningCommandInvocations: () => ReadonlyArray<RuntimeCommand<Message, R>>;
   readonly dispose: (exit?: Exit.Exit<unknown, unknown>) => Effect.Effect<void>;
 };
-export type RuntimeCommand<Message, R> = Readonly<{
-  readonly id: number | undefined;
-  readonly command: Update.Commands<Message, R>[number];
-}>;
 export interface RuntimeObserver<Model, Message, R> {
-  readonly recordInit: (model: Model, commands: Update.Commands<Message, R>) => ReadonlyArray<number>;
-  readonly recordMessage: (message: Message, modelBeforeUpdate: Model, modelAfterUpdate: Model, commands: Update.Commands<Message, R>) => ReadonlyArray<number>;
-  readonly recordCommandResult: (id: number, message: Message) => void;
+  readonly recordInit: (model: Model, commands: Update.Commands<Message, R>) => void;
+  readonly recordMessage: (message: Message, modelBeforeUpdate: Model, modelAfterUpdate: Model, commands: Update.Commands<Message, R>) => void;
+  readonly adoptCommand: (command: Update.Commands<Message, R>[number]) => Update.Commands<Message, R>[number];
 }
 export declare function makeRuntime<Model, Message, R>(program: Config<Model, Message, R>, initialModel: Model, observer?: RuntimeObserver<Model, Message, R>): Runtime<Model, Message, R>;
 export declare function makeRuntime<Model, Message, R>(program: Program<Model, Message, R> & {
   readonly resources?: Layer.Layer<NoInfer<R>, never, never>;
 }, initialModel: Model, observer?: RuntimeObserver<Model, Message, R>): Runtime<Model, Message, R>;
-export declare function make<Model, Message extends {
-  readonly _tag: string;
-}, R = never>(config: Config<Model, Message, R>, init: Update.Return<Model, Message, R>): Effect.Effect<Store<Model, Message>, never, Scope.Scope>;
-export declare function make<Model, Message extends {
-  readonly _tag: string;
-}, R = never>(config: Program<Model, Message, R> & {
+export declare function make<Model, Message, R = never>(config: Config<Model, Message, R>, init: Update.Return<Model, Message, R>): Effect.Effect<Store<Model, Message>, never, Scope.Scope>;
+export declare function make<Model, Message, R = never>(config: Program<Model, Message, R> & {
   readonly resources?: never;
 }, init: Update.Return<Model, Message, R>): Effect.Effect<Store<Model, Message>, never, R | Scope.Scope>;
-export declare function boot<Model, Message extends {
-  readonly _tag: string;
-}, R = never>(config: Config<Model, Message, R>, init: Update.Return<Model, Message, R>): Store<Model, Message>;
+export declare function boot<Model, Message, R = never>(config: Config<Model, Message, R>, init: Update.Return<Model, Message, R>): Store<Model, Message>;
 export {};
 ```
 
