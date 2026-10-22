@@ -38,11 +38,11 @@ export type { Application, CrashConfig, CrashContext, ModelHooks, Options, Provi
 
 ```ts
 import { Cause, Effect, Option, Schema } from "effect";
+import type * as Update from "foldkit/update";
 import React from "react";
 import type { ModelSource } from "../modelSource";
-import type { OptionalProjection, Projection } from "../submodel/lift";
-import type * as Update from "foldkit/update";
 import type { Program } from "../program/program";
+import type { OptionalProjection, Projection } from "../submodel/lift";
 import * as ReactStore from "./reactStore";
 import { type Send } from "./send";
 export type { ReactivationContext } from "./reactStore";
@@ -104,24 +104,23 @@ export declare function modelHooks<Model, Message>(Context: SourceContext<Model,
   useSubmodel: <Model_1, Message_1>({ read, toParentMessage, }: Projection<Model, Message, Model_1, Message_1>) => ModelSource<Model_1, Message_1>;
   useOptionalSubmodel: <Model_1, Message_1>({ read, toParentMessage, }: OptionalProjection<Model, Message, Model_1, Message_1>) => Option.Option<ModelSource<Model_1, Message_1>>;
 };
-export declare function define<Model, Message extends {
+type Tagged = {
   readonly _tag: string;
-}, R = never>(program: Program<Model, Message, never, R> & {
-  readonly init: () => Update.Return<Model, Message, R>;
-}, ...options: OptionsArgument<Model, Message, R>): Application<Model, Message, R, true>;
-export declare function define<Model, Message extends {
-  readonly _tag: string;
-}, R = never>(program: Program<Model, Message, never, R>, ...options: OptionsArgument<Model, Message, R>): Application<Model, Message, R>;
+};
+export declare function define<ModelSchema extends Schema.Constraint, MessageSchema extends Schema.Schema<Tagged>, R = never>(program: Program<ModelSchema, MessageSchema, never, R> & {
+  readonly init: () => Update.Return<ModelSchema["Type"], MessageSchema["Type"], R>;
+}, ...options: OptionsArgument<ModelSchema["Type"], MessageSchema["Type"], R>): Application<ModelSchema["Type"], MessageSchema["Type"], R, true>;
+export declare function define<ModelSchema extends Schema.Constraint, MessageSchema extends Schema.Schema<Tagged>, R = never>(program: Program<ModelSchema, MessageSchema, never, R>, ...options: OptionsArgument<ModelSchema["Type"], MessageSchema["Type"], R>): Application<ModelSchema["Type"], MessageSchema["Type"], R>;
 ```
 
 ## dist/application/reactStore.d.ts
 
 ```ts
+import type { Schema } from "effect";
 import { Cause, Duration, Effect, Option, Result, Scope } from "effect";
-import * as Store from "../store/store";
 import type * as Update from "foldkit/update";
 import * as DevTools from "../devToolsIntegration";
-import type { Schema } from "effect";
+import * as Store from "../store/store";
 declare const ReactStoreTypeId: unique symbol;
 export type ReactStoreTypeId = typeof ReactStoreTypeId;
 export type ReactStore<Model, Message> = Readonly<{
@@ -151,7 +150,7 @@ export type Config<Model, Message, R = never> = Store.Config<Model, Message, R> 
 };
 export declare function make<Model, Message extends {
   readonly _tag: string;
-}, R = never>(config: Config<Model, Message, R>, init: Update.Return<Model, Message, R>, modelSchema?: Schema.Codec<Model, unknown, unknown, unknown>): ReactStore<Model, Message>;
+}, ModelSchema extends Schema.Codec<Model, unknown> = Schema.Codec<Model, unknown>, R = never>(config: Config<Model, Message, R>, init: Update.Return<Model, Message, R>, Model?: ModelSchema): ReactStore<Model, Message>;
 export {};
 ```
 
@@ -198,20 +197,20 @@ export type Display<Model> = Readonly<{
   set: (model: Model) => void;
 }>;
 export declare function makeDisplay<Model>(initial: Model): Display<Model>;
-export declare function makeObserver<Model, Message extends {
+export declare function makeObserver<ModelSchema extends Schema.Codec<unknown, unknown>, Message extends {
   readonly _tag: string;
 }, R>(options: {
   readonly config: Config<Message> | undefined;
-  readonly update: (model: Model, message: Message) => {
-    readonly model: Model;
+  readonly update: (model: ModelSchema["Type"], message: Message) => {
+    readonly model: ModelSchema["Type"];
   };
-  readonly modelSchema: Schema.Codec<Model, unknown, unknown, unknown>;
-  readonly display: Display<Model>;
-  readonly freeze: (model: Model) => Model;
-  readonly readLive: () => Model;
+  readonly Model: ModelSchema;
+  readonly display: Display<ModelSchema["Type"]>;
+  readonly freeze: (model: ModelSchema["Type"]) => ModelSchema["Type"];
+  readonly readLive: () => ModelSchema["Type"];
   readonly dispatch: (message: Message) => void;
 }): Readonly<{
-  readonly observer: Store.RuntimeObserver<Model, Message, R>;
+  readonly observer: Store.RuntimeObserver<ModelSchema["Type"], Message, R>;
   readonly install: Effect.Effect<void, never, import("effect").Scope.Scope>;
   readonly isPaused: () => boolean;
 }>;
@@ -327,33 +326,30 @@ export * from "./program/public";
 import type { Schema } from "effect";
 import type * as Subscription from "foldkit/subscription";
 import type * as Update from "foldkit/update";
-export interface Program<Model, Message, OutMessage = never, R = never> {
-  readonly Model: Schema.Codec<Model, unknown, unknown, unknown>;
-  readonly Message: Schema.Schema<Message>;
+type Tagged = {
+  readonly _tag: string;
+};
+export interface Program<ModelSchema extends Schema.Constraint, MessageSchema extends Schema.Schema<Tagged>, OutMessage = never, R = never> {
+  readonly Model: ModelSchema;
+  readonly Message: MessageSchema;
   readonly OutMessage?: Schema.Schema<OutMessage>;
-  readonly init?: () => Update.Return<Model, Message, R>;
-  readonly update: (model: Model, message: Message) => Update.ReturnWithOutMessage<Model, Message, OutMessage, R>;
-  readonly subscriptions?: Subscription.Subscriptions<Model, Message, R>;
+  readonly init?: () => Update.Return<ModelSchema["Type"], MessageSchema["Type"], R>;
+  readonly update: (model: ModelSchema["Type"], message: MessageSchema["Type"]) => Update.ReturnWithOutMessage<ModelSchema["Type"], MessageSchema["Type"], OutMessage, R>;
+  readonly subscriptions?: Subscription.Subscriptions<ModelSchema["Type"], MessageSchema["Type"], R>;
 }
-type ApplicationProgram<Model, Message, R> = Omit<Program<Model, Message, never, R>, "OutMessage" | "update"> & {
+type ApplicationProgram<ModelSchema extends Schema.Constraint, MessageSchema extends Schema.Schema<Tagged>, R> = Omit<Program<ModelSchema, MessageSchema, never, R>, "OutMessage" | "update"> & {
   readonly OutMessage?: undefined;
-  readonly update: (model: Model, message: Message) => Update.Return<Model, Message, R>;
+  readonly update: (model: ModelSchema["Type"], message: MessageSchema["Type"]) => Update.Return<ModelSchema["Type"], MessageSchema["Type"], R>;
 };
-export declare function make<Model, Message extends {
-  readonly _tag: string;
-}, OutMessage, R = never>(program: Program<Model, Message, OutMessage, R> & {
+export declare function make<ModelSchema extends Schema.Constraint, MessageSchema extends Schema.Schema<Tagged>, OutMessage, R = never>(program: Program<ModelSchema, MessageSchema, OutMessage, R> & {
   readonly OutMessage: Schema.Schema<OutMessage>;
-}): Program<Model, Message, OutMessage, R>;
-export declare function make<Model, Message extends {
-  readonly _tag: string;
-}, R = never>(program: ApplicationProgram<Model, Message, R> & {
-  readonly init: () => Update.Return<Model, Message, R>;
-}): Program<Model, Message, never, R> & {
-  readonly init: () => Update.Return<Model, Message, R>;
+}): Program<ModelSchema, MessageSchema, OutMessage, R>;
+export declare function make<ModelSchema extends Schema.Constraint, MessageSchema extends Schema.Schema<Tagged>, R = never>(program: ApplicationProgram<ModelSchema, MessageSchema, R> & {
+  readonly init: () => Update.Return<ModelSchema["Type"], MessageSchema["Type"], R>;
+}): Program<ModelSchema, MessageSchema, never, R> & {
+  readonly init: () => Update.Return<ModelSchema["Type"], MessageSchema["Type"], R>;
 };
-export declare function make<Model, Message extends {
-  readonly _tag: string;
-}, R = never>(program: ApplicationProgram<Model, Message, R>): Program<Model, Message, never, R>;
+export declare function make<ModelSchema extends Schema.Constraint, MessageSchema extends Schema.Schema<Tagged>, R = never>(program: ApplicationProgram<ModelSchema, MessageSchema, R>): Program<ModelSchema, MessageSchema, never, R>;
 export {};
 ```
 
@@ -603,13 +599,14 @@ declare const ProviderError_base: Schema.Class<ProviderError, Schema.Struct<{
 export declare class ProviderError extends ProviderError_base {
   get message(): string;
 }
-export interface Config<Model, Message> {
-  readonly Model: Schema.Codec<Model, unknown, unknown, unknown>;
-  readonly Message: Schema.Schema<Message>;
-}
-export declare function define<Model, Message extends {
+type Tagged = {
   readonly _tag: string;
-}>(config: Config<Model, Message>): Submodel<Model, Message>;
+};
+export interface Config<ModelSchema extends Schema.Codec<unknown, unknown>, MessageSchema extends Schema.Schema<Tagged>> {
+  readonly Model: ModelSchema;
+  readonly Message: MessageSchema;
+}
+export declare function define<ModelSchema extends Schema.Codec<unknown, unknown>, MessageSchema extends Schema.Codec<Tagged, unknown>>(config: Config<ModelSchema, MessageSchema>): Submodel<ModelSchema["Type"], MessageSchema["Type"]>;
 export {};
 ```
 

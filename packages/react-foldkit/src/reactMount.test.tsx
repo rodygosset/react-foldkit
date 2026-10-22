@@ -1,8 +1,8 @@
-import { afterEach, expect, it } from "vitest"
-import { ValueMessage, setValue } from "../test/fixtures/valueMessage"
-import React from "react"
 import { cleanup, render } from "@testing-library/react"
 import { Schema } from "effect"
+import React from "react"
+import { afterEach, expect, it } from "vitest"
+import { ValueMessage, setValue } from "../test/fixtures/valueMessage"
 import * as Application from "./application"
 
 afterEach(cleanup)

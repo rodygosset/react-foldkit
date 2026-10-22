@@ -1,12 +1,12 @@
+import { it } from "@effect/vitest"
 import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react"
-import { ValueMessage, setValue } from "../test/fixtures/valueMessage"
 import { Cause, Deferred, Effect, Schema } from "effect"
+import * as AsyncData from "foldkit/asyncData"
 import * as Query from "foldkit/experimental/query"
 import * as Update from "foldkit/update"
 import React from "react"
 import { afterEach, expect } from "vitest"
-import { it } from "@effect/vitest"
-import * as AsyncData from "foldkit/asyncData"
+import { ValueMessage, setValue } from "../test/fixtures/valueMessage"
 import * as Application from "./application"
 
 afterEach(cleanup)

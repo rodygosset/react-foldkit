@@ -1,10 +1,10 @@
 // @vitest-environment node
 
-import { ValueMessage, setValue } from "../../test/fixtures/valueMessage"
 import { expect, it } from "@effect/vitest"
 import { Cause, Deferred, Effect, Exit, Fiber, Layer, Logger, Option, Result, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import * as Subscription from "foldkit/subscription"
+import { ValueMessage, setValue } from "../../test/fixtures/valueMessage"
 import * as Session from "./providerSession"
 import * as ReactStore from "./reactStore"
 

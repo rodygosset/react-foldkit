@@ -1,13 +1,13 @@
 // @vitest-environment node
 import { Effect, Layer, Schema, Stream } from "effect"
-import { renderToString } from "react-dom/server"
-import { describe, expect, it } from "vitest"
 import type * as Command from "foldkit/command"
 import { defineMessageUnion } from "foldkit/message"
-import * as Application from "./application"
 import { modifyFields } from "foldkit/struct"
 import * as Subscription from "foldkit/subscription"
 import type * as Update from "foldkit/update"
+import { renderToString } from "react-dom/server"
+import { describe, expect, it } from "vitest"
+import * as Application from "./application"
 
 const Message = defineMessageUnion({
 	CompletedLoad: { value: Schema.String },
@@ -57,7 +57,7 @@ describe("React server rendering", function () {
 			})
 		)
 		const { Provider, useModel } = Application.define(
-			{ Model, Message, update, subscriptions },
+			{ Model: Model, Message, update, subscriptions },
 			{
 				resources: layer,
 			}
@@ -81,7 +81,7 @@ describe("React server rendering", function () {
 	})
 
 	it("isolates preloaded Models across server renders of the same app definition", function () {
-		const { Provider, useModel } = Application.define({ Model, Message, update })
+		const { Provider, useModel } = Application.define({ Model: Model, Message, update })
 		function View() {
 			const model = useModel()
 			return <span>{`${model.status}:${model.value}`}</span>

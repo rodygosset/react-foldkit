@@ -1,16 +1,16 @@
 import { it } from "@effect/vitest"
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { Effect, Latch, Layer, Schema, Stream } from "effect"
+import type * as Command from "foldkit/command"
+import { defineMessageUnion } from "foldkit/message"
+import { modifyFields } from "foldkit/struct"
+import * as Subscription from "foldkit/subscription"
+import type * as Update from "foldkit/update"
 import React, { StrictMode } from "react"
 import { hydrateRoot, type Root } from "react-dom/client"
 import { renderToString } from "react-dom/server"
 import { afterEach, describe, expect, vi } from "vitest"
-import { modifyFields } from "foldkit/struct"
-import type * as Command from "foldkit/command"
-import { defineMessageUnion } from "foldkit/message"
 import * as Application from "./application"
-import * as Subscription from "foldkit/subscription"
-import type * as Update from "foldkit/update"
 
 const Message = defineMessageUnion({
 	CompletedLoad: { value: Schema.String },
@@ -58,7 +58,7 @@ describe("React Provider", function () {
 					return Message.CompletedLoad({ value: "loaded" })
 				})
 			)
-			const { Provider, useModel } = Application.define({ Model, Message, update })
+			const { Provider, useModel } = Application.define({ Model: Model, Message, update })
 
 			function View() {
 				const model = useModel()
@@ -102,7 +102,7 @@ describe("React Provider", function () {
 					return Message.CompletedLoad({ value: "hydrated" })
 				})
 			)
-			const { Provider, useModel } = Application.define({ Model, Message, update })
+			const { Provider, useModel } = Application.define({ Model: Model, Message, update })
 
 			function View() {
 				const model = useModel()
@@ -178,7 +178,7 @@ describe("React Provider", function () {
 					return Message.CompletedLoad({ value: "strict" })
 				})
 			)
-			const { Provider, useModel } = Application.define({ Model, Message, update })
+			const { Provider, useModel } = Application.define({ Model: Model, Message, update })
 
 			function View() {
 				return <span>{useModel().value}</span>
@@ -220,7 +220,7 @@ describe("React Provider", function () {
 					)
 				)
 			)
-			const { Provider, useModel } = Application.define({ Model, Message, update })
+			const { Provider, useModel } = Application.define({ Model: Model, Message, update })
 
 			function View() {
 				return <span>{useModel().value}</span>
@@ -294,7 +294,7 @@ describe("React Provider", function () {
 				)
 			)
 			const { Provider, useModel } = Application.define({
-				Model,
+				Model: Model,
 				Message,
 				update(model: Model, message: Message): UpdateReturn {
 					results += 1
@@ -356,7 +356,7 @@ describe("React Provider", function () {
 				),
 			}))
 			const { Provider, useModel } = Application.define(
-				{ Model, Message, update, subscriptions },
+				{ Model: Model, Message, update, subscriptions },
 				{
 					resources: layer,
 				}
@@ -389,7 +389,7 @@ describe("React Provider", function () {
 	)
 
 	it("uses selector equivalence to avoid unrelated rerenders", function () {
-		const { Provider, useDispatch, useModel } = Application.define({ Model, Message, update })
+		const { Provider, useDispatch, useModel } = Application.define({ Model: Model, Message, update })
 		let selectedRenders = 0
 		let fullRenders = 0
 
@@ -434,7 +434,7 @@ describe("React Provider", function () {
 	})
 
 	it("captures init for one Provider identity and replaces it on keyed remount", function () {
-		const { Provider, useModel } = Application.define({ Model, Message, update })
+		const { Provider, useModel } = Application.define({ Model: Model, Message, update })
 
 		function View() {
 			return <span>{useModel().value}</span>

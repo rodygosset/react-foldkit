@@ -757,14 +757,14 @@ The child Model Schema and Message union that `define` binds. A child `Program` 
 - `Model` Supplies the child Model type. The Submodel Provider does not validate it.
 
   ```ts
-  Schema.Codec<Model, unknown, unknown, unknown>
+  ModelSchema
   ```
 
 - `Message` The Schema of the Messages the child update handles, usually the union from
   `defineMessageUnion`. `useSend` builds Messages with its constructors.
 
   ```ts
-  Schema.Schema<Message>
+  MessageSchema
   ```
 
 ### Lift
@@ -1060,44 +1060,44 @@ pass the Program to `Store.make` and `Store.boot`.
 them: the host that runs it supplies `resources`. An application Program has no
 OutMessage, so its update returns `Update.Return`.
 
-- `Model` Supplies the Model type. `Application.define` also checks initial Models against it.
-
-  ```ts
-  Schema.Codec<Model, unknown, unknown, unknown>
-  ```
-
-- `Message` The Schema of the Messages update handles. Every Message has a string `_tag`.
-  Use `defineMessageUnion` to define the variants and their constructors.
-
-  ```ts
-  Schema.Schema<Message>
-  ```
-
 - `OutMessage` The union of facts a child reports to its parent. Omit it for an application.
 
   ```ts
   Schema.Schema<OutMessage> | undefined
   ```
 
+- `Model` Supplies the Model type. `Application.define` also checks initial Models against it.
+
+  ```ts
+  ModelSchema
+  ```
+
+- `Message` The Schema of the Messages update handles. Every Message has a string `_tag`.
+  Use `defineMessageUnion` to define the variants and their constructors.
+
+  ```ts
+  MessageSchema
+  ```
+
 - `init` Creates the initial Model and Commands. A child Program usually omits it, because its
   parent creates the child Model.
 
   ```ts
-  (() => Update.Return<Model, Message, R>) | undefined
+  (() => Update.Return<ModelSchema["Type"], MessageSchema["Type"], R>) | undefined
   ```
 
 - `update` Applies a Message to the Model without running side effects. Return Commands for work that
   runs after the transition.
 
   ```ts
-  (model: Model, message: Message) => Update.ReturnWithOutMessage<Model, Message, OutMessage, R>
+  (model: ModelSchema["Type"], message: MessageSchema["Type"]) => Update.ReturnWithOutMessage<ModelSchema["Type"], MessageSchema["Type"], OutMessage, R>
   ```
 
 - `subscriptions` Declares Streams whose dependencies are derived from the Model. Changed dependencies
   restart their Streams.
 
   ```ts
-  Readonly<Record<string, Subscription.Subscription<Model, Message, any, R>>> | undefined
+  Readonly<Record<string, Subscription.Subscription<ModelSchema["Type"], MessageSchema["Type"], any, R>>> | undefined
   ```
 
 ### make

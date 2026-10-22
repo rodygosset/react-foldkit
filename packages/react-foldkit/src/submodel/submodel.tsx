@@ -89,6 +89,8 @@ export class ProviderError extends Schema.Error<ProviderError>("react-foldkit/Su
 	}
 }
 
+type Tagged = { readonly _tag: string }
+
 /**
  * The child Model Schema and Message union that `define` binds. A child `Program` from
  * `Program.make` is one.
@@ -96,16 +98,19 @@ export class ProviderError extends Schema.Error<ProviderError>("react-foldkit/Su
  * @category configuration
  * @since 0.2.0
  */
-export interface Config<Model, Message> {
+export interface Config<
+	ModelSchema extends Schema.Codec<unknown, unknown>,
+	MessageSchema extends Schema.Schema<Tagged>,
+> {
 	/**
 	 * Supplies the child Model type. The Submodel Provider does not validate it.
 	 */
-	readonly Model: Schema.Codec<Model, unknown, unknown, unknown>
+	readonly Model: ModelSchema
 	/**
 	 * The Schema of the Messages the child update handles, usually the union from
 	 * `defineMessageUnion`. `useSend` builds Messages with its constructors.
 	 */
-	readonly Message: Schema.Schema<Message>
+	readonly Message: MessageSchema
 }
 
 /**
@@ -143,9 +148,12 @@ export interface Config<Model, Message> {
  * @category constructors
  * @since 0.1.0
  */
-export function define<Model, Message extends { readonly _tag: string }>(
-	config: Config<Model, Message>
-): Submodel<Model, Message> {
+export function define<
+	ModelSchema extends Schema.Codec<unknown, unknown>,
+	MessageSchema extends Schema.Codec<Tagged, unknown>,
+>(config: Config<ModelSchema, MessageSchema>): Submodel<ModelSchema["Type"], MessageSchema["Type"]> {
+	type Model = ModelSchema["Type"]
+	type Message = MessageSchema["Type"]
 	const Context = makeSourceContext<Model, Message>()
 
 	function SourceProvider({
@@ -221,5 +229,5 @@ export function define<Model, Message extends { readonly _tag: string }>(
 		)
 	}
 
-	return { Provider, ...modelHooks(Context, config.Message, () => new ProviderError({})) }
+	return { Provider, ...modelHooks<Model, Message>(Context, config.Message, () => new ProviderError({})) }
 }

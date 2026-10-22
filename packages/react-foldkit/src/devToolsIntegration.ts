@@ -1,9 +1,9 @@
-import { Array, Cause, Effect, Exit, Function, Option, Schema, SubscriptionRef } from "effect"
-import type { DevToolsConfig, DevToolsPosition, DevToolsMode } from "foldkit/runtime"
+import { Array, Cause, Effect, Option, Schema, SubscriptionRef } from "effect"
+import type { DevToolsConfig, DevToolsMode, DevToolsPosition } from "foldkit/runtime"
+import * as Overlay from "./devtoolsOverlay"
 import { createDevToolsStore, type DevToolsStore } from "./devtoolsVendor/devTools/store.js"
 import { extractSubmodelInfo } from "./devtoolsVendor/devTools/submodelPath.js"
 import { startWebSocketBridge } from "./devtoolsVendor/devTools/webSocketBridge.js"
-import * as Overlay from "./devtoolsOverlay"
 import type * as Store from "./store/store"
 
 type Command<Message, R> = Store.RuntimeCommand<Message, R>["command"]
@@ -43,16 +43,20 @@ export function makeDisplay<Model>(initial: Model): Display<Model> {
 	}
 }
 
-export function makeObserver<Model, Message extends { readonly _tag: string }, R>(options: {
+export function makeObserver<
+	ModelSchema extends Schema.Codec<unknown, unknown>,
+	Message extends { readonly _tag: string },
+	R,
+>(options: {
 	readonly config: Config<Message> | undefined
-	readonly update: (model: Model, message: Message) => { readonly model: Model }
-	readonly modelSchema: Schema.Codec<Model, unknown, unknown, unknown>
-	readonly display: Display<Model>
-	readonly freeze: (model: Model) => Model
-	readonly readLive: () => Model
+	readonly update: (model: ModelSchema["Type"], message: Message) => { readonly model: ModelSchema["Type"] }
+	readonly Model: ModelSchema
+	readonly display: Display<ModelSchema["Type"]>
+	readonly freeze: (model: ModelSchema["Type"]) => ModelSchema["Type"]
+	readonly readLive: () => ModelSchema["Type"]
 	readonly dispatch: (message: Message) => void
 }): Readonly<{
-	readonly observer: Store.RuntimeObserver<Model, Message, R>
+	readonly observer: Store.RuntimeObserver<ModelSchema["Type"], Message, R>
 	readonly install: Effect.Effect<void, never, import("effect").Scope.Scope>
 	readonly isPaused: () => boolean
 }> {
@@ -66,14 +70,9 @@ export function makeObserver<Model, Message extends { readonly _tag: string }, R
 	const excluded = new Set(config?.excludeFromHistory ?? [])
 	// History replay is synchronous by the DevToolsStore contract and only runs the pure Model codec.
 	// A recorded Model that no longer decodes is a defect, as it is in Foldkit's runtime.
-	const decodeModelExit = Schema.decodeUnknownExit(options.modelSchema as Schema.Codec<Model, unknown, never, never>)
-	const decodeModel = (model: unknown): Model =>
-		Exit.match(decodeModelExit(model), {
-			onSuccess: Function.identity,
-			onFailure(cause) {
-				throw Cause.squash(cause)
-			},
-		})
+	type Model = ModelSchema["Type"]
+	// @effect-diagnostics-next-line schemaSync:off
+	const decodeModel = Schema.decodeUnknownSync(options.Model)
 	const isPaused = () => devToolsStore !== undefined && SubscriptionRef.getUnsafe(devToolsStore.stateRef).isPaused
 	const observer: Store.RuntimeObserver<Model, Message, R> = {
 		recordInit(model, commands) {

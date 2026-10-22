@@ -1,9 +1,9 @@
 import { Option, Schema } from "effect"
-import React from "react"
 import { defineMessageUnion } from "foldkit/message"
-import type { ModelSource } from "../../src/modelSource"
-import * as Application from "../../src/application"
 import { modifyFields } from "foldkit/struct"
+import React from "react"
+import * as Application from "../../src/application"
+import type { ModelSource } from "../../src/modelSource"
 import { define } from "../../src/submodel"
 
 export const ChildModel = Schema.Struct({ count: Schema.Finite, unrelated: Schema.Finite })

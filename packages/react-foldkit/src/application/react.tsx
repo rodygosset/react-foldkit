@@ -1,11 +1,11 @@
 import { Cause, Effect, Equal, Exit, Option, Schema } from "effect"
+import type * as Update from "foldkit/update"
 import React from "react"
 import { isDevelopment } from "../internal/deepFreeze"
 import type { ModelSource } from "../modelSource"
+import type { Program } from "../program/program"
 import type { OptionalProjection, Projection } from "../submodel/lift"
 import { project, projectOptional } from "../submodel/lift"
-import type * as Update from "foldkit/update"
-import type { Program } from "../program/program"
 import * as ProviderSession from "./providerSession"
 import * as ReactStore from "./reactStore"
 import { sendFor, type Send } from "./send"
@@ -339,6 +339,8 @@ function SessionLifecycle({ session }: { readonly session: ProviderSession.Provi
 	return null
 }
 
+type Tagged = { readonly _tag: string }
+
 /**
  * Creates a React Provider and hooks for a Foldkit Program.
  * Define the application once, then render its Provider. Views read state with `useModel` and
@@ -404,18 +406,22 @@ function SessionLifecycle({ session }: { readonly session: ProviderSession.Provi
  * @category constructors
  * @since 0.2.0
  */
-export function define<Model, Message extends { readonly _tag: string }, R = never>(
-	program: Program<Model, Message, never, R> & { readonly init: () => Update.Return<Model, Message, R> },
-	...options: OptionsArgument<Model, Message, R>
-): Application<Model, Message, R, true>
-export function define<Model, Message extends { readonly _tag: string }, R = never>(
-	program: Program<Model, Message, never, R>,
-	...options: OptionsArgument<Model, Message, R>
-): Application<Model, Message, R>
-export function define<Model, Message extends { readonly _tag: string }, R = never>(
-	program: Program<Model, Message, never, R>,
-	...[options]: OptionsArgument<Model, Message, R>
-): Application<Model, Message, R, boolean> {
+export function define<ModelSchema extends Schema.Constraint, MessageSchema extends Schema.Schema<Tagged>, R = never>(
+	program: Program<ModelSchema, MessageSchema, never, R> & {
+		readonly init: () => Update.Return<ModelSchema["Type"], MessageSchema["Type"], R>
+	},
+	...options: OptionsArgument<ModelSchema["Type"], MessageSchema["Type"], R>
+): Application<ModelSchema["Type"], MessageSchema["Type"], R, true>
+export function define<ModelSchema extends Schema.Constraint, MessageSchema extends Schema.Schema<Tagged>, R = never>(
+	program: Program<ModelSchema, MessageSchema, never, R>,
+	...options: OptionsArgument<ModelSchema["Type"], MessageSchema["Type"], R>
+): Application<ModelSchema["Type"], MessageSchema["Type"], R>
+export function define<ModelSchema extends Schema.Constraint, MessageSchema extends Schema.Schema<Tagged>, R = never>(
+	program: Program<ModelSchema, MessageSchema, never, R>,
+	...[options]: OptionsArgument<ModelSchema["Type"], MessageSchema["Type"], R>
+): Application<ModelSchema["Type"], MessageSchema["Type"], R, boolean> {
+	type Model = ModelSchema["Type"]
+	type Message = MessageSchema["Type"]
 	const config = {
 		...options,
 		update: program.update,
@@ -494,7 +500,7 @@ export function define<Model, Message extends { readonly _tag: string }, R = nev
 
 	return {
 		Provider,
-		...modelHooks(
+		...modelHooks<Model, Message>(
 			Context,
 			program.Message,
 			() => new Error("react-foldkit hooks must be used within a <Provider>")

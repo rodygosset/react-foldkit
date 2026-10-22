@@ -1,9 +1,9 @@
 import { it as effectIt } from "@effect/vitest"
-import { ValueMessage, setValue } from "../test/fixtures/valueMessage"
 import { cleanup, render, waitFor } from "@testing-library/react"
 import { Effect, Schema } from "effect"
 import React from "react"
 import { afterEach, describe, expect } from "vitest"
+import { ValueMessage, setValue } from "../test/fixtures/valueMessage"
 import * as Application from "./application"
 
 afterEach(cleanup)

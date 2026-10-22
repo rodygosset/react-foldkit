@@ -1,11 +1,11 @@
-import { afterEach, expect } from "vitest"
-import { ValueMessage, setValue } from "../test/fixtures/valueMessage"
 import { it } from "@effect/vitest"
-import React from "react"
 import { cleanup, render, waitFor } from "@testing-library/react"
 import { Cause, Effect, Schema, Stream } from "effect"
-import * as Application from "./application"
 import * as Subscription from "foldkit/subscription"
+import React from "react"
+import { afterEach, expect } from "vitest"
+import { ValueMessage, setValue } from "../test/fixtures/valueMessage"
+import * as Application from "./application"
 afterEach(cleanup)
 it.live("repeated subscription Cause after Activity reconnect", () =>
 	Effect.gen(function* () {

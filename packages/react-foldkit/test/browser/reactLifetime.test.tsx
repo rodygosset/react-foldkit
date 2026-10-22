@@ -1,14 +1,14 @@
 import { it } from "@effect/vitest"
-import { ValueMessage, setValue } from "../fixtures/valueMessage"
 import { Cause, Deferred, Effect, Schema, Stream } from "effect"
+import * as AsyncData from "foldkit/asyncData"
 import * as Query from "foldkit/experimental/query"
+import * as Subscription from "foldkit/subscription"
 import * as Update from "foldkit/update"
 import React from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, describe, expect } from "vitest"
-import * as AsyncData from "foldkit/asyncData"
 import * as Application from "../../src/application"
-import * as Subscription from "foldkit/subscription"
+import { ValueMessage, setValue } from "../fixtures/valueMessage"
 
 let root: Root | undefined
 let container: HTMLDivElement | undefined

@@ -1,13 +1,13 @@
 import { it } from "@effect/vitest"
-import { ValueMessage, setValue } from "../fixtures/valueMessage"
-import { Deferred, Effect, Schema } from "effect"
 import { overlay } from "@foldkit/devtools/vite"
+import { Deferred, Effect, Schema } from "effect"
 import { defineMessageUnion } from "foldkit/message"
 import React from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, describe, expect } from "vitest"
 import * as Application from "../../src/application"
 import { __configure } from "../../src/devtoolsOverlay"
+import { ValueMessage, setValue } from "../fixtures/valueMessage"
 
 let root: Root | undefined
 let container: HTMLDivElement | undefined
@@ -50,7 +50,7 @@ describe("native Foldkit DevTools overlay", function () {
 				}
 				const App = Application.define(
 					{
-						Model,
+						Model: Model,
 						Message,
 						update: (model, message) =>
 							message._tag === "Increment"

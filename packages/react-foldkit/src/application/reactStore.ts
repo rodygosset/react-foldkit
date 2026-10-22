@@ -1,10 +1,10 @@
+import type { Schema } from "effect"
 import { Array, Cause, Context, Duration, Effect, Exit, Option, Predicate, RcRef, Result, Scope } from "effect"
+import type * as Update from "foldkit/update"
+import * as DevTools from "../devToolsIntegration"
 import { deepFreeze, isDevelopment } from "../internal/deepFreeze"
 import * as InitCommand from "../internal/initCommand"
 import * as Store from "../store/store"
-import type * as Update from "foldkit/update"
-import * as DevTools from "../devToolsIntegration"
-import type { Schema } from "effect"
 
 const ReactStoreTypeId: unique symbol = Symbol.for("react-foldkit/ReactStoreTypeId")
 export type ReactStoreTypeId = typeof ReactStoreTypeId
@@ -77,10 +77,15 @@ export type Config<Model, Message, R = never> = Store.Config<Model, Message, R> 
 	readonly devTools?: DevTools.Config<Message>
 }
 
-export function make<Model, Message extends { readonly _tag: string }, R = never>(
+export function make<
+	Model,
+	Message extends { readonly _tag: string },
+	ModelSchema extends Schema.Codec<Model, unknown> = Schema.Codec<Model, unknown>,
+	R = never,
+>(
 	config: Config<Model, Message, R>,
 	init: Update.Return<Model, Message, R>,
-	modelSchema?: Schema.Codec<Model, unknown, unknown, unknown>
+	Model?: ModelSchema
 ): ReactStore<Model, Message> {
 	const freeze = config.freezeModel ?? isDevelopment
 	if (freeze) deepFreeze(init.model)
@@ -90,12 +95,12 @@ export function make<Model, Message extends { readonly _tag: string }, R = never
 	const display = DevTools.makeDisplay(init.model)
 	let runtime: Store.Runtime<Model, Message, R>
 	const devTools =
-		modelSchema === undefined
+		Model === undefined
 			? undefined
-			: DevTools.makeObserver<Model, Message, R>({
+			: DevTools.makeObserver<ModelSchema, Message, R>({
 					config: config.devTools,
 					update: config.update,
-					modelSchema,
+					Model,
 					display,
 					freeze(model) {
 						if (freeze) deepFreeze(model)

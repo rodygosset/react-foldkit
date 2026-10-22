@@ -1,5 +1,4 @@
 import { it } from "@effect/vitest"
-import { ValueMessage, setValue } from "../../test/fixtures/valueMessage"
 import {
 	Cause,
 	Deferred,
@@ -17,14 +16,15 @@ import {
 	Scope,
 	Stream,
 } from "effect"
-import { describe, expect, vi } from "vitest"
 import type * as Command from "foldkit/command"
 import { defineMessageUnion } from "foldkit/message"
-import * as Store from "../store"
-import { CommitError, Inactive, Crashed } from "../store"
 import { modifyFields } from "foldkit/struct"
 import * as Subscription from "foldkit/subscription"
 import type * as Update from "foldkit/update"
+import { describe, expect, vi } from "vitest"
+import { ValueMessage, setValue } from "../../test/fixtures/valueMessage"
+import * as Store from "../store"
+import { CommitError, Crashed, Inactive } from "../store"
 import * as ReactStore from "./reactStore"
 
 /** Activation owns a Scope, so closing it is the whole deactivation story. */
