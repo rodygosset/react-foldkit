@@ -1,7 +1,6 @@
 import { ValueMessage, setValue } from "../test/fixtures/valueMessage"
 import { it } from "@effect/vitest"
-import { Effect, Option, Schema, SubscriptionRef } from "effect"
-import type { DevToolsConfig } from "foldkit/runtime"
+import { Effect, Option, Result, Schema, SubscriptionRef } from "effect"
 import { describe, expect } from "vitest"
 import * as ReactStore from "./application/reactStore"
 import * as Overlay from "./devtoolsOverlay"
@@ -9,7 +8,10 @@ import type { DevToolsStore } from "foldkit/devtools-host"
 import { dispatchRequest } from "./devtoolsVendor/devTools/webSocketBridge.js"
 import type * as Update from "foldkit/update"
 
-const makeHarness = (config: Exclude<DevToolsConfig, boolean> = {}, commands: Update.Commands<ValueMessage> = []) =>
+const makeHarness = (
+	config: { readonly maxEntries?: number; readonly keyframeInterval?: number } = {},
+	commands: Update.Commands<ValueMessage> = []
+) =>
 	Effect.gen(function* () {
 		let history: DevToolsStore | undefined
 		yield* Effect.acquireRelease(
@@ -49,14 +51,44 @@ describe("DevTools history integration", function () {
 			store.commit(setValue(1))
 			store.commit(setValue(1))
 			yield* history.jumpTo(0)
-			expect(store.getDisplayModel()).toBe(6)
+			expect(store.readView()).toBe(6)
+			expect(store.getModel()).toBe(7)
+			expect(store.commit(setValue(1))).toEqual(Result.void)
 			expect(store.getModel()).toBe(7)
 			yield* history.clear
-			expect(store.getDisplayModel()).toBe(6)
+			expect(store.readView()).toBe(6)
 			expect(SubscriptionRef.getUnsafe(history.stateRef).entries).toHaveLength(2)
 			yield* history.resume
-			expect(store.getDisplayModel()).toBe(7)
+			expect(store.readView()).toBe(7)
 		}).pipe(Effect.scoped)
+	)
+
+	it.live("activates every Provider when two register in one turn", () =>
+		Effect.gen(function* () {
+			yield* Effect.acquireRelease(
+				Effect.sync(() => Overlay.__configure(() => Effect.void, undefined)),
+				(dispose) => Effect.sync(dispose),
+			)
+			const first = ReactStore.make<number, ValueMessage>(
+				{
+					update: (model, message) => ({ model: model + message.value }),
+					devTools: { show: "Always" },
+				},
+				{ model: 0 },
+				Schema.Finite,
+			)
+			const second = ReactStore.make<number, ValueMessage>(
+				{
+					update: (model, message) => ({ model: model + message.value }),
+					devTools: { show: "Always" },
+				},
+				{ model: 0 },
+				Schema.Finite,
+			)
+			yield* Effect.all([first.activate, second.activate], { concurrency: "unbounded" }).pipe(
+				Effect.timeout("2 seconds"),
+			)
+		}).pipe(Effect.scoped),
 	)
 
 	it.live("records tagged Messages and replays their original payload", () =>
@@ -68,7 +100,7 @@ describe("DevTools history integration", function () {
 			expect(state.entries.map(({ tag }) => tag)).toEqual(["SetValue", "SetValue"])
 			expect(yield* history.getMessageAtIndex(0)).toEqual(Option.some(setValue(2)))
 			yield* history.jumpTo(0)
-			expect(store.getDisplayModel()).toBe(2)
+			expect(store.readView()).toBe(2)
 			expect(store.getModel()).toBe(5)
 			const response = yield* dispatchRequest(history, () => Effect.void, Option.none(), Option.none(), {
 				_tag: "RequestListMessages",
@@ -81,7 +113,11 @@ describe("DevTools history integration", function () {
 		}).pipe(Effect.scoped)
 	)
 
-	it.live.each([{ maxEntries: 20 }, { maxEntries: 20, keyframeInterval: 100 }, { keyframeInterval: 200 }])(
+	it.live.each([
+		{ maxEntries: 20, keyframeInterval: 1 },
+		{ maxEntries: 20, keyframeInterval: 5 },
+		{ keyframeInterval: 10 },
+	])(
 		"keeps every retained entry readable after eviction with %j",
 		(config) =>
 			Effect.gen(function* () {
@@ -95,9 +131,9 @@ describe("DevTools history integration", function () {
 					expect(yield* history.getModelAtIndex(index)).toBe(index + 1)
 				}
 				yield* history.jumpTo(state.startIndex)
-				expect(store.getDisplayModel()).toBe(state.startIndex + 1)
+				expect(store.readView()).toBe(state.startIndex + 1)
 				yield* history.resume
-				expect(store.getDisplayModel()).toBe(123)
+				expect(store.readView()).toBe(123)
 			}).pipe(Effect.scoped)
 	)
 })

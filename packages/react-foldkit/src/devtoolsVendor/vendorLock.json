@@ -96,6 +96,26 @@
       "path": "effectExtensions/stringExtensions.js",
       "sourceSha256": "2bc09e984ad02097b999fd788c267ef3b872f9183f494e4a86fb18e7b964ba84",
       "patchedSha256": "2bc09e984ad02097b999fd788c267ef3b872f9183f494e4a86fb18e7b964ba84"
+    },
+    {
+      "path": "runtime/devToolsConfig.d.ts",
+      "sourceSha256": "9298149766f028460b333433cfb2e59f8975529ddc0778f7a92552ca21fb31c1",
+      "patchedSha256": "9298149766f028460b333433cfb2e59f8975529ddc0778f7a92552ca21fb31c1"
+    },
+    {
+      "path": "runtime/devToolsConfig.js",
+      "sourceSha256": "1d47210db648bdb421f39a77c249b361866c4545d4df05041f895167f93475b5",
+      "patchedSha256": "1d47210db648bdb421f39a77c249b361866c4545d4df05041f895167f93475b5"
+    },
+    {
+      "path": "runtime/visibility.d.ts",
+      "sourceSha256": "5ad3c2d7950e4f0a7f022c3427b39714434145f381702e9eaea674b56bf7f3c2",
+      "patchedSha256": "5ad3c2d7950e4f0a7f022c3427b39714434145f381702e9eaea674b56bf7f3c2"
+    },
+    {
+      "path": "runtime/visibility.js",
+      "sourceSha256": "45045ba37ff74c85fbf19d930e4ddf9b77c0ed2ab16432d627393a3317addf3f",
+      "patchedSha256": "45045ba37ff74c85fbf19d930e4ddf9b77c0ed2ab16432d627393a3317addf3f"
     }
   ]
 }

@@ -3,9 +3,19 @@
   "version": "0.28.0",
   "files": [
     {
+      "path": "relayRegistry.d.ts",
+      "sourceSha256": "fd4d422ac35dd33395f92fd50521ca0ecaa325f69d7d5a7af4519b10187c2ce0",
+      "patchedSha256": "fd4d422ac35dd33395f92fd50521ca0ecaa325f69d7d5a7af4519b10187c2ce0"
+    },
+    {
       "path": "relayRegistry.js",
       "sourceSha256": "a15611bc08234681cbd681103c4345d307558622979c586052b311c865e3966b",
       "patchedSha256": "a15611bc08234681cbd681103c4345d307558622979c586052b311c865e3966b"
+    },
+    {
+      "path": "relayRegistryTrust.d.ts",
+      "sourceSha256": "b0c01db69c1b671b1d46550533dbfc79d326977c93fe5ee8b45192211cf17d70",
+      "patchedSha256": "b0c01db69c1b671b1d46550533dbfc79d326977c93fe5ee8b45192211cf17d70"
     },
     {
       "path": "relayRegistryTrust.js",

@@ -401,8 +401,6 @@ export interface ActivateOptions<Message, R> {
 	 */
 	readonly context: Context.Context<never>
 	readonly commands: Update.Commands<Message, R>
-	/** Optional history identities carried when interrupted work is restarted. */
-	readonly commandIds?: ReadonlyArray<number | undefined>
 	/** Delivered before the Messages that were queued while the Store was inactive. */
 	readonly firstMessage: Option.Option<Message>
 }
@@ -417,25 +415,22 @@ export type Runtime<Model, Message, R> = Omit<Store<Model, Message>, "getRunning
 	readonly activate: (options: ActivateOptions<Message, R>) => Effect.Effect<void, never, Scope.Scope>
 	readonly getCrashMessage: () => Option.Option<Message>
 	readonly getRunningCommands: () => Update.Commands<Message, R>
-	readonly getRunningCommandInvocations: () => ReadonlyArray<RuntimeCommand<Message, R>>
 	/** Like `Store.dispose`, and resource finalizers receive `exit` unless a crash closed them first. */
 	readonly dispose: (exit?: Exit.Exit<unknown, unknown>) => Effect.Effect<void>
 }
 
-export type RuntimeCommand<Message, R> = Readonly<{
-	readonly id: number | undefined
-	readonly command: Update.Commands<Message, R>[number]
-}>
-
 export interface RuntimeObserver<Model, Message, R> {
-	readonly recordInit: (model: Model, commands: Update.Commands<Message, R>) => ReadonlyArray<number>
+	readonly recordInit: (model: Model, commands: Update.Commands<Message, R>) => void
 	readonly recordMessage: (
 		message: Message,
 		modelBeforeUpdate: Model,
 		modelAfterUpdate: Model,
 		commands: Update.Commands<Message, R>
-	) => ReadonlyArray<number>
-	readonly recordCommandResult: (id: number, message: Message) => void
+	) => void
+	/** Returns the Command the Store should fork. DevTools uses this to keep history ids on that Command. */
+	readonly adoptCommand: (
+		command: Update.Commands<Message, R>[number]
+	) => Update.Commands<Message, R>[number]
 }
 
 export function makeRuntime<Model, Message, R>(
@@ -456,7 +451,7 @@ export function makeRuntime<Model, Message, R>(
 	const listeners = new Set<() => void>()
 	const crashListeners = new Set<() => void>()
 	const pendingMessages = MutableList.make<PendingMessage<Message, R>>()
-	const runningCommands = new Map<Fiber.Fiber<void>, RuntimeCommand<Message, R>>()
+	const runningCommands = new Map<Fiber.Fiber<void>, Command<Message, R>>()
 	let model = initialModel
 	let phase: Phase<Model, Message, R> = { _tag: "Inactive", crash: Option.none() }
 	let syncWorkMsSinceYield = 0
@@ -571,11 +566,13 @@ export function makeRuntime<Model, Message, R>(
 
 	// Forks the Command into the activation's fiber Scope. The fiber inherits the calling fiber's
 	// Context, so run this with the activation's Context.
+	const adopted = (command: Command<Message, R>): Command<Message, R> =>
+		observe(() => observer?.adoptCommand(command)) ?? command
+
 	function startCommand(
 		activation: Activation<Model, R>,
 		command: Command<Message, R>,
-		triggeringMessage: Option.Option<Message>,
-		commandId: number | undefined
+		triggeringMessage: Option.Option<Message>
 	): Effect.Effect<void> {
 		// Foldkit Command accepts a Schema or its Type; this runtime dispatches values.
 		const effect = (command.effect as Effect.Effect<Message, never, R>).pipe(
@@ -583,8 +580,6 @@ export function makeRuntime<Model, Message, R>(
 			activation.provideServices,
 			Effect.flatMap((message) =>
 				Effect.sync(function () {
-					if (isLive(activation) && commandId !== undefined)
-						observe(() => observer?.recordCommandResult(commandId, message))
 					// A result that lands after its activation ended belongs to no Store.
 					if (isLive(activation)) enqueueMessage(message, command)
 				})
@@ -600,7 +595,7 @@ export function makeRuntime<Model, Message, R>(
 		return Effect.forkIn(effect, activation.fiberScope).pipe(
 			Effect.flatMap((fiber) =>
 				Effect.sync(function () {
-					runningCommands.set(fiber, { id: commandId, command })
+					runningCommands.set(fiber, command)
 					fiber.addObserver(() => runningCommands.delete(fiber))
 				})
 			)
@@ -611,10 +606,9 @@ export function makeRuntime<Model, Message, R>(
 	function forkCommand(
 		activation: Activation<Model, R>,
 		command: Command<Message, R>,
-		triggeringMessage: Option.Option<Message>,
-		commandId?: number
+		triggeringMessage: Option.Option<Message>
 	): void {
-		Effect.runForkWith(activation.runtimeContext)(startCommand(activation, command, triggeringMessage, commandId))
+		Effect.runForkWith(activation.runtimeContext)(startCommand(activation, adopted(command), triggeringMessage))
 	}
 
 	function processMessage(activation: Activation<Model, R>, { message, command }: PendingMessage<Message, R>): void {
@@ -623,13 +617,13 @@ export function makeRuntime<Model, Message, R>(
 		const previous = model
 		model = updated.success.model
 		const commands = updated.success.commands ?? []
-		const ids = observe(() => observer?.recordMessage(message, previous, model, commands)) ?? []
+		observe(() => observer?.recordMessage(message, previous, model, commands))
 		if (command !== undefined) InitCommand.complete(command)
 		if (previous !== model) {
 			PubSub.publishUnsafe(activation.modelPubSub, model)
 			notify(listeners)
 		}
-		for (const [index, next] of commands.entries()) forkCommand(activation, next, Option.some(message), ids[index])
+		for (const next of commands) forkCommand(activation, next, Option.some(message))
 	}
 
 	function drainPendingMessages(until?: PendingMessage<Message, R>): void {
@@ -706,7 +700,6 @@ export function makeRuntime<Model, Message, R>(
 	const activate = ({
 		context,
 		commands,
-		commandIds,
 		firstMessage,
 	}: ActivateOptions<Message, R>): Effect.Effect<void, never, Scope.Scope> =>
 		Effect.gen(function* () {
@@ -767,11 +760,9 @@ export function makeRuntime<Model, Message, R>(
 
 			// Foldkit attaches subscriptions before forking init Commands, so their initial
 			// dependencies come from the current Model.
-			let initCommandIds = commandIds
 			yield* Effect.gen(function* () {
 				if (!hasRecordedInit) {
-					// Init command identities are paired with each occurrence, even when objects repeat.
-					initCommandIds = observe(() => observer?.recordInit(model, commands)) ?? commandIds
+					observe(() => observer?.recordInit(model, commands))
 					hasRecordedInit = true
 				}
 				yield* forkSubscriptionFibers(program.subscriptions, {
@@ -786,8 +777,7 @@ export function makeRuntime<Model, Message, R>(
 						if (isLive(activation)) crashWith(cause, message)
 					},
 				})
-				for (const [index, command] of commands.entries())
-					yield* startCommand(activation, command, Option.none(), initCommandIds?.[index])
+				for (const command of commands) yield* startCommand(activation, adopted(command), Option.none())
 			}).pipe(Effect.provideContext(activation.runtimeContext))
 
 			if (Option.isNone(firstMessage)) return drainPendingMessages()
@@ -834,8 +824,7 @@ export function makeRuntime<Model, Message, R>(
 				return disposeOnce
 			}),
 		isDisposed: () => phase._tag === "Disposed",
-		getRunningCommands: () => Array.map(Array.fromIterable(runningCommands.values()), ({ command }) => command),
-		getRunningCommandInvocations: () => Array.fromIterable(runningCommands.values()),
+		getRunningCommands: () => Array.fromIterable(runningCommands.values()),
 		activate,
 	}
 }
@@ -888,16 +877,16 @@ function subscribeTo(listeners: Set<() => void>, listener: () => void): () => vo
  * @category constructors
  * @since 0.1.0
  */
-export function make<Model, Message extends { readonly _tag: string }, R = never>(
+export function make<Model, Message, R = never>(
 	config: Config<Model, Message, R>,
 	init: Update.Return<Model, Message, R>
 ): Effect.Effect<Store<Model, Message>, never, Scope.Scope>
-export function make<Model, Message extends { readonly _tag: string }, R = never>(
+export function make<Model, Message, R = never>(
 	config: Program<Model, Message, R> & { readonly resources?: never },
 	init: Update.Return<Model, Message, R>
 ): Effect.Effect<Store<Model, Message>, never, R | Scope.Scope>
 // eslint-disable-next-line foldkit-style/prefer-arrow-for-expression-return -- Overloads distinguish provided and ambient services.
-export function make<Model, Message extends { readonly _tag: string }, R = never>(
+export function make<Model, Message, R = never>(
 	config: Program<Model, Message, R> & { readonly resources?: Layer.Layer<NoInfer<R>, never, never> },
 	init: Update.Return<Model, Message, R>
 ): Effect.Effect<Store<Model, Message>, never, R | Scope.Scope> {
@@ -955,7 +944,7 @@ export function make<Model, Message extends { readonly _tag: string }, R = never
  * @category constructors
  * @since 0.1.0
  */
-export function boot<Model, Message extends { readonly _tag: string }, R = never>(
+export function boot<Model, Message, R = never>(
 	config: Config<Model, Message, R>,
 	init: Update.Return<Model, Message, R>
 ): Store<Model, Message> {
