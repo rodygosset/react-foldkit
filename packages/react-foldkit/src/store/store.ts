@@ -888,16 +888,16 @@ function subscribeTo(listeners: Set<() => void>, listener: () => void): () => vo
  * @category constructors
  * @since 0.1.0
  */
-export function make<Model, Message, R = never>(
+export function make<Model, Message extends { readonly _tag: string }, R = never>(
 	config: Config<Model, Message, R>,
 	init: Update.Return<Model, Message, R>
 ): Effect.Effect<Store<Model, Message>, never, Scope.Scope>
-export function make<Model, Message, R = never>(
+export function make<Model, Message extends { readonly _tag: string }, R = never>(
 	config: Program<Model, Message, R> & { readonly resources?: never },
 	init: Update.Return<Model, Message, R>
 ): Effect.Effect<Store<Model, Message>, never, R | Scope.Scope>
 // eslint-disable-next-line foldkit-style/prefer-arrow-for-expression-return -- Overloads distinguish provided and ambient services.
-export function make<Model, Message, R = never>(
+export function make<Model, Message extends { readonly _tag: string }, R = never>(
 	config: Program<Model, Message, R> & { readonly resources?: Layer.Layer<NoInfer<R>, never, never> },
 	init: Update.Return<Model, Message, R>
 ): Effect.Effect<Store<Model, Message>, never, R | Scope.Scope> {
@@ -955,7 +955,7 @@ export function make<Model, Message, R = never>(
  * @category constructors
  * @since 0.1.0
  */
-export function boot<Model, Message, R = never>(
+export function boot<Model, Message extends { readonly _tag: string }, R = never>(
 	config: Config<Model, Message, R>,
 	init: Update.Return<Model, Message, R>
 ): Store<Model, Message> {

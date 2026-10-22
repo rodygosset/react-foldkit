@@ -1,4 +1,5 @@
 import { Effect, Result } from "effect"
+import { ValueMessage, setValue } from "../fixtures/valueMessage"
 import * as Foldkit from "react-foldkit"
 import * as Program from "react-foldkit/program"
 import * as Application from "react-foldkit/application"
@@ -24,12 +25,12 @@ describe("built package entry points", function () {
 
 	it("returns a CommitError recognized through every Store export", function () {
 		const store = Foldkit.Store.boot(
-			{ update: (model: number, message: number) => ({ model: model + message }) },
+			{ update: (model: number, message: ValueMessage) => ({ model: model + message.value }) },
 			{ model: 0 }
 		)
 		Effect.runSync(store.dispose())
 
-		const committed = store.commit(1)
+		const committed = store.commit(setValue(1))
 		expect(Result.isFailure(committed)).toBe(true)
 		if (Result.isFailure(committed)) {
 			expect(committed.failure).toBeInstanceOf(Store.CommitError)

@@ -30,7 +30,8 @@ export interface Program<Model, Message, OutMessage = never, R = never> {
 	 */
 	readonly Model: Schema.Codec<Model, unknown, unknown, unknown>
 	/**
-	 * The Schema of the Messages update handles, usually the union from `defineMessageUnion`.
+	 * The Schema of the Messages update handles. Every Message has a string `_tag`.
+	 * Use `defineMessageUnion` to define the variants and their constructors.
 	 */
 	readonly Message: Schema.Schema<Message>
 	/**
@@ -99,17 +100,17 @@ type ApplicationProgram<Model, Message, R> = Omit<Program<Model, Message, never,
  * @category constructors
  * @since 0.2.0
  */
-export function make<Model, Message, OutMessage, R = never>(
+export function make<Model, Message extends { readonly _tag: string }, OutMessage, R = never>(
 	program: Program<Model, Message, OutMessage, R> & { readonly OutMessage: Schema.Schema<OutMessage> }
 ): Program<Model, Message, OutMessage, R>
-export function make<Model, Message, R = never>(
+export function make<Model, Message extends { readonly _tag: string }, R = never>(
 	program: ApplicationProgram<Model, Message, R> & { readonly init: () => Update.Return<Model, Message, R> }
 ): Program<Model, Message, never, R> & { readonly init: () => Update.Return<Model, Message, R> }
-export function make<Model, Message, R = never>(
+export function make<Model, Message extends { readonly _tag: string }, R = never>(
 	program: ApplicationProgram<Model, Message, R>
 ): Program<Model, Message, never, R>
 // eslint-disable-next-line foldkit-style/prefer-arrow-for-expression-return -- Overloads keep a required init and a `never` OutMessage.
-export function make<Model, Message, OutMessage, R>(
+export function make<Model, Message extends { readonly _tag: string }, OutMessage, R>(
 	program: Program<Model, Message, OutMessage, R>
 ): Program<Model, Message, OutMessage, R> {
 	return program

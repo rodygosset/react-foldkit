@@ -143,7 +143,9 @@ export interface Config<Model, Message> {
  * @category constructors
  * @since 0.1.0
  */
-export function define<Model, Message>(config: Config<Model, Message>): Submodel<Model, Message> {
+export function define<Model, Message extends { readonly _tag: string }>(
+	config: Config<Model, Message>
+): Submodel<Model, Message> {
 	const Context = makeSourceContext<Model, Message>()
 
 	function SourceProvider({

@@ -16,7 +16,7 @@ import * as NodeChildProcessSpawner from "@effect/platform-node-shared/NodeChild
 import * as NodeCrypto from "@effect/platform-node-shared/NodeCrypto"
 import * as NodeFileSystem from "@effect/platform-node-shared/NodeFileSystem"
 import * as NodePath from "@effect/platform-node-shared/NodePath"
-import type { Plugin, ViteDevServer } from "vite"
+import type { Plugin, ViteDevServer, WebSocketClient } from "vite"
 import { WebSocket, WebSocketServer } from "ws"
 
 import { publishRelayRecord, retireRelayRecord } from "./vendor/relayRegistry.js"
@@ -39,6 +39,7 @@ const decodeRequestFrame = Schema.decodeExit(Schema.fromJsonString(RequestFrame)
 const encodeResponseFrame = Schema.encodeUnknownSync(Schema.fromJsonString(ResponseFrame))
 
 type ConnectedRuntime = {
+	readonly client: WebSocketClient
 	readonly connectionId: string
 	readonly sequence: number
 	readonly runtime: {
@@ -58,6 +59,7 @@ type Relay = {
 
 type RelayState = {
 	readonly runtimes: Map<string, ConnectedRuntime>
+	readonly clientConnections: WeakMap<WebSocketClient, Set<string>>
 	readonly clients: Set<WebSocket>
 	nextSequence: number
 }
@@ -91,13 +93,31 @@ const decodeFrame = <A>(exit: Exit.Exit<A, unknown>, label: string): Option.Opti
 		onSuccess: Option.some,
 	})
 
-const handleRuntimeEvent = function (server: ViteDevServer, state: RelayState, data: unknown): void {
+const handleRuntimeEvent = function (
+	server: ViteDevServer,
+	state: RelayState,
+	data: unknown,
+	client: WebSocketClient
+): void {
 	const maybeFrame = decodeFrame(decodeEventFrame(data), "runtime event frame")
 	if (Option.isNone(maybeFrame)) return
 
 	DevToolsEvent.match(maybeFrame.value.event, {
 		EventConnected({ runtime }) {
+			let connectionIds = state.clientConnections.get(client)
+			if (connectionIds === undefined) {
+				connectionIds = new Set()
+				state.clientConnections.set(client, connectionIds)
+				const ownedIds = connectionIds
+				client.socket.once("close", function () {
+					for (const id of ownedIds) {
+						if (state.runtimes.get(id)?.client === client) state.runtimes.delete(id)
+					}
+				})
+			}
+			connectionIds.add(runtime.connectionId)
 			const connected: ConnectedRuntime = {
+				client,
 				connectionId: runtime.connectionId,
 				sequence: state.nextSequence++,
 				runtime,
@@ -108,7 +128,8 @@ const handleRuntimeEvent = function (server: ViteDevServer, state: RelayState, d
 			)
 		},
 		EventDisconnected({ connectionId }) {
-			state.runtimes.delete(connectionId)
+			if (state.runtimes.get(connectionId)?.client === client) state.runtimes.delete(connectionId)
+			state.clientConnections.get(client)?.delete(connectionId)
 			server.config.logger.info(`[react-foldkit:devtools] runtime disconnected: ${connectionId}`)
 		},
 	})
@@ -131,7 +152,11 @@ const handleRelayRequest = function (
 ): void {
 	const maybeFrame = decodeFrame(
 		decodeRequestFrame(
-			Buffer.isBuffer(raw) ? raw.toString() : Array.isArray(raw) ? Buffer.concat(raw).toString() : Buffer.from(raw).toString()
+			Buffer.isBuffer(raw)
+				? raw.toString()
+				: Array.isArray(raw)
+					? Buffer.concat(raw).toString()
+					: Buffer.from(raw).toString()
 		),
 		"MCP request frame"
 	)
@@ -304,8 +329,13 @@ export const devToolsRelayPlugin = function (): Plugin {
 		apply: "serve",
 		async configureServer(server) {
 			if (server.config.mode === "test") return
-			const state: RelayState = { runtimes: new Map(), clients: new Set(), nextSequence: 0 }
-			server.ws.on("foldkit:devTools:event", (data) => handleRuntimeEvent(server, state, data))
+			const state: RelayState = {
+				runtimes: new Map(),
+				clientConnections: new WeakMap(),
+				clients: new Set(),
+				nextSequence: 0,
+			}
+			server.ws.on("foldkit:devTools:event", (data, client) => handleRuntimeEvent(server, state, data, client))
 			server.ws.on("foldkit:devTools:response", (data) => handleRuntimeResponse(state, data))
 			const relay = createRelay(server, state).catch(function (cause) {
 				server.config.logger.error(`[react-foldkit:devtools] MCP relay failed to start: ${String(cause)}`)

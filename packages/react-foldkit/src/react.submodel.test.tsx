@@ -1,4 +1,5 @@
 import { it } from "@effect/vitest"
+import { TextMessage, setText } from "../test/fixtures/valueMessage"
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { Context, Deferred, Effect, Fiber, Layer, Option, Schema } from "effect"
 import React from "react"
@@ -64,10 +65,10 @@ function View(props: { name: string }) {
 describe("define", function () {
 	it("composes inline root, sibling, and nested Providers without parent subscriptions", function () {
 		const fixture = createSubmodelFixture()
-		const NumberView = define({ Model: Schema.Finite, Message: Schema.String })
+		const NumberView = define({ Model: Schema.Finite, Message: TextMessage })
 		const count = {
 			read: (model: ChildModel) => model.count,
-			toParentMessage: (_message: string) => ChildMessage.Increment(),
+			toParentMessage: (_message: TextMessage) => ChildMessage.Increment(),
 		}
 		let dispatch: ReturnType<typeof fixture.App.useDispatch> | undefined
 		const sources: Array<ModelSource<{ readonly count: number; readonly unrelated: number }, ChildMessage>> = []
@@ -93,7 +94,7 @@ describe("define", function () {
 		function Counter() {
 			const count = NumberView.useModel()
 			const dispatch = NumberView.useDispatch()
-			return <button onClick={() => dispatch("increment")}>{count}</button>
+			return <button onClick={() => dispatch(setText("increment"))}>{count}</button>
 		}
 		function Sibling() {
 			return <output>{fixture.Child.useModel((model) => model.count)}</output>

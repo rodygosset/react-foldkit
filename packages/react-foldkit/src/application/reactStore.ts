@@ -3,7 +3,6 @@ import { deepFreeze, isDevelopment } from "../internal/deepFreeze"
 import * as InitCommand from "../internal/initCommand"
 import * as Store from "../store/store"
 import type * as Update from "foldkit/update"
-import type { DevToolsConfig } from "foldkit/runtime"
 import * as DevTools from "../devToolsIntegration"
 import type { Schema } from "effect"
 
@@ -75,10 +74,10 @@ export type Config<Model, Message, R = never> = Store.Config<Model, Message, R> 
 	 */
 	readonly freezeModel?: boolean
 	/** Foldkit DevTools configuration. The panel and MCP bridge are enabled by the Vite plugin. */
-	readonly devTools?: DevToolsConfig
+	readonly devTools?: DevTools.Config<Message>
 }
 
-export function make<Model, Message, R = never>(
+export function make<Model, Message extends { readonly _tag: string }, R = never>(
 	config: Config<Model, Message, R>,
 	init: Update.Return<Model, Message, R>,
 	modelSchema?: Schema.Codec<Model, unknown, unknown, unknown>

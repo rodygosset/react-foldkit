@@ -1,4 +1,5 @@
 import { it } from "@effect/vitest"
+import { ValueMessage, setValue } from "../fixtures/valueMessage"
 import { Deferred, Effect, Schema } from "effect"
 import { overlay } from "@foldkit/devtools/vite"
 import { defineMessageUnion } from "foldkit/message"
@@ -61,8 +62,8 @@ describe("native Foldkit DevTools overlay", function () {
 				const Other = Application.define(
 					{
 						Model: Schema.Finite,
-						Message: Schema.Finite,
-						update: (_model: number, message: number) => ({ model: message }),
+						Message: ValueMessage,
+						update: (_model: number, message: ValueMessage) => ({ model: message.value }),
 					},
 					{ devTools: { show: "Always", mode: "TimeTravel" } }
 				)
@@ -76,7 +77,7 @@ describe("native Foldkit DevTools overlay", function () {
 				function OtherCounter() {
 					const model = Other.useModel()
 					const dispatch = Other.useDispatch()
-					return <button onClick={() => dispatch(model + 1)}>{`other:${model}`}</button>
+					return <button onClick={() => dispatch(setValue(model + 1))}>{`other:${model}`}</button>
 				}
 
 				disposeOverlay = __configure(overlay, undefined)
@@ -151,6 +152,10 @@ describe("native Foldkit DevTools overlay", function () {
 				)
 				expect(panelRoot()?.querySelector(".dt-panel")?.textContent).not.toContain("native overlay")
 				yield* Effect.promise(() => waitFor(() => (panelRoot()?.querySelectorAll(".dt-row").length ?? 0) === 1))
+				view.querySelectorAll<HTMLButtonElement>("button")[1]?.click()
+				yield* Effect.promise(() => waitFor(() => view.textContent?.includes("other:1") === true))
+				yield* Effect.promise(() => waitFor(() => (panelRoot()?.querySelectorAll(".dt-row").length ?? 0) === 2))
+				expect(panelRoot()?.querySelector(".dt-panel")?.textContent).toContain("SetValue")
 			})
 	)
 })

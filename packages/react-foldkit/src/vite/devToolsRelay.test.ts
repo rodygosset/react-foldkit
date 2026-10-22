@@ -2,6 +2,7 @@
 import { mkdtemp, readFile, readdir, rm } from "node:fs/promises"
 import { createServer as createNetServer } from "node:net"
 import { join } from "node:path"
+import { tmpdir } from "node:os"
 import { createServer } from "vite"
 import { afterEach, describe, expect, it } from "vitest"
 import { WebSocket } from "ws"
@@ -63,7 +64,7 @@ const findFreePort = (): Promise<number> =>
 
 describe("DevTools MCP relay", function () {
 	it("discovers runtimes, routes requests, rejects malformed frames, and cleans up", async function () {
-		const registryDirectory = await mkdtemp(join("/private/tmp", "react-foldkit-vite-relay-"))
+		const registryDirectory = await mkdtemp(join(tmpdir(), "react-foldkit-vite-relay-"))
 		registryDirectories.push(registryDirectory)
 		process.env["FOLDKIT_DEVTOOLS_RELAY_DIRECTORY"] = registryDirectory
 
@@ -146,7 +147,23 @@ describe("DevTools MCP relay", function () {
 			response: { _tag: "ResponseModel" },
 		})
 
-		browser.close()
+		await new Promise<void>(function (resolveClose) {
+			browser.once("close", () => resolveClose())
+			browser.close()
+		})
+		await expect
+			.poll(async function () {
+				const response = nextJson<{ response: { runtimes: unknown[] } }>(mcp)
+				mcp.send(
+					JSON.stringify({
+						id: "after-close",
+						maybeConnectionId: null,
+						request: { _tag: "RequestListRuntimes" },
+					})
+				)
+				return (await response).response.runtimes
+			})
+			.toEqual([])
 		mcp.close()
 		await server.close()
 		servers.splice(servers.indexOf(server), 1)
@@ -161,7 +178,7 @@ describe("DevTools MCP relay", function () {
 	})
 
 	it("injects the published overlay entry and the React Foldkit runtime bridge", async function () {
-		const registryDirectory = await mkdtemp(join("/private/tmp", "react-foldkit-vite-overlay-"))
+		const registryDirectory = await mkdtemp(join(tmpdir(), "react-foldkit-vite-overlay-"))
 		registryDirectories.push(registryDirectory)
 		process.env["FOLDKIT_DEVTOOLS_RELAY_DIRECTORY"] = registryDirectory
 		const root = fileURLToPath(new URL("./fixtures/devtools/", import.meta.url))
@@ -201,9 +218,9 @@ describe("DevTools MCP relay", function () {
 		// import the overlay themselves. Server-side modules do not.
 		const clientModule = await server.transformRequest("/app.js")
 		expect(clientModule?.code).toContain("virtual:react-foldkit-devtools-overlay")
-		const serverModule = await server.ssrLoadModule("/app.js").then(() =>
-			server.environments.ssr.transformRequest("/app.js")
-		)
+		const serverModule = await server
+			.ssrLoadModule("/app.js")
+			.then(() => server.environments.ssr.transformRequest("/app.js"))
 		expect(serverModule?.code).not.toContain("virtual:react-foldkit-devtools-overlay")
 
 		// Loading the optimized overlay also lets Vite finish its dependency run, which close waits for.

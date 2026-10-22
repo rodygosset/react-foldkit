@@ -5,7 +5,6 @@ import type { ModelSource } from "../modelSource"
 import type { OptionalProjection, Projection } from "../submodel/lift"
 import { project, projectOptional } from "../submodel/lift"
 import type * as Update from "foldkit/update"
-import type { DevToolsConfig } from "foldkit/runtime"
 import type { Program } from "../program/program"
 import * as ProviderSession from "./providerSession"
 import * as ReactStore from "./reactStore"
@@ -95,7 +94,7 @@ export type Options<Model, Message, R = never> = Omit<
 	 * Messages sent from the paused view. Resume renders the latest live Model. React Foldkit
 	 * records no Mounts, so the panel's Mounts tab stays empty.
 	 */
-	readonly devTools?: DevToolsConfig
+	readonly devTools?: ReactStore.Config<Model, Message, R>["devTools"]
 }
 
 type OptionsArgument<Model, Message, R> = [R] extends [never]
@@ -405,15 +404,15 @@ function SessionLifecycle({ session }: { readonly session: ProviderSession.Provi
  * @category constructors
  * @since 0.2.0
  */
-export function define<Model, Message, R = never>(
+export function define<Model, Message extends { readonly _tag: string }, R = never>(
 	program: Program<Model, Message, never, R> & { readonly init: () => Update.Return<Model, Message, R> },
 	...options: OptionsArgument<Model, Message, R>
 ): Application<Model, Message, R, true>
-export function define<Model, Message, R = never>(
+export function define<Model, Message extends { readonly _tag: string }, R = never>(
 	program: Program<Model, Message, never, R>,
 	...options: OptionsArgument<Model, Message, R>
 ): Application<Model, Message, R>
-export function define<Model, Message, R = never>(
+export function define<Model, Message extends { readonly _tag: string }, R = never>(
 	program: Program<Model, Message, never, R>,
 	...[options]: OptionsArgument<Model, Message, R>
 ): Application<Model, Message, R, boolean> {

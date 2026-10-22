@@ -303,7 +303,7 @@ required when the Program needs services, which also makes the options argument 
   records no Mounts, so the panel's Mounts tab stays empty.
 
   ```ts
-  DevToolsConfig | undefined
+  ReactStore.Config<Model, Message, R>["devTools"] | undefined
   ```
 
 ### ProviderProps
@@ -1066,7 +1066,8 @@ OutMessage, so its update returns `Update.Return`.
   Schema.Codec<Model, unknown, unknown, unknown>
   ```
 
-- `Message` The Schema of the Messages update handles, usually the union from `defineMessageUnion`.
+- `Message` The Schema of the Messages update handles. Every Message has a string `_tag`.
+  Use `defineMessageUnion` to define the variants and their constructors.
 
   ```ts
   Schema.Schema<Message>

@@ -1,4 +1,5 @@
 import { it } from "@effect/vitest"
+import { ValueMessage, setValue } from "../fixtures/valueMessage"
 import { Cause, Deferred, Effect, Schema, Stream } from "effect"
 import * as Query from "foldkit/experimental/query"
 import * as Update from "foldkit/update"
@@ -32,16 +33,16 @@ describe("React activation with the native browser scheduler", function () {
 		Effect.gen(function* () {
 			const App = Application.define({
 				Model: Schema.Finite,
-				Message: Schema.Finite,
-				update: (_model: number, message: number) => ({ model: message }),
+				Message: ValueMessage,
+				update: (_model: number, message: ValueMessage) => ({ model: message.value }),
 			})
 			function View() {
 				const model = App.useModel()
 				const dispatch = App.useDispatch()
 				const send = React.useCallback(
 					function () {
-						dispatch(1)
-						dispatch(2)
+						dispatch(setValue(1))
+						dispatch(setValue(2))
 					},
 					[dispatch]
 				)
@@ -159,13 +160,13 @@ describe("React activation with the native browser scheduler", function () {
 			const App = Application.define(
 				{
 					Model: Schema.Finite,
-					Message: Schema.Finite,
-					update(_model: number, _message: number): { model: number } {
+					Message: ValueMessage,
+					update(_model: number, _message: ValueMessage): { model: number } {
 						throw defect
 					},
 				},
 				{
-					onReactivate: () => 1,
+					onReactivate: () => setValue(1),
 					onCrash() {},
 				}
 			)
@@ -212,13 +213,13 @@ describe("React activation with the native browser scheduler", function () {
 			const App = Application.define(
 				{
 					Model: Schema.Finite,
-					Message: Schema.Finite,
-					update(_model: number, _message: number): { model: number } {
+					Message: ValueMessage,
+					update(_model: number, _message: ValueMessage): { model: number } {
 						throw previous
 					},
 				},
 				{
-					onReactivate(): number {
+					onReactivate(): ValueMessage {
 						throw current
 					},
 					onCrash() {},
@@ -226,7 +227,7 @@ describe("React activation with the native browser scheduler", function () {
 			)
 			function View() {
 				const dispatch = App.useDispatch()
-				return <button onClick={() => dispatch(1)}>Crash</button>
+				return <button onClick={() => dispatch(setValue(1))}>Crash</button>
 			}
 			const tree = (mode: "visible" | "hidden") => (
 				<React.Activity mode={mode}>
@@ -270,7 +271,7 @@ describe("React activation with the native browser scheduler", function () {
 		Effect.gen(function* () {
 			const stream = Stream.die(new Error("Repeated browser failure"))
 			const reports: Cause.Cause<unknown>[] = []
-			const subscriptions = Subscription.make<number, number>()((entry) => ({
+			const subscriptions = Subscription.make<number, ValueMessage>()((entry) => ({
 				failure: entry(
 					{},
 					{
@@ -282,8 +283,8 @@ describe("React activation with the native browser scheduler", function () {
 			const App = Application.define(
 				{
 					Model: Schema.Finite,
-					Message: Schema.Finite,
-					update: (model: number, _message: number) => ({ model }),
+					Message: ValueMessage,
+					update: (model: number, _message: ValueMessage) => ({ model }),
 					subscriptions,
 				},
 				{

@@ -1,4 +1,5 @@
 import { afterEach, expect, it } from "vitest"
+import { ValueMessage, setValue } from "../test/fixtures/valueMessage"
 import React from "react"
 import { cleanup, render } from "@testing-library/react"
 import { Schema } from "effect"
@@ -10,10 +11,10 @@ function fixture(kind: "layout" | "passive" | "ref") {
 	const handled: number[] = []
 	const App = Application.define({
 		Model: Schema.Finite,
-		Message: Schema.Finite,
-		update(_model: number, message: number) {
-			handled.push(message)
-			return { model: message }
+		Message: ValueMessage,
+		update(_model: number, message: ValueMessage) {
+			handled.push(message.value)
+			return { model: message.value }
 		},
 	})
 	function View() {
@@ -21,8 +22,8 @@ function fixture(kind: "layout" | "passive" | "ref") {
 		const dispatch = App.useDispatch()
 		const send = React.useCallback(
 			function () {
-				dispatch(1)
-				dispatch(2)
+				dispatch(setValue(1))
+				dispatch(setValue(2))
 			},
 			[dispatch]
 		)

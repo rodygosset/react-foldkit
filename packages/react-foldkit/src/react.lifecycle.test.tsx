@@ -1,4 +1,5 @@
 import { it as effectIt } from "@effect/vitest"
+import { ValueMessage, setValue } from "../test/fixtures/valueMessage"
 import { cleanup, render, waitFor } from "@testing-library/react"
 import { Effect, Schema } from "effect"
 import React from "react"
@@ -11,10 +12,10 @@ function makeMountingApplication() {
 	const handled: Array<number> = []
 	const App = Application.define({
 		Model: Schema.Finite,
-		Message: Schema.Finite,
-		update(_model: number, message: number) {
-			handled.push(message)
-			return { model: message }
+		Message: ValueMessage,
+		update(_model: number, message: ValueMessage) {
+			handled.push(message.value)
+			return { model: message.value }
 		},
 	})
 	function Child() {
@@ -22,8 +23,8 @@ function makeMountingApplication() {
 		const model = App.useModel()
 		React.useEffect(
 			function sendMountMessages() {
-				dispatch(1)
-				dispatch(2)
+				dispatch(setValue(1))
+				dispatch(setValue(2))
 			},
 			[dispatch]
 		)

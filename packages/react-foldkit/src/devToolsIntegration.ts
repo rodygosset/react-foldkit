@@ -1,12 +1,18 @@
 import { Array, Cause, Effect, Exit, Function, Option, Schema, SubscriptionRef } from "effect"
 import type { DevToolsConfig, DevToolsPosition, DevToolsMode } from "foldkit/runtime"
 import { createDevToolsStore, type DevToolsStore } from "./devtoolsVendor/devTools/store.js"
-import { extractSubmodelInfo, isTagged } from "./devtoolsVendor/devTools/submodelPath.js"
+import { extractSubmodelInfo } from "./devtoolsVendor/devTools/submodelPath.js"
 import { startWebSocketBridge } from "./devtoolsVendor/devTools/webSocketBridge.js"
 import * as Overlay from "./devtoolsOverlay"
 import type * as Store from "./store/store"
 
 type Command<Message, R> = Store.RuntimeCommand<Message, R>["command"]
+
+export type Config<Message> =
+	| false
+	| (Exclude<DevToolsConfig, false> & {
+			readonly Message?: Schema.Codec<NoInfer<Message>, unknown, unknown, unknown>
+	  })
 
 export type Display<Model> = Readonly<{
 	get: () => Model
@@ -37,8 +43,8 @@ export function makeDisplay<Model>(initial: Model): Display<Model> {
 	}
 }
 
-export function makeObserver<Model, Message, R>(options: {
-	readonly config: DevToolsConfig | undefined
+export function makeObserver<Model, Message extends { readonly _tag: string }, R>(options: {
+	readonly config: Config<Message> | undefined
 	readonly update: (model: Model, message: Message) => { readonly model: Model }
 	readonly modelSchema: Schema.Codec<Model, unknown, unknown, unknown>
 	readonly display: Display<Model>
@@ -86,13 +92,13 @@ export function makeObserver<Model, Message, R>(options: {
 			if (!isPaused()) options.display.set(options.freeze(after))
 			const store = devToolsStore
 			if (store !== undefined) {
-				const tag = (message as { readonly _tag?: string })._tag ?? ""
+				const tag = message._tag
 				if (excluded.has(tag)) {
 					if (!Object.is(before, after)) Effect.runFork(store.updateLatestModel(after))
 				} else {
 					Effect.runFork(
 						store.recordMessage(
-							message as Readonly<{ _tag: string }>,
+							message,
 							before,
 							after,
 							commands.map((command, index) => commandRecord(command, ids[index]!)),
@@ -105,7 +111,7 @@ export function makeObserver<Model, Message, R>(options: {
 		},
 		recordCommandResult(id, message) {
 			if (devToolsStore === undefined) return
-			const path = isTagged(message) ? extractSubmodelInfo(message._tag, message).submodelPath : []
+			const path = extractSubmodelInfo(message._tag, message).submodelPath
 			Effect.runFork(devToolsStore.recordResolvedCommand(id, path))
 		},
 	}
@@ -127,12 +133,10 @@ export function makeObserver<Model, Message, R>(options: {
 					? configuredMode.development
 					: configuredMode.production
 		const excludedMessages = excluded.size > 0
-		const maxEntries = config.maxEntries === undefined ? undefined : Math.max(20, Math.min(500, config.maxEntries))
+		const maxEntries = Math.max(20, Math.min(500, Math.floor(config.maxEntries ?? 100)))
 		const keyframeInterval = excludedMessages
 			? 1
-			: config.keyframeInterval === undefined
-				? undefined
-				: Math.max(1, Math.floor(config.keyframeInterval))
+			: Math.min(maxEntries, Math.max(1, Math.floor(config.keyframeInterval ?? 31)))
 		if (devToolsStore === undefined) {
 			const store = yield* createDevToolsStore(
 				{
@@ -147,10 +151,7 @@ export function makeObserver<Model, Message, R>(options: {
 							options.display.set(options.readLive())
 					}),
 				},
-				{
-					...(maxEntries !== undefined && { maxEntries }),
-					...(keyframeInterval !== undefined && { keyframeInterval }),
-				}
+				{ maxEntries, keyframeInterval }
 			)
 			devToolsStore = store
 		}
