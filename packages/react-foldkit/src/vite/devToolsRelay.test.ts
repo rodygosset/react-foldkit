@@ -168,6 +168,7 @@ describe("DevTools MCP relay", function () {
 		await server.close()
 		servers.splice(servers.indexOf(server), 1)
 
+		await expect(openSocket(record.url)).rejects.toBeTruthy()
 		expect(await readdir(registryDirectory)).toEqual([])
 		expect(server.ws.clients.size).toBe(0)
 	})

@@ -38,9 +38,7 @@ describe("Program public types", function () {
 		Application.define(untagged)
 		// @ts-expect-error Submodel Messages must be tagged.
 		define({ Model: Schema.Finite, Message: Schema.Finite })
-		// @ts-expect-error Effect Store Messages must be tagged.
 		Store.make({ update: untagged.update }, { model: 0 })
-		// @ts-expect-error Booted Store Messages must be tagged.
 		Store.boot({ update: untagged.update }, { model: 0 })
 		// @ts-expect-error An untagged object is not a Message.
 		Program.make({ Model, Message: Schema.Struct({ value: Schema.Finite }), update: (model: Model) => ({ model }) })

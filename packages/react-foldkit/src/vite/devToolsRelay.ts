@@ -1,4 +1,4 @@
-import { ConfigProvider, Effect, Exit, Layer, Option, Schema } from "effect"
+import { Clock, ConfigProvider, Deferred, Effect, Exit, Fiber, Layer, Option, Schema, type Scope } from "effect"
 import {
 	Event as DevToolsEvent,
 	EventFrame,
@@ -9,8 +9,7 @@ import {
 	type RelayRecord,
 } from "foldkit/devtools-protocol"
 import { createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto"
-import { createServer as createHttpServer, type Server as HttpServer } from "node:http"
-import type { IncomingMessage } from "node:http"
+import { createServer as createHttpServer, type IncomingMessage, type Server as HttpServer, type ServerResponse } from "node:http"
 import type { Duplex } from "node:stream"
 import * as NodeChildProcessSpawner from "@effect/platform-node-shared/NodeChildProcessSpawner"
 import * as NodeCrypto from "@effect/platform-node-shared/NodeCrypto"
@@ -49,28 +48,12 @@ type ConnectedRuntime = {
 	}
 }
 
-type Relay = {
-	readonly id: string
-	readonly httpServer: HttpServer
-	readonly webSocketServer: WebSocketServer
-	readonly recordDirectory: string
-	readonly state: RelayState
-}
-
 type RelayState = {
 	readonly runtimes: Map<string, ConnectedRuntime>
-	readonly clientConnections: WeakMap<WebSocketClient, Set<string>>
+	readonly watchedClients: WeakSet<WebSocketClient>
 	readonly clients: Set<WebSocket>
 	nextSequence: number
 }
-
-const runRegistryEffect = <A, E>(effect: Effect.Effect<A, E>): Promise<A> =>
-	Effect.runPromise(
-		effect.pipe(
-			Effect.provide(REGISTRY_LAYER),
-			Effect.provideService(ConfigProvider.ConfigProvider, ConfigProvider.fromEnv())
-		)
-	)
 
 const sendJson = function (client: WebSocket, frame: ResponseFrame): void {
 	if (client.readyState === WebSocket.OPEN) {
@@ -104,18 +87,14 @@ const handleRuntimeEvent = function (
 
 	DevToolsEvent.match(maybeFrame.value.event, {
 		EventConnected({ runtime }) {
-			let connectionIds = state.clientConnections.get(client)
-			if (connectionIds === undefined) {
-				connectionIds = new Set()
-				state.clientConnections.set(client, connectionIds)
-				const ownedIds = connectionIds
+			if (!state.watchedClients.has(client)) {
+				state.watchedClients.add(client)
 				client.socket.once("close", function () {
-					for (const id of ownedIds) {
-						if (state.runtimes.get(id)?.client === client) state.runtimes.delete(id)
+					for (const [id, connectedRuntime] of state.runtimes) {
+						if (connectedRuntime.client === client) state.runtimes.delete(id)
 					}
 				})
 			}
-			connectionIds.add(runtime.connectionId)
 			const connected: ConnectedRuntime = {
 				client,
 				connectionId: runtime.connectionId,
@@ -129,7 +108,6 @@ const handleRuntimeEvent = function (
 		},
 		EventDisconnected({ connectionId }) {
 			if (state.runtimes.get(connectionId)?.client === client) state.runtimes.delete(connectionId)
-			state.clientConnections.get(client)?.delete(connectionId)
 			server.config.logger.info(`[react-foldkit:devtools] runtime disconnected: ${connectionId}`)
 		},
 	})
@@ -222,134 +200,172 @@ const refuseUpgrade = function (socket: Duplex, status: 400 | 401 | 404): void {
 	socket.end(`HTTP/1.1 ${status} ${reason}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`)
 }
 
-const createRelay = async function (server: ViteDevServer, state: RelayState): Promise<Relay> {
-	const id = randomUUID()
-	const token = randomBytes(32).toString("hex")
-	const httpServer = createHttpServer(function (_request, response) {
-		response
-			.writeHead(426, {
-				Connection: "Upgrade",
-				Upgrade: "websocket",
-				"Content-Type": "text/plain",
-				"Content-Length": Buffer.byteLength("Upgrade Required"),
-			})
-			.end("Upgrade Required")
-	})
-	const webSocketServer = new WebSocketServer({ noServer: true })
+const isTestRun = (server: ViteDevServer): boolean =>
+	server.config.mode === "test" ||
+	server.config.plugins.some((plugin) => plugin.name === "vitest" || plugin.name.startsWith("vitest:"))
 
-	webSocketServer.on("connection", function (client) {
-		state.clients.add(client)
-		client.on("message", (raw) => handleRelayRequest(server, state, client, raw))
-		client.on("close", () => state.clients.delete(client))
-		client.on("error", (error) =>
-			server.config.logger.warn(`[react-foldkit:devtools] MCP client error: ${error.message}`)
-		)
-	})
-	webSocketServer.on("headers", function (headers, request) {
-		const challenge = request.headers[CHALLENGE_HEADER]
-		if (typeof challenge === "string" && HEX_256_PATTERN.test(challenge)) {
-			headers.push(`${SERVER_PROOF_HEADER}: ${computeProof(token, "server", challenge)}`)
-		}
-	})
-	httpServer.on("upgrade", function (request, socket, head) {
-		let url: URL
-		try {
-			url = new URL(request.url ?? "/", "http://relay")
-		} catch {
-			refuseUpgrade(socket, 400)
-			return
-		}
-		if (url.pathname !== RELAY_PATH) {
-			refuseUpgrade(socket, 404)
-		} else if (!presentsToken(url, token) && !presentsProof(request, token)) {
-			refuseUpgrade(socket, 401)
-		} else {
-			webSocketServer.handleUpgrade(request, socket, head, function (client) {
-				webSocketServer.emit("connection", client, request)
-			})
-		}
-	})
-
-	await new Promise<void>(function (resolveListen, rejectListen) {
-		httpServer.once("error", rejectListen)
-		httpServer.listen(0, LOOPBACK_HOST, function () {
-			httpServer.off("error", rejectListen)
-			resolveListen()
+function answerPlainRequest(_request: IncomingMessage, response: ServerResponse): void {
+	const body = "Upgrade Required"
+	response
+		.writeHead(426, {
+			Connection: "Upgrade",
+			Upgrade: "websocket",
+			"Content-Type": "text/plain",
+			"Content-Length": Buffer.byteLength(body),
 		})
-	})
-
-	const address = httpServer.address()
-	if (address === null || typeof address === "string") {
-		httpServer.close()
-		webSocketServer.close()
-		throw new Error("The DevTools relay did not bind a TCP port")
-	}
-	const relayUrl = new URL(`ws://${LOOPBACK_HOST}:${address.port}${RELAY_PATH}`)
-	relayUrl.searchParams.set(TOKEN_PARAMETER, token)
-	const record: RelayRecord = {
-		version: RELAY_RECORD_VERSION,
-		id,
-		root: server.config.root,
-		url: relayUrl.toString(),
-		pid: process.pid,
-		startedAt: Date.now(),
-	}
-	try {
-		const recordDirectory = await runRegistryEffect(publishRelayRecord(record, relayRegistryTrust))
-		server.config.logger.info(
-			`[react-foldkit:devtools] MCP relay listening at ws://${LOOPBACK_HOST}:${address.port}${RELAY_PATH}`
-		)
-		return { id, httpServer, webSocketServer, recordDirectory, state }
-	} catch (cause) {
-		for (const client of webSocketServer.clients) client.terminate()
-		webSocketServer.close()
-		httpServer.close()
-		server.config.logger.warn(
-			`[react-foldkit:devtools] MCP relay discovery failed; continuing without the relay: ${String(cause)}`
-		)
-		throw cause
-	}
+		.end(body)
 }
 
-const closeRelay = async function (relay: Relay): Promise<void> {
-	await runRegistryEffect(retireRelayRecord(relay.id, relay.recordDirectory)).catch(() => undefined)
-	for (const client of relay.webSocketServer.clients) client.terminate()
-	await new Promise<void>(function (resolveClose) {
-		relay.httpServer.close(() => resolveClose())
-		relay.webSocketServer.close()
-	})
-}
+const bindLoopback = (): Effect.Effect<HttpServer, Error, Scope.Scope> =>
+	Effect.acquireRelease(
+		Effect.callback(function (resume) {
+			const httpServer = createHttpServer(answerPlainRequest)
+			function onBindFailed(cause: Error): void {
+				httpServer.close()
+				resume(Effect.fail(cause))
+			}
+			httpServer.once("error", onBindFailed)
+			httpServer.listen(0, LOOPBACK_HOST, function () {
+				httpServer.off("error", onBindFailed)
+				resume(Effect.succeed(httpServer))
+			})
+			return Effect.sync(function () {
+				httpServer.close()
+			})
+		}),
+		(httpServer) =>
+			Effect.callback(function (resume) {
+				httpServer.close(function () {
+					resume(Effect.void)
+				})
+			}),
+	)
+
+const relayProgram = (
+	server: ViteDevServer,
+	state: RelayState,
+	ready: Deferred.Deferred<void, unknown>,
+): Effect.Effect<void> =>
+	Effect.scoped(
+		Effect.gen(function* () {
+			const httpServer = yield* bindLoopback()
+			const address = httpServer.address()
+			if (address === null || typeof address === "string") {
+				return yield* Effect.fail(new Error("The DevTools relay did not bind a TCP port"))
+			}
+			const id = randomUUID()
+			const token = randomBytes(32).toString("hex")
+			const webSocketServer = yield* Effect.acquireRelease(
+				Effect.sync(() => new WebSocketServer({ noServer: true })),
+				(socketServer) =>
+					Effect.sync(function () {
+						for (const client of socketServer.clients) client.terminate()
+						socketServer.close()
+					}),
+			)
+			webSocketServer.on("connection", function (client) {
+				state.clients.add(client)
+				client.on("message", function (raw) {
+					handleRelayRequest(server, state, client, raw)
+				})
+				client.on("close", function () {
+					state.clients.delete(client)
+				})
+				client.on("error", function (error) {
+					server.config.logger.warn(`[react-foldkit:devtools] MCP client error: ${error.message}`)
+				})
+			})
+			webSocketServer.on("headers", function (headers, request) {
+				const challenge = request.headers[CHALLENGE_HEADER]
+				if (typeof challenge === "string" && HEX_256_PATTERN.test(challenge)) {
+					headers.push(`${SERVER_PROOF_HEADER}: ${computeProof(token, "server", challenge)}`)
+				}
+			})
+			httpServer.on("upgrade", function (request, socket, head) {
+				let url: URL
+				try {
+					url = new URL(request.url ?? "/", "http://relay")
+				} catch {
+					refuseUpgrade(socket, 400)
+					return
+				}
+				if (url.pathname !== RELAY_PATH) {
+					refuseUpgrade(socket, 404)
+				} else if (!presentsToken(url, token) && !presentsProof(request, token)) {
+					refuseUpgrade(socket, 401)
+				} else {
+					webSocketServer.handleUpgrade(request, socket, head, function (client) {
+						webSocketServer.emit("connection", client, request)
+					})
+				}
+			})
+			const relayUrl = new URL(`ws://${LOOPBACK_HOST}:${address.port}${RELAY_PATH}`)
+			relayUrl.searchParams.set(TOKEN_PARAMETER, token)
+			const startedAt = yield* Clock.currentTimeMillis
+			const record: RelayRecord = {
+				version: RELAY_RECORD_VERSION,
+				id,
+				root: server.config.root,
+				url: relayUrl.toString(),
+				pid: process.pid,
+				startedAt,
+			}
+			const recordDirectory = yield* publishRelayRecord(record, relayRegistryTrust)
+			yield* Effect.addFinalizer(() => retireRelayRecord(id, recordDirectory).pipe(Effect.ignoreCause))
+			server.config.logger.info(
+				`[react-foldkit:devtools] MCP relay listening at ws://${LOOPBACK_HOST}:${address.port}${RELAY_PATH}`
+			)
+			yield* Deferred.succeed(ready, undefined)
+			return yield* Effect.never
+		}),
+	).pipe(
+		Effect.provide(REGISTRY_LAYER),
+		Effect.provideService(ConfigProvider.ConfigProvider, ConfigProvider.fromEnv()),
+		Effect.catchCause((cause) => Deferred.fail(ready, cause).pipe(Effect.asVoid)),
+	)
 
 /** Starts and owns the browser-to-MCP relay for a Vite development server. */
 export const devToolsRelayPlugin = function (): Plugin {
-	const relays = new WeakMap<object, Promise<Relay | undefined>>()
+	const runs = new WeakMap<object, Fiber.Fiber<void>>()
 
 	return {
 		name: "react-foldkit:devtools-relay",
 		apply: "serve",
 		async configureServer(server) {
-			if (server.config.mode === "test") return
+			if (isTestRun(server)) return
 			const state: RelayState = {
 				runtimes: new Map(),
-				clientConnections: new WeakMap(),
+				watchedClients: new WeakSet(),
 				clients: new Set(),
 				nextSequence: 0,
 			}
-			server.ws.on("foldkit:devTools:event", (data, client) => handleRuntimeEvent(server, state, data, client))
-			server.ws.on("foldkit:devTools:response", (data) => handleRuntimeResponse(state, data))
-			const relay = createRelay(server, state).catch(function (cause) {
-				server.config.logger.error(`[react-foldkit:devtools] MCP relay failed to start: ${String(cause)}`)
-				return undefined
+			server.ws.on("foldkit:devTools:event", function (data, client) {
+				handleRuntimeEvent(server, state, data, client)
 			})
-			relays.set(server.config, relay)
-			await relay
+			server.ws.on("foldkit:devTools:response", function (data) {
+				handleRuntimeResponse(state, data)
+			})
+			const ready = Deferred.makeUnsafe<void, unknown>()
+			const fiber = Effect.runFork(relayProgram(server, state, ready))
+			runs.set(server.config, fiber)
+			await Effect.runPromise(
+				Deferred.await(ready).pipe(
+					Effect.catchCause((cause) =>
+						Effect.sync(function () {
+							server.config.logger.error(
+								`[react-foldkit:devtools] MCP relay failed to start: ${String(cause)}`,
+							)
+						}),
+					),
+				),
+			)
 		},
-		async closeBundle() {
-			const relayPromise = relays.get(this.environment.getTopLevelConfig())
-			if (relayPromise === undefined) return
-			relays.delete(this.environment.getTopLevelConfig())
-			const relay = await relayPromise
-			if (relay !== undefined) await closeRelay(relay)
+		closeBundle() {
+			const config = this.environment.getTopLevelConfig()
+			const fiber = runs.get(config)
+			if (fiber === undefined) return
+			runs.delete(config)
+			return Effect.runPromise(Fiber.interrupt(fiber))
 		},
 	}
 }

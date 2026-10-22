@@ -1,153 +1,194 @@
 import { Array, Cause, Effect, Option, Schema, SubscriptionRef } from "effect"
-import type { DevToolsConfig, DevToolsMode, DevToolsPosition } from "foldkit/runtime"
+import type { DevToolsConfig, DevToolsMode, DevToolsModeConfig, DevToolsPosition } from "foldkit/runtime"
+import type * as Update from "foldkit/update"
 import * as Overlay from "./devtoolsOverlay"
 import { createDevToolsStore, type DevToolsStore } from "./devtoolsVendor/devTools/store.js"
-import { extractSubmodelInfo } from "./devtoolsVendor/devTools/submodelPath.js"
+import { extractSubmodelInfo, isTagged } from "./devtoolsVendor/devTools/submodelPath.js"
 import { startWebSocketBridge } from "./devtoolsVendor/devTools/webSocketBridge.js"
+import {
+	resolveDevToolsKeyframeInterval,
+	resolveDevToolsMaxEntries,
+	resolveExcludeFromHistoryTags,
+} from "./devtoolsVendor/runtime/devToolsConfig.js"
+import { isVisible } from "./devtoolsVendor/runtime/visibility.js"
+import * as InitCommand from "./internal/initCommand"
 import type * as Store from "./store/store"
 
-type Command<Message, R> = Store.RuntimeCommand<Message, R>["command"]
+type Command<Message, R> = Update.Commands<Message, R>[number]
 
-export type Config<Message> =
+/**
+ * Foldkit DevTools settings for one application.
+ *
+ * `Message` is the Schema the MCP relay uses to decode dispatched Messages. It
+ * has to decode synchronously and without Effect services, because replay and
+ * dispatch run outside a fiber.
+ *
+ * @category configuration
+ * @since 0.2.0
+ */
+export type Config<MessageSchema extends Schema.Codec<unknown, unknown>> =
 	| false
-	| (Exclude<DevToolsConfig, false> & {
-			readonly Message?: Schema.Codec<NoInfer<Message>, unknown, unknown, unknown>
+	| (Omit<Exclude<DevToolsConfig, false>, "Message"> & {
+			readonly Message?: MessageSchema
 	  })
-
-export type Display<Model> = Readonly<{
-	get: () => Model
-	subscribe: (listener: () => void) => () => void
-	set: (model: Model) => void
-}>
-
-export function makeDisplay<Model>(initial: Model): Display<Model> {
-	let model = initial
-	const listeners = new Set<() => void>()
-	return {
-		get: () => model,
-		subscribe(listener) {
-			listeners.add(listener)
-			return () => listeners.delete(listener)
-		},
-		set(next) {
-			if (Object.is(model, next)) return
-			model = next
-			for (const listener of Array.fromIterable(listeners)) {
-				try {
-					listener()
-				} catch (error) {
-					Effect.runFork(Effect.logError(Cause.die(error)))
-				}
-			}
-		},
-	}
-}
 
 export function makeObserver<
 	ModelSchema extends Schema.Codec<unknown, unknown>,
-	Message extends { readonly _tag: string },
+	MessageSchema extends Schema.Codec<unknown, unknown>,
 	R,
 >(options: {
-	readonly config: Config<Message> | undefined
-	readonly update: (model: ModelSchema["Type"], message: Message) => { readonly model: ModelSchema["Type"] }
+	readonly config: Exclude<Config<MessageSchema>, false>
+	readonly update: (
+		model: ModelSchema["Type"],
+		message: MessageSchema["Type"]
+	) => { readonly model: ModelSchema["Type"] }
 	readonly Model: ModelSchema
-	readonly display: Display<ModelSchema["Type"]>
 	readonly freeze: (model: ModelSchema["Type"]) => ModelSchema["Type"]
 	readonly readLive: () => ModelSchema["Type"]
-	readonly dispatch: (message: Message) => void
+	readonly dispatch: (message: MessageSchema["Type"]) => void
 }): Readonly<{
-	readonly observer: Store.RuntimeObserver<ModelSchema["Type"], Message, R>
+	readonly observer: Store.RuntimeObserver<ModelSchema["Type"], MessageSchema["Type"], R>
 	readonly install: Effect.Effect<void, never, import("effect").Scope.Scope>
 	readonly isPaused: () => boolean
+	readonly pausedModel: () => ModelSchema["Type"] | undefined
+	readonly subscribePause: (listener: () => void) => () => void
 }> {
+	type Model = ModelSchema["Type"]
+	type Message = MessageSchema["Type"]
 	let devToolsStore: DevToolsStore | undefined
 	let nextCommandId = 0
-	const commandRecord = (command: Command<Message, R>, id: number) =>
-		command.args === undefined
-			? { id, name: command.name, maybeSubmodelPath: Option.none() }
-			: { id, name: command.name, args: command.args, maybeSubmodelPath: Option.none() }
-	const config = options.config === false ? {} : (options.config ?? {})
-	const excluded = new Set(config?.excludeFromHistory ?? [])
-	// History replay is synchronous by the DevToolsStore contract and only runs the pure Model codec.
-	// A recorded Model that no longer decodes is a defect, as it is in Foldkit's runtime.
-	type Model = ModelSchema["Type"]
+	let historical: Model | undefined
+	const pauseListeners = new Set<() => void>()
+	const prepared = new WeakMap<object, Array<Command<Message, R>>>()
+	const remembered = new WeakMap<object, Array<Command<Message, R>>>()
+	const knownMessages = new WeakMap<object, Message>()
+	const config = options.config
+	const messageSchema = config.Message
+	const excluded = resolveExcludeFromHistoryTags(config)
+	// Replay runs inside the DevTools store, which calls this synchronously.
 	// @effect-diagnostics-next-line schemaSync:off
 	const decodeModel = Schema.decodeUnknownSync(options.Model)
-	const isPaused = () => devToolsStore !== undefined && SubscriptionRef.getUnsafe(devToolsStore.stateRef).isPaused
+
+	function notifyPause(): void {
+		for (const listener of Array.fromIterable(pauseListeners)) {
+			try {
+				listener()
+			} catch (error) {
+				Effect.runFork(Effect.logError(Cause.die(error)))
+			}
+		}
+	}
+
+	function remember(message: Message): void {
+		if (typeof message === "object" && message !== null) knownMessages.set(message, message)
+	}
+
+	function replayMessage(message: unknown): Message {
+		if (typeof message === "object" && message !== null) {
+			const known = knownMessages.get(message)
+			if (known !== undefined) return known
+		}
+		if (messageSchema !== undefined) {
+			// @effect-diagnostics-next-line schemaSync:off
+			return Schema.decodeUnknownSync(messageSchema)(message)
+		}
+		return Effect.runSync(Effect.die(new Error("DevTools replay received an unrecorded Message")))
+	}
+
+	function recordResolved(id: number, message: Message): Effect.Effect<void> {
+		const store = devToolsStore
+		if (store === undefined || !isTagged(message)) return Effect.void
+		const path = extractSubmodelInfo(message._tag, message).submodelPath
+		return store.recordResolvedCommand(id, path).pipe(Effect.catchCause((cause) => Effect.logError(cause)))
+	}
+
+	const watch = (command: Command<Message, R>, id: number): Command<Message, R> => ({
+		...command,
+		effect: command.effect.pipe(Effect.tap((message) => recordResolved(id, message))),
+	})
+
+	const enqueue = (commands: Update.Commands<Message, R>): Array<{
+		readonly id: number
+		readonly name: string
+		readonly args?: Record<string, unknown>
+		readonly maybeSubmodelPath: Option.Option<ReadonlyArray<string>>
+	}> =>
+		commands.map(function (command) {
+			const id = nextCommandId++
+			const wrapped = watch(command, id)
+			const queue = prepared.get(command) ?? []
+			queue.push(wrapped)
+			prepared.set(command, queue)
+			return command.args === undefined
+				? { id, name: command.name, maybeSubmodelPath: Option.none() }
+				: { id, name: command.name, args: command.args, maybeSubmodelPath: Option.none() }
+		})
+
+	function adoptCommand(command: Command<Message, R>): Command<Message, R> {
+		const preparedCommand = prepared.get(command)?.shift()
+		if (preparedCommand !== undefined) {
+			if (InitCommand.isTracked(command)) {
+				const stored = remembered.get(command) ?? []
+				stored.push(preparedCommand)
+				remembered.set(command, stored)
+			}
+			return preparedCommand
+		}
+		const stored = remembered.get(command)
+		const reused = stored?.shift()
+		if (stored === undefined || reused === undefined) return command
+		stored.push(reused)
+		return reused
+	}
+
+	const isPaused = (): boolean =>
+		devToolsStore !== undefined && SubscriptionRef.getUnsafe(devToolsStore.stateRef).isPaused
+
 	const observer: Store.RuntimeObserver<Model, Message, R> = {
 		recordInit(model, commands) {
-			const ids = commands.map(() => nextCommandId++)
-			if (devToolsStore !== undefined)
-				Effect.runFork(
-					devToolsStore.recordInit(
-						model,
-						commands.map((command, index) => commandRecord(command, ids[index]!))
-					)
-				)
-			return ids
+			const store = devToolsStore
+			if (store === undefined) return
+			Effect.runFork(store.recordInit(model, enqueue(commands)))
 		},
 		recordMessage(message, before, after, commands) {
-			const ids = commands.map(() => nextCommandId++)
-			if (!isPaused()) options.display.set(options.freeze(after))
+			remember(message)
 			const store = devToolsStore
-			if (store !== undefined) {
-				const tag = message._tag
-				if (excluded.has(tag)) {
-					if (!Object.is(before, after)) Effect.runFork(store.updateLatestModel(after))
-				} else {
-					Effect.runFork(
-						store.recordMessage(
-							message,
-							before,
-							after,
-							commands.map((command, index) => commandRecord(command, ids[index]!)),
-							!Object.is(before, after)
-						)
-					)
-				}
+			if (store === undefined || !isTagged(message)) return
+			if (excluded.has(message._tag)) {
+				if (!Object.is(before, after)) Effect.runFork(store.updateLatestModel(after))
+				return
 			}
-			return ids
+			Effect.runFork(store.recordMessage(message, before, after, enqueue(commands), !Object.is(before, after)))
 		},
-		recordCommandResult(id, message) {
-			if (devToolsStore === undefined) return
-			const path = extractSubmodelInfo(message._tag, message).submodelPath
-			Effect.runFork(devToolsStore.recordResolvedCommand(id, path))
-		},
+		adoptCommand,
 	}
 
 	const install: Effect.Effect<void, never, import("effect").Scope.Scope> = Effect.gen(function* () {
 		const hot = Overlay.getHot()
-		if (options.config === false) return
-		// Matches Foldkit's resolveDevToolsConfig: "Always" shows everywhere, and "Development" needs
-		// Vite's dev server and a top-level window so an embedded preview does not stack a second panel.
 		const inTopLevelWindow = typeof window !== "undefined" && window.self === window.top
 		const show = config.show ?? "Development"
-		if (show !== "Always" && (hot === undefined || !inTopLevelWindow)) return
+		if (!isVisible(show, hot !== undefined && inTopLevelWindow)) return
 		const position: DevToolsPosition = config.position ?? "BottomRight"
-		const configuredMode = config.mode ?? "TimeTravel"
-		const mode: DevToolsMode =
-			typeof configuredMode === "string"
-				? configuredMode
-				: hot !== undefined
-					? configuredMode.development
-					: configuredMode.production
-		const excludedMessages = excluded.size > 0
-		const maxEntries = Math.max(20, Math.min(500, Math.floor(config.maxEntries ?? 100)))
-		const keyframeInterval = excludedMessages
-			? 1
-			: Math.min(maxEntries, Math.max(1, Math.floor(config.keyframeInterval ?? 31)))
+		const mode = resolveMode(config.mode ?? "TimeTravel", hot)
+		const maxEntries = resolveDevToolsMaxEntries(config) ?? 100
+		const keyframeInterval = excluded.size > 0 ? 1 : (resolveDevToolsKeyframeInterval(config) ?? 31)
 		if (devToolsStore === undefined) {
 			const store = yield* createDevToolsStore(
 				{
 					replay(model, message) {
 						const decoded = decodeModel(model)
-						const next = options.update(decoded, message as Message).model
-						return options.freeze(next)
+						return options.freeze(options.update(decoded, replayMessage(message)).model)
 					},
-					render: (model) => Effect.sync(() => options.display.set(options.freeze(decodeModel(model)))),
+					render: (model) =>
+						Effect.sync(function () {
+							historical = options.freeze(decodeModel(model))
+							notifyPause()
+						}),
 					markRenderPending: Effect.sync(function () {
-						if (devToolsStore !== undefined && !SubscriptionRef.getUnsafe(devToolsStore.stateRef).isPaused)
-							options.display.set(options.readLive())
+						if (devToolsStore !== undefined && !SubscriptionRef.getUnsafe(devToolsStore.stateRef).isPaused) {
+							historical = undefined
+							notifyPause()
+						}
 					}),
 				},
 				{ maxEntries, keyframeInterval }
@@ -157,17 +198,38 @@ export function makeObserver<
 		const store = devToolsStore
 		yield* Overlay.register(store, position, mode, Option.fromNullishOr(config.banner))
 		if (hot !== undefined) {
-			const maybeMessage =
-				config.Message !== undefined
-					? Option.some(config.Message as Schema.Codec<any, any, never, never>)
-					: Option.none()
 			yield* startWebSocketBridge(
 				store,
 				hot,
-				(message) => Effect.sync(() => options.dispatch(message as Message)),
-				maybeMessage
+				function (message) {
+					if (messageSchema === undefined) return Effect.void
+					const schema = Schema.toType(messageSchema)
+					return Effect.sync(function () {
+						// @effect-diagnostics-next-line schemaSync:off
+						options.dispatch(Schema.decodeUnknownSync(schema)(message))
+					})
+				},
+				Option.fromNullishOr(messageSchema)
 			)
 		}
 	})
-	return { observer, install, isPaused }
+
+	return {
+		observer,
+		install,
+		isPaused,
+		pausedModel: () => historical,
+		subscribePause(listener) {
+			pauseListeners.add(listener)
+			return function () {
+				pauseListeners.delete(listener)
+			}
+		},
+	}
+}
+
+function resolveMode(configured: DevToolsModeConfig, hot: Overlay.Hot | undefined): DevToolsMode {
+	if (typeof configured === "string") return configured
+	if (hot !== undefined) return configured.development
+	return configured.production
 }

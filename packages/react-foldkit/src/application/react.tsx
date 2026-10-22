@@ -71,8 +71,13 @@ export interface CrashConfig<Model, Message> {
  * @category configuration
  * @since 0.2.0
  */
-export type Options<Model, Message, R = never> = Omit<
-	ReactStore.Config<Model, Message, R>,
+export type Options<
+	Model,
+	Message,
+	R = never,
+	MessageSchema extends Schema.Codec<Message, unknown> = Schema.Codec<Message>,
+> = Omit<
+	ReactStore.Config<Model, Message, R, MessageSchema>,
 	"update" | "subscriptions" | "devTools"
 > & {
 	/**
@@ -94,12 +99,17 @@ export type Options<Model, Message, R = never> = Omit<
 	 * Messages sent from the paused view. Resume renders the latest live Model. React Foldkit
 	 * records no Mounts, so the panel's Mounts tab stays empty.
 	 */
-	readonly devTools?: ReactStore.Config<Model, Message, R>["devTools"]
+	readonly devTools?: ReactStore.Config<Model, Message, R, MessageSchema>["devTools"]
 }
 
-type OptionsArgument<Model, Message, R> = [R] extends [never]
-	? [options?: Options<Model, Message, R>]
-	: [options: Options<Model, Message, R>]
+type OptionsArgument<
+	Model,
+	Message,
+	R,
+	MessageSchema extends Schema.Codec<Message, unknown> = Schema.Codec<Message>,
+> = [R] extends [never]
+	? [options?: Options<Model, Message, R, MessageSchema>]
+	: [options: Options<Model, Message, R, MessageSchema>]
 
 /**
  * Props for the application Provider that supplies the Model and Message handlers to its views.
@@ -406,19 +416,31 @@ type Tagged = { readonly _tag: string }
  * @category constructors
  * @since 0.2.0
  */
-export function define<ModelSchema extends Schema.Constraint, MessageSchema extends Schema.Schema<Tagged>, R = never>(
+export function define<
+	ModelSchema extends Schema.Constraint,
+	MessageSchema extends Schema.Codec<Tagged, unknown>,
+	R = never,
+>(
 	program: Program<ModelSchema, MessageSchema, never, R> & {
 		readonly init: () => Update.Return<ModelSchema["Type"], MessageSchema["Type"], R>
 	},
-	...options: OptionsArgument<ModelSchema["Type"], MessageSchema["Type"], R>
+	...options: OptionsArgument<ModelSchema["Type"], MessageSchema["Type"], R, MessageSchema>
 ): Application<ModelSchema["Type"], MessageSchema["Type"], R, true>
-export function define<ModelSchema extends Schema.Constraint, MessageSchema extends Schema.Schema<Tagged>, R = never>(
+export function define<
+	ModelSchema extends Schema.Constraint,
+	MessageSchema extends Schema.Codec<Tagged, unknown>,
+	R = never,
+>(
 	program: Program<ModelSchema, MessageSchema, never, R>,
-	...options: OptionsArgument<ModelSchema["Type"], MessageSchema["Type"], R>
+	...options: OptionsArgument<ModelSchema["Type"], MessageSchema["Type"], R, MessageSchema>
 ): Application<ModelSchema["Type"], MessageSchema["Type"], R>
-export function define<ModelSchema extends Schema.Constraint, MessageSchema extends Schema.Schema<Tagged>, R = never>(
+export function define<
+	ModelSchema extends Schema.Constraint,
+	MessageSchema extends Schema.Codec<Tagged, unknown>,
+	R = never,
+>(
 	program: Program<ModelSchema, MessageSchema, never, R>,
-	...[options]: OptionsArgument<ModelSchema["Type"], MessageSchema["Type"], R>
+	...[options]: OptionsArgument<ModelSchema["Type"], MessageSchema["Type"], R, MessageSchema>
 ): Application<ModelSchema["Type"], MessageSchema["Type"], R, boolean> {
 	type Model = ModelSchema["Type"]
 	type Message = MessageSchema["Type"]
@@ -426,7 +448,7 @@ export function define<ModelSchema extends Schema.Constraint, MessageSchema exte
 		...options,
 		update: program.update,
 		subscriptions: program.subscriptions,
-	} as ReactStore.Config<Model, Message, R> & Options<Model, Message, R>
+	} as ReactStore.Config<Model, Message, R, MessageSchema> & Options<Model, Message, R, MessageSchema>
 	const Context = makeSourceContext<Model, Message>()
 	const validateInit = config.validateInit ?? isDevelopment
 	const checkModel = Schema.decodeUnknownExit(Schema.toType(program.Model))
@@ -459,9 +481,9 @@ export function define<ModelSchema extends Schema.Constraint, MessageSchema exte
 		const [session] = React.useState(() => ProviderSession.make(bootstrap, observeFailure))
 		const [source] = React.useState(() =>
 			Option.map(store, (store): ModelSource<Model, Message> => ({
-				getSnapshot: store.getDisplayModel,
+				getSnapshot: store.readView,
 				getServerSnapshot: store.getServerModel,
-				subscribe: store.subscribeDisplay,
+				subscribe: store.subscribe,
 				dispatch: store.dispatch,
 			}))
 		)

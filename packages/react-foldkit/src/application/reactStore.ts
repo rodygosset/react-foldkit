@@ -14,13 +14,13 @@ type Command<Message, R> = Update.Commands<Message, R>[number]
 export type ReactStore<Model, Message> = Readonly<{
 	[ReactStoreTypeId]: ReactStoreTypeId
 	getModel: () => Model
-	getDisplayModel: () => Model
+	/** The Model React renders. This is the live Model, or the paused history Model while DevTools is time-traveling. */
+	readView: () => Model
 	getServerModel: () => Model
 	getCrash: () => Option.Option<Cause.Cause<unknown>>
 	getCrashMessage: () => Option.Option<Message>
 	subscribeCrash: (listener: () => void) => () => void
 	subscribe: (listener: () => void) => () => void
-	subscribeDisplay: (listener: () => void) => () => void
 	dispatch: (message: Message) => void
 	commit: (message: Message) => Result.Result<void, Store.CommitError>
 	/** Holds one lease on the live Store until the Scope closes. */
@@ -45,7 +45,12 @@ export interface ReactivationContext<Model, Message, R = never> {
 	readonly interrupted: Update.Commands<Message, R>
 }
 
-export type Config<Model, Message, R = never> = Store.Config<Model, Message, R> & {
+export type Config<
+	Model,
+	Message,
+	R = never,
+	MessageSchema extends Schema.Codec<Message, unknown> = Schema.Codec<Message>,
+> = Store.Config<Model, Message, R> & {
 	/**
 	 * Creates a Message when the Provider reactivates with a replacement Store. Use it to retry
 	 * interrupted work or clear pending state. It is not called on the initial activation or when
@@ -74,16 +79,17 @@ export type Config<Model, Message, R = never> = Store.Config<Model, Message, R> 
 	 */
 	readonly freezeModel?: boolean
 	/** Foldkit DevTools configuration. The panel and MCP bridge are enabled by the Vite plugin. */
-	readonly devTools?: DevTools.Config<Message>
+	readonly devTools?: DevTools.Config<MessageSchema>
 }
 
 export function make<
 	Model,
 	Message extends { readonly _tag: string },
-	ModelSchema extends Schema.Codec<Model, unknown> = Schema.Codec<Model, unknown>,
+	ModelSchema extends Schema.Codec<unknown, unknown> & { readonly Type: Model } = Schema.Codec<Model>,
+	MessageSchema extends Schema.Codec<Message, unknown> = Schema.Codec<Message>,
 	R = never,
 >(
-	config: Config<Model, Message, R>,
+	config: Config<Model, Message, R, MessageSchema>,
 	init: Update.Return<Model, Message, R>,
 	Model?: ModelSchema
 ): ReactStore<Model, Message> {
@@ -92,16 +98,14 @@ export function make<
 	const program: Store.Config<Model, Message, R> = freeze
 		? { ...config, update: (model, message) => frozen(config.update(model, message)) }
 		: config
-	const display = DevTools.makeDisplay(init.model)
 	let runtime: Store.Runtime<Model, Message, R>
 	const devTools =
-		Model === undefined
+		Model === undefined || config.devTools === undefined || config.devTools === false
 			? undefined
-			: DevTools.makeObserver<ModelSchema, Message, R>({
+			: DevTools.makeObserver<ModelSchema, MessageSchema, R>({
 					config: config.devTools,
 					update: config.update,
 					Model,
-					display,
 					freeze(model) {
 						if (freeze) deepFreeze(model)
 						return model
@@ -121,24 +125,8 @@ export function make<
 		Predicate.isBoolean(restartInterrupted) ? restartInterrupted : restartInterrupted(command)
 
 	// None until the first activation ends. Each later activation restarts the Store's live work.
-	let interruptedByLastDeactivation: Option.Option<ReadonlyArray<Store.RuntimeCommand<Message, R>>> = Option.none()
-	const initCommandIds = new WeakMap<object, number>()
-	const observer =
-		devTools === undefined
-			? undefined
-			: {
-					recordInit(model: Model, commands: Update.Commands<Message, R>) {
-						const ids = devTools.observer.recordInit(model, commands)
-						commands.forEach(function (command, index) {
-							const id = ids[index]
-							if (id !== undefined) initCommandIds.set(command, id)
-						})
-						return ids
-					},
-					recordMessage: devTools.observer.recordMessage,
-					recordCommandResult: devTools.observer.recordCommandResult,
-				}
-	runtime = Store.makeRuntime(program, init.model, observer)
+	let interruptedByLastDeactivation: Option.Option<Update.Commands<Message, R>> = Option.none()
+	runtime = Store.makeRuntime(program, init.model, devTools?.observer)
 	// RcRef acquires with the Context it was made in, so each lease passes its own Context here.
 	let leaseContext = Context.empty()
 	let leaseExit: Exit.Exit<unknown, unknown> = Exit.void
@@ -146,15 +134,15 @@ export function make<
 
 	const acquire = Effect.gen(function* () {
 		const interrupted = Option.getOrElse(interruptedByLastDeactivation, Array.empty)
-		const restarted = interrupted.filter(({ command }) => shouldRestart(command))
-		const kept = interrupted.filter(({ command }) => !shouldRestart(command))
+		const restarted = interrupted.filter(shouldRestart)
+		const kept = interrupted.filter((command) => !shouldRestart(command))
 		const firstMessage = yield* Option.isNone(interruptedByLastDeactivation) || config.onReactivate === undefined
 			? Effect.succeedNone
 			: Effect.sync(() =>
 					Option.fromUndefinedOr(
 						config.onReactivate?.({
 							model: runtime.getModel(),
-							interrupted: kept.map(({ command }) => command),
+							interrupted: kept,
 						})
 					)
 				)
@@ -169,11 +157,7 @@ export function make<
 		yield* runtime
 			.activate({
 				context: leaseContext,
-				commands: [...pendingInitCommands, ...restarted.map(({ command }) => command)],
-				commandIds: [
-					...Array.map(Array.fromIterable(pendingInitCommands), (command) => initCommandIds.get(command)),
-					...restarted.map(({ id }) => id),
-				],
+				commands: [...pendingInitCommands, ...restarted],
 				firstMessage,
 			})
 			.pipe(Scope.provide(work))
@@ -181,7 +165,7 @@ export function make<
 		yield* Effect.addFinalizer(() =>
 			Effect.sync(function () {
 				interruptedByLastDeactivation = Option.some(
-					runtime.getRunningCommandInvocations().filter(({ command }) => !InitCommand.isTracked(command))
+					runtime.getRunningCommands().filter((command) => !InitCommand.isTracked(command))
 				)
 			})
 		)
@@ -213,26 +197,29 @@ export function make<
 	return {
 		[ReactStoreTypeId]: ReactStoreTypeId,
 		getModel: runtime.getModel,
-		getDisplayModel: display.get,
+		readView: () => devTools?.pausedModel() ?? runtime.getModel(),
 		getServerModel: () => init.model,
 		getCrash: runtime.getCrash,
 		getCrashMessage: runtime.getCrashMessage,
 		subscribeCrash: runtime.subscribeCrash,
 		subscribe(listener) {
 			const unsubscribe = runtime.subscribe(listener)
+			const unsubscribePause = devTools?.subscribePause(listener)
 			// React Activity can reconnect after an activation published a new Model.
 			const notified = Result.try(listener)
 			if (Result.isFailure(notified)) Effect.runFork(Effect.logError(Cause.die(notified.failure)))
-			return unsubscribe
+			return function () {
+				unsubscribe()
+				unsubscribePause?.()
+			}
 		},
-		subscribeDisplay: display.subscribe,
 		dispatch(message) {
 			if (!devTools?.isPaused()) runtime.dispatch(message)
 		},
-		commit: (message) =>
-			devTools?.isPaused()
-				? Result.fail(new Store.CommitError({ reason: new Store.Inactive() }))
-				: runtime.commit(message),
+		commit(message) {
+			if (devTools?.isPaused() === true) return Result.void
+			return runtime.commit(message)
+		},
 		activate,
 	}
 }

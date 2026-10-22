@@ -9,8 +9,7 @@ const writeLock = process.argv.includes("--write-lock")
 const applyPatches = process.argv.includes("--apply")
 
 // Each copy names its npm release, upstream directory, and checked source patches.
-// The recorder's Clear patch uses the live Model as the next history baseline. Hand-written `.d.ts` files
-// for the relay are not copies, so only matching extensions are checked.
+// The recorder's Clear patch uses the live Model as the next history baseline.
 const copies = [
 	{
 		vendorRoot: "src/devtoolsVendor",
@@ -43,7 +42,7 @@ const copies = [
 		packageName: "@foldkit/vite-plugin",
 		version: "0.28.0",
 		upstreamRoot: "dist",
-		includes: (relative) => relative.endsWith(".js"),
+		includes: (relative) => relative.endsWith(".js") || relative.endsWith(".d.ts"),
 		patches: new Map(),
 		// devToolsRelay.ts and devToolsPlugin.ts adapt these without Foldkit's reload and SSR plugins.
 		// A changed hash means the adaptation needs review against the new upstream source.
