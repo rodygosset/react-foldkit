@@ -140,10 +140,10 @@ const mountChoice = (
 			Effect.forkScoped,
 		)
 		yield* overlay(registration.store, registration.position, registration.mode, registration.banner).pipe(
-			Effect.catchCause(function (cause) {
-				if (Cause.hasInterruptsOnly(cause)) return Effect.failCause(cause)
-				return Effect.logError("[react-foldkit] DevTools overlay failed", cause)
-			}),
+			Effect.catchCauseIf(
+				(cause) => !Cause.hasInterruptsOnly(cause),
+				(cause) => Effect.logError("[react-foldkit] DevTools overlay failed", cause),
+			),
 		)
 		yield* settle(registration)
 		return Stream.never

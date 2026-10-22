@@ -19,14 +19,14 @@ function mount(children: React.ReactNode): HTMLDivElement {
 	return container
 }
 
-afterEach(async function () {
+afterEach(function () {
 	root?.unmount()
 	container?.remove()
 	disposeOverlay?.()
 	root = undefined
 	container = undefined
 	disposeOverlay = undefined
-	await expect.poll(() => document.querySelector("[data-react-foldkit-devtools='provider-selector']")).toBeNull()
+	return expect.poll(() => document.querySelector("[data-react-foldkit-devtools='provider-selector']")).toBeNull()
 })
 
 // The overlay renders into an open shadow root on Foldkit's DevTools host element.
