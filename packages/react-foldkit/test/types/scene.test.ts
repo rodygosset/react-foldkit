@@ -1,4 +1,5 @@
 import { Schema } from "effect"
+import { defineMessageUnion } from "foldkit/message"
 import * as FoldkitScene from "foldkit/scene"
 import * as Application from "react-foldkit/application"
 import * as Scene from "react-foldkit/scene"
@@ -29,12 +30,14 @@ it("preserves Foldkit's generic Scene step signatures", function () {
 })
 
 if (false) {
-	const update = (_model: string, message: string) => ({ model: message })
-	const App = Application.define({ Model: Schema.String, Message: Schema.String, update })
+	const Message = defineMessageUnion({ SetText: { text: Schema.String } })
+	type Message = typeof Message.Type
+	const update = (_model: string, message: Message) => ({ model: message.text })
+	const App = Application.define({ Model: Schema.String, Message, update })
 	const view = bindSceneView(App, () => null)
 	Scene.scene({ update, view }, Scene.given("ready"), Scene.click(Scene.role("button")))
 	// @ts-expect-error The bound view cannot read a numeric Model.
-	Scene.scene({ update: (model: number, _message: string) => ({ model }), view }, Scene.given(0))
+	Scene.scene({ update: (model: number, _message: Message) => ({ model }), view }, Scene.given(0))
 	Scene.scene(
 		{ update, view },
 		Scene.given("ready"),

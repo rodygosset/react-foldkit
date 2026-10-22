@@ -1,5 +1,6 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { Schema } from "effect"
+import { defineMessageUnion } from "foldkit/message"
 import React from "react"
 import { afterEach, expect, it } from "vitest"
 import * as Application from "../application"
@@ -7,8 +8,19 @@ import * as Scene from "../scene"
 import { bindSceneView } from "./react"
 
 afterEach(cleanup)
-const update = (_model: string, message: string) => ({ model: message })
-const App = Application.define({ Model: Schema.String, Message: Schema.String, update })
+
+const TextMessage = defineMessageUnion({ SetText: { text: Schema.String } })
+type TextMessage = typeof TextMessage.Type
+
+function setText(text: string): TextMessage {
+	return TextMessage.SetText({ text })
+}
+
+function update(_model: string, message: TextMessage) {
+	return { model: message.text }
+}
+
+const App = Application.define({ Model: Schema.String, Message: TextMessage, update })
 
 function Radios() {
 	const send = App.useDispatch()
@@ -19,13 +31,13 @@ function Radios() {
 				name="choice"
 				aria-label="A"
 				defaultChecked
-				onChange={() => send("a")}
+				onChange={() => send(setText("a"))}
 			/>
 			<input
 				type="radio"
 				name="choice"
 				aria-label="B"
-				onChange={() => send("b")}
+				onChange={() => send(setText("b"))}
 			/>
 			<p>{App.useModel()}</p>
 		</main>
@@ -58,7 +70,7 @@ it("React DOM unchecks the previous radio in the same group", function () {
 function Keyboard() {
 	const send = App.useDispatch()
 	return (
-		<button onKeyDown={(event) => send(event.target === event.currentTarget ? "self" : "child")}>
+		<button onKeyDown={(event) => send(setText(event.target === event.currentTarget ? "self" : "child"))}>
 			{App.useModel()}
 		</button>
 	)
@@ -96,7 +108,7 @@ it("radio groups respect explicit form owners across different ancestors", funct
 						name="choice"
 						aria-label="A"
 						defaultChecked
-						onChange={() => send("a")}
+						onChange={() => send(setText("a"))}
 					/>
 				</form>
 				<form id="second">
@@ -105,7 +117,7 @@ it("radio groups respect explicit form owners across different ancestors", funct
 						name="choice"
 						aria-label="B"
 						defaultChecked
-						onChange={() => send("b")}
+						onChange={() => send(setText("b"))}
 					/>
 				</form>
 				<input
@@ -113,7 +125,7 @@ it("radio groups respect explicit form owners across different ancestors", funct
 					name="choice"
 					form="first"
 					aria-label="C"
-					onChange={() => send("c")}
+					onChange={() => send(setText("c"))}
 				/>
 			</main>
 		)
@@ -138,13 +150,13 @@ it("radios with empty names remain independent", function () {
 					name=""
 					aria-label="A"
 					defaultChecked
-					onChange={() => send("a")}
+					onChange={() => send(setText("a"))}
 				/>
 				<input
 					type="radio"
 					name=""
 					aria-label="B"
-					onChange={() => send("b")}
+					onChange={() => send(setText("b"))}
 				/>
 			</main>
 		)
@@ -196,11 +208,11 @@ it("a direct keyboard event has the same host node as its two targets", function
 			<input
 				name="query"
 				value={App.useModel()}
-				onChange={(event) => send(event.currentTarget.value)}
+				onChange={(event) => send(setText(event.currentTarget.value))}
 				onKeyDown={function (event) {
 					expect(event.target).toBe(event.currentTarget)
 					expect((event.target as HTMLInputElement).name).toBe("query")
-					send(event.key)
+					send(setText(event.key))
 				}}
 			/>
 		)
