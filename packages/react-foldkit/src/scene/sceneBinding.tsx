@@ -259,7 +259,7 @@ let interactionDepth = 0
 /** Flushes React work after all handlers of one interaction have read the activated element. */
 export function runSceneInteraction<A>(callback: () => A): A {
 	if (interactionDepth > 0) return callback()
-	return renderer.flushSyncFromReconciler(function () {
+	const result = renderer.flushSyncFromReconciler(function () {
 		interactionDepth++
 		try {
 			return callback()
@@ -267,6 +267,12 @@ export function runSceneInteraction<A>(callback: () => A): A {
 			interactionDepth--
 		}
 	})
+	const error = hostErrors[0]
+	if (error !== undefined) {
+		hostErrors.length = 0
+		throw error
+	}
+	return result
 }
 
 function commitScene(update: () => void): void {

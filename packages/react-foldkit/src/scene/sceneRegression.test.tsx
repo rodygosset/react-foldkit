@@ -209,6 +209,25 @@ it("fails the scene call with the error thrown while rendering", function () {
 	expect(() => Scene.scene({ update, view: bindSceneView(App, View) }, Scene.given(""))).toThrow(/render failed/)
 })
 
+it("fails the scene call when a click makes the next render throw", function () {
+	function View() {
+		const [boom, setBoom] = React.useState(false)
+		if (boom) throw new Error("click render failed")
+		return (
+			<button type="button" onClick={function () { setBoom(true) }}>
+				Go
+			</button>
+		)
+	}
+	expect(() =>
+		Scene.scene(
+			{ update, view: bindSceneView(App, View) },
+			Scene.given(""),
+			Scene.click(Scene.role("button", { name: "Go" }))
+		)
+	).toThrow(/click render failed/)
+})
+
 it("checkbox click handlers see the new value even when they change local state", function () {
 	const clicks: boolean[] = []
 	function View() {
