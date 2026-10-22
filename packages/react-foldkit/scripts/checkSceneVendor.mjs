@@ -53,7 +53,7 @@ scene = replaceOnce(scene,
 	"Effect import")
 scene = replaceOnce(scene,
 	"import { kebabToPascal } from '../customElement/index.js';\nimport { serializedStylePropertyName } from '../domReflection.js';\nimport { FOLDKIT_MOUNT_KEY, FileHandlerSymbol, __clearRuntime as clearHtmlRuntime, __htmlBuilder as htmlBuilderFor, __setRuntime as setHtmlRuntime, } from '../html/index.js';\nimport { MountTracker } from '../mount/index.js';\nimport { Dispatch } from '../runtime/dispatch.js';\nimport { tagNameFromSelector } from '../tagName.js';",
-	"import { kebabToPascal, serializedStylePropertyName, FOLDKIT_MOUNT_KEY, FileHandlerSymbol, tagNameFromSelector } from './sceneCompat.js';\nimport { createSceneRenderSession, disposeSceneRenderSession, isBoundSceneView, renderBoundSceneView, runSceneInteraction, getSceneEventHandler } from '../sceneBinding.js';",
+	"import { kebabToPascal, serializedStylePropertyName, FOLDKIT_MOUNT_KEY, FileHandlerSymbol, tagNameFromSelector } from './sceneCompat.js';\nimport { createSceneRenderSession, disposeSceneRenderSession, isBoundSceneView, renderBoundSceneView, getSceneEventHandler } from '../sceneBinding.js';\nimport { runClick } from '../sceneClick.js';\nimport { settleSimulation } from '../sceneSettle.js';",
 	"private helper import")
 const renderViewStart = scene.indexOf("const renderView = (viewFn, model, dispatch) => {")
 const renderViewEnd = scene.indexOf("\nconst isDocument", renderViewStart)
@@ -71,19 +71,17 @@ scene = replaceOnce(scene,
 scene = replaceOnce(scene,
 	"const runSteps = (seed, steps) =>",
 	`const settleRender = (simulation) => {
-    let internal = toInternal(simulation);
+    const internal = toInternal(simulation);
     if (internal.model === UNINITIALIZED) return internal;
-    for (let pass = 0; pass < 100; pass++) {
-        internal.capturingDispatch.reset();
-        const html = renderView(internal.viewFn, internal.model, internal.capturingDispatch.dispatch, internal.sceneRenderSession);
-        const mountSlots = reconcileMountSlots(internal.mountSlots, html);
-        internal = { ...internal, html, mountSlots, mounts: pendingMountsOf(mountSlots) };
-        const messages = internal.capturingDispatch.getCapturedMessages();
-        internal.capturingDispatch.reset();
-        if (messages.length === 0) return internal;
-        internal = Array.reduce(messages, internal, applyMessageWithoutBoundaryChecks);
-    }
-    throw new Error('React Scene did not settle after 100 renders. Check Effects that dispatch on every render.');
+    return settleSimulation(internal, (current) => {
+        current.capturingDispatch.reset();
+        const html = renderView(current.viewFn, current.model, current.capturingDispatch.dispatch, current.sceneRenderSession);
+        const mountSlots = reconcileMountSlots(current.mountSlots, html);
+        const rendered = { ...current, html, mountSlots, mounts: pendingMountsOf(mountSlots) };
+        const messages = current.capturingDispatch.getCapturedMessages();
+        current.capturingDispatch.reset();
+        return [rendered, messages];
+    }, applyMessageWithoutBoundaryChecks);
 };
 const runSteps = (seed, steps) =>`,
 	"React render settlement")
@@ -103,33 +101,11 @@ scene = replaceOnce(scene,
 	"    return next;",
 	"render before OutMessage capture closes")
 scene = replaceOnce(scene,
-	"    const simulatedClick = createSimulatedClick();",
 	`    const simulatedClick = createSimulatedClick();
-    const clickTarget = element.elm;
-    simulatedClick.event.target = clickTarget;
-    Object.defineProperty(simulatedClick.event, 'defaultPrevented', { get: simulatedClick.isDefaultPrevented });
-    const inputType = lookupStringAttribute(element, 'type');
-    const isCheckable = element.sel === 'input' && (inputType === 'checkbox' || inputType === 'radio');
-    const previousChecked = clickTarget?.checked;
-    const name = lookupStringAttribute(element, 'name');
-    const form = Option.getOrUndefined(formOwnerOf(internal.html, element));
-    const group = inputType === 'radio' && name !== undefined && name !== ''
-        ? allSelector('input[type="radio"]')(internal.html).filter(radio =>
-            lookupStringAttribute(radio, 'name') === name &&
-            Option.getOrUndefined(formOwnerOf(internal.html, radio)) === form)
-        : isCheckable ? [element] : [];
-    const previousGroup = group.map(radio => [radio.elm, radio.elm.checked]);
-    if (isCheckable && inputType === 'radio') {
-        for (const [radio] of previousGroup) radio.checked = radio === clickTarget;
-    }
-    if (isCheckable) clickTarget.checked = inputType === 'radio' || !previousChecked;`,
-	"React click target and activation")
-scene = replaceOnce(scene,
-	"    let isClickHandled = false;",
-	"    const changeHandler = isCheckable ? getSceneEventHandler(element, 'change') : undefined;\n    let isClickHandled = changeHandler !== undefined;",
-	"React radio clicks with no value change")
-scene = replaceOnce(scene,
-	`    for (const currentElement of propagationPath) {
+    let isClickHandled = false;
+    let isSubmitHandled = false;
+    internal.capturingDispatch.reset();
+    for (const currentElement of propagationPath) {
         const maybeClickHandler = Option.fromNullishOr(currentElement.data?.on?.['click']);
         if (Option.isNone(maybeClickHandler)) {
             continue;
@@ -141,43 +117,101 @@ scene = replaceOnce(scene,
         if (simulatedClick.isPropagationStopped()) {
             break;
         }
-    }`,
-	`    runSceneInteraction(() => {
-        const clickHandler = getSceneEventHandler(element, 'click');
-        if (clickHandler !== undefined) {
-            isClickHandled = true;
-            clickHandler(simulatedClick.event);
-        }`,
-	"React click capture and bubbling")
-scene = replaceOnce(scene,
-	"    if (!simulatedClick.isDefaultPrevented()) {",
-	`    if (isCheckable && clickTarget.checked !== previousChecked && changeHandler !== undefined) {
-        isClickHandled = true;
-        changeHandler(simulatedClick.event);
     }
-    if (simulatedClick.isDefaultPrevented()) {
-        for (const [radio, checked] of previousGroup) radio.checked = checked;
+    if (!simulatedClick.isDefaultPrevented()) {
+        const maybeSubmitter = Array.findFirst(propagationPath, isSubmitButton);
+        const maybeForm = pipe(maybeSubmitter, Option.flatMap(submitter => formOwnerOf(internal.html, submitter)));
+        if (Option.isSome(maybeForm)) {
+            const maybeSubmitHandler = Option.fromNullishOr(maybeForm.value.data?.on?.['submit']);
+            if (Option.isSome(maybeSubmitHandler)) {
+                isSubmitHandled = true;
+                // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+                const submitHandler = maybeSubmitHandler.value;
+                submitHandler({ preventDefault: Function.constVoid });
+            }
+        }
     }
-    if (!simulatedClick.isDefaultPrevented()) {`,
-	"React checkbox change and canceled activation")
-scene = replaceOnce(scene,
-	"    if (!isClickHandled && !isSubmitHandled) {",
-	"    });\n    if (!isClickHandled && !isSubmitHandled) {",
-	"flush React click work before capturing Messages")
+    if (!isClickHandled && !isSubmitHandled) {`,
+	`    internal.capturingDispatch.reset();
+    const clickListeners = runClick(internal.html, element, propagationPath);
+    if (clickListeners._tag === 'Missing') {`,
+	"React click activation")
 scene = replaceOnce(scene,
 	"const maybeHandler = Option.fromNullishOr(element.data?.on?.[eventName]);",
 	"const maybeHandler = Option.fromNullishOr(getSceneEventHandler(element, eventName));",
 	"React event capture and bubbling")
 scene = replaceOnce(scene,
-	"const hasHandler = element.data?.on?.['dblclick'] !== undefined;",
-	"const hasHandler = getSceneEventHandler(element, 'dblclick') !== undefined;",
+	`    const hasHandler = element.data?.on?.['dblclick'] !== undefined;
+    if (hasHandler) {
+        return captureFromElement(simulation, element, description, 'dblclick', handler => {
+            handler();
+        });
+    }
+    const maybeAncestor = findAncestorWithHandler(internal.html, element, 'dblclick');
+    if (Option.isSome(maybeAncestor)) {
+        return captureFromElement(simulation, maybeAncestor.value, \`ancestor of \${description}\`, 'dblclick', handler => {
+            handler();
+        });
+    }`,
+	`    if (getSceneEventHandler(element, 'dblclick') !== undefined) {
+        return captureFromElement(simulation, element, description, 'dblclick', handler => {
+            handler();
+        });
+    }`,
 	"React double click target")
-for (const name of ["contextmenu", "pointerdown", "pointerup"]) {
-	scene = replaceOnce(scene,
-		`if (element.data?.on?.['${name}'] !== undefined) {`,
-		`if (getSceneEventHandler(element, '${name}') !== undefined) {`,
-		`React ${name} target`)
-}
+scene = replaceOnce(scene,
+	`    if (element.data?.on?.['contextmenu'] !== undefined) {
+        return captureFromElement(simulation, element, description, 'contextmenu', invokeHandler);
+    }
+    const maybeAncestor = findAncestorWithHandler(internal.html, element, 'contextmenu');
+    if (Option.isSome(maybeAncestor)) {
+        return captureFromElement(simulation, maybeAncestor.value, \`ancestor of \${description}\`, 'contextmenu', invokeHandler);
+    }`,
+	`    if (getSceneEventHandler(element, 'contextmenu') !== undefined) {
+        return captureFromElement(simulation, element, description, 'contextmenu', invokeHandler);
+    }`,
+	"React context menu target")
+scene = replaceOnce(scene,
+	`    if (element.data?.on?.['pointerdown'] !== undefined) {
+        return captureFromElement(simulation, element, description, 'pointerdown', invokeHandler);
+    }
+    const maybeAncestor = findAncestorWithHandler(internal.html, element, 'pointerdown');
+    if (Option.isSome(maybeAncestor)) {
+        return captureFromElement(simulation, maybeAncestor.value, \`ancestor of \${description}\`, 'pointerdown', invokeHandler);
+    }`,
+	`    if (getSceneEventHandler(element, 'pointerdown') !== undefined) {
+        return captureFromElement(simulation, element, description, 'pointerdown', invokeHandler);
+    }`,
+	"React pointer down target")
+scene = replaceOnce(scene,
+	`    if (element.data?.on?.['pointerup'] !== undefined) {
+        return captureFromElement(simulation, element, description, 'pointerup', invokeHandler);
+    }
+    const maybeAncestor = findAncestorWithHandler(internal.html, element, 'pointerup');
+    if (Option.isSome(maybeAncestor)) {
+        return captureFromElement(simulation, maybeAncestor.value, \`ancestor of \${description}\`, 'pointerup', invokeHandler);
+    }`,
+	`    if (getSceneEventHandler(element, 'pointerup') !== undefined) {
+        return captureFromElement(simulation, element, description, 'pointerup', invokeHandler);
+    }`,
+	"React pointer up target")
+scene = replaceOnce(scene,
+	`    const node = {};
+    handler({
+        key,
+        ...DEFAULT_KEYBOARD_MODIFIERS,
+        ...modifiers,
+        target: node,
+        currentTarget: node,
+        preventDefault: Function.constVoid,
+    });`,
+	`    handler({
+        key,
+        ...DEFAULT_KEYBOARD_MODIFIERS,
+        ...modifiers,
+        preventDefault: Function.constVoid,
+    });`,
+	"React keydown host target")
 const hoverStart = scene.indexOf("export const hover = (target) => (simulation) => {")
 const hoverEnd = scene.indexOf("\n/** Simulates a focus event", hoverStart)
 if (hoverStart < 0 || hoverEnd < 0) throw new Error("Scene hover patch anchor changed")
@@ -187,10 +221,6 @@ const pointerTargetStart = scene.indexOf("const simulatedPointerTarget = (root, 
 const pointerTargetEnd = scene.indexOf("\n/** Simulates a pointerdown", pointerTargetStart)
 if (pointerTargetStart < 0 || pointerTargetEnd < 0) throw new Error("Scene pointer target patch anchor changed")
 scene = scene.slice(0, pointerTargetStart) + "const simulatedPointerTarget = (_root, target) => target.elm;" + scene.slice(pointerTargetEnd)
-scene = replaceOnce(scene,
-	"const maybeSubmitHandler = Option.fromNullishOr(maybeForm.value.data?.on?.['submit']);",
-	"const maybeSubmitHandler = Option.fromNullishOr(getSceneEventHandler(maybeForm.value, 'submit'));",
-	"React submit handlers")
 scene = replaceOnce(scene,
 	"export const scene = (config, ...steps) => {\n    const capturingDispatch = createCapturingDispatch();",
 	"export const scene = (config, ...steps) => {\n    const capturingDispatch = createCapturingDispatch();\n    const sceneRenderSession = createSceneRenderSession();",

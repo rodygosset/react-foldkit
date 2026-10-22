@@ -73,6 +73,12 @@
 	},
 	{
 		"entryPoint": "react-foldkit/application",
+		"name": "SceneSourceTypeId",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
+		"entryPoint": "react-foldkit/application",
 		"name": "Send",
 		"owner": "react-foldkit",
 		"introduced": "0.1.0"

@@ -1,180 +1,58 @@
-import { Option } from "effect"
+import { Array, Option } from "effect"
 import React from "react"
 import Reconciler from "react-reconciler"
 import type ReactReconciler from "react-reconciler"
 import { DiscreteEventPriority, NoEventPriority } from "react-reconciler/constants.js"
 import type { Scene as SceneNamespace } from "foldkit/test"
-import { all as sceneLocators } from "foldkit/scene"
-import { sceneSourceContext } from "../application/react"
+import { SceneSourceTypeId } from "../application/react"
+import type { SourceContext } from "../application/react"
+import { deepFreeze, isDevelopment } from "../internal/deepFreeze"
 import type { ModelSource } from "../modelSource"
+import { dispatchSceneEvent, hasSceneListener, hostFromElm, sceneListeners } from "./sceneEvent"
+import { hostProp, hostString, styleDeclarations } from "./sceneHost"
+import type { HostContainer, HostElement, HostProps, HostText } from "./sceneHost"
+import { syncControlledFields } from "./sceneInput"
+import { SceneRenderLimit } from "./sceneSettle"
 import type { SceneView } from "./sceneView"
-import { FileHandlerSymbol, serializedStylePropertyName } from "./vendor/sceneCompat"
+import { FileHandlerSymbol } from "./vendor/sceneCompat"
+import { allSelector } from "./vendor/query.js"
 
 type VNode = SceneNamespace.SceneSimulation<unknown, unknown>["html"]
 
-interface ReactBinding {
-	readonly application: object
+export const BoundSceneViewTypeId: unique symbol = Symbol.for("react-foldkit/BoundSceneViewTypeId")
+
+interface BoundSceneViewRecord {
+	readonly application: { readonly [SceneSourceTypeId]: SourceContext<unknown, unknown> }
 	readonly Component: React.ComponentType
 }
 
-const boundViews = new WeakMap<Function, ReactBinding>()
-
 export function bindSceneView<Model, Message>(
-	application: object,
+	application: { readonly [SceneSourceTypeId]: SourceContext<Model, Message> },
 	Component: React.ComponentType
 ): SceneView<Model, Message> {
-	const sceneView: SceneView<Model, Message> = () => null
-	boundViews.set(sceneView, { application, Component })
-	return sceneView
+	function sceneView(): never {
+		throw new TypeError("Scene renders this component. Pass the view to scene().")
+	}
+	const record: BoundSceneViewRecord = {
+		application: application as BoundSceneViewRecord["application"],
+		Component,
+	}
+	Object.defineProperty(sceneView, BoundSceneViewTypeId, { value: record })
+	return sceneView as SceneView<Model, Message>
 }
 
-interface HostProps extends Record<string, unknown> {
-	readonly children?: React.ReactNode
+function boundSceneView(view: Function): BoundSceneViewRecord {
+	const record = (view as { readonly [BoundSceneViewTypeId]?: BoundSceneViewRecord })[BoundSceneViewTypeId]
+	if (record === undefined) throw new TypeError("The Scene view is not bound with bindSceneView")
+	return record
 }
 
-interface HostText {
-	text: string
+let sceneCommitCount = 0
+const hostErrors: Array<unknown> = []
+
+function reportHostError(error: unknown): void {
+	hostErrors.push(error)
 }
-
-interface HostElement {
-	tag: string
-	readonly type: string
-	readonly name: string
-	readonly id: string
-	readonly dataset: Readonly<Record<string, string>>
-	props: HostProps
-	attributes: Record<string, string>
-	children: Array<HostElement | HostText>
-	parent?: HostElement
-	readonly tagName: string
-	value?: unknown
-	checked?: boolean
-	selected?: boolean
-	selectedValues?: ReadonlyArray<string>
-	textContent?: string
-	focus: () => void
-	blur: () => void
-	getAttribute: (name: string) => string | null
-	setAttribute: (name: string, value: string) => void
-	removeAttribute: (name: string) => void
-	closest: (selector: string) => HostElement | null
-	contains: (node: unknown) => boolean
-}
-
-interface HostContainer {
-	children: Array<HostElement | HostText>
-}
-
-const propertyNames = new Set([
-	"value",
-	"defaultValue",
-	"checked",
-	"defaultChecked",
-	"selected",
-	"disabled",
-	"multiple",
-	"readOnly",
-	"required",
-	"type",
-	"name",
-	"placeholder",
-	"min",
-	"max",
-	"step",
-	"rows",
-	"cols",
-	"tabIndex",
-	"contentEditable",
-	"role",
-	"title",
-	"alt",
-	"href",
-	"src",
-	"action",
-	"method",
-	"form",
-	"htmlFor",
-	"hidden",
-])
-
-// React DOM appends "px" to numeric style values except for these unitless properties.
-const unitlessStyles = new Set([
-	"animationIterationCount",
-	"aspectRatio",
-	"columnCount",
-	"flex",
-	"flexGrow",
-	"flexShrink",
-	"fontWeight",
-	"gridColumn",
-	"gridRow",
-	"lineHeight",
-	"opacity",
-	"order",
-	"orphans",
-	"scale",
-	"tabSize",
-	"widows",
-	"zIndex",
-	"zoom",
-])
-
-const eventProps: Readonly<Record<string, string>> = {
-	onClick: "click",
-	onDoubleClick: "dblclick",
-	onContextMenu: "contextmenu",
-	onSubmit: "submit",
-	onInput: "input",
-	onChange: "change",
-	onBeforeInput: "beforeinput",
-	onFocus: "focus",
-	onBlur: "blur",
-	onMouseEnter: "mouseenter",
-	onMouseOver: "mouseover",
-	onKeyDown: "keydown",
-	onPointerDown: "pointerdown",
-	onPointerUp: "pointerup",
-	onMouseDown: "mousedown",
-	onMouseUp: "mouseup",
-	onMouseMove: "mousemove",
-	onMouseLeave: "mouseleave",
-	onMouseOut: "mouseout",
-	onReset: "reset",
-	onWheel: "wheel",
-	onCopy: "copy",
-	onCut: "cut",
-	onPaste: "paste",
-	onDragStart: "dragstart",
-	onDrag: "drag",
-	onDragEnd: "dragend",
-	onTouchStart: "touchstart",
-	onTouchEnd: "touchend",
-	onTouchMove: "touchmove",
-	onTouchCancel: "touchcancel",
-	onAnimationStart: "animationstart",
-	onAnimationEnd: "animationend",
-	onAnimationIteration: "animationiteration",
-	onTransitionEnd: "transitionend",
-	onLoad: "load",
-	onError: "error",
-	onPlay: "play",
-	onPause: "pause",
-	onEnded: "ended",
-	onTimeUpdate: "timeupdate",
-	onVolumeChange: "volumechange",
-	onSelect: "select",
-	onDrop: "drop",
-	onDragOver: "dragover",
-	onKeyUp: "keyup",
-}
-
-/** Stringifies a primitive prop the way React DOM writes it; other values become empty. */
-const hostString = (value: unknown): string =>
-	typeof value === "string"
-		? value
-		: typeof value === "number" || typeof value === "boolean" || typeof value === "bigint"
-			? `${value}`
-			: ""
 
 let updatePriority = NoEventPriority
 const rootHostContext = Object.freeze({})
@@ -298,11 +176,11 @@ const hostConfig = {
 	finalizeInitialChildren: () => false,
 	shouldSetTextContent: () => false,
 	prepareForCommit: () => null,
-	resetAfterCommit: () => undefined,
+	resetAfterCommit() {
+		sceneCommitCount += 1
+	},
 	commitUpdate(instance: HostElement, _type: string, _oldProps: HostProps, newProps: HostProps) {
 		instance.props = newProps
-		if (newProps.value !== undefined && newProps.value !== null) instance.value = newProps.value
-		if (newProps.checked !== undefined && newProps.checked !== null) instance.checked = Boolean(newProps.checked)
 	},
 	commitTextUpdate(instance: HostText, _oldText: string, newText: string) {
 		instance.text = newText
@@ -391,6 +269,28 @@ export function runSceneInteraction<A>(callback: () => A): A {
 	})
 }
 
+function commitScene(update: () => void): void {
+	sceneCommitCount = 0
+	hostErrors.length = 0
+	renderer.flushSyncFromReconciler(update)
+	renderer.flushSyncWork()
+	let settled = false
+	for (let pass = 0; pass < SceneRenderLimit; pass++) {
+		const before = sceneCommitCount
+		renderer.flushPassiveEffects()
+		renderer.flushSyncWork()
+		if (sceneCommitCount === before) {
+			settled = true
+			break
+		}
+	}
+	const error = hostErrors[0]
+	if (error !== undefined) throw error
+	if (!settled) {
+		throw new Error("React Scene did not settle after 100 renders. A state update kept scheduling another render.")
+	}
+}
+
 interface RenderState {
 	readonly container: HostContainer
 	readonly root: ReturnType<Renderer["createContainer"]>
@@ -405,7 +305,8 @@ export interface SceneRenderSession {
 
 export const createSceneRenderSession = (): SceneRenderSession => ({})
 
-export const isBoundSceneView = (view: Function): boolean => boundViews.has(view)
+export const isBoundSceneView = (view: unknown): view is SceneView<unknown, unknown> =>
+	typeof view === "function" && BoundSceneViewTypeId in view
 
 /** Whether a simulation came from the copied Scene runner, which records its React render session. */
 export const isBoundSceneSimulation = (simulation: unknown): boolean =>
@@ -420,19 +321,13 @@ function makeRenderState<Model, Message>(model: Model, dispatch: (message: Messa
 		false,
 		null,
 		"",
-		function (error: unknown) {
-			throw error
-		},
-		function (error: unknown) {
-			throw error
-		},
-		function (error: unknown) {
-			throw error
-		},
+		reportHostError,
+		reportHostError,
+		reportHostError,
 		() => undefined,
 		null
 	)
-	let currentModel: unknown = model
+	let currentModel: unknown = isDevelopment ? deepFreeze(model) : model
 	let currentDispatch: (message: unknown) => void = (message) => dispatch(message as Message)
 	const listeners = new Set<() => void>()
 	const source: ModelSource<unknown, unknown> = {
@@ -453,8 +348,9 @@ function makeRenderState<Model, Message>(model: Model, dispatch: (message: Messa
 		setInput(nextModel, nextDispatch) {
 			currentDispatch = nextDispatch
 			if (Object.is(currentModel, nextModel)) return
+			if (isDevelopment) deepFreeze(nextModel)
 			currentModel = nextModel
-			for (const notify of listeners) notify()
+			for (const notify of Array.fromIterable(listeners)) notify()
 		},
 	}
 }
@@ -465,23 +361,20 @@ export function renderBoundSceneView<Model, Message>(
 	dispatch: (message: Message) => void,
 	session: SceneRenderSession
 ): VNode | undefined {
-	const binding = boundViews.get(view)
-	if (binding === undefined) throw new TypeError("The Scene view is not bound with bindSceneView")
+	const binding = boundSceneView(view)
 	const state = session.state ?? makeRenderState(model, dispatch)
 	session.state = state
-	const Context = sceneSourceContext<Model, Message>(binding.application)
+	const Context = binding.application[SceneSourceTypeId] as SourceContext<Model, Message>
 	const element = (state.element ??= React.createElement(
 		Context.Provider,
 		{ value: Option.some(state.source as ModelSource<Model, Message>) },
 		React.createElement(binding.Component)
 	))
-	renderer.flushSyncFromReconciler(function () {
+	commitScene(function () {
 		state.setInput(model, dispatch as (message: unknown) => void)
 		renderer.updateContainerSync(element, state.root, null, null)
 	})
-	renderer.flushSyncWork()
-	renderer.flushPassiveEffects()
-	restoreControlledInputs(state.container.children)
+	syncControlledFields(state.container.children)
 	const root = state.container.children[0]
 	if (state.container.children.length !== 1 || root === undefined || "text" in root) {
 		throw new Error("A bound React Scene view must render one host element at its root")
@@ -493,9 +386,9 @@ export function disposeSceneRenderSession(session: SceneRenderSession): void {
 	const state = session.state
 	if (state === undefined) return
 	try {
-		renderer.flushSyncFromReconciler(() => renderer.updateContainerSync(null, state.root, null, null))
-		renderer.flushSyncWork()
-		renderer.flushPassiveEffects()
+		commitScene(function () {
+			renderer.updateContainerSync(null, state.root, null, null)
+		})
 	} finally {
 		session.state = undefined
 	}
@@ -503,69 +396,39 @@ export function disposeSceneRenderSession(session: SceneRenderSession): void {
 
 type EventHandler = (event?: unknown) => void
 
-function hostEventHandlers(node: HostElement): Record<string, EventHandler> {
-	const on: Record<string, EventHandler> = {}
-	for (const [name, value] of Object.entries(node.props)) {
-		const capture = name.endsWith("Capture")
-		const eventName = eventProps[capture ? name.slice(0, -7) : name]
-		if (eventName !== undefined && typeof value === "function") {
-			const handler = (event: unknown) =>
-				runSceneInteraction(function () {
-					;(value as (event: unknown) => void)(reactEvent(node, eventName, event))
-				})
-			if (name === "onChange" && node.tag === "input" && node.props.type === "file") {
-				Object.defineProperty(handler, FileHandlerSymbol, { value: "OnFileChange" })
-			}
-			if (name === "onDrop") Object.defineProperty(handler, FileHandlerSymbol, { value: "OnDropFiles" })
-			on[capture ? `${eventName}Capture` : eventName] = handler
-		}
+function stampFileHandler(handler: EventHandler, target: HostElement, eventName: string): void {
+	if (eventName === "change" && target.tag === "input" && target.props.type === "file") {
+		Object.defineProperty(handler, FileHandlerSymbol, { value: "OnFileChange" })
 	}
-	return on
+	if (eventName === "drop") Object.defineProperty(handler, FileHandlerSymbol, { value: "OnDropFiles" })
 }
 
 function toVNode(node: HostElement): VNode {
 	const attrs: Record<string, unknown> = {}
 	const props: Record<string, unknown> = {}
-	const on = hostEventHandlers(node)
+	const on = sceneListeners(node)
 	const classes: Record<string, boolean> = {}
-	const style: Record<string, string> = {}
+	let style: Record<string, string> = {}
 	for (const [name, value] of Object.entries(node.props)) {
-		if (name === "children" || name === "key" || name === "ref") continue
-
-		if (
-			name.startsWith("aria-") ||
-			name.startsWith("data-") ||
-			name === "id" ||
-			name === "title" ||
-			name === "role" ||
-			name === "type" ||
-			name === "name" ||
-			name === "placeholder" ||
-			name === "alt" ||
-			name === "href" ||
-			name === "src" ||
-			name === "form" ||
-			name === "method"
-		) {
-			attrs[name] = value
-		} else if (name === "className") {
-			for (const className of hostString(value).split(/\s+/)) {
-				if (className !== "") classes[className] = true
+		const classified = hostProp(name, value)
+		if (Option.isNone(classified)) continue
+		switch (classified.value._tag) {
+			case "ClassList":
+				for (const className of hostString(classified.value.value).split(/\s+/)) {
+					if (className !== "") classes[className] = true
+				}
+				break
+			case "Style":
+				style = { ...style, ...styleDeclarations(classified.value.value) }
+				break
+			case "Attribute":
+				attrs[classified.value.name] = classified.value.value
+				if (classified.value.reactName === "htmlFor") props.htmlFor = classified.value.value
+				break
+			default: {
+				const unexpected: never = classified.value
+				throw new Error(`Unexpected host prop ${String(unexpected)}`)
 			}
-		} else if (name === "style" && value !== null && typeof value === "object") {
-			for (const [property, styleValue] of Object.entries(value as Record<string, unknown>)) {
-				if (styleValue === null || styleValue === undefined || styleValue === "") continue
-				style[serializedStylePropertyName(property)] =
-					typeof styleValue === "number" &&
-					styleValue !== 0 &&
-					!unitlessStyles.has(property) &&
-					!property.startsWith("--")
-						? `${styleValue}px`
-						: hostString(styleValue)
-			}
-		} else if (propertyNames.has(name)) {
-			props[name] = value
-			if (name === "htmlFor") attrs.for = value
 		}
 	}
 	if (node.value !== undefined) props.value = node.value
@@ -590,185 +453,23 @@ function toVNode(node: HostElement): VNode {
 	}
 }
 
-function restoreControlledInputs(children: ReadonlyArray<HostElement | HostText>): void {
-	for (const node of children) {
-		if (!("tag" in node)) continue
-		if (node.props.value !== undefined && node.props.value !== null) node.value = node.props.value
-		if (node.props.checked !== undefined && node.props.checked !== null) node.checked = Boolean(node.props.checked)
-		restoreControlledInputs(node.children)
-		if (node.tag === "select") {
-			const selection = node.props.value ?? node.selectedValues ?? node.value
-			syncSelect(node, selection, selection === undefined || node.props.value !== undefined)
-		}
-	}
-}
-
-const selectOptions = (
-	children: ReadonlyArray<HostElement | HostText>,
-	disabled = false
-): Array<{ node: HostElement; disabled: boolean }> =>
-	children.flatMap(function (node) {
-		if (!("tag" in node)) return []
-		const inactive = disabled || node.props.disabled === true
-		if (node.tag === "option") return [{ node, disabled: inactive }]
-		return selectOptions(node.children, inactive)
-	})
-
-function syncSelect(node: HostElement, selection: unknown, fallback: boolean): void {
-	const options = selectOptions(node.children)
-	const values =
-		selection === undefined
-			? options
-					.filter(({ node }) => node.selected)
-					.map(({ node }) => hostString(node.props.value ?? node.textContent))
-			: (Array.isArray(selection) ? selection : [selection]).map(hostString)
-	let selected = false
-	for (const option of options) {
-		option.node.value = hostString(option.node.props.value ?? option.node.textContent)
-		option.node.selected =
-			values.includes(option.node.value as string) && (!selected || Boolean(node.props.multiple))
-		selected ||= option.node.selected
-	}
-	if (!selected && fallback && !node.props.multiple) {
-		const first = options.find((option) => !option.disabled)
-		if (first !== undefined) first.node.selected = true
-	}
-	node.selectedValues = options.filter(({ node }) => node.selected).map(({ node }) => hostString(node.value))
-	node.value = node.selectedValues[0] ?? ""
-}
-
-/** Finds React handlers on the original target's path without starting an interaction. */
-export function getSceneEventHandler(element: VNode, eventName: string): EventHandler | undefined {
-	const target = element.elm as unknown as HostElement
-	const path: Array<Record<string, EventHandler>> = []
-	let current: HostElement | undefined = target
-	while (current !== undefined) {
-		path.push(hostEventHandlers(current))
-		current = current.parent
-	}
-	const name = eventName === "focusin" ? "focus" : eventName === "focusout" ? "blur" : eventName
-	const names =
-		name === "input" && isTextInput(target)
-			? ["input", "change"]
-			: name === "hover"
-				? ["mouseover", "mouseenter"]
-				: [name]
-	if (
-		!path.some((handlers) =>
-			names.some((name) => handlers[name] !== undefined || handlers[`${name}Capture`] !== undefined)
-		)
-	)
-		return undefined
-	const handler: EventHandler = (value) =>
+/** Finds React handlers on the original target's path. The returned function runs one interaction. */
+export function getSceneEventHandler(element: { readonly elm?: unknown }, eventName: string): EventHandler | undefined {
+	const target = hostFromElm(element.elm)
+	if (target === undefined || !hasSceneListener(target, eventName)) return undefined
+	const handler: EventHandler = function (value) {
+		const fields = value !== null && typeof value === "object" ? (value as Readonly<Record<string, unknown>>) : {}
 		runSceneInteraction(function () {
-			const source = value !== null && typeof value === "object" ? (value as Record<string, unknown>) : {}
-			if (
-				(name === "input" || name === "change") &&
-				source.target !== null &&
-				typeof source.target === "object" &&
-				!("tagName" in source.target)
-			) {
-				Object.assign(target, source.target)
-				if (target.tag === "select") syncSelect(target, target.value, false)
-			}
-			let defaultPrevented = source.defaultPrevented === true
-			let stopped = false
-			const event = {
-				...source,
-				target,
-				relatedTarget: source.relatedTarget ?? null,
-				get defaultPrevented() {
-					return defaultPrevented
-				},
-				preventDefault() {
-					defaultPrevented = true
-					if (typeof source.preventDefault === "function") (source.preventDefault as () => void)()
-				},
-				stopPropagation() {
-					stopped = true
-					if (typeof source.stopPropagation === "function") (source.stopPropagation as () => void)()
-				},
-			}
-			for (const name of names) {
-				stopped = false
-				for (const handlers of [...path].reverse()) {
-					handlers[`${name}Capture`]?.(event)
-					if (stopped) break
-				}
-				if (stopped) continue
-				for (const handlers of name === "mouseenter" ? [...path].reverse() : path) {
-					handlers[name]?.(event)
-					if (stopped) break
-				}
-			}
+			dispatchSceneEvent(target, eventName, fields)
 		})
-	if (name === "change" && target.tag === "input" && target.props.type === "file") {
-		Object.defineProperty(handler, FileHandlerSymbol, { value: "OnFileChange" })
 	}
-	if (name === "drop") Object.defineProperty(handler, FileHandlerSymbol, { value: "OnDropFiles" })
+	stampFileHandler(handler, target, eventName)
 	return handler
 }
-
-function reactEvent(node: HostElement, type: string, value: unknown): Record<string, unknown> {
-	const source = value !== null && typeof value === "object" ? (value as Record<string, unknown>) : {}
-	const isValueEvent = type === "change" || type === "input"
-	const normalizedTarget =
-		source.target !== undefined && source.target === source.currentTarget ? node : (source.target ?? node)
-	const target =
-		isValueEvent && source.target !== null && typeof source.target === "object" && !("tagName" in source.target)
-			? Object.assign(node, source.target)
-			: normalizedTarget
-	const nativeEvent = { ...source, type, target, currentTarget: node }
-	let defaultPrevented = source.defaultPrevented === true
-	let propagationStopped = false
-	return {
-		...nativeEvent,
-		currentTarget: node,
-		target,
-		nativeEvent,
-		bubbles: true,
-		cancelable: true,
-		get defaultPrevented() {
-			return defaultPrevented
-		},
-		preventDefault() {
-			defaultPrevented = true
-			if (typeof source.preventDefault === "function") (source.preventDefault as () => void)()
-		},
-		stopPropagation() {
-			propagationStopped = true
-			if (typeof source.stopPropagation === "function") (source.stopPropagation as () => void)()
-		},
-		isDefaultPrevented: () => defaultPrevented,
-		isPropagationStopped: () => propagationStopped,
-		persist: () => undefined,
-	}
-}
-
-const textInputTypes = new Set([
-	"text",
-	"search",
-	"email",
-	"url",
-	"tel",
-	"password",
-	"number",
-	"date",
-	"datetime-local",
-	"month",
-	"time",
-	"week",
-	"color",
-	"range",
-])
-
-const isTextInput = (node: HostElement): boolean =>
-	node.tag === "textarea" || (node.tag === "input" && textInputTypes.has(hostString(node.props.type ?? "text")))
 
 function matchesSelector(node: HostElement, selector: string): boolean {
 	let root = node
 	while (root.parent !== undefined) root = root.parent
-	return sceneLocators
-		.selector(selector)(toVNode(root))
-		.some((match) => match.elm === (node as unknown as Node))
+	const matches = allSelector(selector)(toVNode(root)) as ReadonlyArray<{ readonly elm?: unknown }>
+	return matches.some((match) => match.elm === node)
 }

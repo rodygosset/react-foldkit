@@ -31,8 +31,6 @@ export const click: typeof FoldkitScene.click = (target) =>
 
 /**
  * Simulates a double-click with React capture, bubbling, and the original host target.
- * Foldkit views use Foldkit's step. Any data-last form is preserved.
- *
  * @category testing
  * @since 0.2.0
  */
@@ -41,8 +39,6 @@ export const doubleClick: typeof FoldkitScene.doubleClick = (target) =>
 
 /**
  * Simulates a context-menu event with React capture, bubbling, and the original host target.
- * Foldkit views use Foldkit's step. Any data-last form is preserved.
- *
  * @category testing
  * @since 0.2.0
  */
@@ -51,8 +47,6 @@ export const contextMenu: typeof FoldkitScene.contextMenu = (target) =>
 
 /**
  * Simulates a pointer press with React capture, bubbling, and the original host target.
- * Foldkit views use Foldkit's step. Any data-last form is preserved.
- *
  * @category testing
  * @since 0.2.0
  */
@@ -61,8 +55,6 @@ export const pointerDown: typeof FoldkitScene.pointerDown = (target, options) =>
 
 /**
  * Simulates a pointer release with React capture, bubbling, and the original host target.
- * Foldkit views use Foldkit's step. Any data-last form is preserved.
- *
  * @category testing
  * @since 0.2.0
  */
@@ -71,7 +63,6 @@ export const pointerUp: typeof FoldkitScene.pointerUp = (target, options) =>
 
 /**
  * Simulates mouseover followed by parent-first mouseenter handlers for a React view.
- * Foldkit views use Foldkit's hover step.
  *
  * @category testing
  * @since 0.2.0
@@ -81,8 +72,6 @@ export const hover: typeof FoldkitScene.hover = (target) =>
 
 /**
  * Simulates a focus event with React capture, bubbling, and the original host target.
- * Foldkit views use Foldkit's step. Any data-last form is preserved.
- *
  * @category testing
  * @since 0.2.0
  */
@@ -91,8 +80,6 @@ export const focus: typeof FoldkitScene.focus = (target) =>
 
 /**
  * Simulates a blur event with React capture, bubbling, and the original host target.
- * Foldkit views use Foldkit's step. Any data-last form is preserved.
- *
  * @category testing
  * @since 0.2.0
  */
@@ -100,8 +87,6 @@ export const blur: typeof FoldkitScene.blur = (target) => adaptStep(FoldkitScene
 
 /**
  * Simulates focus entering a subtree with React capture, bubbling, and the original host target.
- * Foldkit views use Foldkit's step. Any data-last form is preserved.
- *
  * @category testing
  * @since 0.2.0
  */
@@ -110,8 +95,6 @@ export const focusEnter: typeof FoldkitScene.focusEnter = (target) =>
 
 /**
  * Simulates focus leaving a subtree with React capture, bubbling, and the original host target.
- * Foldkit views use Foldkit's step. Any data-last form is preserved.
- *
  * @category testing
  * @since 0.2.0
  */
@@ -120,8 +103,6 @@ export const focusLeave: typeof FoldkitScene.focusLeave = (target) =>
 
 /**
  * Simulates a form submission with React capture, bubbling, and the original host target.
- * Foldkit views use Foldkit's step. Any data-last form is preserved.
- *
  * @category testing
  * @since 0.2.0
  */
@@ -130,8 +111,6 @@ export const submit: typeof FoldkitScene.submit = (target) =>
 
 /**
  * Simulates a value change with React capture, bubbling, and the original host target.
- * Foldkit views use Foldkit's step. Any data-last form is preserved.
- *
  * @category testing
  * @since 0.2.0
  */
@@ -141,8 +120,6 @@ export const change: typeof FoldkitScene.change = dual(2, (target: Target, value
 
 /**
  * Simulates a file selection with React capture, bubbling, and the original host target.
- * Foldkit views use Foldkit's step. Any data-last form is preserved.
- *
  * @category testing
  * @since 0.2.0
  */
@@ -152,8 +129,6 @@ export const changeFiles: typeof FoldkitScene.changeFiles = dual(2, (target: Tar
 
 /**
  * Simulates a file drop with React capture, bubbling, and the original host target.
- * Foldkit views use Foldkit's step. Any data-last form is preserved.
- *
  * @category testing
  * @since 0.2.0
  */
@@ -163,8 +138,6 @@ export const dropFiles: typeof FoldkitScene.dropFiles = dual(2, (target: Target,
 
 /**
  * Simulates a typed value with React capture, bubbling, and the original host target.
- * Foldkit views use Foldkit's step. Any data-last form is preserved.
- *
  * @category testing
  * @since 0.2.0
  */
@@ -174,8 +147,6 @@ export const type: typeof FoldkitScene.type = dual(2, (target: Target, value: st
 
 /**
  * Simulates a contenteditable input with React capture, bubbling, and the original host target.
- * Foldkit views use Foldkit's step. Any data-last form is preserved.
- *
  * @category testing
  * @since 0.2.0
  */
@@ -185,8 +156,6 @@ export const typeContentEditable: typeof FoldkitScene.typeContentEditable = dual
 
 /**
  * Simulates a before-input event with React capture, bubbling, and the original host target.
- * Foldkit views use Foldkit's step. Any data-last form is preserved.
- *
  * @category testing
  * @since 0.2.0
  */
@@ -198,8 +167,6 @@ export const beforeInput: typeof FoldkitScene.beforeInput = dual(
 
 /**
  * Simulates a key press with React capture, bubbling, and the original host target.
- * Foldkit views use Foldkit's step. Any data-last form is preserved.
- *
  * @category testing
  * @since 0.2.0
  */

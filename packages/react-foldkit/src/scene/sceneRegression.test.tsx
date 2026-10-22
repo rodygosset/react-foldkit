@@ -188,6 +188,27 @@ it("limits message loops from effects and still unmounts the view", function () 
 	expect(cleaned).toBe(true)
 })
 
+it("shows the value from a passive effect that sets state twice", function () {
+	function View() {
+		const [step, setStep] = React.useState(0)
+		React.useEffect(
+			function advance() {
+				if (step < 2) setStep(step + 1)
+			},
+			[step]
+		)
+		return <p>{step}</p>
+	}
+	Scene.scene({ update, view: bindSceneView(App, View) }, Scene.given(""), Scene.expect(Scene.text("2")).toExist())
+})
+
+it("fails the scene call with the error thrown while rendering", function () {
+	function View(): React.ReactElement {
+		throw new Error("render failed")
+	}
+	expect(() => Scene.scene({ update, view: bindSceneView(App, View) }, Scene.given(""))).toThrow(/render failed/)
+})
+
 it("checkbox click handlers see the new value even when they change local state", function () {
 	const clicks: boolean[] = []
 	function View() {

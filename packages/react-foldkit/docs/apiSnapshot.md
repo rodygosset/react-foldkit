@@ -30,7 +30,7 @@ export declare function make<Model, Message>(bootstrap: Exit.Exit<Bootstrap<Mode
 ## dist/application/public.d.ts
 
 ```ts
-export { define } from "./react";
+export { define, SceneSourceTypeId } from "./react";
 export type { Application, CrashConfig, CrashContext, ModelHooks, Options, ProviderProps, ReactivationContext, Send, } from "./react";
 ```
 
@@ -85,11 +85,13 @@ export interface ModelHooks<Model, Message> {
   readonly useSubmodel: <ChildModel, ChildMessage>(projection: Projection<Model, Message, ChildModel, ChildMessage>) => ModelSource<ChildModel, ChildMessage>;
   readonly useOptionalSubmodel: <ChildModel, ChildMessage>(projection: OptionalProjection<Model, Message, ChildModel, ChildMessage>) => Option.Option<ModelSource<ChildModel, ChildMessage>>;
 }
+export declare const SceneSourceTypeId: unique symbol;
+export type SceneSourceTypeId = typeof SceneSourceTypeId;
+export type SourceContext<Model, Message> = React.Context<Option.Option<ModelSource<Model, Message>>>;
 export interface Application<Model, Message, R = never, HasInit extends boolean = false> extends ModelHooks<Model, Message> {
   readonly Provider: (props: ProviderProps<Model, Message, R, HasInit>) => React.ReactNode;
+  readonly [SceneSourceTypeId]: SourceContext<Model, Message>;
 }
-export type SourceContext<Model, Message> = React.Context<Option.Option<ModelSource<Model, Message>>>;
-export declare function sceneSourceContext<Model, Message>(application: object): SourceContext<Model, Message>;
 export declare const makeSourceContext: <Model, Message>() => SourceContext<Model, Message>;
 export declare function modelHooks<Model, Message>(Context: SourceContext<Model, Message>, Message: Schema.Schema<Message>, missingProvider: () => Error): {
   useModel: {
@@ -320,17 +322,76 @@ export declare const bindSceneView: <Model, Message, R, HasInit extends boolean>
 import React from "react";
 import Reconciler from "react-reconciler";
 import type { Scene as SceneNamespace } from "foldkit/test";
+import { SceneSourceTypeId } from "../application/react";
+import type { SourceContext } from "../application/react";
 import type { ModelSource } from "../modelSource";
+import type { HostContainer, HostElement, HostText } from "./sceneHost";
 import type { SceneView } from "./sceneView";
 type VNode = SceneNamespace.SceneSimulation<unknown, unknown>["html"];
-export declare function bindSceneView<Model, Message>(application: object, Component: React.ComponentType): SceneView<Model, Message>;
-interface HostProps extends Record<string, unknown> {
+export declare const BoundSceneViewTypeId: unique symbol;
+export declare function bindSceneView<Model, Message>(application: {
+  readonly [SceneSourceTypeId]: SourceContext<Model, Message>;
+}, Component: React.ComponentType): SceneView<Model, Message>;
+declare const renderer: Reconciler.Reconciler<HostContainer, HostContainer | HostElement, HostText, HostElement | HostText, unknown, HostElement | HostText>;
+type Renderer = typeof renderer;
+export declare function runSceneInteraction<A>(callback: () => A): A;
+interface RenderState {
+  readonly container: HostContainer;
+  readonly root: ReturnType<Renderer["createContainer"]>;
+  readonly source: ModelSource<unknown, unknown>;
+  element?: React.ReactElement;
+  setInput: (model: unknown, dispatch: (message: unknown) => void) => void;
+}
+export interface SceneRenderSession {
+  state?: RenderState;
+}
+export declare const createSceneRenderSession: () => SceneRenderSession;
+export declare const isBoundSceneView: (view: unknown) => view is SceneView<unknown, unknown>;
+export declare const isBoundSceneSimulation: (simulation: unknown) => boolean;
+export declare function renderBoundSceneView<Model, Message>(view: Function, model: Model, dispatch: (message: Message) => void, session: SceneRenderSession): VNode | undefined;
+export declare function disposeSceneRenderSession(session: SceneRenderSession): void;
+type EventHandler = (event?: unknown) => void;
+export declare function getSceneEventHandler(element: {
+  readonly elm?: unknown;
+}, eventName: string): EventHandler | undefined;
+export {};
+```
+
+## dist/scene/sceneEvent.d.ts
+
+```ts
+import type { HostElement } from "./sceneHost";
+export interface HostEvent {
+  readonly target: HostElement;
+  currentTarget: HostElement;
+  readonly defaultPrevented: boolean;
+  preventDefault(): void;
+  stopPropagation(): void;
+  readonly propagationStopped: boolean;
+  resetPropagation(): void;
+}
+export declare function sceneListeners(node: HostElement): Record<string, (event: HostEvent) => void>;
+export declare function sceneEventNames(eventName: string, target: HostElement): ReadonlyArray<string>;
+export declare function hostPath(target: HostElement): ReadonlyArray<HostElement>;
+export declare function hasSceneListener(target: HostElement, eventName: string): boolean;
+export declare function makeHostEvent(target: HostElement, fields: Readonly<Record<string, unknown>>): HostEvent;
+export declare function invokeHandlers(path: ReadonlyArray<HostElement>, eventName: string, event: HostEvent): void;
+export declare function dispatchSceneEvent(target: HostElement, eventName: string, fields: Readonly<Record<string, unknown>>): HostEvent;
+export declare function hostFromElm(elm: unknown): HostElement | undefined;
+```
+
+## dist/scene/sceneHost.d.ts
+
+```ts
+import { Option } from "effect";
+import type React from "react";
+export interface HostProps extends Record<string, unknown> {
   readonly children?: React.ReactNode;
 }
-interface HostText {
+export interface HostText {
   text: string;
 }
-interface HostElement {
+export interface HostElement {
   tag: string;
   readonly type: string;
   readonly name: string;
@@ -354,30 +415,51 @@ interface HostElement {
   closest: (selector: string) => HostElement | null;
   contains: (node: unknown) => boolean;
 }
-interface HostContainer {
+export interface HostContainer {
   children: Array<HostElement | HostText>;
 }
-declare const renderer: Reconciler.Reconciler<HostContainer, HostContainer | HostElement, HostText, HostElement | HostText, unknown, HostElement | HostText>;
-type Renderer = typeof renderer;
-export declare function runSceneInteraction<A>(callback: () => A): A;
-interface RenderState {
-  readonly container: HostContainer;
-  readonly root: ReturnType<Renderer["createContainer"]>;
-  readonly source: ModelSource<unknown, unknown>;
-  element?: React.ReactElement;
-  setInput: (model: unknown, dispatch: (message: unknown) => void) => void;
-}
-export interface SceneRenderSession {
-  state?: RenderState;
-}
-export declare const createSceneRenderSession: () => SceneRenderSession;
-export declare const isBoundSceneView: (view: Function) => boolean;
-export declare const isBoundSceneSimulation: (simulation: unknown) => boolean;
-export declare function renderBoundSceneView<Model, Message>(view: Function, model: Model, dispatch: (message: Message) => void, session: SceneRenderSession): VNode | undefined;
-export declare function disposeSceneRenderSession(session: SceneRenderSession): void;
-type EventHandler = (event?: unknown) => void;
-export declare function getSceneEventHandler(element: VNode, eventName: string): EventHandler | undefined;
-export {};
+export declare function hostString(value: unknown): string;
+export declare const eventProps: Readonly<Record<string, string>>;
+export declare const isTextInput: (node: HostElement) => boolean;
+export declare function htmlAttributeName(name: string): string;
+export type HostProp = {
+  readonly _tag: "ClassList";
+  readonly value: unknown;
+} | {
+  readonly _tag: "Style";
+  readonly value: {
+    readonly [key: string]: unknown;
+  };
+} | {
+  readonly _tag: "Attribute";
+  readonly reactName: string;
+  readonly name: string;
+  readonly value: unknown;
+};
+export declare function hostProp(name: string, value: unknown): Option.Option<HostProp>;
+export declare function styleDeclarations(value: {
+  readonly [key: string]: unknown;
+}): Record<string, string>;
+```
+
+## dist/scene/sceneInput.d.ts
+
+```ts
+import type { HostElement, HostText } from "./sceneHost";
+export type Checkable = {
+  readonly _tag: "Checkbox";
+  readonly target: HostElement;
+} | {
+  readonly _tag: "Radio";
+  readonly target: HostElement;
+  readonly group: ReadonlyArray<HostElement>;
+};
+export type CheckedSnapshot = ReadonlyArray<readonly [HostElement, boolean]>;
+export declare function snapshotChecked(checkable: Checkable): CheckedSnapshot;
+export declare function assignChecked(checkable: Checkable): void;
+export declare function revertChecked(snapshot: CheckedSnapshot): void;
+export declare function syncSelect(node: HostElement, selection: unknown, fallback: boolean): void;
+export declare function syncControlledFields(children: ReadonlyArray<HostElement | HostText>): void;
 ```
 
 ## dist/scene/sceneInteractions.d.ts
@@ -404,6 +486,13 @@ export declare const beforeInput: typeof FoldkitScene.beforeInput;
 export declare const keydown: typeof FoldkitScene.keydown;
 ```
 
+## dist/scene/sceneSettle.d.ts
+
+```ts
+export declare const SceneRenderLimit = 100;
+export declare function settleSimulation<Simulation>(simulation: Simulation, render: (simulation: Simulation) => readonly [Simulation, ReadonlyArray<unknown>], applyEffectMessage: (simulation: Simulation, message: unknown) => Simulation): Simulation;
+```
+
 ## dist/scene/sceneView.d.ts
 
 ```ts
@@ -414,6 +503,7 @@ export type SceneView<Model, Message> = (model: Model, html: HtmlBuilder<Message
 ## dist/scene/vendor/sceneCompat.d.ts
 
 ```ts
+import { Option } from "effect";
 export declare const FOLDKIT_MOUNT_KEY = "foldkitMount";
 export declare const FileHandlerSymbol: unique symbol;
 export declare const kebabToPascal: (input: string) => string;
@@ -422,7 +512,6 @@ export declare const serializedStylePropertyName: (name: string) => string;
 export declare const StringExt: {
   stripPrefix: (prefix: string) => (input: string) => Option.None<string> | Option.Some<string>;
 };
-import { Option } from "effect";
 ```
 
 ## dist/store.d.ts

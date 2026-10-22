@@ -1,8 +1,13 @@
+import { Option } from "effect"
+
 export const FOLDKIT_MOUNT_KEY = "foldkitMount"
 export const FileHandlerSymbol = Symbol.for("foldkit/html/fileHandler")
 
 export const kebabToPascal = (input: string): string =>
-	input.split("-").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join("")
+	input
+		.split("-")
+		.map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+		.join("")
 
 export const tagNameFromSelector = (selector: string): string => {
 	const hashIndex = selector.indexOf("#")
@@ -23,5 +28,3 @@ export const StringExt = {
 	stripPrefix: (prefix: string) => (input: string) =>
 		input.startsWith(prefix) ? Option.some(input.slice(prefix.length)) : Option.none(),
 }
-import { Option } from "effect"
-

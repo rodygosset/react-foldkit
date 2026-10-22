@@ -339,6 +339,28 @@ What the Provider knows when it replaces a Store that deactivation disposed.
   Update.Commands<Message, R>
   ```
 
+### SceneSourceTypeId
+
+Identifies the React context an Application uses so Scene can render its hooks.
+
+- `toString` Returns a string representation of an object.
+
+  ```ts
+  () => string
+  ```
+
+- `valueOf` Returns the primitive value of the specified object.
+
+  ```ts
+  () => symbol
+  ```
+
+- `description` Expose the [[Description]] internal slot of a symbol directly.
+
+  ```ts
+  string | undefined
+  ```
+
 ### Send
 
 Sends Messages by tag. `send.ChangedTitle({ title })` builds the Message with the union's
@@ -1208,22 +1230,18 @@ Model and send Messages without depending on the Store implementation.
 ### beforeInput
 
 Simulates a before-input event with React capture, bubbling, and the original host target.
-Foldkit views use Foldkit's step. Any data-last form is preserved.
 
 ### blur
 
 Simulates a blur event with React capture, bubbling, and the original host target.
-Foldkit views use Foldkit's step. Any data-last form is preserved.
 
 ### change
 
 Simulates a value change with React capture, bubbling, and the original host target.
-Foldkit views use Foldkit's step. Any data-last form is preserved.
 
 ### changeFiles
 
 Simulates a file selection with React capture, bubbling, and the original host target.
-Foldkit views use Foldkit's step. Any data-last form is preserved.
 
 ### click
 
@@ -1238,37 +1256,30 @@ handlers read the activated value. A canceled click restores the previous checke
 ### contextMenu
 
 Simulates a context-menu event with React capture, bubbling, and the original host target.
-Foldkit views use Foldkit's step. Any data-last form is preserved.
 
 ### doubleClick
 
 Simulates a double-click with React capture, bubbling, and the original host target.
-Foldkit views use Foldkit's step. Any data-last form is preserved.
 
 ### dropFiles
 
 Simulates a file drop with React capture, bubbling, and the original host target.
-Foldkit views use Foldkit's step. Any data-last form is preserved.
 
 ### focus
 
 Simulates a focus event with React capture, bubbling, and the original host target.
-Foldkit views use Foldkit's step. Any data-last form is preserved.
 
 ### focusEnter
 
 Simulates focus entering a subtree with React capture, bubbling, and the original host target.
-Foldkit views use Foldkit's step. Any data-last form is preserved.
 
 ### focusLeave
 
 Simulates focus leaving a subtree with React capture, bubbling, and the original host target.
-Foldkit views use Foldkit's step. Any data-last form is preserved.
 
 ### hover
 
 Simulates mouseover followed by parent-first mouseenter handlers for a React view.
-Foldkit views use Foldkit's hover step.
 
 ### inside
 
@@ -1281,17 +1292,14 @@ Scenes of bound React views re-enter the copied runner, so scoped steps render t
 ### keydown
 
 Simulates a key press with React capture, bubbling, and the original host target.
-Foldkit views use Foldkit's step. Any data-last form is preserved.
 
 ### pointerDown
 
 Simulates a pointer press with React capture, bubbling, and the original host target.
-Foldkit views use Foldkit's step. Any data-last form is preserved.
 
 ### pointerUp
 
 Simulates a pointer release with React capture, bubbling, and the original host target.
-Foldkit views use Foldkit's step. Any data-last form is preserved.
 
 ### scene
 
@@ -1310,17 +1318,14 @@ renders the component in a private React root and unmounts it when the scene end
 ### submit
 
 Simulates a form submission with React capture, bubbling, and the original host target.
-Foldkit views use Foldkit's step. Any data-last form is preserved.
 
 ### type
 
 Simulates a typed value with React capture, bubbling, and the original host target.
-Foldkit views use Foldkit's step. Any data-last form is preserved.
 
 ### typeContentEditable
 
 Simulates a contenteditable input with React capture, bubbling, and the original host target.
-Foldkit views use Foldkit's step. Any data-last form is preserved.
 
 Foldkit reexports inherit their upstream contracts. See [Foldkit documentation](https://foldkit.dev) and the original editor JSDoc.
 

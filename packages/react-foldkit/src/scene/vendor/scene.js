@@ -1,7 +1,9 @@
 import { Array, Effect, Equal, Function, Match, Option, Predicate, String, pipe, } from 'effect';
 import { dual } from 'effect/Function';
 import { kebabToPascal, serializedStylePropertyName, FOLDKIT_MOUNT_KEY, FileHandlerSymbol, tagNameFromSelector } from './sceneCompat.js';
-import { createSceneRenderSession, disposeSceneRenderSession, isBoundSceneView, renderBoundSceneView, runSceneInteraction, getSceneEventHandler } from '../sceneBinding.js';
+import { createSceneRenderSession, disposeSceneRenderSession, isBoundSceneView, renderBoundSceneView, getSceneEventHandler } from '../sceneBinding.js';
+import { runClick } from '../sceneClick.js';
+import { settleSimulation } from '../sceneSettle.js';
 import { assertAllCommandsResolved, assertAllMountsResolved, assertAllUnmountsAcknowledged, assertExactCommands, assertExactMounts, assertHasCommands, assertHasMounts, assertNoUnacknowledgedUnmounts, assertNoUnresolvedCommands, assertNoUnresolvedMounts, assertResolveUnambiguous, assertZeroCommands, assertZeroMounts, formatCommand, formatMatcher, formatMountList, formatMountMatcher, mountMatches, resolveAllExactInternal, resolveAllInternal, resolveByMatcher, resolveMountByMatcher, } from './internal.js';
 import { accessibleDescription, accessibleName, ancestorsOf, attr, isHidden, resolveTarget, selector, textContent, within, } from './query.js';
 import { allAltText, allDisplayValue, allLabel, allPlaceholder, allRole, allSelector, allTestId, allText, allTitle, } from './query.js';
@@ -839,19 +841,17 @@ const applySceneStep = (simulation, step) => {
     return simulation;
 };
 const settleRender = (simulation) => {
-    let internal = toInternal(simulation);
+    const internal = toInternal(simulation);
     if (internal.model === UNINITIALIZED) return internal;
-    for (let pass = 0; pass < 100; pass++) {
-        internal.capturingDispatch.reset();
-        const html = renderView(internal.viewFn, internal.model, internal.capturingDispatch.dispatch, internal.sceneRenderSession);
-        const mountSlots = reconcileMountSlots(internal.mountSlots, html);
-        internal = { ...internal, html, mountSlots, mounts: pendingMountsOf(mountSlots) };
-        const messages = internal.capturingDispatch.getCapturedMessages();
-        internal.capturingDispatch.reset();
-        if (messages.length === 0) return internal;
-        internal = Array.reduce(messages, internal, applyMessageWithoutBoundaryChecks);
-    }
-    throw new Error('React Scene did not settle after 100 renders. Check Effects that dispatch on every render.');
+    return settleSimulation(internal, (current) => {
+        current.capturingDispatch.reset();
+        const html = renderView(current.viewFn, current.model, current.capturingDispatch.dispatch, current.sceneRenderSession);
+        const mountSlots = reconcileMountSlots(current.mountSlots, html);
+        const rendered = { ...current, html, mountSlots, mounts: pendingMountsOf(mountSlots) };
+        const messages = current.capturingDispatch.getCapturedMessages();
+        current.capturingDispatch.reset();
+        return [rendered, messages];
+    }, applyMessageWithoutBoundaryChecks);
 };
 const runSteps = (seed, steps) => 
 /* eslint-disable @typescript-eslint/consistent-type-assertions */
@@ -946,57 +946,9 @@ export const click = (target) => (simulation) => {
             'use Scene.expect(locator).not.toBeDisabled() to verify the ' +
             'element is interactive.');
     }
-    const simulatedClick = createSimulatedClick();
-    const clickTarget = element.elm;
-    simulatedClick.event.target = clickTarget;
-    Object.defineProperty(simulatedClick.event, 'defaultPrevented', { get: simulatedClick.isDefaultPrevented });
-    const inputType = lookupStringAttribute(element, 'type');
-    const isCheckable = element.sel === 'input' && (inputType === 'checkbox' || inputType === 'radio');
-    const previousChecked = clickTarget?.checked;
-    const name = lookupStringAttribute(element, 'name');
-    const form = Option.getOrUndefined(formOwnerOf(internal.html, element));
-    const group = inputType === 'radio' && name !== undefined && name !== ''
-        ? allSelector('input[type="radio"]')(internal.html).filter(radio =>
-            lookupStringAttribute(radio, 'name') === name &&
-            Option.getOrUndefined(formOwnerOf(internal.html, radio)) === form)
-        : isCheckable ? [element] : [];
-    const previousGroup = group.map(radio => [radio.elm, radio.elm.checked]);
-    if (isCheckable && inputType === 'radio') {
-        for (const [radio] of previousGroup) radio.checked = radio === clickTarget;
-    }
-    if (isCheckable) clickTarget.checked = inputType === 'radio' || !previousChecked;
-    const changeHandler = isCheckable ? getSceneEventHandler(element, 'change') : undefined;
-    let isClickHandled = changeHandler !== undefined;
-    let isSubmitHandled = false;
     internal.capturingDispatch.reset();
-    runSceneInteraction(() => {
-        const clickHandler = getSceneEventHandler(element, 'click');
-        if (clickHandler !== undefined) {
-            isClickHandled = true;
-            clickHandler(simulatedClick.event);
-        }
-    if (isCheckable && clickTarget.checked !== previousChecked && changeHandler !== undefined) {
-        isClickHandled = true;
-        changeHandler(simulatedClick.event);
-    }
-    if (simulatedClick.isDefaultPrevented()) {
-        for (const [radio, checked] of previousGroup) radio.checked = checked;
-    }
-    if (!simulatedClick.isDefaultPrevented()) {
-        const maybeSubmitter = Array.findFirst(propagationPath, isSubmitButton);
-        const maybeForm = pipe(maybeSubmitter, Option.flatMap(submitter => formOwnerOf(internal.html, submitter)));
-        if (Option.isSome(maybeForm)) {
-            const maybeSubmitHandler = Option.fromNullishOr(getSceneEventHandler(maybeForm.value, 'submit'));
-            if (Option.isSome(maybeSubmitHandler)) {
-                isSubmitHandled = true;
-                // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
-                const submitHandler = maybeSubmitHandler.value;
-                submitHandler({ preventDefault: Function.constVoid });
-            }
-        }
-    }
-    });
-    if (!isClickHandled && !isSubmitHandled) {
+    const clickListeners = runClick(internal.html, element, propagationPath);
+    if (clickListeners._tag === 'Missing') {
         const attributeName = EVENT_NAMES['click'] ?? 'click';
         throw new Error(`I found an element matching ${description} but neither it nor any ancestor has a click handler.\n\n` +
             `Make sure the element or a parent has an ${attributeName} attribute.`);
@@ -1015,15 +967,8 @@ export const doubleClick = (target) => (simulation) => {
             'Check that your selector matches an element in the current view.');
     }
     const { value: element } = maybeElement;
-    const hasHandler = getSceneEventHandler(element, 'dblclick') !== undefined;
-    if (hasHandler) {
+    if (getSceneEventHandler(element, 'dblclick') !== undefined) {
         return captureFromElement(simulation, element, description, 'dblclick', handler => {
-            handler();
-        });
-    }
-    const maybeAncestor = findAncestorWithHandler(internal.html, element, 'dblclick');
-    if (Option.isSome(maybeAncestor)) {
-        return captureFromElement(simulation, maybeAncestor.value, `ancestor of ${description}`, 'dblclick', handler => {
             handler();
         });
     }
@@ -1048,10 +993,6 @@ export const contextMenu = (target) => (simulation) => {
     };
     if (getSceneEventHandler(element, 'contextmenu') !== undefined) {
         return captureFromElement(simulation, element, description, 'contextmenu', invokeHandler);
-    }
-    const maybeAncestor = findAncestorWithHandler(internal.html, element, 'contextmenu');
-    if (Option.isSome(maybeAncestor)) {
-        return captureFromElement(simulation, maybeAncestor.value, `ancestor of ${description}`, 'contextmenu', invokeHandler);
     }
     const attributeName = EVENT_NAMES['contextmenu'] ?? 'contextmenu';
     throw new Error(`I found an element matching ${description} but neither it nor any ancestor has a contextmenu handler.\n\n` +
@@ -1103,10 +1044,6 @@ export const pointerDown = (target, options) => (simulation) => {
     if (getSceneEventHandler(element, 'pointerdown') !== undefined) {
         return captureFromElement(simulation, element, description, 'pointerdown', invokeHandler);
     }
-    const maybeAncestor = findAncestorWithHandler(internal.html, element, 'pointerdown');
-    if (Option.isSome(maybeAncestor)) {
-        return captureFromElement(simulation, maybeAncestor.value, `ancestor of ${description}`, 'pointerdown', invokeHandler);
-    }
     throw new Error(`I found an element matching ${description} but neither it nor any ancestor has a pointerdown handler.\n\n` +
         'Make sure the element or a parent has an OnPointerDown attribute.');
 };
@@ -1137,10 +1074,6 @@ export const pointerUp = (target, options) => (simulation) => {
     };
     if (getSceneEventHandler(element, 'pointerup') !== undefined) {
         return captureFromElement(simulation, element, description, 'pointerup', invokeHandler);
-    }
-    const maybeAncestor = findAncestorWithHandler(internal.html, element, 'pointerup');
-    if (Option.isSome(maybeAncestor)) {
-        return captureFromElement(simulation, maybeAncestor.value, `ancestor of ${description}`, 'pointerup', invokeHandler);
     }
     throw new Error(`I found an element matching ${description} but neither it nor any ancestor has a pointerup handler.\n\n` +
         'Make sure the element or a parent has an OnPointerUp attribute.');
@@ -1227,13 +1160,10 @@ export const beforeInput = dual(3, (target, inputType, data) => (simulation) => 
  *  `OnKeyDownSelfPreventDefault` handlers fire.
  *  Dual: `keydown(target, key, modifiers?)` or `keydown(key, modifiers?)` for data-last piping. */
 export const keydown = dual((args) => args.length >= 2 && typeof args[1] === 'string', (target, key, modifiers) => (simulation) => invokeAndCapture(simulation, target, 'keydown', handler => {
-    const node = {};
     handler({
         key,
         ...DEFAULT_KEYBOARD_MODIFIERS,
         ...modifiers,
-        target: node,
-        currentTarget: node,
         preventDefault: Function.constVoid,
     });
 }));
