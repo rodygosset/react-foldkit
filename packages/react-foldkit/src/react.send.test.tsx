@@ -22,7 +22,7 @@ describe("useSend", function () {
 	it("builds Messages with the union constructors and dispatches built Messages", function () {
 		const handled: Array<Message> = []
 		const App = Application.define({
-			Model: Model,
+			Model,
 			Message,
 			update(model: Model, message: Message) {
 				handled.push(message)
@@ -59,7 +59,7 @@ describe("useSend", function () {
 
 	it("keeps its identity across renders", function () {
 		const App = Application.define({
-			Model: Model,
+			Model,
 			Message,
 			update: (model: Model, _message: Message) => ({
 				model: modifyFields(model, { count: (count) => count + 1 }),
@@ -170,7 +170,7 @@ describe("useSend", function () {
 
 describe("application init", function () {
 	const App = Application.define({
-		Model: Model,
+		Model,
 		Message,
 		init: (): Update.Return<Model, Message> => ({ model: { count: 1, label: "config" } }),
 		update: (model: Model, _message: Message) => ({ model }),

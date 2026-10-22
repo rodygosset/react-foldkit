@@ -50,7 +50,7 @@ describe("native Foldkit DevTools overlay", function () {
 				}
 				const App = Application.define(
 					{
-						Model: Model,
+						Model,
 						Message,
 						update: (model, message) =>
 							message._tag === "Increment"

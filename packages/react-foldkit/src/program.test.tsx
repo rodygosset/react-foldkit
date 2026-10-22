@@ -22,7 +22,7 @@ const update = (model: Model, message: Message) =>
 		ClickedIncrement: () => ({ model: modifyFields(model, { count: (count) => count + 1 }) }),
 	})
 
-const counter = Program.make({ Model: Model, Message, init, update })
+const counter = Program.make({ Model, Message, init, update })
 
 describe("Program.make", function () {
 	it("returns the Program it was given", function () {
@@ -57,7 +57,7 @@ describe("Program.make", function () {
 	it("binds a child Program with Submodel.define", function () {
 		const OutMessage = defineMessageUnion({ Reached: { count: Schema.Finite } })
 		const child = Program.make({
-			Model: Model,
+			Model,
 			Message,
 			OutMessage,
 			update: (model: Model, _message: Message) => ({
