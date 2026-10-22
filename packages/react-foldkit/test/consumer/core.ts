@@ -1,4 +1,5 @@
 import { strict as assert } from "node:assert"
+import { defineMessageUnion } from "foldkit/message"
 import { Effect, Option, Schema } from "effect"
 import { constVoid } from "effect/Function"
 import * as AsyncData from "foldkit/asyncData"
@@ -13,11 +14,14 @@ import * as Submodel from "react-foldkit/submodel"
 import * as Scene from "react-foldkit/scene"
 import { bindSceneView } from "react-foldkit/scene/react"
 
+const ValueMessage = defineMessageUnion({ SetValue: { value: Schema.Finite } })
+type ValueMessage = typeof ValueMessage.Type
+
 export type Reader = Foldkit.ModelSource.ModelReader<number>
-export type Program = Foldkit.Store.Program<number, number>
-export type RuntimeStore = Foldkit.Store.Store<number, number>
-export type CounterApplication = Foldkit.Application.Application<number, number>
-export type Projection = Foldkit.Submodel.Projection<number, number, number, number>
+export type Program = Foldkit.Store.Program<number, ValueMessage>
+export type RuntimeStore = Foldkit.Store.Store<number, ValueMessage>
+export type CounterApplication = Foldkit.Application.Application<number, ValueMessage>
+export type Projection = Foldkit.Submodel.Projection<number, ValueMessage, number, ValueMessage>
 
 const reader: Reader = {
 	getSnapshot: () => 7,
@@ -31,9 +35,26 @@ assert.deepEqual(Object.keys(Foldkit).sort(), ["Application", "ModelSource", "Pr
 
 const App = Application.define({
 	Model: Schema.Finite,
-	Message: Schema.Finite,
-	update: (model: number, message: number) => ({ model: model + message }),
+	Message: ValueMessage,
+	update: (model: number, message: ValueMessage) => ({ model: model + message.value }),
 })
+// Foldkit's own DevToolsConfig is accepted unchanged, so the settings carry over to Foldkit's runtime.
+const devToolsSettings = {
+	position: "BottomRight",
+	mode: "TimeTravel",
+	maxEntries: 100,
+	Message: ValueMessage,
+} as const
+const WithDevTools = Application.define(
+	{
+		Model: Schema.Finite,
+		Message: ValueMessage,
+		update: (model: number, message: ValueMessage) => ({ model: model + message.value }),
+	},
+	{ devTools: devToolsSettings }
+)
+assert.equal(renderToString(createElement(WithDevTools.Provider, { init: { model: 1 }, children: null })), "")
+
 function View() {
 	return createElement("span", null, App.useModel())
 }

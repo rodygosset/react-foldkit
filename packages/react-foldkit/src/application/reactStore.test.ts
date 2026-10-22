@@ -16,14 +16,15 @@ import {
 	Scope,
 	Stream,
 } from "effect"
-import { describe, expect, vi } from "vitest"
 import type * as Command from "foldkit/command"
 import { defineMessageUnion } from "foldkit/message"
-import * as Store from "../store"
-import { CommitError, Inactive, Crashed } from "../store"
 import { modifyFields } from "foldkit/struct"
 import * as Subscription from "foldkit/subscription"
 import type * as Update from "foldkit/update"
+import { describe, expect, vi } from "vitest"
+import { ValueMessage, setValue } from "../../test/fixtures/valueMessage"
+import * as Store from "../store"
+import { CommitError, Crashed, Inactive } from "../store"
 import * as ReactStore from "./reactStore"
 
 /** Activation owns a Scope, so closing it is the whole deactivation story. */
@@ -59,9 +60,9 @@ describe("React store lifecycle", function () {
 				const acquired = Deferred.makeUnsafe<void>()
 				let resourceExit: Exit.Exit<unknown, unknown> | undefined
 				const scope = yield* Scope.make()
-				const store = ReactStore.make<number, number>(
+				const store = ReactStore.make<number, ValueMessage>(
 					{
-						update: (_model, message) => ({ model: message }),
+						update: (_model, message) => ({ model: message.value }),
 						resources: Layer.effectDiscard(
 							Effect.acquireRelease(Deferred.succeed(acquired, undefined), (_resource, exit) =>
 								Effect.sync(function () {
@@ -70,7 +71,7 @@ describe("React store lifecycle", function () {
 							)
 						),
 					},
-					{ model: 0, commands: [{ name: "Started", effect: Effect.succeed(1) }] }
+					{ model: 0, commands: [{ name: "Started", effect: Effect.succeed(1).pipe(Effect.map(setValue)) }] }
 				)
 				yield* store.activate.pipe(Scope.provide(scope))
 				yield* Deferred.await(acquired)
@@ -107,11 +108,11 @@ describe("React store lifecycle", function () {
 
 	it.live("keeps only the newest inactive dispatches", () =>
 		Effect.gen(function* () {
-			const store = ReactStore.make<ReadonlyArray<number>, number>(
-				{ update: (model, message) => ({ model: [...model, message] }) },
+			const store = ReactStore.make<ReadonlyArray<number>, ValueMessage>(
+				{ update: (model, message) => ({ model: [...model, message.value] }) },
 				{ model: [] }
 			)
-			for (let message = 0; message < 1002; message++) store.dispatch(message)
+			for (let message = 0; message < 1002; message++) store.dispatch(setValue(message))
 			const scope = yield* Scope.make()
 			yield* store.activate.pipe(Scope.provide(scope))
 			// Delivery can yield after its time budget; wait for the deferred drain.
@@ -128,12 +129,12 @@ describe("React store lifecycle", function () {
 		Effect.gen(function* () {
 			const consoleLog = vi.spyOn(console, "log").mockImplementation(Function.constVoid)
 			yield* Effect.addFinalizer(() => Effect.sync(() => consoleLog.mockRestore()))
-			const store = ReactStore.make<number, number>(
-				{ update: (_model, message) => ({ model: message }) },
+			const store = ReactStore.make<number, ValueMessage>(
+				{ update: (_model, message) => ({ model: message.value }) },
 				{ model: 0 }
 			)
 
-			for (let message = 0; message < 1005; message++) store.dispatch(message)
+			for (let message = 0; message < 1005; message++) store.dispatch(setValue(message))
 			yield* Effect.yieldNow
 
 			const warnings = consoleLog.mock.calls.filter((args) =>
@@ -211,19 +212,19 @@ describe("React store lifecycle", function () {
 						yield* Deferred.await(ready)
 						return 99
 					})
-					const store = ReactStore.make<number, number>(
+					const store = ReactStore.make<number, ValueMessage>(
 						{
 							update(_model, message) {
-								if (message === 1) now += 6
-								return { model: message }
+								if (message.value === 1) now += 6
+								return { model: message.value }
 							},
 						},
-						{ model: 0, commands: [{ name: "Init", effect: command }] }
+						{ model: 0, commands: [{ name: "Init", effect: command.pipe(Effect.map(setValue)) }] }
 					)
 					const first = yield* Scope.fork(yield* Scope.Scope)
 					yield* store.activate.pipe(Scope.provide(first))
 					yield* Deferred.await(started)
-					store.dispatch(1)
+					store.dispatch(setValue(1))
 					yield* Deferred.succeed(ready, undefined)
 					yield* Effect.yieldNow
 					expect(store.getModel()).toBe(1)
@@ -474,11 +475,11 @@ describe("crash projection", function () {
 	it("isolates facade crash observers and recovers the retained health on a new activation", function () {
 		const defect = new Error("terminal")
 		const observations: Array<string> = []
-		const store = ReactStore.make<number, number>(
+		const store = ReactStore.make<number, ValueMessage>(
 			{
 				update(_model, message) {
-					if (message === 9) throw defect
-					return { model: message }
+					if (message.value === 9) throw defect
+					return { model: message.value }
 				},
 				onCrash() {},
 			},
@@ -491,13 +492,13 @@ describe("crash projection", function () {
 			observations.push(Option.isSome(store.getCrash()) ? "crashed" : "healthy")
 		})
 		const first = activate(store)
-		expect(store.commit(1)).toEqual(Result.void)
-		store.dispatch(9)
+		expect(store.commit(setValue(1))).toEqual(Result.void)
+		store.dispatch(setValue(9))
 		const cause = Option.getOrThrow(store.getCrash())
 		first()
 		expect(Option.getOrThrow(store.getCrash())).toBe(cause)
 		const second = activate(store)
-		expect(store.commit(2)).toEqual(Result.void)
+		expect(store.commit(setValue(2))).toEqual(Result.void)
 		expect({ model: store.getModel(), crash: store.getCrash(), observations }).toEqual({
 			model: 2,
 			crash: Option.none(),
@@ -515,11 +516,11 @@ describe("crash projection", function () {
 				const first = yield* Scope.make()
 				const second = yield* Scope.make()
 				let releases = 0
-				const store = ReactStore.make<number, number>(
+				const store = ReactStore.make<number, ValueMessage>(
 					{
 						update(_model, message) {
-							if (message === 9) throw new Error("old activation")
-							return { model: message }
+							if (message.value === 9) throw new Error("old activation")
+							return { model: message.value }
 						},
 						onCrash() {},
 						resources: Layer.effectDiscard(
@@ -537,11 +538,11 @@ describe("crash projection", function () {
 				)
 				yield* store.activate.pipe(Scope.provide(first))
 				yield* Deferred.await(acquired)
-				store.dispatch(9)
+				store.dispatch(setValue(9))
 				const closing = yield* Effect.forkChild(Scope.close(first, Exit.void), { startImmediately: true })
 				yield* Deferred.await(releasing)
 				yield* store.activate.pipe(Scope.provide(second))
-				expect(store.commit(2)).toEqual(Result.void)
+				expect(store.commit(setValue(2))).toEqual(Result.void)
 				yield* Deferred.succeed(gate, undefined)
 				yield* Fiber.join(closing)
 				expect({ model: store.getModel(), crash: store.getCrash(), releases }).toEqual({
@@ -556,22 +557,22 @@ describe("crash projection", function () {
 })
 
 it("sends reactivation only for replacement activations, sharing it across leases", function () {
-	const store = ReactStore.make<number, number>(
+	const store = ReactStore.make<number, ValueMessage>(
 		{
-			update: (model, message) => ({ model: model + message }),
-			onReactivate: () => 10,
+			update: (model, message) => ({ model: model + message.value }),
+			onReactivate: () => setValue(10),
 		},
 		{ model: 1 }
 	)
 	const initial = activate(store)
 	expect(store.getModel()).toBe(1)
-	Result.getOrThrow(store.commit(2))
+	Result.getOrThrow(store.commit(setValue(2)))
 	initial()
 	const replacement = activate(store)
 	const lease = activate(store)
 	expect(store.getModel()).toBe(13)
 	replacement()
-	Result.getOrThrow(store.commit(3))
+	Result.getOrThrow(store.commit(setValue(3)))
 	expect(store.getModel()).toBe(16)
 	lease()
 	const next = activate(store)
@@ -581,21 +582,24 @@ it("sends reactivation only for replacement activations, sharing it across lease
 
 it.live("passes Commands interrupted by deactivation to onReactivate, excluding init Commands", () =>
 	Effect.gen(function* () {
-		const contexts: Array<ReactStore.ReactivationContext<number, number>> = []
-		const save: Command.Command<number> = { name: "Save", effect: Effect.never }
-		const store = ReactStore.make<number, number>(
+		const contexts: Array<ReactStore.ReactivationContext<number, ValueMessage>> = []
+		const save: Command.Command<ValueMessage> = { name: "Save", effect: Effect.never }
+		const store = ReactStore.make<number, ValueMessage>(
 			{
-				update: (model, message) => ({ model: model + message, commands: message === 1 ? [save] : [] }),
+				update: (model, message) => ({
+					model: model + message.value,
+					commands: message.value === 1 ? [save] : [],
+				}),
 				onReactivate(context) {
 					contexts.push(context)
-					return 0
+					return setValue(0)
 				},
 			},
 			{ model: 0, commands: [{ name: "Init", effect: Effect.never }] }
 		)
 		const first = yield* Scope.make()
 		yield* store.activate.pipe(Scope.provide(first))
-		store.dispatch(1)
+		store.dispatch(setValue(1))
 		yield* Effect.yieldNow
 		yield* Scope.close(first, Exit.void)
 		const second = yield* Scope.make()
@@ -612,16 +616,19 @@ it.live("passes Commands interrupted by deactivation to onReactivate, excluding 
 it.live("passes a Command forked in the deactivating tick to onReactivate", () =>
 	Effect.gen(function* () {
 		const interrupted = yield* Queue.unbounded<ReadonlyArray<string>>()
-		const save: Command.Command<number> = { name: "Save", effect: Effect.never }
-		const store = ReactStore.make<number, number>(
+		const save: Command.Command<ValueMessage> = { name: "Save", effect: Effect.never }
+		const store = ReactStore.make<number, ValueMessage>(
 			{
-				update: (model, message) => ({ model: model + message, commands: message === 1 ? [save] : [] }),
+				update: (model, message) => ({
+					model: model + message.value,
+					commands: message.value === 1 ? [save] : [],
+				}),
 				onReactivate(context) {
 					Queue.offerUnsafe(
 						interrupted,
 						context.interrupted.map((command) => command.name)
 					)
-					return 0
+					return setValue(0)
 				},
 			},
 			{ model: 0 }
@@ -629,7 +636,7 @@ it.live("passes a Command forked in the deactivating tick to onReactivate", () =
 		const first = yield* Scope.make()
 		yield* store.activate.pipe(Scope.provide(first))
 
-		store.dispatch(1)
+		store.dispatch(setValue(1))
 		yield* Scope.close(first, Exit.void)
 		const second = yield* Scope.make()
 		yield* store.activate.pipe(Scope.provide(second))
@@ -642,28 +649,28 @@ it.live("passes a Command forked in the deactivating tick to onReactivate", () =
 it.live("restarts interrupted Commands chosen by restartInterrupted", () =>
 	Effect.gen(function* () {
 		const starts: Array<string> = []
-		const run = (name: string): Command.Command<number> => ({
+		const run = (name: string): Command.Command<ValueMessage> => ({
 			name,
 			effect: Effect.sync(() => starts.push(name)).pipe(Effect.andThen(Effect.never)),
 		})
 		const interrupted: Array<ReadonlyArray<string>> = []
-		const store = ReactStore.make<number, number>(
+		const store = ReactStore.make<number, ValueMessage>(
 			{
 				update: (model, message) => ({
-					model: model + message,
-					commands: message === 1 ? [run("Fetch"), run("Save")] : [],
+					model: model + message.value,
+					commands: message.value === 1 ? [run("Fetch"), run("Save")] : [],
 				}),
 				restartInterrupted: (command) => command.name === "Fetch",
 				onReactivate(context) {
 					interrupted.push(context.interrupted.map((command) => command.name))
-					return 0
+					return setValue(0)
 				},
 			},
 			{ model: 0 }
 		)
 		const first = yield* Scope.make()
 		yield* store.activate.pipe(Scope.provide(first))
-		store.dispatch(1)
+		store.dispatch(setValue(1))
 		yield* Effect.yieldNow
 		yield* Scope.close(first, Exit.void)
 		const second = yield* Scope.make()
@@ -681,13 +688,13 @@ describe("retainInactive", function () {
 			const gate = yield* Deferred.make<void>()
 			let interrupted = false
 			let reactivations = 0
-			const store = ReactStore.make<number, number>(
+			const store = ReactStore.make<number, ValueMessage>(
 				{
-					update: (model, message) => ({ model: model + message }),
+					update: (model, message) => ({ model: model + message.value }),
 					retainInactive: "1 minute",
 					onReactivate() {
 						reactivations += 1
-						return 0
+						return setValue(0)
 					},
 				},
 				{
@@ -696,7 +703,7 @@ describe("retainInactive", function () {
 						{
 							name: "Slow",
 							effect: Deferred.await(gate).pipe(
-								Effect.as(5),
+								Effect.as(setValue(5)),
 								Effect.onInterrupt(() =>
 									Effect.sync(function () {
 										interrupted = true
@@ -711,7 +718,7 @@ describe("retainInactive", function () {
 			yield* store.activate.pipe(Scope.provide(first))
 			yield* Scope.close(first, Exit.void)
 			// The retained Store still accepts work while no lease is held.
-			expect(Result.isSuccess(store.commit(1))).toBe(true)
+			expect(Result.isSuccess(store.commit(setValue(1)))).toBe(true)
 			yield* Deferred.succeed(gate, undefined)
 			yield* Effect.yieldNow
 			yield* Effect.yieldNow
@@ -727,8 +734,8 @@ describe("retainInactive", function () {
 	it.live("disposes the retained Store once the window ends", () =>
 		Effect.gen(function* () {
 			let interrupted = false
-			const store = ReactStore.make<number, number>(
-				{ update: (model, message) => ({ model: model + message }), retainInactive: "20 millis" },
+			const store = ReactStore.make<number, ValueMessage>(
+				{ update: (model, message) => ({ model: model + message.value }), retainInactive: "20 millis" },
 				{
 					model: 0,
 					commands: [
@@ -751,7 +758,7 @@ describe("retainInactive", function () {
 			expect(interrupted).toBe(false)
 			yield* Effect.sleep("80 millis")
 			expect(interrupted).toBe(true)
-			expect(store.commit(1)).toEqual(Result.fail(new CommitError({ reason: new Inactive() })))
+			expect(store.commit(setValue(1))).toEqual(Result.fail(new CommitError({ reason: new Inactive() })))
 		})
 	)
 
@@ -761,8 +768,8 @@ describe("retainInactive", function () {
 	it.live("keeps a Store reactivated within the window running after the window ends", () =>
 		Effect.gen(function* () {
 			const interrupted = yield* Deferred.make<void>()
-			const store = ReactStore.make<number, number>(
-				{ update: (model, message) => ({ model: model + message }), retainInactive: "20 millis" },
+			const store = ReactStore.make<number, ValueMessage>(
+				{ update: (model, message) => ({ model: model + message.value }), retainInactive: "20 millis" },
 				{
 					model: 0,
 					commands: [
@@ -784,7 +791,7 @@ describe("retainInactive", function () {
 			yield* Effect.sleep("80 millis")
 
 			expect(yield* Deferred.isDone(interrupted)).toBe(false)
-			expect(store.commit(1)).toEqual(Result.void)
+			expect(store.commit(setValue(1))).toEqual(Result.void)
 			yield* Scope.close(second, Exit.void)
 		})
 	)
@@ -797,14 +804,14 @@ describe("retainInactive", function () {
 			const defect = new Error("late Command failed")
 			const fail = yield* Deferred.make<void>()
 			const reactivations = yield* Queue.unbounded<number>()
-			const store = ReactStore.make<number, number>(
+			const store = ReactStore.make<number, ValueMessage>(
 				{
-					update: (model, message) => ({ model: model + message }),
+					update: (model, message) => ({ model: model + message.value }),
 					retainInactive: "1 minute",
 					onCrash: Function.constVoid,
 					onReactivate({ model }) {
 						Queue.offerUnsafe(reactivations, model)
-						return 0
+						return setValue(0)
 					},
 				},
 				{
@@ -826,7 +833,7 @@ describe("retainInactive", function () {
 
 			expect(store.getCrash()).toEqual(Option.none())
 			expect(yield* Queue.take(reactivations)).toBe(0)
-			expect(store.commit(1)).toEqual(Result.void)
+			expect(store.commit(setValue(1))).toEqual(Result.void)
 			yield* Scope.close(second, Exit.void)
 		})
 	)
@@ -837,9 +844,9 @@ describe("retainInactive", function () {
 		Effect.gen(function* () {
 			const acquired = yield* Deferred.make<void>()
 			const released = yield* Deferred.make<Exit.Exit<unknown, unknown>>()
-			const store = ReactStore.make<number, number>(
+			const store = ReactStore.make<number, ValueMessage>(
 				{
-					update: (_model, message) => ({ model: message }),
+					update: (_model, message) => ({ model: message.value }),
 					retainInactive: "20 millis",
 					resources: Layer.effectDiscard(
 						Effect.acquireRelease(Deferred.succeed(acquired, undefined), (_, exit) =>
@@ -847,7 +854,10 @@ describe("retainInactive", function () {
 						)
 					),
 				},
-				{ model: 0, commands: [{ name: "BuildResources", effect: Effect.succeed(1) }] }
+				{
+					model: 0,
+					commands: [{ name: "BuildResources", effect: Effect.succeed(1).pipe(Effect.map(setValue)) }],
+				}
 			)
 			const scope = yield* Scope.make()
 			yield* store.activate.pipe(Scope.provide(scope))
@@ -866,15 +876,15 @@ it.each(["callback", "update"] as const)(
 	function (failure) {
 		let shouldFail = true
 		const defect = new Error(`reactivation ${failure} failed`)
-		const store = ReactStore.make<number, number>(
+		const store = ReactStore.make<number, ValueMessage>(
 			{
 				update(model, message) {
 					if (shouldFail && failure === "update") throw defect
-					return { model: model + message }
+					return { model: model + message.value }
 				},
 				onReactivate() {
 					if (shouldFail && failure === "callback") throw defect
-					return 10
+					return setValue(10)
 				},
 				onCrash() {},
 			},
@@ -886,20 +896,20 @@ it.each(["callback", "update"] as const)(
 		if (failure === "callback") {
 			expect(exit).toEqual(Exit.die(defect))
 			expect(store.getCrash()).toEqual(Option.none())
-			expect(store.commit(2)).toEqual(Result.fail(new CommitError({ reason: new Inactive() })))
+			expect(store.commit(setValue(2))).toEqual(Result.fail(new CommitError({ reason: new Inactive() })))
 		} else {
 			expect(exit).toEqual(Exit.void)
 			expect(store.getCrash()).toEqual(Option.some(Cause.die(defect)))
-			expect(store.commit(2)).toEqual(
+			expect(store.commit(setValue(2))).toEqual(
 				Result.fail(new CommitError({ reason: new Crashed({ cause: Cause.die(defect) }) }))
 			)
 		}
 		Effect.runSync(Scope.close(failedScope, Exit.void))
-		expect(store.commit(2)).toEqual(Result.fail(new CommitError({ reason: new Inactive() })))
+		expect(store.commit(setValue(2))).toEqual(Result.fail(new CommitError({ reason: new Inactive() })))
 		shouldFail = false
 		const replacement = activate(store)
 		expect(store.getModel()).toBe(11)
-		Result.getOrThrow(store.commit(2))
+		Result.getOrThrow(store.commit(setValue(2)))
 		expect(store.getModel()).toBe(13)
 		replacement()
 	}
@@ -913,12 +923,12 @@ it.live("releases a failed reactivation scope before its queued resources can st
 		let acquisitions = 0
 		let releases = 0
 		let shouldFail = true
-		const store = ReactStore.make<number, number>(
+		const store = ReactStore.make<number, ValueMessage>(
 			{
-				update: (model, message) => ({ model: model + message }),
+				update: (model, message) => ({ model: model + message.value }),
 				onReactivate() {
 					if (shouldFail) throw new Error("resume failed")
-					return 10
+					return setValue(10)
 				},
 				resources: Layer.effectDiscard(
 					Effect.acquireRelease(

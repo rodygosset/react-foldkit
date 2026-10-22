@@ -1,11 +1,17 @@
 import { describe, expect, it } from "@effect/vitest"
-import { Effect, Function } from "effect"
+import { Effect, Function, Schema } from "effect"
 import * as Cases from "./cases"
 import { type Case, foldkitRuntime, run, storeRuntime, type Tagged } from "./harness"
 
 // Runs one program on the React Foldkit Store and on Foldkit's own runtime. Both must produce the
 // expected trace, so a Foldkit upgrade that changes one of these behaviors fails here first.
-const conforms = <Model, Message extends Tagged, R>(conformanceCase: Case<Model, Message, R>) =>
+const conforms = <
+	ModelSchema extends Schema.Codec<unknown, unknown>,
+	MessageSchema extends Schema.Codec<Tagged, unknown>,
+	R,
+>(
+	conformanceCase: Case<ModelSchema, MessageSchema, R>
+) =>
 	Effect.gen(function* () {
 		const normalize = conformanceCase.normalize ?? Function.identity
 		const store = normalize(yield* run(storeRuntime, conformanceCase))

@@ -26,7 +26,7 @@ const Load = Command.define("Load", {
 	execute: Effect.succeed(InitMessage.Loaded({ value: 1 })),
 })
 
-export const init: Case<number, InitMessage> = {
+export const init: Case<Schema.Finite, typeof InitMessage> = {
 	program: Effect.succeed({
 		Model: Schema.Finite,
 		Message: InitMessage,
@@ -46,7 +46,7 @@ type ListModel = typeof ListModel.Type
 const FifoMessage = defineMessageUnion({ Added: { value: Schema.Finite } })
 type FifoMessage = typeof FifoMessage.Type
 
-export const fifo: Case<ListModel, FifoMessage> = {
+export const fifo: Case<typeof ListModel, typeof FifoMessage> = {
 	program: Effect.succeed({
 		Model: ListModel,
 		Message: FifoMessage,
@@ -78,7 +78,7 @@ const Advance = Command.define("Advance", {
 	execute: ({ step }) => Effect.succeed(ChainMessage.Stepped({ step })),
 })
 
-export const commandChain: Case<ListModel, ChainMessage> = {
+export const commandChain: Case<typeof ListModel, typeof ChainMessage> = {
 	program: Effect.succeed({
 		Model: ListModel,
 		Message: ChainMessage,
@@ -118,7 +118,7 @@ const byObservedTag = Order.mapInput(Order.String, (event: Event) =>
 	event._tag === "Updated" ? String(event.observed) : ""
 )
 
-export const batch: Case<number, BatchMessage> = {
+export const batch: Case<typeof Schema.Finite, typeof BatchMessage> = {
 	program: Effect.succeed({
 		Model: Schema.Finite,
 		Message: BatchMessage,
@@ -148,7 +148,7 @@ const updateRoom = (_model: RoomModel, message: RoomMessage) =>
 		Left: () => ({ model: { room: Option.none() } }),
 	})
 
-export const subscriptionLifecycle: Case<RoomModel, RoomMessage> = {
+export const subscriptionLifecycle: Case<typeof RoomModel, typeof RoomMessage> = {
 	program: Effect.gen(function* () {
 		const { record } = yield* Trace
 		const presence = (room: string) => logged(record, room)(Stream.never)
@@ -196,7 +196,7 @@ type FeedMessage = typeof FeedMessage.Type
 const FeedModel = Schema.Struct({ joined: Schema.Boolean, values: Schema.Array(Schema.Finite) })
 type FeedModel = typeof FeedModel.Type
 
-export const subscriptionMessages: Case<FeedModel, FeedMessage> = {
+export const subscriptionMessages: Case<typeof FeedModel, typeof FeedMessage> = {
 	program: Effect.gen(function* () {
 		const feed = yield* Queue.unbounded<number>()
 		return {
@@ -245,7 +245,7 @@ const WorkMessage = defineMessageUnion({
 })
 type WorkMessage = typeof WorkMessage.Type
 
-export const interrupt: Case<number, WorkMessage> = {
+export const interrupt: Case<typeof Schema.Finite, typeof WorkMessage> = {
 	program: Effect.gen(function* () {
 		const { record } = yield* Trace
 		const Work = Command.define("Work", {
@@ -319,7 +319,7 @@ const lifted = revision.lift<RevisionModel, RevisionMessage>({
 	toParentMessage: (message) => RevisionMessage.GotRevisionMessage({ message }),
 })
 
-export const query: Case<RevisionModel, RevisionMessage, Responses> = {
+export const query: Case<typeof RevisionModel, typeof RevisionMessage, Responses> = {
 	program: Effect.gen(function* () {
 		const responses = yield* Queue.unbounded<number>()
 		const respond = (value: number) => Effect.asVoid(Queue.offer(responses, value))
@@ -364,7 +364,7 @@ export const query: Case<RevisionModel, RevisionMessage, Responses> = {
 const CrashMessage = defineMessageUnion({ Added: { value: Schema.Finite }, Exploded: {} })
 type CrashMessage = typeof CrashMessage.Type
 
-export const crash: Case<ListModel, CrashMessage> = {
+export const crash: Case<typeof ListModel, typeof CrashMessage> = {
 	program: Effect.succeed({
 		Model: ListModel,
 		Message: CrashMessage,

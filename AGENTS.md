@@ -22,7 +22,7 @@ Use camelCase implementation filenames and directories. Keep public ESLint rule 
 
 Do not edit `routeTree.gen.ts`, `dist`, `eslint/dist`, `.release`, or generated documentation by hand. Build and run `docs:generate` after an intentional API or JSDoc change, then review the generated diff.
 
-Code copied from Foldkit lives in `vendor` directories with a manifest of the tested release, file hashes, and recorded patches. When upgrading Foldkit, run `check:vendor`, recopy changed files, reapply the patches, and update the manifest. Do not edit copied files except through the recorded patches.
+Code copied from Foldkit lives in vendor directories, with the tested release, file hashes, and recorded patches. Scene stores that record in `scripts/sceneVendorManifest.json`. DevTools stores it in a `vendorLock.json` beside the copy. When upgrading Foldkit, run `check:vendor` and `check:devtools-vendor`, recopy changed files, reapply the patches, and update the manifest or the lock. Do not edit copied files except through the recorded patches.
 
 Use the official Foldkit npm release. Keep the demo and package development dependency pinned to the same version, and bound the peer range to tested compatible versions. CI and packed consumer tests must install from the registry without sibling checkouts or dependency overrides. Define HttpApi-backed Queries with `Query.define` and read the client service inside `execute`.
 

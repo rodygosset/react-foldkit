@@ -1,0 +1,36 @@
+{
+  "package": "@foldkit/vite-plugin",
+  "version": "0.28.0",
+  "files": [
+    {
+      "path": "relayRegistry.d.ts",
+      "sourceSha256": "fd4d422ac35dd33395f92fd50521ca0ecaa325f69d7d5a7af4519b10187c2ce0",
+      "patchedSha256": "fd4d422ac35dd33395f92fd50521ca0ecaa325f69d7d5a7af4519b10187c2ce0"
+    },
+    {
+      "path": "relayRegistry.js",
+      "sourceSha256": "a15611bc08234681cbd681103c4345d307558622979c586052b311c865e3966b",
+      "patchedSha256": "a15611bc08234681cbd681103c4345d307558622979c586052b311c865e3966b"
+    },
+    {
+      "path": "relayRegistryTrust.d.ts",
+      "sourceSha256": "b0c01db69c1b671b1d46550533dbfc79d326977c93fe5ee8b45192211cf17d70",
+      "patchedSha256": "b0c01db69c1b671b1d46550533dbfc79d326977c93fe5ee8b45192211cf17d70"
+    },
+    {
+      "path": "relayRegistryTrust.js",
+      "sourceSha256": "5a62582bc8ff24e7234f316be2f7120e710bb0a99b8288bba72210c428acf64b",
+      "patchedSha256": "5a62582bc8ff24e7234f316be2f7120e710bb0a99b8288bba72210c428acf64b"
+    }
+  ],
+  "adaptedFrom": [
+    {
+      "path": "index.js",
+      "sourceSha256": "87e50815aef2225c2ba7c8fa8101b5906c4c6bbfede89150e9afceddda53086e"
+    },
+    {
+      "path": "devToolsOverlay.js",
+      "sourceSha256": "c05816f4d1d01ffad418d17e35195a0bf190fef45ce89c6431736a6e6b90e2d6"
+    }
+  ]
+}

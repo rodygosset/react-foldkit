@@ -14,6 +14,8 @@ export default defineConfig({
 		program: "src/program/public.ts",
 		scene: "src/scene.ts",
 		"scene/react": "src/scene/react.ts",
+		devtools: "src/devtools.ts",
+		vite: "src/vite.ts",
 	},
 	format: ["esm"],
 	dts: false,
@@ -21,5 +23,16 @@ export default defineConfig({
 	sourcemap: true,
 	clean: true,
 	treeshake: true,
-	external: ["effect", /^foldkit(?:\/.*)?$/, "react", "react/jsx-runtime", "react/jsx-dev-runtime"],
+	external: [
+		"effect",
+		/^foldkit(?:\/.*)?$/,
+		"react",
+		"react/jsx-runtime",
+		"react/jsx-dev-runtime",
+		// The Vite plugin runs in Node and loads these from the consumer's install.
+		"vite",
+		"ws",
+		/^@effect\/platform-node-shared(?:\/.*)?$/,
+		/^@foldkit\/devtools(?:\/.*)?$/,
+	],
 })

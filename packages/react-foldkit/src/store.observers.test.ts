@@ -1,18 +1,59 @@
-import { Cause, Deferred, Effect, Exit, Fiber, Function, Layer, Option, Schema, Stream } from "effect"
+import {
+	Cause,
+	Context,
+	Deferred,
+	Effect,
+	Exit,
+	Fiber,
+	Function,
+	Layer,
+	Option,
+	Result,
+	Schema,
+	Scope,
+	Stream,
+} from "effect"
+import { ValueMessage, setValue } from "../test/fixtures/valueMessage"
 import { describe, expect } from "vitest"
 import { it } from "@effect/vitest"
 import * as Store from "./store"
+import * as Runtime from "./store/store"
 import * as Subscription from "foldkit/subscription"
 import { makeLogCapture } from "../test/fixtures/logCapture"
 
 describe("store observers", function () {
+	it.live("observer defects do not interrupt Message delivery", () =>
+		Effect.gen(function* () {
+			const command = { name: "Run", effect: Effect.never }
+			const runtime = Runtime.makeRuntime(
+				{ update: (model: number, message: ValueMessage) => ({ model: message.value, commands: [command] }) },
+				0,
+				{
+					recordInit() {},
+					recordMessage() {
+						throw new Error("observer failed")
+					},
+					adoptCommand: (command) => command,
+				}
+			)
+			const scope = yield* Scope.make()
+			yield* runtime
+				.activate({ context: Context.empty(), commands: [], firstMessage: Option.none() })
+				.pipe(Scope.provide(scope))
+			expect(runtime.commit(setValue(1))).toEqual(Result.void)
+			expect(runtime.getModel()).toBe(1)
+			expect(runtime.getRunningCommands()).toEqual([command])
+			yield* Scope.close(scope, Exit.void)
+		})
+	)
+
 	it.live("buffers every model while subscription resources are acquiring", () =>
 		Effect.gen(function* () {
 			const seen: number[] = []
 			const acquiring = Deferred.makeUnsafe<void>()
 			const ready = Deferred.makeUnsafe<void>()
 			const consumed = Deferred.makeUnsafe<void>()
-			const subscriptions = Subscription.make<number, number>()((entry) => ({
+			const subscriptions = Subscription.make<number, ValueMessage>()((entry) => ({
 				watch: entry(
 					{ value: Schema.Finite },
 					{
@@ -29,7 +70,7 @@ describe("store observers", function () {
 			}))
 			const store = Store.boot(
 				{
-					update: (_model: number, message: number) => ({ model: message }),
+					update: (_model: number, message: ValueMessage) => ({ model: message.value }),
 					subscriptions,
 					resources: Layer.effectDiscard(
 						Deferred.succeed(acquiring, undefined).pipe(Effect.andThen(Deferred.await(ready)))
@@ -39,8 +80,8 @@ describe("store observers", function () {
 			)
 			try {
 				yield* Deferred.await(acquiring)
-				store.commit(1)
-				store.commit(2)
+				store.commit(setValue(1))
+				store.commit(setValue(2))
 				yield* Deferred.succeed(ready, undefined)
 				yield* Deferred.await(consumed)
 				expect(seen).toEqual([0, 1, 2])
@@ -55,7 +96,7 @@ describe("store observers", function () {
 			const defect = new Error("predicate failed")
 			let picks = 0
 			const store = Store.boot(
-				{ update: (_model: number, message: number) => ({ model: message }) },
+				{ update: (_model: number, message: ValueMessage) => ({ model: message.value }) },
 				{ model: 0 }
 			)
 			const waiter = yield* Effect.forkChild(
@@ -69,10 +110,10 @@ describe("store observers", function () {
 				{ startImmediately: true }
 			)
 			try {
-				store.commit(1)
+				store.commit(setValue(1))
 				const result = yield* Fiber.join(waiter)
 				expect(Exit.isFailure(result) && result.cause.reasons).toEqual(Cause.die(defect).reasons)
-				store.commit(2)
+				store.commit(setValue(2))
 				expect(picks).toBe(throwAt + 1)
 				expect(store.getModel()).toBe(2)
 				expect(store.getCrash()).toEqual(Option.none())
@@ -89,7 +130,7 @@ describe("store observers", function () {
 			const updateDefect = new Error("update failed")
 			const onCrashDefect = new Error("onCrash failed")
 			const logs = makeLogCapture()
-			const store = yield* Store.make<number, number>(
+			const store = yield* Store.make<number, ValueMessage>(
 				{
 					update() {
 						throw updateDefect
@@ -105,7 +146,7 @@ describe("store observers", function () {
 				notified = true
 			})
 
-			store.dispatch(1)
+			store.dispatch(setValue(1))
 			yield* Effect.yieldNow
 
 			expect(notified).toBe(true)
@@ -118,7 +159,7 @@ describe("store observers", function () {
 	// time still runs once.
 	it.effect("notifies every crash listener registered at crash time when one unsubscribes another", () =>
 		Effect.gen(function* () {
-			const store = yield* Store.make<number, number>(
+			const store = yield* Store.make<number, ValueMessage>(
 				{
 					update() {
 						throw new Error("update failed")
@@ -137,7 +178,7 @@ describe("store observers", function () {
 				notified.push("second")
 			})
 
-			store.dispatch(1)
+			store.dispatch(setValue(1))
 
 			expect(notified).toEqual(["first", "second"])
 		})
@@ -148,7 +189,7 @@ describe("store observers", function () {
 		Effect.gen(function* () {
 			const defect = new Error("update failed")
 			const logs = makeLogCapture()
-			const store = yield* Store.make<number, number>(
+			const store = yield* Store.make<number, ValueMessage>(
 				{
 					update() {
 						throw defect
@@ -157,7 +198,7 @@ describe("store observers", function () {
 				{ model: 0 }
 			).pipe(Effect.provide(logs.layer))
 
-			store.dispatch(1)
+			store.dispatch(setValue(1))
 			yield* Effect.yieldNow
 
 			expect(logs.entries.map(({ message }) => message)).toEqual([
@@ -182,7 +223,7 @@ describe("store observers", function () {
 				)
 			)
 			const store = Store.boot(
-				{ update: (_model: number, message: number) => ({ model: message }), resources: layer },
+				{ update: (_model: number, message: ValueMessage) => ({ model: message.value }), resources: layer },
 				{ model: 0, commands: [{ name: "Wait", effect: Effect.never }] }
 			)
 			yield* Deferred.await(started)

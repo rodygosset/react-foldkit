@@ -419,17 +419,34 @@ export type Runtime<Model, Message, R> = Omit<Store<Model, Message>, "getRunning
 	readonly dispose: (exit?: Exit.Exit<unknown, unknown>) => Effect.Effect<void>
 }
 
+export interface RuntimeObserver<Model, Message, R> {
+	readonly recordInit: (model: Model, commands: Update.Commands<Message, R>) => void
+	readonly recordMessage: (
+		message: Message,
+		modelBeforeUpdate: Model,
+		modelAfterUpdate: Model,
+		commands: Update.Commands<Message, R>
+	) => void
+	/** Returns the Command the Store should fork. DevTools uses this to keep history ids on that Command. */
+	readonly adoptCommand: (
+		command: Update.Commands<Message, R>[number]
+	) => Update.Commands<Message, R>[number]
+}
+
 export function makeRuntime<Model, Message, R>(
 	program: Config<Model, Message, R>,
-	initialModel: Model
+	initialModel: Model,
+	observer?: RuntimeObserver<Model, Message, R>
 ): Runtime<Model, Message, R>
 export function makeRuntime<Model, Message, R>(
 	program: Program<Model, Message, R> & { readonly resources?: Layer.Layer<NoInfer<R>, never, never> },
-	initialModel: Model
+	initialModel: Model,
+	observer?: RuntimeObserver<Model, Message, R>
 ): Runtime<Model, Message, R>
 export function makeRuntime<Model, Message, R>(
 	program: Program<Model, Message, R> & { readonly resources?: Layer.Layer<NoInfer<R>, never, never> },
-	initialModel: Model
+	initialModel: Model,
+	observer?: RuntimeObserver<Model, Message, R>
 ): Runtime<Model, Message, R> {
 	const listeners = new Set<() => void>()
 	const crashListeners = new Set<() => void>()
@@ -441,6 +458,16 @@ export function makeRuntime<Model, Message, R>(
 	let lastDrainEndedAt = 0
 	let deferredDrainChannel: MessageChannel | undefined
 	let warnedInactiveOverflow = false
+	let hasRecordedInit = false
+
+	function observe<A>(run: () => A): A | undefined {
+		try {
+			return run()
+		} catch (error) {
+			runFork(Effect.logError(Cause.die(error)))
+			return undefined
+		}
+	}
 
 	// Logs with the live activation's services, such as its Logger, when there is one.
 	function runFork(effect: Effect.Effect<void>): void {
@@ -539,6 +566,9 @@ export function makeRuntime<Model, Message, R>(
 
 	// Forks the Command into the activation's fiber Scope. The fiber inherits the calling fiber's
 	// Context, so run this with the activation's Context.
+	const adopted = (command: Command<Message, R>): Command<Message, R> =>
+		observe(() => observer?.adoptCommand(command)) ?? command
+
 	function startCommand(
 		activation: Activation<Model, R>,
 		command: Command<Message, R>,
@@ -578,7 +608,7 @@ export function makeRuntime<Model, Message, R>(
 		command: Command<Message, R>,
 		triggeringMessage: Option.Option<Message>
 	): void {
-		Effect.runForkWith(activation.runtimeContext)(startCommand(activation, command, triggeringMessage))
+		Effect.runForkWith(activation.runtimeContext)(startCommand(activation, adopted(command), triggeringMessage))
 	}
 
 	function processMessage(activation: Activation<Model, R>, { message, command }: PendingMessage<Message, R>): void {
@@ -586,12 +616,14 @@ export function makeRuntime<Model, Message, R>(
 		if (Result.isFailure(updated)) return crashWith(Cause.die(updated.failure), Option.some(message))
 		const previous = model
 		model = updated.success.model
+		const commands = updated.success.commands ?? []
+		observe(() => observer?.recordMessage(message, previous, model, commands))
 		if (command !== undefined) InitCommand.complete(command)
 		if (previous !== model) {
 			PubSub.publishUnsafe(activation.modelPubSub, model)
 			notify(listeners)
 		}
-		for (const next of updated.success.commands ?? []) forkCommand(activation, next, Option.some(message))
+		for (const next of commands) forkCommand(activation, next, Option.some(message))
 	}
 
 	function drainPendingMessages(until?: PendingMessage<Message, R>): void {
@@ -729,6 +761,10 @@ export function makeRuntime<Model, Message, R>(
 			// Foldkit attaches subscriptions before forking init Commands, so their initial
 			// dependencies come from the current Model.
 			yield* Effect.gen(function* () {
+				if (!hasRecordedInit) {
+					observe(() => observer?.recordInit(model, commands))
+					hasRecordedInit = true
+				}
 				yield* forkSubscriptionFibers(program.subscriptions, {
 					initialModel: model,
 					modelPubSub: activation.modelPubSub,
@@ -741,7 +777,7 @@ export function makeRuntime<Model, Message, R>(
 						if (isLive(activation)) crashWith(cause, message)
 					},
 				})
-				for (const command of commands) yield* startCommand(activation, command, Option.none())
+				for (const command of commands) yield* startCommand(activation, adopted(command), Option.none())
 			}).pipe(Effect.provideContext(activation.runtimeContext))
 
 			if (Option.isNone(firstMessage)) return drainPendingMessages()

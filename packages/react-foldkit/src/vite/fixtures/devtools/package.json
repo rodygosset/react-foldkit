@@ -1,0 +1,8 @@
+{
+  "name": "react-foldkit-vite-devtools-fixture",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "@foldkit/devtools": "0.168.0"
+  }
+}

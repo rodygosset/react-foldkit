@@ -4,6 +4,7 @@ import { defineMessageUnion } from "foldkit/message"
 import type * as Update from "foldkit/update"
 import * as Program from "react-foldkit/program"
 import * as Application from "react-foldkit/application"
+import * as Store from "react-foldkit/store"
 import { define } from "react-foldkit/submodel"
 import { describe, expectTypeOf, it } from "vitest"
 
@@ -26,6 +27,41 @@ describe("Program public types", function () {
 	})
 
 	if (false) {
+		const untagged = {
+			Model: Schema.Finite,
+			Message: Schema.Finite,
+			update: (model: number, _message: number) => ({ model }),
+		}
+		// @ts-expect-error Messages must have a string _tag.
+		Program.make(untagged)
+		// @ts-expect-error Application Messages must be tagged.
+		Application.define(untagged)
+		// @ts-expect-error Submodel Messages must be tagged.
+		define({ Model: Schema.Finite, Message: Schema.Finite })
+		Store.make({ update: untagged.update }, { model: 0 })
+		Store.boot({ update: untagged.update }, { model: 0 })
+		// @ts-expect-error An untagged object is not a Message.
+		Program.make({ Model, Message: Schema.Struct({ value: Schema.Finite }), update: (model: Model) => ({ model }) })
+		Application.define({
+			Model,
+			// @ts-expect-error _tag must be a string.
+			Message: Schema.Struct({ _tag: Schema.Finite }),
+			update: (model: Model) => ({ model }),
+		})
+		Application.define(
+			{ Model, Message, update },
+			{
+				// @ts-expect-error DevTools cannot dispatch Messages from a different Schema.
+				devTools: { Message: Schema.Finite },
+			}
+		)
+		Application.define(
+			{ Model, Message, update },
+			{
+				// @ts-expect-error A different tagged union is also invalid for DevTools dispatch.
+				devTools: { Message: Other },
+			}
+		)
 		const program = Program.make({ Model, Message, init, update })
 		const App = Application.define(program, { retainInactive: "1 second" })
 		// The Program's init makes the Provider's init optional.

@@ -1,11 +1,12 @@
 import { it } from "@effect/vitest"
+import { ValueMessage, setValue } from "../test/fixtures/valueMessage"
 import { Array, Cause, Effect, Exit, Result } from "effect"
 import { afterEach, beforeEach, describe, expect, vi } from "vitest"
 import * as Store from "./store"
 import { controlledDrains } from "../test/fixtures/controlledDrains"
 import type * as Update from "foldkit/update"
 
-type Message = { readonly label: string; readonly burn?: number }
+type Message = { readonly _tag: "Append"; readonly label: string; readonly burn?: number }
 type Model = ReadonlyArray<string>
 const stores: Array<Store.Store<Model, Message>> = []
 let clock = 0
@@ -39,10 +40,7 @@ function boot(extra?: (model: Model, message: Message) => Update.Return<Model, M
 	stores.push(store)
 	return { store, onCrash }
 }
-function failReason(
-	action: () => Result.Result<void, Store.CommitError>,
-	reason: Store.CommitError["reason"]["_tag"]
-) {
+function failReason(action: () => Result.Result<void, Store.CommitError>, reason: Store.CommitError["reason"]["_tag"]) {
 	const result = action()
 	expect(Result.isFailure(result)).toBe(true)
 	if (Result.isSuccess(result)) return expect.fail("Expected commit failure")
@@ -53,13 +51,13 @@ function failReason(
 describe("synchronous commit", function () {
 	it("the Effect adapter is lazy, repeatable, and exposes commit errors as typed failures", function () {
 		const { store } = boot()
-		const commit = Store.commit(store, { label: "effect" })
+		const commit = Store.commit(store, { _tag: "Append" as const, label: "effect" })
 		expect(store.getModel()).toEqual([])
 		Effect.runSync(commit)
 		Effect.runSync(commit)
 		expect(store.getModel()).toEqual(["effect", "effect"])
 		Effect.runSync(store.dispose())
-		failReason(() => store.commit({ label: "after-disposal" }), "Disposed")
+		failReason(() => store.commit({ _tag: "Append" as const, label: "after-disposal" }), "Disposed")
 		expect(store.getModel()).toEqual(["effect", "effect"])
 		const exit = Effect.runSyncExit(commit)
 		expect(Exit.isFailure(exit)).toBe(true)
@@ -73,7 +71,7 @@ describe("synchronous commit", function () {
 		const { store } = boot()
 		const observed: Model[] = []
 		store.subscribe(() => observed.push(store.getModel()))
-		Result.getOrThrow(store.commit({ label: "committed" }))
+		Result.getOrThrow(store.commit({ _tag: "Append" as const, label: "committed" }))
 		expect(store.getModel()).toEqual(["committed"])
 		expect(observed).toEqual([["committed"]])
 	})
@@ -81,13 +79,13 @@ describe("synchronous commit", function () {
 	it("stops at its own queue entry and schedules listener-enqueued work normally", function () {
 		const { store } = boot()
 		store.subscribe(function () {
-			if (store.getModel().at(-1) === "earlier") store.dispatch({ label: "later" })
+			if (store.getModel().at(-1) === "earlier") store.dispatch({ _tag: "Append" as const, label: "later" })
 		})
-		store.dispatch({ label: "burn", burn: 10 })
-		store.dispatch({ label: "earlier" })
+		store.dispatch({ _tag: "Append" as const, label: "burn", burn: 10 })
+		store.dispatch({ _tag: "Append" as const, label: "earlier" })
 		expect(store.getModel()).toEqual(["burn"])
 		expect(drains.pending).toBeGreaterThan(0)
-		Result.getOrThrow(store.commit({ label: "target" }))
+		Result.getOrThrow(store.commit({ _tag: "Append" as const, label: "target" }))
 		expect(store.getModel()).toEqual(["burn", "earlier", "target"])
 		// The canceled old callback must not consume the new deferred work.
 		drains.flushNext()
@@ -98,8 +96,8 @@ describe("synchronous commit", function () {
 
 	it("does not confuse repeated Message references with the commit boundary", function () {
 		const { store } = boot()
-		const repeated = { label: "same" }
-		store.dispatch({ label: "burn", burn: 10 })
+		const repeated = { _tag: "Append" as const, label: "same" }
+		store.dispatch({ _tag: "Append" as const, label: "burn", burn: 10 })
 		store.dispatch(repeated)
 		store.dispatch(repeated)
 		expect(store.getModel()).toEqual(["burn"])
@@ -110,12 +108,12 @@ describe("synchronous commit", function () {
 
 	it("an obsolete callback cannot reset the budget or prematurely drain a new queue", function () {
 		const { store } = boot()
-		store.dispatch({ label: "burn", burn: 10 })
-		store.dispatch({ label: "queued" })
+		store.dispatch({ _tag: "Append" as const, label: "burn", burn: 10 })
+		store.dispatch({ _tag: "Append" as const, label: "queued" })
 		expect(store.getModel()).toEqual(["burn"])
 		expect(drains.pending).toBeGreaterThan(0)
-		Result.getOrThrow(store.commit({ label: "target" }))
-		store.dispatch({ label: "after" })
+		Result.getOrThrow(store.commit({ _tag: "Append" as const, label: "target" }))
+		store.dispatch({ _tag: "Append" as const, label: "after" })
 		expect(store.getModel()).toEqual(["burn", "queued", "target"])
 		drains.flushNext()
 		expect(store.getModel()).toEqual(["burn", "queued", "target"])
@@ -127,14 +125,14 @@ describe("synchronous commit", function () {
 		let store: Store.Store<Model, Message>
 		let nestedResult: Result.Result<void, Store.CommitError> | undefined
 		const made = boot(function (model, message) {
-			if (message.label === "outer") nestedResult = store.commit({ label: "nested" })
+			if (message.label === "outer") nestedResult = store.commit({ _tag: "Append" as const, label: "nested" })
 			return { model: Array.append(model, message.label) }
 		})
 		store = made.store
-		const outerResult = store.commit({ label: "outer" })
+		const outerResult = store.commit({ _tag: "Append" as const, label: "outer" })
 		expect(nestedResult).toEqual(Result.fail(new Store.CommitError({ reason: new Store.Reentrant() })))
 		Result.getOrThrow(outerResult)
-		Result.getOrThrow(store.commit({ label: "next" }))
+		Result.getOrThrow(store.commit({ _tag: "Append" as const, label: "next" }))
 		expect(store.getModel()).toEqual(["outer", "next"])
 		expect(made.onCrash).not.toHaveBeenCalled()
 	})
@@ -143,12 +141,13 @@ describe("synchronous commit", function () {
 		const { store, onCrash } = boot()
 		let nestedResult: Result.Result<void, Store.CommitError> | undefined
 		store.subscribe(function () {
-			if (store.getModel().at(-1) === "outer") nestedResult = store.commit({ label: "nested" })
+			if (store.getModel().at(-1) === "outer")
+				nestedResult = store.commit({ _tag: "Append" as const, label: "nested" })
 		})
-		const outerResult = store.commit({ label: "outer" })
+		const outerResult = store.commit({ _tag: "Append" as const, label: "outer" })
 		expect(nestedResult).toEqual(Result.fail(new Store.CommitError({ reason: new Store.Reentrant() })))
 		Result.getOrThrow(outerResult)
-		Result.getOrThrow(store.commit({ label: "next" }))
+		Result.getOrThrow(store.commit({ _tag: "Append" as const, label: "next" }))
 		expect(store.getModel()).toEqual(["outer", "next"])
 		expect(onCrash).not.toHaveBeenCalled()
 	})
@@ -159,16 +158,16 @@ describe("synchronous commit", function () {
 			if (message.label === "fail") throw defect
 			return { model: Array.append(model, message.label) }
 		})
-		store.dispatch({ label: "burn", burn: 10 })
-		store.dispatch({ label: "fail" })
+		store.dispatch({ _tag: "Append" as const, label: "burn", burn: 10 })
+		store.dispatch({ _tag: "Append" as const, label: "fail" })
 		expect(store.getModel()).toEqual(["burn"])
 		expect(drains.pending).toBeGreaterThan(0)
-		const error = failReason(() => store.commit({ label: "target" }), "Crashed")
+		const error = failReason(() => store.commit({ _tag: "Append" as const, label: "target" }), "Crashed")
 		expect(error.reason._tag).toBe("Crashed")
 		if (error.reason._tag === "Crashed") expect(Cause.squash(error.reason.cause)).toBe(defect)
 		expect(onCrash).toHaveBeenCalledTimes(1)
 		expect(store.getModel()).toEqual(["burn"])
-		failReason(() => store.commit({ label: "again" }), "Crashed")
+		failReason(() => store.commit({ _tag: "Append" as const, label: "again" }), "Crashed")
 		drains.flush()
 		expect(store.getModel()).toEqual(["burn"])
 	})
@@ -177,7 +176,7 @@ describe("synchronous commit", function () {
 		const { store, onCrash } = boot(function () {
 			throw new Error("target failed")
 		})
-		failReason(() => store.commit({ label: "target" }), "Crashed")
+		failReason(() => store.commit({ _tag: "Append" as const, label: "target" }), "Crashed")
 		expect(onCrash).toHaveBeenCalledTimes(1)
 		expect(store.getModel()).toEqual([])
 	})
@@ -190,7 +189,7 @@ describe("synchronous commit", function () {
 		})
 		const notified = vi.fn()
 		store.subscribe(notified)
-		expect(store.commit({ label: "target" })).toEqual(Result.void)
+		expect(store.commit({ _tag: "Append" as const, label: "target" })).toEqual(Result.void)
 		expect(notified).toHaveBeenCalledTimes(1)
 		expect(store.getModel()).toEqual(["target"])
 		expect(onCrash).not.toHaveBeenCalled()
@@ -202,11 +201,11 @@ describe("synchronous commit", function () {
 		store.subscribe(function () {
 			if (store.getModel().at(-1) === "dispose") Effect.runFork(store.dispose())
 		})
-		store.dispatch({ label: "burn", burn: 10 })
-		store.dispatch({ label: "dispose" })
+		store.dispatch({ _tag: "Append" as const, label: "burn", burn: 10 })
+		store.dispatch({ _tag: "Append" as const, label: "dispose" })
 		expect(store.getModel()).toEqual(["burn"])
 		expect(drains.pending).toBeGreaterThan(0)
-		failReason(() => store.commit({ label: "target" }), "Disposed")
+		failReason(() => store.commit({ _tag: "Append" as const, label: "target" }), "Disposed")
 		expect(store.getModel()).toEqual(["burn", "dispose"])
 	})
 
@@ -222,13 +221,13 @@ describe("synchronous commit", function () {
 									name: "Complete",
 									effect: Effect.sync(function () {
 										executions += 1
-										return { label: "result" }
+										return { _tag: "Append" as const, label: "result" }
 									}),
 								},
 							]
 						: [],
 			}))
-			Result.getOrThrow(store.commit({ label: "start" }))
+			Result.getOrThrow(store.commit({ _tag: "Append" as const, label: "start" }))
 			expect(executions).toBe(0)
 			expect(store.getModel()).toEqual(["start"])
 			yield* Effect.promise(() => vi.waitFor(() => expect(store.getModel()).toEqual(["start", "result"])))
@@ -239,9 +238,12 @@ describe("synchronous commit", function () {
 
 it.effect("lets Effect.catchReason handle one CommitError reason", () =>
 	Effect.gen(function* () {
-		const store = Store.boot({ update: (model: number, message: number) => ({ model: model + message }) }, { model: 0 })
+		const store = Store.boot(
+			{ update: (model: number, message: ValueMessage) => ({ model: model + message.value }) },
+			{ model: 0 }
+		)
 		yield* store.dispose()
-		const handled = yield* Store.commit(store, 1).pipe(
+		const handled = yield* Store.commit(store, setValue(1)).pipe(
 			Effect.catchReason("CommitError", "Disposed", (reason) => Effect.succeed(reason._tag)),
 			Effect.catchReason("CommitError", "Inactive", () => Effect.succeed("unexpected"))
 		)

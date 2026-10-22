@@ -1,11 +1,11 @@
 import { Cause, Effect, Equal, Exit, Option, Schema } from "effect"
+import type * as Update from "foldkit/update"
 import React from "react"
 import { isDevelopment } from "../internal/deepFreeze"
 import type { ModelSource } from "../modelSource"
+import type { Program } from "../program/program"
 import type { OptionalProjection, Projection } from "../submodel/lift"
 import { project, projectOptional } from "../submodel/lift"
-import type * as Update from "foldkit/update"
-import type { Program } from "../program/program"
 import * as ProviderSession from "./providerSession"
 import * as ReactStore from "./reactStore"
 import { sendFor, type Send } from "./send"
@@ -71,9 +71,14 @@ export interface CrashConfig<Model, Message> {
  * @category configuration
  * @since 0.2.0
  */
-export type Options<Model, Message, R = never> = Omit<
-	ReactStore.Config<Model, Message, R>,
-	"update" | "subscriptions"
+export type Options<
+	Model,
+	Message,
+	R = never,
+	MessageSchema extends Schema.Codec<Message, unknown> = Schema.Codec<Message>,
+> = Omit<
+	ReactStore.Config<Model, Message, R, MessageSchema>,
+	"update" | "subscriptions" | "devTools"
 > & {
 	/**
 	 * Default failure view and reporting for every Provider of this application.
@@ -84,11 +89,27 @@ export type Options<Model, Message, R = never> = Omit<
 	 * a `SchemaError`. Defaults to `true` outside production builds.
 	 */
 	readonly validateInit?: boolean
+	/**
+	 * Foldkit's DevTools settings, the same `DevToolsConfig` Foldkit's runtime takes. Add
+	 * `devTools()` from `react-foldkit/vite` to show Foldkit's panel and connect its MCP relay.
+	 *
+	 * Each Provider records its own history. With several Providers on a page, a selector chooses
+	 * which one the panel shows. Selecting a history entry in `"TimeTravel"` mode renders that
+	 * entry's Model while Commands and Subscriptions keep running on the live Model, and drops
+	 * Messages sent from the paused view. Resume renders the latest live Model. React Foldkit
+	 * records no Mounts, so the panel's Mounts tab stays empty.
+	 */
+	readonly devTools?: ReactStore.Config<Model, Message, R, MessageSchema>["devTools"]
 }
 
-type OptionsArgument<Model, Message, R> = [R] extends [never]
-	? [options?: Options<Model, Message, R>]
-	: [options: Options<Model, Message, R>]
+type OptionsArgument<
+	Model,
+	Message,
+	R,
+	MessageSchema extends Schema.Codec<Message, unknown> = Schema.Codec<Message>,
+> = [R] extends [never]
+	? [options?: Options<Model, Message, R, MessageSchema>]
+	: [options: Options<Model, Message, R, MessageSchema>]
 
 /**
  * Props for the application Provider that supplies the Model and Message handlers to its views.
@@ -341,6 +362,8 @@ function SessionLifecycle({ session }: { readonly session: ProviderSession.Provi
 	return null
 }
 
+type Tagged = { readonly _tag: string }
+
 /**
  * Creates a React Provider and hooks for a Foldkit Program.
  * Define the application once, then render its Provider. Views read state with `useModel` and
@@ -406,23 +429,39 @@ function SessionLifecycle({ session }: { readonly session: ProviderSession.Provi
  * @category constructors
  * @since 0.2.0
  */
-export function define<Model, Message, R = never>(
-	program: Program<Model, Message, never, R> & { readonly init: () => Update.Return<Model, Message, R> },
-	...options: OptionsArgument<Model, Message, R>
-): Application<Model, Message, R, true>
-export function define<Model, Message, R = never>(
-	program: Program<Model, Message, never, R>,
-	...options: OptionsArgument<Model, Message, R>
-): Application<Model, Message, R>
-export function define<Model, Message, R = never>(
-	program: Program<Model, Message, never, R>,
-	...[options]: OptionsArgument<Model, Message, R>
-): Application<Model, Message, R, boolean> {
+export function define<
+	ModelSchema extends Schema.Constraint,
+	MessageSchema extends Schema.Codec<Tagged, unknown>,
+	R = never,
+>(
+	program: Program<ModelSchema, MessageSchema, never, R> & {
+		readonly init: () => Update.Return<ModelSchema["Type"], MessageSchema["Type"], R>
+	},
+	...options: OptionsArgument<ModelSchema["Type"], MessageSchema["Type"], R, MessageSchema>
+): Application<ModelSchema["Type"], MessageSchema["Type"], R, true>
+export function define<
+	ModelSchema extends Schema.Constraint,
+	MessageSchema extends Schema.Codec<Tagged, unknown>,
+	R = never,
+>(
+	program: Program<ModelSchema, MessageSchema, never, R>,
+	...options: OptionsArgument<ModelSchema["Type"], MessageSchema["Type"], R, MessageSchema>
+): Application<ModelSchema["Type"], MessageSchema["Type"], R>
+export function define<
+	ModelSchema extends Schema.Constraint,
+	MessageSchema extends Schema.Codec<Tagged, unknown>,
+	R = never,
+>(
+	program: Program<ModelSchema, MessageSchema, never, R>,
+	...[options]: OptionsArgument<ModelSchema["Type"], MessageSchema["Type"], R, MessageSchema>
+): Application<ModelSchema["Type"], MessageSchema["Type"], R, boolean> {
+	type Model = ModelSchema["Type"]
+	type Message = MessageSchema["Type"]
 	const config = {
 		...options,
 		update: program.update,
 		subscriptions: program.subscriptions,
-	} as ReactStore.Config<Model, Message, R> & Options<Model, Message, R>
+	} as ReactStore.Config<Model, Message, R, MessageSchema> & Options<Model, Message, R, MessageSchema>
 	const Context = makeSourceContext<Model, Message>()
 	const validateInit = config.validateInit ?? isDevelopment
 	const checkModel = Schema.decodeUnknownExit(Schema.toType(program.Model))
@@ -438,7 +477,7 @@ export function define<Model, Message, R = never>(
 					if (source === undefined) return yield* Effect.die(new Error(missingInit))
 					const init = typeof source === "function" ? source() : source
 					if (validateInit) yield* checkModel(init.model)
-					return { store: ReactStore.make(config, init) }
+					return { store: ReactStore.make(config, init, Schema.toType(program.Model)) }
 				})
 			)
 		)
@@ -455,7 +494,7 @@ export function define<Model, Message, R = never>(
 		const [session] = React.useState(() => ProviderSession.make(bootstrap, observeFailure))
 		const [source] = React.useState(() =>
 			Option.map(store, (store): ModelSource<Model, Message> => ({
-				getSnapshot: store.getModel,
+				getSnapshot: store.readView,
 				getServerSnapshot: store.getServerModel,
 				subscribe: store.subscribe,
 				dispatch: store.dispatch,
@@ -497,7 +536,7 @@ export function define<Model, Message, R = never>(
 	const application = {
 		[SceneSourceTypeId]: Context,
 		Provider,
-		...modelHooks(
+		...modelHooks<Model, Message>(
 			Context,
 			program.Message,
 			() => new Error("react-foldkit hooks must be used within a <Provider>")

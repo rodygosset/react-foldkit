@@ -1,8 +1,8 @@
-import React from "react"
 import { Context, Effect, Layer, Option, Schema } from "effect"
 import { defineMessageUnion } from "foldkit/message"
-import * as Application from "react-foldkit/application"
 import type * as Update from "foldkit/update"
+import React from "react"
+import * as Application from "react-foldkit/application"
 import { describe, expectTypeOf, it } from "vitest"
 
 const Model = Schema.Struct({ count: Schema.Finite })
@@ -81,8 +81,8 @@ describe("React public types", function () {
 		Application.define({ Model, update: (model: Model, _message: Message) => ({ model }) })
 		Application.define({
 			Model,
-			// @ts-expect-error The Message union must match update.
 			Message: Fields,
+			// @ts-expect-error The Message union must match update.
 			update: (model: Model, _message: Message) => ({ model }),
 		})
 		// @ts-expect-error Without a config init, the Provider needs one.

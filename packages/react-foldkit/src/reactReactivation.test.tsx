@@ -1,11 +1,12 @@
+import { it } from "@effect/vitest"
 import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react"
 import { Cause, Deferred, Effect, Schema } from "effect"
+import * as AsyncData from "foldkit/asyncData"
 import * as Query from "foldkit/experimental/query"
 import * as Update from "foldkit/update"
 import React from "react"
 import { afterEach, expect } from "vitest"
-import { it } from "@effect/vitest"
-import * as AsyncData from "foldkit/asyncData"
+import { ValueMessage, setValue } from "../test/fixtures/valueMessage"
 import * as Application from "./application"
 
 afterEach(cleanup)
@@ -141,14 +142,14 @@ it.live("reports the original reactivation update defect and recovers on a later
 		const App = Application.define(
 			{
 				Model: Schema.Finite,
-				Message: Schema.Finite,
-				update(model: number, message: number) {
+				Message: ValueMessage,
+				update(model: number, message: ValueMessage) {
 					if (shouldFail) throw defect
-					return { model: model + message }
+					return { model: model + message.value }
 				},
 			},
 			{
-				onReactivate: () => 1,
+				onReactivate: () => setValue(1),
 				onCrash() {},
 			}
 		)
@@ -203,23 +204,23 @@ it.live.each([false, true])("renders a new callback defect after Activity retain
 		const App = Application.define(
 			{
 				Model: Schema.Finite,
-				Message: Schema.Finite,
-				update(model: number, message: number) {
-					if (message === 9) throw previous
-					return { model: model + message }
+				Message: ValueMessage,
+				update(model: number, message: ValueMessage) {
+					if (message.value === 9) throw previous
+					return { model: model + message.value }
 				},
 			},
 			{
-				onReactivate(): number {
+				onReactivate(): ValueMessage {
 					if (shouldFail) throw current
-					return 1
+					return setValue(1)
 				},
 				onCrash() {},
 			}
 		)
 		function View() {
 			const dispatch = App.useDispatch()
-			return <button onClick={() => dispatch(9)}>{App.useModel()}</button>
+			return <button onClick={() => dispatch(setValue(9))}>{App.useModel()}</button>
 		}
 		function Activity({ mode }: { readonly mode: "visible" | "hidden" }) {
 			return (

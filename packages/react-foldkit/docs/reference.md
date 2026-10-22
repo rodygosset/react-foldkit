@@ -7,6 +7,8 @@ Generated from the public exports. See the [counter tutorial](examples.md) for u
 - [react-foldkit/store](#react-foldkitstore)
 - [react-foldkit/submodel](#react-foldkitsubmodel)
 - [react-foldkit/program](#react-foldkitprogram)
+- [react-foldkit/devtools](#react-foldkitdevtools)
+- [react-foldkit/vite](#react-foldkitvite)
 - [react-foldkit/eslint](#react-foldkiteslint)
 - [react-foldkit/modelSource](#react-foldkitmodelSource)
 - [react-foldkit/scene](#react-foldkitscene)
@@ -291,6 +293,19 @@ required when the Program needs services, which also makes the options argument 
 
   ```ts
   boolean | undefined
+  ```
+
+- `devTools` Foldkit's DevTools settings, the same `DevToolsConfig` Foldkit's runtime takes. Add
+  `devTools()` from `react-foldkit/vite` to show Foldkit's panel and connect its MCP relay.
+  
+  Each Provider records its own history. With several Providers on a page, a selector chooses
+  which one the panel shows. Selecting a history entry in `"TimeTravel"` mode renders that
+  entry's Model while Commands and Subscriptions keep running on the live Model, and drops
+  Messages sent from the paused view. Resume renders the latest live Model. React Foldkit
+  records no Mounts, so the panel's Mounts tab stays empty.
+
+  ```ts
+  ReactStore.Config<Model, Message, R>["devTools"] | undefined
   ```
 
 ### ProviderProps
@@ -766,14 +781,14 @@ The child Model Schema and Message union that `define` binds. A child `Program` 
 - `Model` Supplies the child Model type. The Submodel Provider does not validate it.
 
   ```ts
-  Schema.Codec<Model, unknown, unknown, unknown>
+  ModelSchema
   ```
 
 - `Message` The Schema of the Messages the child update handles, usually the union from
   `defineMessageUnion`. `useSend` builds Messages with its constructors.
 
   ```ts
-  Schema.Schema<Message>
+  MessageSchema
   ```
 
 ### Lift
@@ -1069,43 +1084,44 @@ pass the Program to `Store.make` and `Store.boot`.
 them: the host that runs it supplies `resources`. An application Program has no
 OutMessage, so its update returns `Update.Return`.
 
-- `Model` Supplies the Model type. `Application.define` also checks initial Models against it.
-
-  ```ts
-  Schema.Codec<Model, unknown, unknown, unknown>
-  ```
-
-- `Message` The Schema of the Messages update handles, usually the union from `defineMessageUnion`.
-
-  ```ts
-  Schema.Schema<Message>
-  ```
-
 - `OutMessage` The union of facts a child reports to its parent. Omit it for an application.
 
   ```ts
   Schema.Schema<OutMessage> | undefined
   ```
 
+- `Model` Supplies the Model type. `Application.define` also checks initial Models against it.
+
+  ```ts
+  ModelSchema
+  ```
+
+- `Message` The Schema of the Messages update handles. Every Message has a string `_tag`.
+  Use `defineMessageUnion` to define the variants and their constructors.
+
+  ```ts
+  MessageSchema
+  ```
+
 - `init` Creates the initial Model and Commands. A child Program usually omits it, because its
   parent creates the child Model.
 
   ```ts
-  (() => Update.Return<Model, Message, R>) | undefined
+  (() => Update.Return<ModelSchema["Type"], MessageSchema["Type"], R>) | undefined
   ```
 
 - `update` Applies a Message to the Model without running side effects. Return Commands for work that
   runs after the transition.
 
   ```ts
-  (model: Model, message: Message) => Update.ReturnWithOutMessage<Model, Message, OutMessage, R>
+  (model: ModelSchema["Type"], message: MessageSchema["Type"]) => Update.ReturnWithOutMessage<ModelSchema["Type"], MessageSchema["Type"], OutMessage, R>
   ```
 
 - `subscriptions` Declares Streams whose dependencies are derived from the Model. Changed dependencies
   restart their Streams.
 
   ```ts
-  Readonly<Record<string, Subscription.Subscription<Model, Message, any, R>>> | undefined
+  Readonly<Record<string, Subscription.Subscription<ModelSchema["Type"], MessageSchema["Type"], any, R>>> | undefined
   ```
 
 ### make
@@ -1142,6 +1158,51 @@ const update = (model: Model, message: Message) =>
   })
 
 export const counter = Program.make({ Model, Message, init, update })
+```
+
+## react-foldkit/devtools
+
+### __configure
+
+Connects the injected native Foldkit overlay and Vite HMR bridge to Provider recorders.
+
+## react-foldkit/vite
+
+### devTools
+
+Creates the Vite plugin that connects Foldkit's DevTools panel and MCP relay to React Foldkit
+Providers.
+
+**When to use**
+
+Add it to `vite.config.ts` next to `@vitejs/plugin-react` when an application sets `devTools`
+in `Application.define`'s options. After migrating to Foldkit's runtime, replace it with
+`@foldkit/vite-plugin`; the `devTools` settings carry over unchanged.
+
+**Details**
+
+During `vite serve`, the plugin loads the panel from `@foldkit/devtools` in the browser, including
+in frameworks that render HTML on the server, and passes the dev server's HMR channel to every
+Provider, which shows the panel with `show: "Development"`. It
+also starts Foldkit's DevTools MCP relay on a loopback port and publishes its address for the
+Foldkit DevTools MCP server. `vite build` includes the panel only when `@foldkit/devtools` is a
+production dependency. Unlike `@foldkit/vite-plugin`, it sends no full-page reloads, so React
+Fast Refresh keeps working.
+
+**Gotchas**
+
+- Install `@foldkit/devtools` and its peer dependencies. Without it, the plugin does nothing.
+
+**Example** (Add DevTools to a React app)
+
+```ts
+import react from "@vitejs/plugin-react"
+import { defineConfig } from "vite"
+import { devTools } from "react-foldkit/vite"
+
+export default defineConfig({
+  plugins: [react(), devTools()],
+})
 ```
 
 ## react-foldkit/eslint
