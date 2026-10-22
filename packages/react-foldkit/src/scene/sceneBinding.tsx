@@ -476,6 +476,8 @@ export function getSceneEventHandler(element: { readonly elm?: unknown }, eventN
 function matchesSelector(node: HostElement, selector: string): boolean {
 	let root = node
 	while (root.parent !== undefined) root = root.parent
-	const matches = allSelector(selector)(toVNode(root)) as ReadonlyArray<{ readonly elm?: unknown }>
-	return matches.some((match) => match.elm === node)
+	return allSelector(selector)(toVNode(root)).some(function (match) {
+		const elm: unknown = match.elm
+		return elm === node
+	})
 }

@@ -1,4 +1,5 @@
-import type { HtmlBuilder } from "foldkit/html"
+import type { Document, Html, HtmlBuilder } from "foldkit/html"
+import type { AnyCommand } from "foldkit/scene"
 import * as FoldkitScene from "foldkit/scene"
 import { isBoundSceneSimulation, isBoundSceneView } from "./sceneBinding"
 import { inside as insideBoundReactScene, scene as runBoundReactScene } from "./vendor/scene.js"
@@ -29,10 +30,10 @@ export const scene: typeof FoldkitScene.scene = function <Model, Message, OutMes
 			message: Message
 		) => Readonly<{
 			model: Model
-			commands?: ReadonlyArray<unknown>
+			commands?: ReadonlyArray<AnyCommand>
 			outMessage?: OutMessage
 		}>
-		view: (model: Model, html: HtmlBuilder<Message>) => unknown
+		view: (model: Model, html: HtmlBuilder<Message>) => Html | Document
 	}>,
 	...steps: ReadonlyArray<FoldkitScene.SceneStep<Model, Message, OutMessage>>
 ): void {
@@ -40,10 +41,7 @@ export const scene: typeof FoldkitScene.scene = function <Model, Message, OutMes
 		runBoundReactScene(config, ...steps)
 		return
 	}
-	FoldkitScene.scene(
-		config as unknown as Parameters<typeof FoldkitScene.scene>[0],
-		...(steps as unknown as ReadonlyArray<Parameters<typeof FoldkitScene.scene>[1]>)
-	)
+	FoldkitScene.scene(config, ...steps)
 } as unknown as typeof FoldkitScene.scene
 
 /**
@@ -56,19 +54,16 @@ export const scene: typeof FoldkitScene.scene = function <Model, Message, OutMes
  * @category testing
  * @since 0.2.0
  */
-export const inside: typeof FoldkitScene.inside = (<Model, Message, OutMessage = undefined>(
+export const inside: typeof FoldkitScene.inside = <Model, Message, OutMessage = undefined>(
 	parent: FoldkitScene.Locator,
 	...steps: ReadonlyArray<FoldkitScene.SceneStep<Model, Message, OutMessage>>
 ) =>
 	function (simulation: FoldkitScene.SceneSimulation<Model, Message, OutMessage>) {
 		if (isBoundSceneSimulation(simulation)) {
-			return insideBoundReactScene(
-				parent,
-				...(steps as ReadonlyArray<unknown>)
-			)(simulation) as FoldkitScene.SceneSimulation<Model, Message, OutMessage>
+			return insideBoundReactScene(parent, ...steps)(simulation)
 		}
 		return FoldkitScene.inside<Model, Message, OutMessage>(parent, ...steps)(simulation)
-	}) as unknown as typeof FoldkitScene.inside
+	}
 
 export {
 	click,

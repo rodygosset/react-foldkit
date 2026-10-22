@@ -1,19 +1,7 @@
-export function ancestorsOf(target: unknown): (root: unknown) => ReadonlyArray<{
-	readonly sel?: string
-	readonly elm?: unknown
-	readonly data?: {
-		readonly attrs?: Readonly<Record<string, unknown>>
-		readonly props?: Readonly<Record<string, unknown>>
-	}
-	readonly children?: ReadonlyArray<unknown>
-}>
+import type { SceneSimulation } from "foldkit/scene"
 
-export function allSelector(css: string): (root: unknown) => ReadonlyArray<{
-	readonly sel?: string
-	readonly elm?: unknown
-	readonly data?: {
-		readonly attrs?: Readonly<Record<string, unknown>>
-		readonly props?: Readonly<Record<string, unknown>>
-	}
-	readonly children?: ReadonlyArray<unknown>
-}>
+export type SceneNode = SceneSimulation<unknown, unknown>["html"]
+
+export function ancestorsOf(target: SceneNode): (root: SceneNode) => ReadonlyArray<SceneNode>
+
+export function allSelector(css: string): (root: SceneNode) => ReadonlyArray<SceneNode>

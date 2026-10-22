@@ -293,52 +293,6 @@ const invokeAndCapture = (simulation, target, eventName, invokeHandler) => {
     }
     return captureFromElement(simulation, maybeElement.value, description, eventName, invokeHandler);
 };
-const lookupStringAttribute = (vnode, name) => {
-    const fromAttrs = vnode.data?.attrs?.[name];
-    const fromProps = vnode.data?.props?.[name];
-    if (Predicate.isString(fromAttrs)) {
-        return fromAttrs;
-    }
-    if (Predicate.isString(fromProps)) {
-        return fromProps;
-    }
-    return undefined;
-};
-const isSubmitButton = (element) => {
-    const maybeType = pipe(lookupStringAttribute(element, 'type'), Option.fromNullishOr, Option.map(String.toLowerCase));
-    if (element.sel === 'button') {
-        return Option.match(maybeType, {
-            onNone: () => true,
-            onSome: value => value !== 'button' && value !== 'reset',
-        });
-    }
-    if (element.sel === 'input') {
-        return Option.exists(maybeType, value => value === 'submit' || value === 'image');
-    }
-    return false;
-};
-const findElementById = (root, id) => {
-    if (lookupStringAttribute(root, 'id') === id) {
-        return Option.some(root);
-    }
-    for (const child of root.children ?? []) {
-        if (Predicate.isString(child)) {
-            continue;
-        }
-        const maybeMatch = findElementById(child, id);
-        if (Option.isSome(maybeMatch)) {
-            return maybeMatch;
-        }
-    }
-    return Option.none();
-};
-const formOwnerOf = (root, submitter) => {
-    const formId = lookupStringAttribute(submitter, 'form');
-    if (formId !== undefined) {
-        return pipe(findElementById(root, formId), Option.filter(element => element.sel === 'form'));
-    }
-    return pipe(root, ancestorsOf(submitter), Array.findLast(element => element.sel === 'form'));
-};
 const isElementDisabled = (element) => {
     const attrDisabled = element.data?.attrs?.['disabled'];
     const propDisabled = element.data?.props?.['disabled'];
@@ -900,23 +854,6 @@ export const inside = (parent, ...steps) => (simulation) => {
     };
     /* eslint-enable @typescript-eslint/consistent-type-assertions */
 };
-const findAncestorWithHandler = (root, element, eventName) => pipe(root, ancestorsOf(element), Array.reverse, Array.findFirst(vnode => vnode.data?.on?.[eventName] !== undefined));
-const createSimulatedClick = () => {
-    let isDefaultPrevented = false;
-    let isPropagationStopped = false;
-    return {
-        event: {
-            preventDefault: () => {
-                isDefaultPrevented = true;
-            },
-            stopPropagation: () => {
-                isPropagationStopped = true;
-            },
-        },
-        isDefaultPrevented: () => isDefaultPrevented,
-        isPropagationStopped: () => isPropagationStopped,
-    };
-};
 // INTERACTION STEPS
 /** Simulates a click on the element matching the target.
  *  Runs click handlers from the target through its ancestors until one stops
@@ -1101,7 +1038,7 @@ export const focusLeave = (target) => (simulation) => invokeAndCapture(simulatio
 /** Simulates a change event on the element matching the target.
  *  Dual: `change(target, value)` or `change(value)` for data-last piping. */
 export const change = dual(2, (target, value) => (simulation) => invokeAndCapture(simulation, target, 'change', handler => {
-    handler({ target: { value } });
+    handler({ hostUpdate: { _tag: 'Value', value } });
 }));
 /** Simulates a file input change event on the element matching the target.
  *  For use with `OnFileChange` attributes. The handler receives a synthetic
@@ -1109,7 +1046,7 @@ export const change = dual(2, (target, value) => (simulation) => invokeAndCaptur
  *  Dual: `changeFiles(target, files)` or `changeFiles(files)` for data-last piping. */
 export const changeFiles = dual(2, (target, files) => (simulation) => invokeAndCapture(simulation, target, 'change', handler => {
     assertFileHandler(handler, 'OnFileChange', 'changeFiles');
-    handler({ target: { files, value: '' } });
+    handler({ hostUpdate: { _tag: 'Files', files } });
 }));
 /** Simulates a drop event with files on the element matching the target.
  *  For use with `OnDropFiles` attributes. The handler receives a synthetic
@@ -1131,7 +1068,7 @@ export const submit = (target) => (simulation) => invokeAndCapture(simulation, t
  *  Dual: `type(target, value)` or `type(value)` for data-last piping. */
 export { type_ as type };
 const type_ = dual(2, (target, value) => (simulation) => invokeAndCapture(simulation, target, 'input', handler => {
-    handler({ target: { value } });
+    handler({ hostUpdate: { _tag: 'Value', value } });
 }));
 /** Simulates typing into a contenteditable host matching the target. A
  *  contenteditable element has no `value`, so the `input` event reports the
@@ -1139,7 +1076,7 @@ const type_ = dual(2, (target, value) => (simulation) => invokeAndCapture(simula
  *  element. Dual: `typeContentEditable(target, text)` or
  *  `typeContentEditable(text)` for data-last piping. */
 export const typeContentEditable = dual(2, (target, text) => (simulation) => invokeAndCapture(simulation, target, 'input', handler => {
-    handler({ target: { innerText: text } });
+    handler({ hostUpdate: { _tag: 'Text', text } });
 }));
 /** Simulates a `beforeinput` event on the element matching the target. Drives
  *  `OnBeforeInput` and `OnBeforeInputPreventDefault`. Pass the edit's

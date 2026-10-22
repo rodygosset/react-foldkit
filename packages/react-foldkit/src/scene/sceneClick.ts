@@ -3,57 +3,54 @@ import { getSceneEventHandler, runSceneInteraction } from "./sceneBinding"
 import { hasSceneListener, hostFromElm, hostPath, invokeHandlers, makeHostEvent } from "./sceneEvent"
 import { assignChecked, type Checkable, type CheckedSnapshot, revertChecked, snapshotChecked } from "./sceneInput"
 import type { HostElement } from "./sceneHost"
-import { allSelector, ancestorsOf } from "./vendor/query.js"
-
-interface SceneNode {
-	readonly sel?: string
-	readonly data?: {
-		readonly attrs?: Readonly<Record<string, unknown>>
-		readonly props?: Readonly<Record<string, unknown>>
-	}
-	readonly children?: ReadonlyArray<SceneNode | string>
-	readonly elm?: unknown
-}
+import { allSelector, ancestorsOf, type SceneNode } from "./vendor/query.js"
 
 export type ClickListeners = { readonly _tag: "Found" } | { readonly _tag: "Missing" }
 
-function stringAttribute(node: SceneNode, name: string): string | undefined {
+function stringAttribute(node: SceneNode, name: string): Option.Option<string> {
 	const fromAttrs = node.data?.attrs?.[name]
-	if (typeof fromAttrs === "string") return fromAttrs
+	if (typeof fromAttrs === "string") return Option.some(fromAttrs)
 	const fromProps = node.data?.props?.[name]
-	if (typeof fromProps === "string") return fromProps
-	return undefined
+	if (typeof fromProps === "string") return Option.some(fromProps)
+	return Option.none()
 }
 
-function findElementById(root: SceneNode, id: string): Option.Option<SceneNode> {
-	if (stringAttribute(root, "id") === id) return Option.some(root)
-	for (const child of root.children ?? []) {
-		if (typeof child === "string") continue
-		const match = findElementById(child, id)
+const childElements = (node: SceneNode): ReadonlyArray<SceneNode> =>
+	Array.getSomes(
+		Array.map(node.children ?? [], (child) => (typeof child === "string" ? Option.none() : Option.some(child)))
+	)
+
+function elementById(root: SceneNode, id: string): Option.Option<SceneNode> {
+	if (Option.contains(stringAttribute(root, "id"), id)) return Option.some(root)
+	for (const child of childElements(root)) {
+		const match = elementById(child, id)
 		if (Option.isSome(match)) return match
 	}
 	return Option.none()
 }
 
-function formOwnerOf(root: SceneNode, node: SceneNode): Option.Option<SceneNode> {
-	const formId = stringAttribute(node, "form")
-	if (formId !== undefined) {
-		return Option.filter(findElementById(root, formId), (element) => element.sel === "form")
-	}
-	return Array.findLast(ancestorsOf(node)(root) as ReadonlyArray<SceneNode>, (element) => element.sel === "form")
-}
+const formOwnerOf = (root: SceneNode, node: SceneNode): Option.Option<SceneNode> =>
+	Option.match(stringAttribute(node, "form"), {
+		onSome: (formId) => Option.filter(elementById(root, formId), (element) => element.sel === "form"),
+		onNone: () => Array.findLast(ancestorsOf(node)(root), (element) => element.sel === "form"),
+	})
+
+const sameForm = (left: Option.Option<SceneNode>, right: Option.Option<SceneNode>): boolean =>
+	Option.match(left, {
+		onNone: () => Option.isNone(right),
+		onSome: (form) => Option.isSome(right) && form === right.value,
+	})
 
 function isSubmitButton(element: SceneNode): boolean {
-	const rawType = stringAttribute(element, "type")
-	const maybeType = Option.map(Option.fromNullishOr(rawType), (value) => value.toLowerCase())
+	const controlType = Option.map(stringAttribute(element, "type"), (value) => value.toLowerCase())
 	if (element.sel === "button") {
-		return Option.match(maybeType, {
+		return Option.match(controlType, {
 			onNone: () => true,
 			onSome: (value) => value !== "button" && value !== "reset",
 		})
 	}
 	if (element.sel === "input") {
-		return Option.match(maybeType, {
+		return Option.match(controlType, {
 			onNone: () => false,
 			onSome: (value) => value === "submit" || value === "image",
 		})
@@ -62,22 +59,19 @@ function isSubmitButton(element: SceneNode): boolean {
 }
 
 function radioGroup(root: SceneNode, target: SceneNode): ReadonlyArray<HostElement> {
-	const name = stringAttribute(target, "name")
-	const form = Option.getOrUndefined(formOwnerOf(root, target))
-	const nodes =
-		name === undefined || name === ""
-			? [target]
-			: (allSelector('input[type="radio"]')(root) as ReadonlyArray<SceneNode>).filter(
-					(radio) =>
-						stringAttribute(radio, "name") === name &&
-						Option.getOrUndefined(formOwnerOf(root, radio)) === form
-				)
-	const hosts: Array<HostElement> = []
-	for (const node of nodes) {
-		const host = hostFromElm(node.elm)
-		if (host !== undefined) hosts.push(host)
-	}
-	return hosts
+	const form = formOwnerOf(root, target)
+	const radios = Option.match(stringAttribute(target, "name"), {
+		onNone: () => [target],
+		onSome: (name) =>
+			name === ""
+				? [target]
+				: allSelector('input[type="radio"]')(root).filter(
+						(radio) =>
+							Option.contains(stringAttribute(radio, "name"), name) &&
+							sameForm(formOwnerOf(root, radio), form)
+					),
+	})
+	return Array.getSomes(Array.map(radios, (radio) => Option.fromNullishOr(hostFromElm(radio.elm))))
 }
 
 function checkableOf(root: SceneNode, element: SceneNode): Option.Option<Checkable> {
@@ -85,8 +79,8 @@ function checkableOf(root: SceneNode, element: SceneNode): Option.Option<Checkab
 	const target = hostFromElm(element.elm)
 	if (target === undefined) return Option.none()
 	const inputType = stringAttribute(element, "type")
-	if (inputType === "checkbox") return Option.some({ _tag: "Checkbox", target })
-	if (inputType === "radio") return Option.some({ _tag: "Radio", target, group: radioGroup(root, element) })
+	if (Option.contains(inputType, "checkbox")) return Option.some({ _tag: "Checkbox", target })
+	if (Option.contains(inputType, "radio")) return Option.some({ _tag: "Radio", target, group: radioGroup(root, element) })
 	return Option.none()
 }
 

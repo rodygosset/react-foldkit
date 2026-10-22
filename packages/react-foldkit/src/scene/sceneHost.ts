@@ -22,10 +22,12 @@ export interface HostElement {
 	parent?: HostElement
 	readonly tagName: string
 	value?: unknown
+	files?: unknown
 	checked?: boolean
 	selected?: boolean
 	selectedValues?: ReadonlyArray<string>
 	textContent?: string
+	innerText?: string
 	focus: () => void
 	blur: () => void
 	getAttribute: (name: string) => string | null

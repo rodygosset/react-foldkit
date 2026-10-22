@@ -212,6 +212,101 @@ scene = replaceOnce(scene,
         preventDefault: Function.constVoid,
     });`,
 	"React keydown host target")
+scene = replaceOnce(scene,
+	`const lookupStringAttribute = (vnode, name) => {
+    const fromAttrs = vnode.data?.attrs?.[name];
+    const fromProps = vnode.data?.props?.[name];
+    if (Predicate.isString(fromAttrs)) {
+        return fromAttrs;
+    }
+    if (Predicate.isString(fromProps)) {
+        return fromProps;
+    }
+    return undefined;
+};
+const isSubmitButton = (element) => {
+    const maybeType = pipe(lookupStringAttribute(element, 'type'), Option.fromNullishOr, Option.map(String.toLowerCase));
+    if (element.sel === 'button') {
+        return Option.match(maybeType, {
+            onNone: () => true,
+            onSome: value => value !== 'button' && value !== 'reset',
+        });
+    }
+    if (element.sel === 'input') {
+        return Option.exists(maybeType, value => value === 'submit' || value === 'image');
+    }
+    return false;
+};
+const findElementById = (root, id) => {
+    if (lookupStringAttribute(root, 'id') === id) {
+        return Option.some(root);
+    }
+    for (const child of root.children ?? []) {
+        if (Predicate.isString(child)) {
+            continue;
+        }
+        const maybeMatch = findElementById(child, id);
+        if (Option.isSome(maybeMatch)) {
+            return maybeMatch;
+        }
+    }
+    return Option.none();
+};
+const formOwnerOf = (root, submitter) => {
+    const formId = lookupStringAttribute(submitter, 'form');
+    if (formId !== undefined) {
+        return pipe(findElementById(root, formId), Option.filter(element => element.sel === 'form'));
+    }
+    return pipe(root, ancestorsOf(submitter), Array.findLast(element => element.sel === 'form'));
+};
+`,
+	"",
+	"React click owns form lookup")
+scene = replaceOnce(scene,
+	`const findAncestorWithHandler = (root, element, eventName) => pipe(root, ancestorsOf(element), Array.reverse, Array.findFirst(vnode => vnode.data?.on?.[eventName] !== undefined));
+const createSimulatedClick = () => {
+    let isDefaultPrevented = false;
+    let isPropagationStopped = false;
+    return {
+        event: {
+            preventDefault: () => {
+                isDefaultPrevented = true;
+            },
+            stopPropagation: () => {
+                isPropagationStopped = true;
+            },
+        },
+        isDefaultPrevented: () => isDefaultPrevented,
+        isPropagationStopped: () => isPropagationStopped,
+    };
+};
+`,
+	"",
+	"React click owns the event")
+scene = replaceOnce(scene,
+	`export const change = dual(2, (target, value) => (simulation) => invokeAndCapture(simulation, target, 'change', handler => {
+    handler({ target: { value } });
+}));`,
+	`export const change = dual(2, (target, value) => (simulation) => invokeAndCapture(simulation, target, 'change', handler => {
+    handler({ hostUpdate: { _tag: 'Value', value } });
+}));`,
+	"React change host update")
+scene = replaceOnce(scene,
+	`const type_ = dual(2, (target, value) => (simulation) => invokeAndCapture(simulation, target, 'input', handler => {
+    handler({ target: { value } });
+}));`,
+	`const type_ = dual(2, (target, value) => (simulation) => invokeAndCapture(simulation, target, 'input', handler => {
+    handler({ hostUpdate: { _tag: 'Value', value } });
+}));`,
+	"React input host update")
+scene = replaceOnce(scene,
+	"handler({ target: { files, value: '' } });",
+	"handler({ hostUpdate: { _tag: 'Files', files } });",
+	"React file host update")
+scene = replaceOnce(scene,
+	"handler({ target: { innerText: text } });",
+	"handler({ hostUpdate: { _tag: 'Text', text } });",
+	"React text host update")
 const hoverStart = scene.indexOf("export const hover = (target) => (simulation) => {")
 const hoverEnd = scene.indexOf("\n/** Simulates a focus event", hoverStart)
 if (hoverStart < 0 || hoverEnd < 0) throw new Error("Scene hover patch anchor changed")

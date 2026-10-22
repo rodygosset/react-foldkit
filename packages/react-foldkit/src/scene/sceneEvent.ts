@@ -1,4 +1,4 @@
-import { Array } from "effect"
+import { Array, Option } from "effect"
 import type { HostElement } from "./sceneHost"
 import { eventProps, isTextInput } from "./sceneHost"
 import { syncSelect } from "./sceneInput"
@@ -23,6 +23,7 @@ const omittedFields = new Set([
 	"isPropagationStopped",
 	"propagationStopped",
 	"resetPropagation",
+	"hostUpdate",
 ])
 
 export function sceneListeners(node: HostElement): Record<string, (event: HostEvent) => void> {
@@ -71,14 +72,40 @@ function eventPayload(fields: Readonly<Record<string, unknown>>): Record<string,
 	return payload
 }
 
-function proposeHostValue(target: HostElement, eventName: string, fields: Readonly<Record<string, unknown>>): void {
-	const names = sceneEventNames(eventName, target)
-	const proposesValue = names.includes("input") || names.includes("change")
-	if (!proposesValue) return
-	const proposed = fields.target
-	if (proposed === null || typeof proposed !== "object" || "tagName" in proposed) return
-	Object.assign(target, proposed)
-	if (target.tag === "select") syncSelect(target, target.value, false)
+export type HostUpdate =
+	| { readonly _tag: "Value"; readonly value: unknown }
+	| { readonly _tag: "Files"; readonly files: unknown }
+	| { readonly _tag: "Text"; readonly text: string }
+
+function hostUpdateFrom(fields: Readonly<Record<string, unknown>>): Option.Option<HostUpdate> {
+	const update = fields.hostUpdate
+	if (update === null || typeof update !== "object" || !("_tag" in update)) return Option.none()
+	if (update._tag === "Value" && "value" in update) return Option.some({ _tag: "Value", value: update.value })
+	if (update._tag === "Files" && "files" in update) return Option.some({ _tag: "Files", files: update.files })
+	if (update._tag === "Text" && "text" in update && typeof update.text === "string") {
+		return Option.some({ _tag: "Text", text: update.text })
+	}
+	return Option.none()
+}
+
+function applyHostUpdate(target: HostElement, update: HostUpdate): void {
+	switch (update._tag) {
+		case "Value":
+			target.value = update.value
+			if (target.tag === "select") syncSelect(target, update.value, false)
+			return
+		case "Files":
+			target.value = ""
+			target.files = update.files
+			return
+		case "Text":
+			target.innerText = update.text
+			return
+		default: {
+			const unexpected: never = update
+			return unexpected
+		}
+	}
 }
 
 export function makeHostEvent(target: HostElement, fields: Readonly<Record<string, unknown>>): HostEvent {
@@ -139,7 +166,10 @@ export function dispatchSceneEvent(
 	eventName: string,
 	fields: Readonly<Record<string, unknown>>
 ): HostEvent {
-	proposeHostValue(target, eventName, fields)
+	Option.match(hostUpdateFrom(fields), {
+		onNone: () => undefined,
+		onSome: (update) => applyHostUpdate(target, update),
+	})
 	const event = makeHostEvent(target, fields)
 	invokeHandlers(hostPath(target), eventName, event)
 	return event
