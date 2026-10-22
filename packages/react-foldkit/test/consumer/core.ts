@@ -63,9 +63,6 @@ assert.equal(
 	"<span>7</span>"
 )
 
-function addValue(model: number, message: ValueMessage) {
-	return { model: model + message.value }
-}
 function Counter() {
 	const send = App.useSend()
 	return createElement(
@@ -79,22 +76,23 @@ function Counter() {
 	)
 }
 Scene.scene(
-	{ update: addValue, view: bindSceneView(App, Counter) },
+	{
+		update: (model: number, message: ValueMessage) => ({ model: model + message.value }),
+		view: bindSceneView(App, Counter),
+	},
 	Scene.given(0),
 	Scene.click(Scene.role("button", { name: "Count 0" })),
 	Scene.expect(Scene.role("button")).toHaveText("Count 1")
 )
 
-const TextMessage = defineMessageUnion({ SetText: { value: Schema.String } })
-type TextMessage = typeof TextMessage.Type
+const Message = defineMessageUnion({ SetText: { text: Schema.String } })
+type Message = typeof Message.Type
 
-function replaceText(_model: string, message: TextMessage) {
-	return { model: message.value }
-}
+const update = (_model: string, message: Message) => ({ model: message.text })
 const InputApp = Application.define({
 	Model: Schema.String,
-	Message: TextMessage,
-	update: replaceText,
+	Message,
+	update,
 })
 function InputView() {
 	const model = InputApp.useModel()
@@ -102,7 +100,7 @@ function InputView() {
 	const [ready, setReady] = useState(false)
 	useEffect(
 		function initialize() {
-			send(TextMessage.SetText({ value: "ready" }))
+			send(Message.SetText({ text: "ready" }))
 			setReady(true)
 		},
 		[send]
@@ -112,13 +110,13 @@ function InputView() {
 		{
 			onClick: function (event) {
 				const action = (event.target as HTMLElement).getAttribute("data-action") ?? "missing"
-				send(TextMessage.SetText({ value: action }))
+				send(Message.SetText({ text: action }))
 			},
 			onChange: function (event) {
-				send(TextMessage.SetText({ value: (event.target as HTMLInputElement).value }))
+				send(Message.SetText({ text: (event.target as HTMLInputElement).value }))
 			},
 			onPointerDown: function (event) {
-				send(TextMessage.SetText({ value: (event.target as HTMLElement).dataset.action ?? "missing" }))
+				send(Message.SetText({ text: (event.target as HTMLElement).dataset.action ?? "missing" }))
 			},
 		},
 		createElement("input", { value: model, onChange: constVoid }),
@@ -127,7 +125,7 @@ function InputView() {
 	)
 }
 Scene.scene(
-	{ update: replaceText, view: bindSceneView(InputApp, InputView) },
+	{ update, view: bindSceneView(InputApp, InputView) },
 	Scene.given("waiting"),
 	Scene.expect(Scene.role("textbox")).toHaveValue("ready"),
 	Scene.expect(Scene.text("true")).toExist(),

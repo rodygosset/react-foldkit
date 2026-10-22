@@ -8,18 +8,14 @@ import * as Scene from "../scene"
 import { bindSceneView } from "./react"
 import * as Submodel from "../submodel"
 
-const TextMessage = defineMessageUnion({ SetText: { text: Schema.String } })
-type TextMessage = typeof TextMessage.Type
+const Message = defineMessageUnion({ SetText: { text: Schema.String } })
+type Message = typeof Message.Type
 
-function setText(text: string): TextMessage {
-	return TextMessage.SetText({ text })
-}
-
-function update(_model: string, message: TextMessage) {
+function update(_model: string, message: Message) {
 	return { model: message.text }
 }
 
-const App = Application.define({ Model: Schema.String, Message: TextMessage, update })
+const App = Application.define({ Model: Schema.String, Message, update })
 
 it("typing into a textarea calls onInput and onChange once with the same value", function () {
 	const calls: string[] = []
@@ -36,7 +32,7 @@ it("typing into a textarea calls onInput and onChange once with the same value",
 				}}
 				onChange={function (event) {
 					calls.push(`change:${event.currentTarget.value}`)
-					send(setText(event.currentTarget.value))
+					send(Message.SetText({ text: event.currentTarget.value }))
 				}}
 			/>
 		)
@@ -90,7 +86,7 @@ it("captures OutMessages produced by effect messages", function () {
 		const send = App.useDispatch()
 		React.useEffect(
 			function markReady() {
-				send(setText("ready"))
+				send(Message.SetText({ text: "ready" }))
 			},
 			[send]
 		)
@@ -98,7 +94,7 @@ it("captures OutMessages produced by effect messages", function () {
 	}
 	Scene.scene(
 		{
-			update: function (_model: string, message: TextMessage) {
+			update: function (_model: string, message: Message) {
 				return { model: message.text, outMessage: message.text }
 			},
 			view: bindSceneView(App, View),
@@ -116,7 +112,7 @@ it("does not rerun React effects for assertions or unchanged Model snapshots", f
 		const model = App.useModel()
 		React.useEffect(function observeRender() {
 			effects++
-			send(setText(model))
+			send(Message.SetText({ text: model }))
 		})
 		return <p>{model}</p>
 	}
@@ -135,7 +131,7 @@ it("captures messages from effects after a click changes local state", function 
 		const [clicked, setClicked] = React.useState(false)
 		React.useEffect(
 			function markClicked() {
-				if (clicked) send(setText("ready"))
+				if (clicked) send(Message.SetText({ text: "ready" }))
 			},
 			[clicked, send]
 		)
@@ -160,13 +156,13 @@ it("applies effects after a Model update within scoped steps", function () {
 		const send = App.useDispatch()
 		React.useEffect(
 			function complete() {
-				if (model === "clicked") send(setText("ready"))
+				if (model === "clicked") send(Message.SetText({ text: "ready" }))
 			},
 			[model, send]
 		)
 		return (
 			<main>
-				<button onClick={() => send(setText("clicked"))}>Go</button>
+				<button onClick={() => send(Message.SetText({ text: "clicked" }))}>Go</button>
 				<p>{model}</p>
 			</main>
 		)
@@ -185,7 +181,7 @@ it("limits message loops from effects and still unmounts the view", function () 
 		const send = App.useDispatch()
 		React.useEffect(
 			function loop() {
-				send(setText(model === "a" ? "b" : "a"))
+				send(Message.SetText({ text: model === "a" ? "b" : "a" }))
 			},
 			[model, send]
 		)
@@ -261,7 +257,7 @@ it("checkbox click handlers see the new value even when they change local state"
 				}}
 				onChange={function (event) {
 					expect(event.target).toBe(event.currentTarget)
-					send(setText(event.currentTarget.checked ? "yes" : "no"))
+					send(Message.SetText({ text: event.currentTarget.checked ? "yes" : "no" }))
 				}}
 			/>
 		)
@@ -305,7 +301,7 @@ it("uncontrolled checkboxes retain their value across renders and repeated click
 			<input
 				type="checkbox"
 				defaultChecked={false}
-				onChange={(event) => send(setText(String(event.currentTarget.checked)))}
+				onChange={(event) => send(Message.SetText({ text: String(event.currentTarget.checked) }))}
 			/>
 		)
 	}
@@ -358,7 +354,7 @@ it("a delegated click preserves target identity and stops at stopPropagation", f
 						expect((event.target as HTMLElement).getAttribute("data-action")).toBe("save")
 						calls.push(event.currentTarget.tagName)
 						event.stopPropagation()
-						send(setText("saved"))
+						send(Message.SetText({ text: "saved" }))
 					}}
 				>
 					<button data-action="save">Go</button>
@@ -382,7 +378,7 @@ it("typing invokes a React text input's onChange", function () {
 		return (
 			<input
 				value={App.useModel()}
-				onChange={(e) => send(setText(e.target.value))}
+				onChange={(e) => send(Message.SetText({ text: e.target.value }))}
 			/>
 		)
 	}
@@ -399,7 +395,7 @@ it("a mount effect can dispatch a message", function () {
 		const send = App.useDispatch()
 		React.useEffect(
 			function markReady() {
-				send(setText("ready"))
+				send(Message.SetText({ text: "ready" }))
 			},
 			[send]
 		)
@@ -424,7 +420,7 @@ it("checkbox currentTarget.checked reflects the toggle", function () {
 					expect(event.target).toBe(event.currentTarget)
 					expect(event.target.type).toBe("checkbox")
 					expect(event.target.name).toBe("agreement")
-					send(setText(event.currentTarget.checked ? "yes" : "no"))
+					send(Message.SetText({ text: event.currentTarget.checked ? "yes" : "no" }))
 				}}
 			/>
 		)
@@ -442,7 +438,7 @@ it("a bubbled click retains its original target", function () {
 		const send = App.useDispatch()
 		return (
 			<main>
-				<div onClick={(e) => send(setText((e.target as HTMLElement).tagName))}>
+				<div onClick={(e) => send(Message.SetText({ text: (e.target as HTMLElement).tagName }))}>
 					<button>Go</button>
 				</div>
 				<p>{App.useModel()}</p>
@@ -473,8 +469,8 @@ it("a mount effect's local state update is visible", function () {
 })
 
 it("notifies memoized Submodel readers when the parent changes", function () {
-	const Child = Submodel.define({ Model: Schema.String, Message: TextMessage })
-	const lift = { read: (model: string) => model, toParentMessage: (message: TextMessage) => message }
+	const Child = Submodel.define({ Model: Schema.String, Message })
+	const lift = { read: (model: string) => model, toParentMessage: (message: Message) => message }
 	function ChildView() {
 		return <p>{Child.useModel()}</p>
 	}
@@ -483,7 +479,7 @@ it("notifies memoized Submodel readers when the parent changes", function () {
 		const send = App.useDispatch()
 		return (
 			<main>
-				<button onClick={() => send(setText("updated"))}>Go</button>
+				<button onClick={() => send(Message.SetText({ text: "updated" }))}>Go</button>
 				<Child.Provider
 					from={App}
 					lift={lift}

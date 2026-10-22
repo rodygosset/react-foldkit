@@ -10,18 +10,14 @@ import { bindSceneView } from "./react"
 
 afterEach(cleanup)
 
-const TextMessage = defineMessageUnion({ SetText: { text: Schema.String } })
-type TextMessage = typeof TextMessage.Type
+const Message = defineMessageUnion({ SetText: { text: Schema.String } })
+type Message = typeof Message.Type
 
-function setText(text: string): TextMessage {
-	return TextMessage.SetText({ text })
-}
-
-function update(_model: string, message: TextMessage) {
+function update(_model: string, message: Message) {
 	return { model: message.text }
 }
 
-const App = Application.define({ Model: Schema.String, Message: TextMessage, update })
+const App = Application.define({ Model: Schema.String, Message, update })
 
 it("restores a controlled checkbox when its change handler leaves the Model unchanged", function () {
 	function View() {
@@ -62,7 +58,7 @@ it("delivers input changes to a parent React handler", function () {
 	function View() {
 		const send = App.useDispatch()
 		return (
-			<main onChange={(event) => send(setText((event.target as HTMLInputElement).value))}>
+			<main onChange={(event) => send(Message.SetText({ text: (event.target as HTMLInputElement).value }))}>
 				<input defaultValue="" />
 				<p>{App.useModel()}</p>
 			</main>
@@ -79,7 +75,7 @@ it("preserves the child target of a delegated double click", function () {
 	function View() {
 		const send = App.useDispatch()
 		return (
-			<main onDoubleClick={(event) => send(setText((event.target as HTMLElement).tagName))}>
+			<main onDoubleClick={(event) => send(Message.SetText({ text: (event.target as HTMLElement).tagName }))}>
 				<button>Go</button>
 				<p>{App.useModel()}</p>
 			</main>
@@ -96,7 +92,11 @@ it("preserves a direct pointer target's identity", function () {
 	function View() {
 		const send = App.useDispatch()
 		return (
-			<button onPointerDown={(event) => send(setText(event.target === event.currentTarget ? "self" : "other"))}>
+			<button
+				onPointerDown={(event) =>
+					send(Message.SetText({ text: event.target === event.currentTarget ? "self" : "other" }))
+				}
+			>
 				{App.useModel()}
 			</button>
 		)
@@ -121,7 +121,7 @@ it("runs click capture handlers before bubble handlers", function () {
 				<button
 					onClick={function () {
 						calls.push("bubble")
-						send(setText("clicked"))
+						send(Message.SetText({ text: "clicked" }))
 					}}
 				>
 					Go
@@ -161,7 +161,7 @@ it("React DOM delivers parent change handlers and capture handlers", function ()
 		const send = App.useDispatch()
 		return (
 			<main
-				onChange={(event) => send(setText((event.target as HTMLInputElement).value))}
+				onChange={(event) => send(Message.SetText({ text: (event.target as HTMLInputElement).value }))}
 				onClickCapture={function () {
 					calls.push("capture")
 				}}
@@ -219,7 +219,7 @@ it("focus capture and bubble handlers observe the input's original target", func
 				onFocus={function (event) {
 					expect(event.currentTarget.contains(event.relatedTarget)).toBe(false)
 					calls.push("bubble")
-					send(setText("focused"))
+					send(Message.SetText({ text: "focused" }))
 				}}
 			>
 				<input />
@@ -280,7 +280,7 @@ it("input and change propagation run once each and preserve data-last steps", fu
 					}}
 					onChange={function (event) {
 						calls.push("change-child")
-						send(setText(event.target.value))
+						send(Message.SetText({ text: event.target.value }))
 					}}
 				/>
 			</main>
@@ -307,7 +307,11 @@ it("checkbox changes bubble from an input without its own handler", function () 
 	function View() {
 		const send = App.useDispatch()
 		return (
-			<main onChange={(event) => send(setText(String((event.target as HTMLInputElement).checked)))}>
+			<main
+				onChange={(event) =>
+					send(Message.SetText({ text: String((event.target as HTMLInputElement).checked) }))
+				}
+			>
 				<input type="checkbox" />
 				<p>{App.useModel()}</p>
 			</main>
@@ -328,7 +332,7 @@ it("pointer events retain dataset and closest matches on the real host path", fu
 				onPointerDown={function (event) {
 					const target = event.target as HTMLElement
 					expect(target.closest<HTMLElement>('button[data-action="save"]')?.dataset.action).toBe("save")
-					send(setText(target.dataset.part ?? "missing"))
+					send(Message.SetText({ text: target.dataset.part ?? "missing" }))
 				}}
 			>
 				<button data-action="save">
@@ -351,8 +355,8 @@ it("keyboard data-last calls preserve modifiers", function () {
 		return (
 			<input
 				value={App.useModel()}
-				onChange={(event) => send(setText(event.target.value))}
-				onKeyDown={(event) => send(setText(event.ctrlKey ? event.key : "missing"))}
+				onChange={(event) => send(Message.SetText({ text: event.target.value }))}
+				onKeyDown={(event) => send(Message.SetText({ text: event.ctrlKey ? event.key : "missing" }))}
 			/>
 		)
 	}
@@ -376,19 +380,19 @@ it("rejects multiple host roots rather than silently dropping their siblings", f
 })
 
 it("native Foldkit views keep upstream behavior for adapted data-last interactions", function () {
-	function stringUpdate(_model: string, message: string) {
+	function update(_model: string, message: string) {
 		return { model: message }
 	}
-	function view(model: string, html: HtmlBuilder<string>) {
-		return html.input([
-			html.Value(model),
-			html.OnInput((value) => value),
-			html.OnChange((value) => value),
-			html.OnKeyDown((key) => key),
+	function view(model: string, h: HtmlBuilder<string>) {
+		return h.input([
+			h.Value(model),
+			h.OnInput((value) => value),
+			h.OnChange((value) => value),
+			h.OnKeyDown((key) => key),
 		])
 	}
 	Scene.scene(
-		{ update: stringUpdate, view },
+		{ update, view },
 		Scene.given(""),
 		Scene.type("Ada")(Scene.role("textbox")),
 		Scene.expect(Scene.role("textbox")).toHaveValue("Ada"),
@@ -406,13 +410,15 @@ it("data-last file selection and drops preserve their event payloads", function 
 			<main
 				onDrop={function (event) {
 					event.preventDefault()
-					send(setText(event.dataTransfer.files[0]?.name ?? "missing"))
+					send(Message.SetText({ text: event.dataTransfer.files[0]?.name ?? "missing" }))
 				}}
 			>
 				<input
 					type="file"
 					data-testid="file"
-					onChange={(event) => send(setText(event.currentTarget.files?.[0]?.name ?? "missing"))}
+					onChange={(event) =>
+						send(Message.SetText({ text: event.currentTarget.files?.[0]?.name ?? "missing" }))
+					}
 				/>
 				<span data-testid="drop">Drop</span>
 				<p>{App.useModel()}</p>
@@ -435,7 +441,7 @@ it("selected option matchers follow a controlled select value", function () {
 		return (
 			<select
 				value={App.useModel()}
-				onChange={(event) => send(setText(event.target.value))}
+				onChange={(event) => send(Message.SetText({ text: event.target.value }))}
 			>
 				<option value="a">Alpha</option>
 				<option value="b">Beta</option>
@@ -457,7 +463,7 @@ it("React DOM selected options follow a controlled select value", function () {
 		return (
 			<select
 				value={App.useModel()}
-				onChange={(event) => send(setText(event.target.value))}
+				onChange={(event) => send(Message.SetText({ text: event.target.value }))}
 			>
 				<option value="a">Alpha</option>
 				<option value="b">Beta</option>
