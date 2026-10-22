@@ -1205,6 +1205,16 @@ Model and send Messages without depending on the Store implementation.
 
 ## react-foldkit/scene
 
+### click
+
+Clicks an element with React event targets and checkbox activation in a bound React Scene.
+
+**Details**
+
+Foldkit views use Foldkit's click step. React views preserve the clicked element as `target`
+while each handler receives its own element as `currentTarget`. Checkbox and radio change
+handlers read the activated value. A canceled click restores the previous checked state.
+
 ### inside
 
 Runs steps with locators scoped to a parent element, as Foldkit's `inside` does.
@@ -1229,7 +1239,7 @@ renders the component in a private React root and unmounts it when the scene end
 
 Foldkit reexports inherit their upstream contracts. See [Foldkit documentation](https://foldkit.dev) and the original editor JSDoc.
 
-`AnyCommand`, `AnyMount`, `Command`, `CustomElement`, `Locator`, `LocatorAll`, `ManagedResource`, `Mount`, `MountMatcher`, `MountResolver`, `OutMessageStep`, `OutMessagesStep`, `PendingMount`, `Resolver`, `SceneSimulation`, `SceneStep`, `Subscription`, `SubscriptionMessageStep`, `all`, `altText`, `attr`, `beforeInput`, `blur`, `change`, `changeFiles`, `click`, `contextMenu`, `displayValue`, `doubleClick`, `dropFiles`, `expect`, `expectAll`, `expectHandled`, `expectIgnored`, `expectNoOutMessage`, `expectOutMessage`, `expectOutMessages`, `filter`, `find`, `findAll`, `first`, `focus`, `focusEnter`, `focusLeave`, `getAllByAltText`, `getAllByDisplayValue`, `getAllByLabel`, `getAllByPlaceholder`, `getAllByRole`, `getAllByTestId`, `getAllByText`, `getAllByTitle`, `getByAltText`, `getByDisplayValue`, `getByLabel`, `getByPlaceholder`, `getByRole`, `getByTestId`, `getByText`, `getByTitle`, `given`, `hover`, `keydown`, `label`, `last`, `nth`, `placeholder`, `pointerDown`, `pointerUp`, `role`, `sceneMatchers`, `selector`, `submit`, `tap`, `testId`, `text`, `textContent`, `title`, `type`, `typeContentEditable`, `withViewInputs`, `within`.
+`AnyCommand`, `AnyMount`, `Command`, `CustomElement`, `Locator`, `LocatorAll`, `ManagedResource`, `Mount`, `MountMatcher`, `MountResolver`, `OutMessageStep`, `OutMessagesStep`, `PendingMount`, `Resolver`, `SceneSimulation`, `SceneStep`, `Subscription`, `SubscriptionMessageStep`, `all`, `altText`, `attr`, `beforeInput`, `blur`, `change`, `changeFiles`, `contextMenu`, `displayValue`, `doubleClick`, `dropFiles`, `expect`, `expectAll`, `expectHandled`, `expectIgnored`, `expectNoOutMessage`, `expectOutMessage`, `expectOutMessages`, `filter`, `find`, `findAll`, `first`, `focus`, `focusEnter`, `focusLeave`, `getAllByAltText`, `getAllByDisplayValue`, `getAllByLabel`, `getAllByPlaceholder`, `getAllByRole`, `getAllByTestId`, `getAllByText`, `getAllByTitle`, `getByAltText`, `getByDisplayValue`, `getByLabel`, `getByPlaceholder`, `getByRole`, `getByTestId`, `getByText`, `getByTitle`, `given`, `hover`, `keydown`, `label`, `last`, `nth`, `placeholder`, `pointerDown`, `pointerUp`, `role`, `sceneMatchers`, `selector`, `submit`, `tap`, `testId`, `text`, `textContent`, `title`, `type`, `typeContentEditable`, `withViewInputs`, `within`.
 
 ## react-foldkit/scene/react
 
@@ -1247,13 +1257,16 @@ change the test import to `foldkit/scene`.
 
 Each `scene` call renders the component in a private React root. `useModel` reads the
 Scene's current Model and `useSend` records Messages for Scene instead of dispatching them to a
-Store. No Store starts, so Commands and Subscriptions run only as Scene steps. React state and
-Effects behave as in React, and the root unmounts when the scene finishes or a step throws.
+Store. Synchronous React state updates and Effects finish before the next step. Effect Messages
+pass through update, and Commands remain pending until the test resolves them. The root unmounts
+when the scene finishes or a step throws.
 
 **Gotchas**
 
 - The component must render one host element at its root.
 - React views produce no Foldkit Mounts or element hooks, so `Mount` steps and `toHaveHook` do not apply.
+- Timers, promises, transitions, and suspended work need an asynchronous test outside Scene.
+- Scene fails after 100 renders if Effect Messages do not settle.
 
 **Example** (Bind a feature view for Scene tests)
 

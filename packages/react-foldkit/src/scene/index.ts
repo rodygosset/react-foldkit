@@ -1,8 +1,12 @@
 import * as FoldkitScene from "foldkit/scene"
 import { isBoundSceneSimulation, isBoundSceneView } from "./sceneBinding"
-import { inside as insideBoundReactScene, scene as runBoundReactScene } from "./vendor/scene.js"
+import {
+	click as clickBoundReactScene,
+	inside as insideBoundReactScene,
+	scene as runBoundReactScene,
+} from "./vendor/scene.js"
 
-// Every other name is Foldkit's own Scene API. Only the two runners below dispatch on the view.
+// Only the runners and click dispatch on the view. Other names are Foldkit's own Scene API.
 export * from "foldkit/scene"
 
 type UntypedScene = (config: Readonly<{ view: Function }>, ...steps: ReadonlyArray<unknown>) => void
@@ -27,8 +31,14 @@ const insideFoldkit = FoldkitScene.inside as unknown as UntypedInside
  * @category testing
  * @since 0.2.0
  */
-export const scene: typeof FoldkitScene.scene = ((config: Readonly<{ view: Function }>, ...steps: ReadonlyArray<unknown>) =>
-	(isBoundSceneView(config.view) ? runBoundReactScene : sceneFoldkit)(config, ...steps)) as unknown as typeof FoldkitScene.scene
+export const scene: typeof FoldkitScene.scene = ((
+	config: Readonly<{ view: Function }>,
+	...steps: ReadonlyArray<unknown>
+) =>
+	(isBoundSceneView(config.view) ? runBoundReactScene : sceneFoldkit)(
+		config,
+		...steps
+	)) as unknown as typeof FoldkitScene.scene
 
 /**
  * Runs steps with locators scoped to a parent element, as Foldkit's `inside` does.
@@ -42,4 +52,22 @@ export const scene: typeof FoldkitScene.scene = ((config: Readonly<{ view: Funct
  */
 export const inside: typeof FoldkitScene.inside = ((parent: unknown, ...steps: ReadonlyArray<unknown>) =>
 	(simulation: unknown) =>
-		(isBoundSceneSimulation(simulation) ? insideBoundReactScene : insideFoldkit)(parent, ...steps)(simulation)) as unknown as typeof FoldkitScene.inside
+		(isBoundSceneSimulation(simulation) ? insideBoundReactScene : insideFoldkit)(
+			parent,
+			...steps
+		)(simulation)) as unknown as typeof FoldkitScene.inside
+
+/**
+ * Clicks an element with React event targets and checkbox activation in a bound React Scene.
+ *
+ * **Details**
+ *
+ * Foldkit views use Foldkit's click step. React views preserve the clicked element as `target`
+ * while each handler receives its own element as `currentTarget`. Checkbox and radio change
+ * handlers read the activated value. A canceled click restores the previous checked state.
+ *
+ * @category testing
+ * @since 0.2.0
+ */
+export const click: typeof FoldkitScene.click = (target) => (simulation) =>
+	(isBoundSceneSimulation(simulation) ? clickBoundReactScene : FoldkitScene.click)(target)(simulation)

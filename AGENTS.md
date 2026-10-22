@@ -16,7 +16,7 @@ Use Bun 1.3.14 and Node.js 24. Only `packages/react-foldkit` is published. The d
 
 ## Keep the package consistent
 
-Public barrels define the exports. Do not reexport Foldkit vocabulary; applications import it from `foldkit`, a peer dependency. `react-foldkit/scene` is the one exception: it reexports `foldkit/scene` and owns only `scene` and `inside`, so tests migrate by changing one import. Follow [the JSDoc playbook](docs/jsdocPlaybook.md) for owned exports.
+Public barrels define the exports. Do not reexport Foldkit vocabulary; applications import it from `foldkit`, a peer dependency. `react-foldkit/scene` is the one exception: it reexports `foldkit/scene` and owns `scene`, `inside`, and `click`, so tests migrate by changing one import. Follow [the JSDoc playbook](docs/jsdocPlaybook.md) for owned exports.
 
 Use camelCase implementation filenames and directories. Keep public ESLint rule IDs in dash-case. Do not rename web app files. `check:filenames` checks the package conventions.
 

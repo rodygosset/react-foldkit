@@ -15,13 +15,16 @@ import type { SceneView } from "./sceneView"
  *
  * Each `scene` call renders the component in a private React root. `useModel` reads the
  * Scene's current Model and `useSend` records Messages for Scene instead of dispatching them to a
- * Store. No Store starts, so Commands and Subscriptions run only as Scene steps. React state and
- * Effects behave as in React, and the root unmounts when the scene finishes or a step throws.
+ * Store. Synchronous React state updates and Effects finish before the next step. Effect Messages
+ * pass through update, and Commands remain pending until the test resolves them. The root unmounts
+ * when the scene finishes or a step throws.
  *
  * **Gotchas**
  *
  * - The component must render one host element at its root.
  * - React views produce no Foldkit Mounts or element hooks, so `Mount` steps and `toHaveHook` do not apply.
+ * - Timers, promises, transitions, and suspended work need an asynchronous test outside Scene.
+ * - Scene fails after 100 renders if Effect Messages do not settle.
  *
  * **Example** (Bind a feature view for Scene tests)
  *

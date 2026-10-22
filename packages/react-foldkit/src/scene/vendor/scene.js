@@ -1,7 +1,7 @@
 import { Array, Effect, Equal, Function, Match, Option, Predicate, String, pipe, } from 'effect';
 import { dual } from 'effect/Function';
 import { kebabToPascal, serializedStylePropertyName, FOLDKIT_MOUNT_KEY, FileHandlerSymbol, tagNameFromSelector } from './sceneCompat.js';
-import { createSceneRenderSession, disposeSceneRenderSession, isBoundSceneView, renderBoundSceneView } from '../sceneBinding.js';
+import { createSceneRenderSession, disposeSceneRenderSession, isBoundSceneView, renderBoundSceneView, runSceneInteraction } from '../sceneBinding.js';
 import { assertAllCommandsResolved, assertAllMountsResolved, assertAllUnmountsAcknowledged, assertExactCommands, assertExactMounts, assertHasCommands, assertHasMounts, assertNoUnacknowledgedUnmounts, assertNoUnresolvedCommands, assertNoUnresolvedMounts, assertResolveUnambiguous, assertZeroCommands, assertZeroMounts, formatCommand, formatMatcher, formatMountList, formatMountMatcher, mountMatches, resolveAllExactInternal, resolveAllInternal, resolveByMatcher, resolveMountByMatcher, } from './internal.js';
 import { accessibleDescription, accessibleName, ancestorsOf, attr, isHidden, resolveTarget, selector, textContent, within, } from './query.js';
 import { allAltText, allDisplayValue, allLabel, allPlaceholder, allRole, allSelector, allTestId, allText, allTitle, } from './query.js';
@@ -838,6 +838,21 @@ const applySceneStep = (simulation, step) => {
     }
     return simulation;
 };
+const settleRender = (simulation) => {
+    let internal = toInternal(simulation);
+    if (internal.model === UNINITIALIZED) return internal;
+    for (let pass = 0; pass < 100; pass++) {
+        internal.capturingDispatch.reset();
+        const html = renderView(internal.viewFn, internal.model, internal.capturingDispatch.dispatch, internal.sceneRenderSession);
+        const mountSlots = reconcileMountSlots(internal.mountSlots, html);
+        internal = { ...internal, html, mountSlots, mounts: pendingMountsOf(mountSlots) };
+        const messages = internal.capturingDispatch.getCapturedMessages();
+        internal.capturingDispatch.reset();
+        if (messages.length === 0) return internal;
+        internal = applyExternalMessages(internal, messages, 'when a React Effect dispatched a new Message');
+    }
+    throw new Error('React Scene did not settle after 100 renders. Check Effects that dispatch on every render.');
+};
 const runSteps = (seed, steps) => 
 /* eslint-disable @typescript-eslint/consistent-type-assertions */
 Array.reduce(steps, seed, (current, step) => {
@@ -847,7 +862,7 @@ Array.reduce(steps, seed, (current, step) => {
         ...currentInternal,
         updateFn: outMessageCapture.updateFn,
     };
-    const stepResult = applySceneStep(capturingSimulation, step);
+    const stepResult = settleRender(applySceneStep(capturingSimulation, step));
     const restoredSimulation = {
         ...toInternal(stepResult),
         updateFn: currentInternal.updateFn,
@@ -857,13 +872,6 @@ Array.reduce(steps, seed, (current, step) => {
     const next = outMessageCapture.isUpdateApplied() && !isSequenceUpdatedByNestedSteps
         ? withOutMessages(restoredSimulation, outMessageCapture.getOutMessages())
         : restoredSimulation;
-    const internal = toInternal(next);
-    if (internal.model !== UNINITIALIZED) {
-        const html = renderView(internal.viewFn, internal.model, internal.capturingDispatch.dispatch, internal.sceneRenderSession);
-        const mountSlots = reconcileMountSlots(internal.mountSlots, html);
-        const mounts = pendingMountsOf(mountSlots);
-        return { ...internal, html, mountSlots, mounts };
-    }
     return next;
 });
 /* eslint-enable @typescript-eslint/consistent-type-assertions */
@@ -939,9 +947,17 @@ export const click = (target) => (simulation) => {
             'element is interactive.');
     }
     const simulatedClick = createSimulatedClick();
-    let isClickHandled = false;
+    const clickTarget = element.elm;
+    simulatedClick.event.target = clickTarget;
+    Object.defineProperty(simulatedClick.event, 'defaultPrevented', { get: simulatedClick.isDefaultPrevented });
+    const inputType = lookupStringAttribute(element, 'type');
+    const isCheckable = element.sel === 'input' && (inputType === 'checkbox' || inputType === 'radio');
+    const previousChecked = clickTarget?.checked;
+    if (isCheckable) clickTarget.checked = inputType === 'radio' || !previousChecked;
+    let isClickHandled = isCheckable && element.data?.on?.change !== undefined;
     let isSubmitHandled = false;
     internal.capturingDispatch.reset();
+    runSceneInteraction(() => {
     for (const currentElement of propagationPath) {
         const maybeClickHandler = Option.fromNullishOr(currentElement.data?.on?.['click']);
         if (Option.isNone(maybeClickHandler)) {
@@ -955,6 +971,11 @@ export const click = (target) => (simulation) => {
             break;
         }
     }
+    if (isCheckable && clickTarget.checked !== previousChecked && element.data?.on?.change !== undefined) {
+        isClickHandled = true;
+        element.data.on.change(simulatedClick.event);
+    }
+    if (isCheckable && simulatedClick.isDefaultPrevented()) clickTarget.checked = previousChecked;
     if (!simulatedClick.isDefaultPrevented()) {
         const maybeSubmitter = Array.findFirst(propagationPath, isSubmitButton);
         const maybeForm = pipe(maybeSubmitter, Option.flatMap(submitter => formOwnerOf(internal.html, submitter)));
@@ -968,6 +989,7 @@ export const click = (target) => (simulation) => {
             }
         }
     }
+    });
     if (!isClickHandled && !isSubmitHandled) {
         const attributeName = EVENT_NAMES['click'] ?? 'click';
         throw new Error(`I found an element matching ${description} but neither it nor any ancestor has a click handler.\n\n` +

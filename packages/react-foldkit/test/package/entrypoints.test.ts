@@ -43,7 +43,7 @@ describe("built package entry points", function () {
 	it("mirrors foldkit/scene from the scene entry and binds React views from scene/react", function () {
 		// The scene entry is the one place that reexports Foldkit, so tests migrate by changing the import.
 		expect(Object.keys(Scene).sort()).toEqual(Object.keys(FoldkitScene).sort())
-		expect(Scene.click).toBe(FoldkitScene.click)
+		expect(Scene.click).not.toBe(FoldkitScene.click)
 		expect(Scene.scene).not.toBe(FoldkitScene.scene)
 		expect(Object.keys(SceneReact)).toEqual(["bindSceneView"])
 	})

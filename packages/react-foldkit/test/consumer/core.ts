@@ -3,7 +3,7 @@ import { Effect, Option, Schema } from "effect"
 import { constVoid } from "effect/Function"
 import * as AsyncData from "foldkit/asyncData"
 import * as Query from "foldkit/experimental/query"
-import { createElement } from "react"
+import { createElement, useEffect, useState } from "react"
 import { renderToString } from "react-dom/server"
 import * as Foldkit from "react-foldkit"
 import type { ModelReader } from "react-foldkit/modelSource"
@@ -51,6 +51,41 @@ Scene.scene(
 	Scene.given(0),
 	Scene.click(Scene.role("button", { name: "Count 0" })),
 	Scene.expect(Scene.role("button")).toHaveText("Count 1")
+)
+
+const InputApp = Application.define({
+	Model: Schema.String,
+	Message: Schema.String,
+	update: (_model: string, message: string) => ({ model: message }),
+})
+function InputView() {
+	const model = InputApp.useModel()
+	const send = InputApp.useDispatch()
+	const [ready, setReady] = useState(false)
+	useEffect(
+		function initialize() {
+			send("ready")
+			setReady(true)
+		},
+		[send]
+	)
+	return createElement(
+		"main",
+		{ onClick: (event) => send((event.target as HTMLElement).getAttribute("data-action") ?? "missing") },
+		createElement("input", { value: model, onChange: (event) => send(event.currentTarget.value) }),
+		createElement("button", { "data-action": "saved" }, "Save"),
+		createElement("p", null, String(ready))
+	)
+}
+Scene.scene(
+	{ update: (_model: string, message: string) => ({ model: message }), view: bindSceneView(InputApp, InputView) },
+	Scene.given("waiting"),
+	Scene.expect(Scene.role("textbox")).toHaveValue("ready"),
+	Scene.expect(Scene.text("true")).toExist(),
+	Scene.type(Scene.role("textbox"), "Ada"),
+	Scene.expect(Scene.role("textbox")).toHaveValue("Ada"),
+	Scene.click(Scene.role("button")),
+	Scene.expect(Scene.role("textbox")).toHaveValue("saved")
 )
 
 const query = Query.define({

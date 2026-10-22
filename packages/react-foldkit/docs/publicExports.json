@@ -410,7 +410,7 @@
 	{
 		"entryPoint": "react-foldkit/scene",
 		"name": "click",
-		"owner": "foldkit",
+		"owner": "react-foldkit",
 		"introduced": "0.1.0"
 	},
 	{

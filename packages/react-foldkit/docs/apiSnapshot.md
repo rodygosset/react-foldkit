@@ -293,7 +293,7 @@ export type { Program } from "./program";
 
 ```ts
 export * from "foldkit/scene";
-export { inside, scene } from "./scene/index";
+export { click, inside, scene } from "./scene/index";
 ```
 
 ## dist/scene/index.d.ts
@@ -303,6 +303,7 @@ import * as FoldkitScene from "foldkit/scene";
 export * from "foldkit/scene";
 export declare const scene: typeof FoldkitScene.scene;
 export declare const inside: typeof FoldkitScene.inside;
+export declare const click: typeof FoldkitScene.click;
 ```
 
 ## dist/scene/react.d.ts
@@ -330,7 +331,10 @@ interface HostText {
   text: string;
 }
 interface HostElement {
-  type: string;
+  tag: string;
+  readonly type: string;
+  readonly name: string;
+  readonly id: string;
   props: HostProps;
   attributes: Record<string, string>;
   children: Array<HostElement | HostText>;
@@ -351,10 +355,12 @@ interface HostContainer {
 }
 declare const renderer: Reconciler.Reconciler<HostContainer, HostContainer | HostElement, HostText, HostElement | HostText, unknown, HostElement | HostText>;
 type Renderer = typeof renderer;
+export declare function runSceneInteraction<A>(callback: () => A): A;
 interface RenderState {
   readonly container: HostContainer;
   readonly root: ReturnType<Renderer["createContainer"]>;
   readonly source: ModelSource<unknown, unknown>;
+  element?: React.ReactElement;
   setInput: (model: unknown, dispatch: (message: unknown) => void) => void;
 }
 export interface SceneRenderSession {

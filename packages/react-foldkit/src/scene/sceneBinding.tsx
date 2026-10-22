@@ -2,7 +2,7 @@ import { Option } from "effect"
 import React from "react"
 import Reconciler from "react-reconciler"
 import type ReactReconciler from "react-reconciler"
-import { DefaultEventPriority, NoEventPriority } from "react-reconciler/constants.js"
+import { DiscreteEventPriority, NoEventPriority } from "react-reconciler/constants.js"
 import type { Scene as SceneNamespace } from "foldkit/test"
 import { sceneSourceContext } from "../application/react"
 import type { ModelSource } from "../modelSource"
@@ -36,7 +36,10 @@ interface HostText {
 }
 
 interface HostElement {
-	type: string
+	tag: string
+	readonly type: string
+	readonly name: string
+	readonly id: string
 	props: HostProps
 	attributes: Record<string, string>
 	children: Array<HostElement | HostText>
@@ -164,21 +167,25 @@ const eventProps: Readonly<Record<string, string>> = {
 
 /** Stringifies a primitive prop the way React DOM writes it; other values become empty. */
 const hostString = (value: unknown): string =>
-	typeof value === "string" ? value : typeof value === "number" || typeof value === "boolean" || typeof value === "bigint" ? `${value}` : ""
+	typeof value === "string"
+		? value
+		: typeof value === "number" || typeof value === "boolean" || typeof value === "bigint"
+			? `${value}`
+			: ""
 
 let updatePriority = NoEventPriority
 const rootHostContext = Object.freeze({})
 
 const append = function (parent: HostContainer | HostElement, child: HostElement | HostText): void {
 	remove(parent, child)
-	if ("type" in parent && "type" in child) child.parent = parent
+	if ("tag" in parent && "tag" in child) child.parent = parent
 	parent.children.push(child)
 }
 
 const remove = function (parent: HostContainer | HostElement, child: HostElement | HostText): void {
 	const index = parent.children.indexOf(child)
 	if (index !== -1) parent.children.splice(index, 1)
-	if ("type" in parent && "type" in child) child.parent = undefined
+	if ("tag" in parent && "tag" in child) child.parent = undefined
 }
 
 const hostConfig = {
@@ -189,10 +196,11 @@ const hostConfig = {
 	rendererVersion: "0.1.0",
 	rendererPackageName: "react-foldkit",
 	extraDevToolsConfig: null,
-	bindToConsole: (methodName: string, args: unknown[]) => function () {
-		const method = console[methodName as keyof Console]
-		if (typeof method === "function") (method as (...values: unknown[]) => void)(...args)
-	},
+	bindToConsole: (methodName: string, args: unknown[]) =>
+		function () {
+			const method = console[methodName as keyof Console]
+			if (typeof method === "function") (method as (...values: unknown[]) => void)(...args)
+		},
 	getInstanceFromNode: () => null,
 	beforeActiveInstanceBlur: () => undefined,
 	afterActiveInstanceBlur: () => undefined,
@@ -205,7 +213,16 @@ const hostConfig = {
 	getPublicInstance: (instance: HostElement | HostText) => instance,
 	createInstance(type: string, props: HostProps): HostElement {
 		const instance: HostElement = {
-			type,
+			tag: type,
+			get type() {
+				return hostString(this.props.type ?? (type === "input" ? "text" : type === "button" ? "submit" : ""))
+			},
+			get name() {
+				return hostString(this.props.name)
+			},
+			get id() {
+				return hostString(this.props.id)
+			},
 			props,
 			attributes: {},
 			children: [],
@@ -213,7 +230,7 @@ const hostConfig = {
 			value: props.value ?? props.defaultValue,
 			checked: Boolean(props.checked ?? props.defaultChecked),
 			get textContent() {
-				return this.children.map((child) => ("text" in child ? child.text : child.textContent ?? "")).join("")
+				return this.children.map((child) => ("text" in child ? child.text : (child.textContent ?? ""))).join("")
 			},
 			focus: () => undefined,
 			blur: () => undefined,
@@ -222,8 +239,12 @@ const hostConfig = {
 				const value = instance.props[key] ?? instance.attributes[name]
 				return value === undefined || value === null || typeof value === "function" ? null : hostString(value)
 			},
-			setAttribute(name, value) { instance.attributes[name] = value },
-			removeAttribute(name) { delete instance.attributes[name] },
+			setAttribute(name, value) {
+				instance.attributes[name] = value
+			},
+			removeAttribute(name) {
+				delete instance.attributes[name]
+			},
 			closest(selector: string) {
 				let current: HostElement | undefined = instance
 				while (current !== undefined) {
@@ -243,7 +264,7 @@ const hostConfig = {
 		remove(parent, child)
 		const index = parent.children.indexOf(before)
 		parent.children.splice(index < 0 ? parent.children.length : index, 0, child)
-		if ("type" in child) child.parent = parent
+		if ("tag" in child) child.parent = parent
 	},
 	insertInContainerBefore(parent: HostContainer, child: HostElement | HostText, before: HostElement | HostText) {
 		remove(parent, child)
@@ -258,8 +279,8 @@ const hostConfig = {
 	resetAfterCommit: () => undefined,
 	commitUpdate(instance: HostElement, _type: string, _oldProps: HostProps, newProps: HostProps) {
 		instance.props = newProps
-		instance.value = newProps.value ?? newProps.defaultValue
-		instance.checked = Boolean(newProps.checked ?? newProps.defaultChecked)
+		if (newProps.value !== undefined && newProps.value !== null) instance.value = newProps.value
+		if (newProps.checked !== undefined && newProps.checked !== null) instance.checked = Boolean(newProps.checked)
 	},
 	commitTextUpdate(instance: HostText, _oldText: string, newText: string) {
 		instance.text = newText
@@ -281,7 +302,8 @@ const hostConfig = {
 	setCurrentUpdatePriority(priority: number) {
 		updatePriority = priority
 	},
-	resolveUpdatePriority: () => updatePriority || DefaultEventPriority,
+	// Scene is synchronous, including state updates scheduled by passive Effects.
+	resolveUpdatePriority: () => DiscreteEventPriority,
 	resolveEventType: () => null,
 	resolveEventTimeStamp: () => -1,
 	shouldAttemptEagerTransition: () => false,
@@ -332,10 +354,26 @@ type HostConfig = ReactReconciler.HostConfig<
 const renderer = Reconciler(hostConfig satisfies HostConfig)
 type Renderer = typeof renderer
 
+let interactionDepth = 0
+
+/** Flushes React work after all handlers of one interaction have read the activated element. */
+export function runSceneInteraction<A>(callback: () => A): A {
+	if (interactionDepth > 0) return callback()
+	return renderer.flushSyncFromReconciler(function () {
+		interactionDepth++
+		try {
+			return callback()
+		} finally {
+			interactionDepth--
+		}
+	})
+}
+
 interface RenderState {
 	readonly container: HostContainer
 	readonly root: ReturnType<Renderer["createContainer"]>
 	readonly source: ModelSource<unknown, unknown>
+	element?: React.ReactElement
 	setInput: (model: unknown, dispatch: (message: unknown) => void) => void
 }
 
@@ -360,18 +398,30 @@ function makeRenderState<Model, Message>(model: Model, dispatch: (message: Messa
 		false,
 		null,
 		"",
-		function (error: unknown) { throw error },
-		function (error: unknown) { throw error },
-		function (error: unknown) { throw error },
+		function (error: unknown) {
+			throw error
+		},
+		function (error: unknown) {
+			throw error
+		},
+		function (error: unknown) {
+			throw error
+		},
 		() => undefined,
 		null
 	)
 	let currentModel: unknown = model
 	let currentDispatch: (message: unknown) => void = (message) => dispatch(message as Message)
+	const listeners = new Set<() => void>()
 	const source: ModelSource<unknown, unknown> = {
 		getSnapshot: () => currentModel,
 		getServerSnapshot: () => currentModel,
-		subscribe: () => () => undefined,
+		subscribe(notify) {
+			listeners.add(notify)
+			return function () {
+				listeners.delete(notify)
+			}
+		},
 		dispatch: (message) => currentDispatch(message),
 	}
 	return {
@@ -379,8 +429,10 @@ function makeRenderState<Model, Message>(model: Model, dispatch: (message: Messa
 		root,
 		source,
 		setInput(nextModel, nextDispatch) {
-			currentModel = nextModel
 			currentDispatch = nextDispatch
+			if (Object.is(currentModel, nextModel)) return
+			currentModel = nextModel
+			for (const notify of listeners) notify()
 		},
 	}
 }
@@ -395,14 +447,16 @@ export function renderBoundSceneView<Model, Message>(
 	if (binding === undefined) throw new TypeError("The Scene view is not bound with bindSceneView")
 	const state = session.state ?? makeRenderState(model, dispatch)
 	session.state = state
-	state.setInput(model, dispatch as (message: unknown) => void)
 	const Context = sceneSourceContext<Model, Message>(binding.application)
-	const element = React.createElement(
+	const element = (state.element ??= React.createElement(
 		Context.Provider,
 		{ value: Option.some(state.source as ModelSource<Model, Message>) },
 		React.createElement(binding.Component)
-	)
-	renderer.flushSyncFromReconciler(() => renderer.updateContainerSync(element, state.root, null, null))
+	))
+	renderer.flushSyncFromReconciler(function () {
+		state.setInput(model, dispatch as (message: unknown) => void)
+		renderer.updateContainerSync(element, state.root, null, null)
+	})
 	renderer.flushSyncWork()
 	renderer.flushPassiveEffects()
 	const root = state.container.children[0]
@@ -434,17 +488,32 @@ function toVNode(node: HostElement): VNode {
 		if (name === "children" || name === "key" || name === "ref") continue
 		const eventName = eventProps[name]
 		if (eventName !== undefined && typeof value === "function") {
-			const handler = (event: unknown) => renderer.flushSyncFromReconciler(function () {
-				;(value as (event: unknown) => void)(reactEvent(node, eventName, event))
-			})
-			if (name === "onChange" && node.type === "input" && node.props.type === "file") {
+			const handler = (event: unknown) =>
+				runSceneInteraction(function () {
+					;(value as (event: unknown) => void)(reactEvent(node, eventName, event))
+				})
+			if (name === "onChange" && node.tag === "input" && node.props.type === "file") {
 				Object.defineProperty(handler, FileHandlerSymbol, { value: "OnFileChange" })
 			}
 			if (name === "onDrop") Object.defineProperty(handler, FileHandlerSymbol, { value: "OnDropFiles" })
 			on[eventName] = handler
 			continue
 		}
-		if (name.startsWith("aria-") || name.startsWith("data-") || name === "id" || name === "title" || name === "role" || name === "type" || name === "name" || name === "placeholder" || name === "alt" || name === "href" || name === "src" || name === "form" || name === "method") {
+		if (
+			name.startsWith("aria-") ||
+			name.startsWith("data-") ||
+			name === "id" ||
+			name === "title" ||
+			name === "role" ||
+			name === "type" ||
+			name === "name" ||
+			name === "placeholder" ||
+			name === "alt" ||
+			name === "href" ||
+			name === "src" ||
+			name === "form" ||
+			name === "method"
+		) {
 			attrs[name] = value
 		} else if (name === "className") {
 			for (const className of hostString(value).split(/\s+/)) {
@@ -454,7 +523,10 @@ function toVNode(node: HostElement): VNode {
 			for (const [property, styleValue] of Object.entries(value as Record<string, unknown>)) {
 				if (styleValue === null || styleValue === undefined || styleValue === "") continue
 				style[serializedStylePropertyName(property)] =
-					typeof styleValue === "number" && styleValue !== 0 && !unitlessStyles.has(property) && !property.startsWith("--")
+					typeof styleValue === "number" &&
+					styleValue !== 0 &&
+					!unitlessStyles.has(property) &&
+					!property.startsWith("--")
 						? `${styleValue}px`
 						: hostString(styleValue)
 			}
@@ -463,18 +535,20 @@ function toVNode(node: HostElement): VNode {
 			if (name === "htmlFor") attrs.for = value
 		}
 	}
-	const onChange = node.props.onChange
-	if (node.type === "input" && (node.props.type === "checkbox" || node.props.type === "radio") && typeof onChange === "function") {
-		// React DOM fires a checkbox or radio onChange from the click that toggles it.
-		const onClick = on.click
-		on.click = function (event) {
-			onClick?.(event)
-			const target = { type: node.props.type, name: node.props.name, value: node.value, checked: node.props.type === "radio" || !node.checked }
-			renderer.flushSyncFromReconciler(function () {
-				;(onChange as (event: unknown) => void)(reactEvent(node, "change", { target }))
+	if (isTextInput(node) && on.change !== undefined) {
+		const inputHandler = on.input
+		const changeHandler = on.change
+		on.input = function (event) {
+			// Batch both handlers so neither observes a partial React state update.
+			runSceneInteraction(function () {
+				inputHandler?.(event)
+				changeHandler(event)
 			})
 		}
 	}
+	if (node.value !== undefined) props.value = node.value
+	if (node.tag === "input" && (node.props.type === "checkbox" || node.props.type === "radio"))
+		props.checked = node.checked
 	const data = {
 		...(Object.keys(attrs).length > 0 ? { attrs } : {}),
 		...(Object.keys(props).length > 0 ? { props } : {}),
@@ -484,7 +558,7 @@ function toVNode(node: HostElement): VNode {
 	}
 	const children = node.children.map((child) => ("text" in child ? child.text : toVNode(child)))
 	return {
-		sel: node.type,
+		sel: node.tag,
 		data: data as unknown as VNode["data"],
 		children,
 		elm: node as unknown as Node,
@@ -494,16 +568,14 @@ function toVNode(node: HostElement): VNode {
 }
 
 function reactEvent(node: HostElement, type: string, value: unknown): Record<string, unknown> {
-	const source = value !== null && typeof value === "object" ? value as Record<string, unknown> : {}
-	if ((type === "change" || type === "input") && source.target !== null && typeof source.target === "object") {
-		const value = (source.target as Record<string, unknown>).value
-		if (value !== undefined) node.value = value
-	}
-	const target = source.target !== null && typeof source.target === "object"
-		? { ...(source.target as Record<string, unknown>), value: (source.target as Record<string, unknown>).value ?? node.value }
-		: node
+	const source = value !== null && typeof value === "object" ? (value as Record<string, unknown>) : {}
+	const isValueEvent = type === "change" || type === "input"
+	const target =
+		isValueEvent && source.target !== null && typeof source.target === "object" && !("tagName" in source.target)
+			? Object.assign(node, source.target)
+			: (source.target ?? node)
 	const nativeEvent = { ...source, type, target, currentTarget: node }
-	let defaultPrevented = false
+	let defaultPrevented = source.defaultPrevented === true
 	let propagationStopped = false
 	return {
 		...nativeEvent,
@@ -512,7 +584,9 @@ function reactEvent(node: HostElement, type: string, value: unknown): Record<str
 		nativeEvent,
 		bubbles: true,
 		cancelable: true,
-		get defaultPrevented() { return defaultPrevented },
+		get defaultPrevented() {
+			return defaultPrevented
+		},
 		preventDefault() {
 			defaultPrevented = true
 			if (typeof source.preventDefault === "function") (source.preventDefault as () => void)()
@@ -527,8 +601,28 @@ function reactEvent(node: HostElement, type: string, value: unknown): Record<str
 	}
 }
 
+const textInputTypes = new Set([
+	"text",
+	"search",
+	"email",
+	"url",
+	"tel",
+	"password",
+	"number",
+	"date",
+	"datetime-local",
+	"month",
+	"time",
+	"week",
+	"color",
+	"range",
+])
+
+const isTextInput = (node: HostElement): boolean =>
+	node.tag === "textarea" || (node.tag === "input" && textInputTypes.has(hostString(node.props.type ?? "text")))
+
 function matchesSelector(node: HostElement, selector: string): boolean {
 	if (selector.startsWith("#")) return node.props.id === selector.slice(1)
 	if (selector.startsWith(".")) return hostString(node.props.className).split(/\s+/).includes(selector.slice(1))
-	return node.type.toLowerCase() === selector.toLowerCase()
+	return node.tag.toLowerCase() === selector.toLowerCase()
 }

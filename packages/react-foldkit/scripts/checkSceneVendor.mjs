@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto"
-import { readFileSync } from "node:fs"
+import { readFileSync, writeFileSync } from "node:fs"
 import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import manifest from "./sceneVendorManifest.json" with { type: "json" }
@@ -53,7 +53,7 @@ scene = replaceOnce(scene,
 	"Effect import")
 scene = replaceOnce(scene,
 	"import { kebabToPascal } from '../customElement/index.js';\nimport { serializedStylePropertyName } from '../domReflection.js';\nimport { FOLDKIT_MOUNT_KEY, FileHandlerSymbol, __clearRuntime as clearHtmlRuntime, __htmlBuilder as htmlBuilderFor, __setRuntime as setHtmlRuntime, } from '../html/index.js';\nimport { MountTracker } from '../mount/index.js';\nimport { Dispatch } from '../runtime/dispatch.js';\nimport { tagNameFromSelector } from '../tagName.js';",
-	"import { kebabToPascal, serializedStylePropertyName, FOLDKIT_MOUNT_KEY, FileHandlerSymbol, tagNameFromSelector } from './sceneCompat.js';\nimport { createSceneRenderSession, disposeSceneRenderSession, isBoundSceneView, renderBoundSceneView } from '../sceneBinding.js';",
+	"import { kebabToPascal, serializedStylePropertyName, FOLDKIT_MOUNT_KEY, FileHandlerSymbol, tagNameFromSelector } from './sceneCompat.js';\nimport { createSceneRenderSession, disposeSceneRenderSession, isBoundSceneView, renderBoundSceneView, runSceneInteraction } from '../sceneBinding.js';",
 	"private helper import")
 const renderViewStart = scene.indexOf("const renderView = (viewFn, model, dispatch) => {")
 const renderViewEnd = scene.indexOf("\nconst isDocument", renderViewStart)
@@ -69,9 +69,71 @@ scene = replaceOnce(scene,
 	"dispatch: {\n            dispatchAsync: () => Effect.void,\n            dispatchSync: (dispatchedMessage) => {\n                capturedMessages.push(dispatchedMessage);\n            },\n        },",
 	"capturing dispatch")
 scene = replaceOnce(scene,
-	"renderView(internal.viewFn, internal.model, internal.capturingDispatch.dispatch);",
-	"renderView(internal.viewFn, internal.model, internal.capturingDispatch.dispatch, internal.sceneRenderSession);",
-	"render invocation")
+	"const runSteps = (seed, steps) =>",
+	`const settleRender = (simulation) => {
+    let internal = toInternal(simulation);
+    if (internal.model === UNINITIALIZED) return internal;
+    for (let pass = 0; pass < 100; pass++) {
+        internal.capturingDispatch.reset();
+        const html = renderView(internal.viewFn, internal.model, internal.capturingDispatch.dispatch, internal.sceneRenderSession);
+        const mountSlots = reconcileMountSlots(internal.mountSlots, html);
+        internal = { ...internal, html, mountSlots, mounts: pendingMountsOf(mountSlots) };
+        const messages = internal.capturingDispatch.getCapturedMessages();
+        internal.capturingDispatch.reset();
+        if (messages.length === 0) return internal;
+        internal = applyExternalMessages(internal, messages, 'when a React Effect dispatched a new Message');
+    }
+    throw new Error('React Scene did not settle after 100 renders. Check Effects that dispatch on every render.');
+};
+const runSteps = (seed, steps) =>`,
+	"React render settlement")
+scene = replaceOnce(scene,
+	"const stepResult = applySceneStep(capturingSimulation, step);",
+	"const stepResult = settleRender(applySceneStep(capturingSimulation, step));",
+	"capture Effect OutMessages before restoring update")
+scene = replaceOnce(scene,
+	`    const internal = toInternal(next);
+    if (internal.model !== UNINITIALIZED) {
+        const html = renderView(internal.viewFn, internal.model, internal.capturingDispatch.dispatch);
+        const mountSlots = reconcileMountSlots(internal.mountSlots, html);
+        const mounts = pendingMountsOf(mountSlots);
+        return { ...internal, html, mountSlots, mounts };
+    }
+    return next;`,
+	"    return next;",
+	"render before OutMessage capture closes")
+scene = replaceOnce(scene,
+	"    const simulatedClick = createSimulatedClick();",
+	`    const simulatedClick = createSimulatedClick();
+    const clickTarget = element.elm;
+    simulatedClick.event.target = clickTarget;
+    Object.defineProperty(simulatedClick.event, 'defaultPrevented', { get: simulatedClick.isDefaultPrevented });
+    const inputType = lookupStringAttribute(element, 'type');
+    const isCheckable = element.sel === 'input' && (inputType === 'checkbox' || inputType === 'radio');
+    const previousChecked = clickTarget?.checked;
+    if (isCheckable) clickTarget.checked = inputType === 'radio' || !previousChecked;`,
+	"React click target and activation")
+scene = replaceOnce(scene,
+	"    let isClickHandled = false;",
+	"    let isClickHandled = isCheckable && element.data?.on?.change !== undefined;",
+	"React radio clicks with no value change")
+scene = replaceOnce(scene,
+	"    internal.capturingDispatch.reset();\n    for (const currentElement of propagationPath) {",
+	"    internal.capturingDispatch.reset();\n    runSceneInteraction(() => {\n    for (const currentElement of propagationPath) {",
+	"batch React click handlers")
+scene = replaceOnce(scene,
+	"    if (!simulatedClick.isDefaultPrevented()) {",
+	`    if (isCheckable && clickTarget.checked !== previousChecked && element.data?.on?.change !== undefined) {
+        isClickHandled = true;
+        element.data.on.change(simulatedClick.event);
+    }
+    if (isCheckable && simulatedClick.isDefaultPrevented()) clickTarget.checked = previousChecked;
+    if (!simulatedClick.isDefaultPrevented()) {`,
+	"React checkbox change and canceled activation")
+scene = replaceOnce(scene,
+	"    if (!isClickHandled && !isSubmitHandled) {",
+	"    });\n    if (!isClickHandled && !isSubmitHandled) {",
+	"flush React click work before capturing Messages")
 scene = replaceOnce(scene,
 	"export const scene = (config, ...steps) => {\n    const capturingDispatch = createCapturingDispatch();",
 	"export const scene = (config, ...steps) => {\n    const capturingDispatch = createCapturingDispatch();\n    const sceneRenderSession = createSceneRenderSession();",
@@ -106,9 +168,10 @@ for (const [name, patches] of Object.entries(importPatches)) {
 	expected[name] = source
 }
 for (const [name, source] of Object.entries(expected)) {
-	const checkedIn = readFileSync(resolve(vendorRoot, name), "utf8")
 	const upstreamCopy = readFileSync(resolve(vendorRoot, name.replace(".js", ".upstream.js")), "utf8")
 	if (upstreamCopy !== checkedSource(name)) throw new Error(`${name}.upstream.js is not a pristine Foldkit copy`)
+	if (process.argv.includes("--write")) writeFileSync(resolve(vendorRoot, name), source)
+	const checkedIn = readFileSync(resolve(vendorRoot, name), "utf8")
 	if (checkedIn !== source) throw new Error(`${name} differs from the recorded Foldkit ${packageJson.version} source patches`)
 }
 process.stdout.write(`Scene vendor matches foldkit@${packageJson.version}; upstream hashes and import/render/cleanup patches verified.\n`)

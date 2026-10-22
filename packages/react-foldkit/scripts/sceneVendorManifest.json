@@ -106,6 +106,8 @@
   "patches": [
     "Replace native HTML renderView with the React reconciler bridge for bound views.",
     "Create and always dispose one reconciler root per Scene run.",
+    "Apply React Effect Messages before the next step while preserving Command boundaries and OutMessages.",
+    "Preserve React click targets, batch click handlers, and activate or cancel checkbox and radio changes.",
     "Keep upstream Scene query, command, subscription, resource, and lifecycle steps unchanged.",
     "Replace private helper imports with package public imports or tiny exact-value compatibility shims."
   ],
@@ -122,7 +124,6 @@
     "blur",
     "change",
     "changeFiles",
-    "click",
     "contextMenu",
     "displayValue",
     "doubleClick",

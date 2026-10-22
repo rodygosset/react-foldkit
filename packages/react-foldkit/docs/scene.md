@@ -54,6 +54,8 @@ test("loads a user", () => {
 
 There is no `render`, `act`, or cleanup. Each `scene` renders the component in a private React root and unmounts it when the scene ends, including when a step throws. The scene fails if a Command is left unresolved, as it does in Foldkit.
 
+Synchronous React effects and local state updates finish before the next step. Messages from effects pass through `update`, and their Commands stay pending until the test resolves them. Scene fails after 100 renders if effect messages keep changing the Model without settling. Timers, promises, transitions, and suspended work require an asynchronous test outside Scene.
+
 ## Migrate to Foldkit
 
 When `./view` exports a Foldkit view instead, change the import and keep the test:
