@@ -18,7 +18,7 @@ import {
 import * as InitCommand from "../internal/initCommand"
 import { CurrentInterruptRegistry, makeInterruptRegistry } from "../internal/interrupt"
 import type * as ManagedResource from "foldkit/managedResource"
-import type { RemainingServices } from "../internal/managedResourceTypes"
+import type { RemainingServices, RequireManagedRecord } from "../internal/managedResourceTypes"
 import { makeManagedResources } from "./managedResources"
 import type * as Subscription from "foldkit/subscription"
 import type * as Update from "foldkit/update"
@@ -51,16 +51,17 @@ export type Program<
 	 */
 	subscriptions?: Subscription.Subscriptions<Model, Message, R>
 	/**
-	 * Resources whose lifetime follows the Model. Use Foldkit's `ManagedResource.make` to declare
-	 * acquisition, release, and lifecycle Messages. Each activation owns separate live values.
-	 */
-	managedResources?: Managed & ManagedResource.ManagedResources<Model, Message>
-	/**
 	 * Called once on terminal failure, with the original Cause and a Message when one triggered
 	 * the failure. Runs before `subscribeCrash` listeners. Observer defects are logged.
 	 */
 	onCrash?: (cause: Cause.Cause<unknown>, triggeringMessage: Option.Option<Message>) => void
-}
+	/**
+	 * Resources whose lifetime follows the Model. Use Foldkit's `ManagedResource.make` to declare
+	 * acquisition, release, and lifecycle Messages. Each activation owns separate live values.
+	 * A record supplies its services only when it is present and its keys are known.
+	 */
+	managedResources?: Managed & ManagedResource.ManagedResources<Model, Message>
+} & RequireManagedRecord<Managed & ManagedResource.ManagedResources<Model, Message>>
 
 /**
  * A Program with a Layer that provides the services its Commands and Subscriptions need.

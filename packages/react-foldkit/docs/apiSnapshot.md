@@ -292,7 +292,16 @@ export {};
 
 ```ts
 import type * as ManagedResource from "foldkit/managedResource";
-export type RemainingServices<Requirements, Managed> = unknown extends ManagedResource.ServicesOf<Managed> ? Requirements : Exclude<Requirements, ManagedResource.ServicesOf<Managed>>;
+export type ManagedRegistration<Managed> = {
+  readonly managedResources?: Managed;
+} & ({} extends Managed ? {} : {
+  readonly managedResources: Managed;
+});
+export type RequireManagedRecord<Managed> = {} extends NoInfer<Managed> ? {} : {
+  readonly managedResources: NoInfer<Managed>;
+};
+export type WithManagedResources<Shape, Managed> = Omit<Shape, "managedResources"> & ManagedRegistration<Managed>;
+export type RemainingServices<Requirements, Managed> = string extends keyof Managed ? Requirements : unknown extends ManagedResource.ServicesOf<Managed> ? Requirements : Exclude<Requirements, ManagedResource.ServicesOf<Managed>>;
 ```
 
 ## dist/modelSource.d.ts
@@ -334,23 +343,24 @@ import type { Schema } from "effect";
 import type * as ManagedResource from "foldkit/managedResource";
 import type * as Subscription from "foldkit/subscription";
 import type * as Update from "foldkit/update";
+import type { ManagedRegistration, WithManagedResources } from "../internal/managedResourceTypes";
 type Tagged = {
   readonly _tag: string;
 };
-export interface Program<ModelSchema extends Schema.Constraint, MessageSchema extends Schema.Schema<Tagged>, OutMessage = never, R = never, Managed extends ManagedResource.ManagedResources<ModelSchema["Type"], MessageSchema["Type"]> = {}> {
+interface ProgramFields<ModelSchema extends Schema.Constraint, MessageSchema extends Schema.Schema<Tagged>, OutMessage = never, R = never, Managed extends ManagedResource.ManagedResources<ModelSchema["Type"], MessageSchema["Type"]> = {}> {
   readonly Model: ModelSchema;
   readonly Message: MessageSchema;
   readonly OutMessage?: Schema.Schema<OutMessage>;
   readonly init?: () => Update.Return<ModelSchema["Type"], MessageSchema["Type"], R>;
   readonly update: (model: ModelSchema["Type"], message: MessageSchema["Type"]) => Update.ReturnWithOutMessage<ModelSchema["Type"], MessageSchema["Type"], OutMessage, R>;
   readonly subscriptions?: Subscription.Subscriptions<ModelSchema["Type"], MessageSchema["Type"], R>;
-  readonly managedResources?: Managed;
 }
-type ApplicationProgram<ModelSchema extends Schema.Constraint, MessageSchema extends Schema.Schema<Tagged>, R, Managed extends ManagedResource.ManagedResources<ModelSchema["Type"], MessageSchema["Type"]>> = Omit<Program<ModelSchema, MessageSchema, never, R, Managed>, "OutMessage" | "update"> & {
+export type Program<ModelSchema extends Schema.Constraint, MessageSchema extends Schema.Schema<Tagged>, OutMessage = never, R = never, Managed extends ManagedResource.ManagedResources<ModelSchema["Type"], MessageSchema["Type"]> = {}> = ProgramFields<ModelSchema, MessageSchema, OutMessage, R, Managed> & ManagedRegistration<Managed>;
+type ApplicationProgram<ModelSchema extends Schema.Constraint, MessageSchema extends Schema.Schema<Tagged>, R, Managed extends ManagedResource.ManagedResources<ModelSchema["Type"], MessageSchema["Type"]>> = WithManagedResources<Omit<ProgramFields<ModelSchema, MessageSchema, never, R, Managed>, "OutMessage" | "update">, Managed> & {
   readonly OutMessage?: undefined;
   readonly update: (model: ModelSchema["Type"], message: MessageSchema["Type"]) => Update.Return<ModelSchema["Type"], MessageSchema["Type"], R>;
 };
-export declare function make<ModelSchema extends Schema.Constraint, MessageSchema extends Schema.Schema<Tagged>, OutMessage, R = never, Managed extends ManagedResource.ManagedResources<ModelSchema["Type"], MessageSchema["Type"]> = {}>(program: Program<ModelSchema, MessageSchema, OutMessage, R, Managed> & {
+export declare function make<ModelSchema extends Schema.Constraint, MessageSchema extends Schema.Schema<Tagged>, OutMessage, R = never, Managed extends ManagedResource.ManagedResources<ModelSchema["Type"], MessageSchema["Type"]> = {}>(program: WithManagedResources<ProgramFields<ModelSchema, MessageSchema, OutMessage, R, Managed>, Managed> & {
   readonly OutMessage: Schema.Schema<OutMessage>;
 }): Program<ModelSchema, MessageSchema, OutMessage, R, Managed>;
 export declare function make<ModelSchema extends Schema.Constraint, MessageSchema extends Schema.Schema<Tagged>, R = never, Managed extends ManagedResource.ManagedResources<ModelSchema["Type"], MessageSchema["Type"]> = {}>(program: ApplicationProgram<ModelSchema, MessageSchema, R, Managed> & {
@@ -660,15 +670,15 @@ export declare const browserScheduler: Scheduler.MixedScheduler;
 ```ts
 import { Cause, Context, Effect, Exit, Layer, Option, Result, Schema, Scope } from "effect";
 import type * as ManagedResource from "foldkit/managedResource";
-import type { RemainingServices } from "../internal/managedResourceTypes";
+import type { RemainingServices, RequireManagedRecord } from "../internal/managedResourceTypes";
 import type * as Subscription from "foldkit/subscription";
 import type * as Update from "foldkit/update";
 export type Program<Model, Message, R = never, Managed extends ManagedResource.ManagedResources<Model, Message> = {}> = {
   update: (model: Model, message: Message) => Update.Return<Model, Message, R>;
   subscriptions?: Subscription.Subscriptions<Model, Message, R>;
-  managedResources?: Managed & ManagedResource.ManagedResources<Model, Message>;
   onCrash?: (cause: Cause.Cause<unknown>, triggeringMessage: Option.Option<Message>) => void;
-};
+  managedResources?: Managed & ManagedResource.ManagedResources<Model, Message>;
+} & RequireManagedRecord<Managed & ManagedResource.ManagedResources<Model, Message>>;
 export type Config<Model, Message, R = never, Managed extends ManagedResource.ManagedResources<Model, Message> = {}> = [
   RemainingServices<R, Managed>
 ] extends [never] ? Program<Model, Message, R, Managed> & {

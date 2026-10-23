@@ -2,32 +2,11 @@ import type { Schema } from "effect"
 import type * as ManagedResource from "foldkit/managedResource"
 import type * as Subscription from "foldkit/subscription"
 import type * as Update from "foldkit/update"
+import type { ManagedRegistration, WithManagedResources } from "../internal/managedResourceTypes"
 
 type Tagged = { readonly _tag: string }
 
-/**
- * A Foldkit application or child feature without its view: the Model Schema, Message union,
- * update, and optionally an OutMessage union, `init`, Subscriptions, and Managed Resources.
- * The field names match Foldkit's `Runtime.makeApplication`.
- *
- * **When to use**
- *
- * Use a Program to keep a feature's logic in a module without React. Pass an application
- * Program to `Application.define`, with React-only options and `resources` as its second
- * argument. Pass a child Program to `Submodel.define`, run `update` in Foldkit Story tests, or
- * pass the Program to `Store.make` and `Store.boot`.
- *
- * **Details**
- *
- * `R` is the services that Commands and Subscriptions require. Registered Managed Resources
- * supply their own services. The host supplies the remaining services through `resources`.
- * An application Program has no OutMessage, so its update returns `Update.Return`.
- *
- * @see {@link make} for creating one with checked types
- * @category models
- * @since 0.2.0
- */
-export interface Program<
+interface ProgramFields<
 	ModelSchema extends Schema.Constraint,
 	MessageSchema extends Schema.Schema<Tagged>,
 	OutMessage = never,
@@ -65,13 +44,38 @@ export interface Program<
 	 * restart their Streams.
 	 */
 	readonly subscriptions?: Subscription.Subscriptions<ModelSchema["Type"], MessageSchema["Type"], R>
-	/**
-	 * Resources whose lifetime follows the Model. Declare them with Foldkit's `ManagedResource.make`.
-	 * The host supplies their services to Commands and Subscriptions and releases them on shutdown.
-	 * Lift a child's resources into the parent Program with `ManagedResource.lift`.
-	 */
-	readonly managedResources?: Managed
 }
+
+/**
+ * A Foldkit application or child feature without its view: the Model Schema, Message union,
+ * update, and optionally an OutMessage union, `init`, Subscriptions, and Managed Resources.
+ * The field names match Foldkit's `Runtime.makeApplication`.
+ *
+ * **When to use**
+ *
+ * Use a Program to keep a feature's logic in a module without React. Pass an application
+ * Program to `Application.define`, with React-only options and `resources` as its second
+ * argument. Pass a child Program to `Submodel.define`, run `update` in Foldkit Story tests, or
+ * pass the Program to `Store.make` and `Store.boot`.
+ *
+ * **Details**
+ *
+ * `R` is the services that Commands and Subscriptions require. A Managed Resource record supplies
+ * its own services when the Program includes that record and the record's keys are known. The host
+ * supplies every other service through `resources`. An application Program has no OutMessage, so
+ * its update returns `Update.Return`.
+ *
+ * @see {@link make} for creating one with checked types
+ * @category models
+ * @since 0.2.0
+ */
+export type Program<
+	ModelSchema extends Schema.Constraint,
+	MessageSchema extends Schema.Schema<Tagged>,
+	OutMessage = never,
+	R = never,
+	Managed extends ManagedResource.ManagedResources<ModelSchema["Type"], MessageSchema["Type"]> = {},
+> = ProgramFields<ModelSchema, MessageSchema, OutMessage, R, Managed> & ManagedRegistration<Managed>
 
 // An application Program reports no OutMessages, so OutMessage stays `never` rather than
 // being inferred from update's optional `outMessage` field.
@@ -80,7 +84,10 @@ type ApplicationProgram<
 	MessageSchema extends Schema.Schema<Tagged>,
 	R,
 	Managed extends ManagedResource.ManagedResources<ModelSchema["Type"], MessageSchema["Type"]>,
-> = Omit<Program<ModelSchema, MessageSchema, never, R, Managed>, "OutMessage" | "update"> & {
+> = WithManagedResources<
+	Omit<ProgramFields<ModelSchema, MessageSchema, never, R, Managed>, "OutMessage" | "update">,
+	Managed
+> & {
 	readonly OutMessage?: undefined
 	readonly update: (
 		model: ModelSchema["Type"],
@@ -133,7 +140,7 @@ export function make<
 	R = never,
 	Managed extends ManagedResource.ManagedResources<ModelSchema["Type"], MessageSchema["Type"]> = {},
 >(
-	program: Program<ModelSchema, MessageSchema, OutMessage, R, Managed> & {
+	program: WithManagedResources<ProgramFields<ModelSchema, MessageSchema, OutMessage, R, Managed>, Managed> & {
 		readonly OutMessage: Schema.Schema<OutMessage>
 	}
 ): Program<ModelSchema, MessageSchema, OutMessage, R, Managed>

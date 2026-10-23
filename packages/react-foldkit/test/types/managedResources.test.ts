@@ -37,7 +37,7 @@ const update = (model: Model, _message: Message): Update.Return<Model, Message, 
 	commands: [Read()],
 })
 const program = Program.make({ Model, Message, init, update, managedResources })
-expectTypeOf(program.managedResources).toEqualTypeOf<typeof managedResources | undefined>()
+expectTypeOf(program.managedResources).toEqualTypeOf<typeof managedResources>()
 expectTypeOf(program.init).toEqualTypeOf<() => Update.Return<Model, Message, EngineService>>()
 expectTypeOf(Store.make(program, init())).toEqualTypeOf<
 	Effect.Effect<Store.Store<Model, Message>, never, Scope.Scope>
@@ -109,4 +109,41 @@ if (false) {
 	const widened: ManagedResource.ManagedResources<Model, Message> = managedResources
 	// @ts-expect-error A widened record cannot prove that Engine and Api are supplied.
 	Application.define(Program.make({ Model, Message, init, update: withApi, managedResources: widened }))
+
+	const optionalResources = (enabled: boolean): typeof managedResources | undefined =>
+		enabled ? managedResources : undefined
+	const optional = Program.make({
+		Model,
+		Message,
+		init,
+		update,
+		managedResources: optionalResources(false),
+	})
+	// @ts-expect-error A record that may be absent does not register Engine.
+	Application.define(optional)
+	// @ts-expect-error A record that may be absent does not register Engine.
+	Store.boot(optional, init())
+	// @ts-expect-error A record that may be absent does not register Engine.
+	Store.boot({ managedResources: optionalResources(false), update }, init())
+	expectTypeOf(Store.make(optional, init())).toEqualTypeOf<
+		Effect.Effect<Store.Store<Model, Message>, never, EngineService | Scope.Scope>
+	>()
+
+	// @ts-expect-error A concrete record type still requires that record.
+	const omitted: Program.Program<typeof Model, typeof Message, never, EngineService, typeof managedResources> = {
+		Model,
+		Message,
+		init,
+		update,
+	}
+	void omitted
+	// @ts-expect-error A concrete Store record type still requires that record.
+	const omittedStore: Store.Program<Model, Message, EngineService, typeof managedResources> = { update }
+	void omittedStore
+
+	const dictionary: Record<string, (typeof managedResources)["engine"]> = {}
+	// @ts-expect-error A string-keyed dictionary may be empty, so it does not register Engine.
+	Application.define(Program.make({ Model, Message, init, update, managedResources: dictionary }))
+	// @ts-expect-error A string-keyed dictionary may be empty, so it does not register Engine.
+	Store.boot({ managedResources: dictionary, update }, init())
 }

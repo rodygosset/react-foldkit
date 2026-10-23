@@ -86,7 +86,7 @@ Acquisition failures produce `onAcquireError` Messages. The Store waits for requ
 
 When a Command needs a newly acquired Worker, return the Command from the `CompletedAcquireWorker` update handler. Creating a resource requirement and returning the dependent Command in one update does not guarantee that acquisition finishes first.
 
-Registered resources supply their services to both Commands and Subscriptions. Infer the service types with Foldkit's `ManagedResource.ServiceOf` or `ServicesOf` when annotating an update's requirements. Use `Program.make` to preserve the registered tags in the Program's type.
+Registered resources supply their services to both Commands and Subscriptions when `managedResources` is present and its keys are known. A value that may be `undefined`, or a record typed as `Record<string, ...>`, does not supply those services. Infer the service types with Foldkit's `ManagedResource.ServiceOf` or `ServicesOf` when annotating an update's requirements. Use `Program.make` to preserve the registered tags in the Program's type.
 
 ## Supply other services
 

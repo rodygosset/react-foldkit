@@ -479,18 +479,19 @@ it when live work first needs it.
   Readonly<Record<string, Subscription.Subscription<Model, Message, any, R>>> | undefined
   ```
 
-- `managedResources` Resources whose lifetime follows the Model. Use Foldkit's `ManagedResource.make` to declare
-  acquisition, release, and lifecycle Messages. Each activation owns separate live values.
-
-  ```ts
-  (Managed & Record<string, ManagedResource.ManagedResourceConfig<Model, Message>> & { readonly __managedResourceServices?: undefined; }) | undefined
-  ```
-
 - `onCrash` Called once on terminal failure, with the original Cause and a Message when one triggered
   the failure. Runs before `subscribeCrash` listeners. Observer defects are logged.
 
   ```ts
   ((cause: Cause.Cause<unknown>, triggeringMessage: Option.Option<Message>) => void) | undefined
+  ```
+
+- `managedResources` Resources whose lifetime follows the Model. Use Foldkit's `ManagedResource.make` to declare
+  acquisition, release, and lifecycle Messages. Each activation owns separate live values.
+  A record supplies its services only when it is present and its keys are known.
+
+  ```ts
+  (Managed & Record<string, ManagedResource.ManagedResourceConfig<Model, Message>> & { readonly __managedResourceServices?: undefined; }) | (((Managed & Record<string, ManagedResource.ManagedResourceConfig<Model, Message>> & { readonly __managedResourceServices?: undefined; }) | undefined) & NoInfer<Managed & Record<string, ManagedResource.ManagedResourceConfig<Model, Message>> & { readonly __managedResourceServices?: undefined; }>) | undefined
   ```
 
 - `resources` Supplies services not provided by Managed Resources. Live work finishes before the Layer
@@ -533,18 +534,19 @@ surrounding Effect. Use `Config` when the Store should build its own service Lay
   Readonly<Record<string, Subscription.Subscription<Model, Message, any, R>>> | undefined
   ```
 
-- `managedResources` Resources whose lifetime follows the Model. Use Foldkit's `ManagedResource.make` to declare
-  acquisition, release, and lifecycle Messages. Each activation owns separate live values.
-
-  ```ts
-  (Managed & Record<string, ManagedResource.ManagedResourceConfig<Model, Message>> & { readonly __managedResourceServices?: undefined; }) | undefined
-  ```
-
 - `onCrash` Called once on terminal failure, with the original Cause and a Message when one triggered
   the failure. Runs before `subscribeCrash` listeners. Observer defects are logged.
 
   ```ts
   ((cause: Cause.Cause<unknown>, triggeringMessage: Option.Option<Message>) => void) | undefined
+  ```
+
+- `managedResources` Resources whose lifetime follows the Model. Use Foldkit's `ManagedResource.make` to declare
+  acquisition, release, and lifecycle Messages. Each activation owns separate live values.
+  A record supplies its services only when it is present and its keys are known.
+
+  ```ts
+  (Managed & Record<string, ManagedResource.ManagedResourceConfig<Model, Message>> & { readonly __managedResourceServices?: undefined; }) | (((Managed & Record<string, ManagedResource.ManagedResourceConfig<Model, Message>> & { readonly __managedResourceServices?: undefined; }) | undefined) & NoInfer<Managed & Record<string, ManagedResource.ManagedResourceConfig<Model, Message>> & { readonly __managedResourceServices?: undefined; }>) | undefined
   ```
 
 ### Reentrant
@@ -1096,9 +1098,10 @@ pass the Program to `Store.make` and `Store.boot`.
 
 **Details**
 
-`R` is the services that Commands and Subscriptions require. Registered Managed Resources
-supply their own services. The host supplies the remaining services through `resources`.
-An application Program has no OutMessage, so its update returns `Update.Return`.
+`R` is the services that Commands and Subscriptions require. A Managed Resource record supplies
+its own services when the Program includes that record and the record's keys are known. The host
+supplies every other service through `resources`. An application Program has no OutMessage, so
+its update returns `Update.Return`.
 
 - `OutMessage` The union of facts a child reports to its parent. Omit it for an application.
 
@@ -1123,14 +1126,14 @@ An application Program has no OutMessage, so its update returns `Update.Return`.
   parent creates the child Model.
 
   ```ts
-  (() => Update.Return<ModelSchema["Type"], MessageSchema["Type"], R>) | undefined
+  (() => Readonly<{ model: ModelSchema["Type"]; commands?: Update.Commands<MessageSchema["Type"], R> | undefined; outMessage?: never; }>) | undefined
   ```
 
 - `update` Applies a Message to the Model without running side effects. Return Commands for work that
   runs after the transition.
 
   ```ts
-  (model: ModelSchema["Type"], message: MessageSchema["Type"]) => Update.ReturnWithOutMessage<ModelSchema["Type"], MessageSchema["Type"], OutMessage, R>
+  (model: ModelSchema["Type"], message: MessageSchema["Type"]) => Readonly<{ model: ModelSchema["Type"]; commands?: Update.Commands<MessageSchema["Type"], R> | undefined; outMessage?: OutMessage | undefined; }>
   ```
 
 - `subscriptions` Declares Streams whose dependencies are derived from the Model. Changed dependencies
@@ -1141,11 +1144,13 @@ An application Program has no OutMessage, so its update returns `Update.Return`.
   ```
 
 - `managedResources` Resources whose lifetime follows the Model. Declare them with Foldkit's `ManagedResource.make`.
-  The host supplies their services to Commands and Subscriptions and releases them on shutdown.
-  Lift a child's resources into the parent Program with `ManagedResource.lift`.
+  A record supplies its services when it is present and its keys are known. A missing record, a
+  record that may be absent, or a string-keyed dictionary does not. The host supplies those
+  remaining services and releases registered resources on shutdown. Each activation owns separate
+  live values. Lift a child's resources with `ManagedResource.lift`.
 
   ```ts
-  Managed | undefined
+  Managed | (undefined & Managed) | undefined
   ```
 
 ### make
