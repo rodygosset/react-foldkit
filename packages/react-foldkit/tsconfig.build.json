@@ -7,7 +7,7 @@
 		"rootDir": "./src",
 		"outDir": "./dist"
 	},
-	"files": ["src/index.ts", "src/devtools.ts", "src/vite.ts"],
+	"files": ["src/index.ts", "src/scene.ts", "src/scene/react.ts", "src/devtools.ts", "src/vite.ts"],
 	"include": [],
 	"exclude": []
 }

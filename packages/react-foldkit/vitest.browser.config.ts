@@ -13,7 +13,7 @@ export default defineConfig({
 		],
 	},
 	test: {
-		include: ["test/browser/**/*.test.tsx"],
+		include: ["test/browser/**/*.test.tsx", "src/scene/**/*.test.tsx"],
 		setupFiles: ["./vitest.setup.ts"],
 		browser: {
 			enabled: true,

@@ -206,6 +206,18 @@ export interface ModelHooks<Model, Message> {
 }
 
 /**
+ * Identifies the React context an Application uses so Scene can render its hooks.
+ *
+ * @category models
+ * @since 0.2.0
+ */
+export const SceneSourceTypeId: unique symbol = Symbol.for("react-foldkit/SceneSourceTypeId")
+export type SceneSourceTypeId = typeof SceneSourceTypeId
+
+/** The React context that application and Submodel Providers use to pass their source down. */
+export type SourceContext<Model, Message> = React.Context<Option.Option<ModelSource<Model, Message>>>
+
+/**
  * The Provider and hooks returned by `define` for a Foldkit application.
  * Render its Provider above the views that use its hooks. Each mounted Provider owns an
  * independent Model and the Commands and Subscriptions that update it.
@@ -222,10 +234,11 @@ export interface Application<Model, Message, R = never, HasInit extends boolean 
 	 * Captures `init` on initialization. Remount to replace it.
 	 */
 	readonly Provider: (props: ProviderProps<Model, Message, R, HasInit>) => React.ReactNode
+	/**
+	 * React context Scene uses to render this Application's hooks outside a Provider.
+	 */
+	readonly [SceneSourceTypeId]: SourceContext<Model, Message>
 }
-
-/** The React context that application and Submodel Providers use to pass their source down. */
-export type SourceContext<Model, Message> = React.Context<Option.Option<ModelSource<Model, Message>>>
 
 export const makeSourceContext = <Model, Message>(): SourceContext<Model, Message> =>
 	React.createContext<Option.Option<ModelSource<Model, Message>>>(Option.none())
@@ -520,7 +533,8 @@ export function define<
 		)
 	}
 
-	return {
+	const application = {
+		[SceneSourceTypeId]: Context,
 		Provider,
 		...modelHooks<Model, Message>(
 			Context,
@@ -528,4 +542,5 @@ export function define<
 			() => new Error("react-foldkit hooks must be used within a <Provider>")
 		),
 	}
+	return application
 }

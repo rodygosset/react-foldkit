@@ -9,7 +9,6 @@ import React from "react"
 import { renderToString } from "react-dom/server"
 import { afterEach, describe, expect, vi } from "vitest"
 import { ChildMessage, ChildModel, createSubmodelFixture } from "../test/fixtures/reactSubmodel"
-import { setText, TextMessage } from "../test/fixtures/valueMessage"
 import * as Application from "./application"
 import type { ModelSource } from "./modelSource"
 import { define, ProviderError } from "./submodel"
@@ -65,10 +64,12 @@ function View(props: { name: string }) {
 describe("define", function () {
 	it("composes inline root, sibling, and nested Providers without parent subscriptions", function () {
 		const fixture = createSubmodelFixture()
-		const NumberView = define({ Model: Schema.Finite, Message: TextMessage })
+		const Message = defineMessageUnion({ SetText: { text: Schema.String } })
+		type Message = typeof Message.Type
+		const NumberView = define({ Model: Schema.Finite, Message })
 		const count = {
 			read: (model: ChildModel) => model.count,
-			toParentMessage: (_message: TextMessage) => ChildMessage.Increment(),
+			toParentMessage: (_message: Message) => ChildMessage.Increment(),
 		}
 		let dispatch: ReturnType<typeof fixture.App.useDispatch> | undefined
 		const sources: Array<ModelSource<{ readonly count: number; readonly unrelated: number }, ChildMessage>> = []
@@ -94,7 +95,7 @@ describe("define", function () {
 		function Counter() {
 			const count = NumberView.useModel()
 			const dispatch = NumberView.useDispatch()
-			return <button onClick={() => dispatch(setText("increment"))}>{count}</button>
+			return <button onClick={() => dispatch(Message.SetText({ text: "increment" }))}>{count}</button>
 		}
 		function Sibling() {
 			return <output>{fixture.Child.useModel((model) => model.count)}</output>

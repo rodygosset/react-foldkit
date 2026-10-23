@@ -2,7 +2,7 @@ import { cleanup, render } from "@testing-library/react"
 import { Schema } from "effect"
 import React from "react"
 import { afterEach, expect, it } from "vitest"
-import { ValueMessage, setValue } from "../test/fixtures/valueMessage"
+import { Message } from "../test/fixtures/message"
 import * as Application from "./application"
 
 afterEach(cleanup)
@@ -11,8 +11,8 @@ function fixture(kind: "layout" | "passive" | "ref") {
 	const handled: number[] = []
 	const App = Application.define({
 		Model: Schema.Finite,
-		Message: ValueMessage,
-		update(_model: number, message: ValueMessage) {
+		Message,
+		update(_model: number, message: Message) {
 			handled.push(message.value)
 			return { model: message.value }
 		},
@@ -22,8 +22,8 @@ function fixture(kind: "layout" | "passive" | "ref") {
 		const dispatch = App.useDispatch()
 		const send = React.useCallback(
 			function () {
-				dispatch(setValue(1))
-				dispatch(setValue(2))
+				dispatch(Message.SetValue({ value: 1 }))
+				dispatch(Message.SetValue({ value: 2 }))
 			},
 			[dispatch]
 		)

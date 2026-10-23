@@ -1,10 +1,13 @@
 import { Effect, Result } from "effect"
-import { ValueMessage, setValue } from "../fixtures/valueMessage"
+import { Message } from "../fixtures/message"
 import * as Foldkit from "react-foldkit"
 import * as Program from "react-foldkit/program"
 import * as Application from "react-foldkit/application"
 import * as Submodel from "react-foldkit/submodel"
 import * as Store from "react-foldkit/store"
+import * as Scene from "react-foldkit/scene"
+import * as SceneReact from "react-foldkit/scene/react"
+import * as FoldkitScene from "foldkit/scene"
 import * as Vite from "react-foldkit/vite"
 import { describe, expect, it } from "vitest"
 
@@ -25,18 +28,26 @@ describe("built package entry points", function () {
 
 	it("returns a CommitError recognized through every Store export", function () {
 		const store = Foldkit.Store.boot(
-			{ update: (model: number, message: ValueMessage) => ({ model: model + message.value }) },
+			{ update: (model: number, message: Message) => ({ model: model + message.value }) },
 			{ model: 0 }
 		)
 		Effect.runSync(store.dispose())
 
-		const committed = store.commit(setValue(1))
+		const committed = store.commit(Message.SetValue({ value: 1 }))
 		expect(Result.isFailure(committed)).toBe(true)
 		if (Result.isFailure(committed)) {
 			expect(committed.failure).toBeInstanceOf(Store.CommitError)
 			expect(committed.failure).toBeInstanceOf(Foldkit.Store.CommitError)
 			expect(committed.failure.reason._tag).toBe("Disposed")
 		}
+	})
+
+	it("mirrors foldkit/scene from the scene entry and binds React views from scene/react", function () {
+		// The scene entry is the one place that reexports Foldkit, so tests migrate by changing the import.
+		expect(Object.keys(Scene).sort()).toEqual(Object.keys(FoldkitScene).sort())
+		expect(Scene.click).not.toBe(FoldkitScene.click)
+		expect(Scene.scene).not.toBe(FoldkitScene.scene)
+		expect(Object.keys(SceneReact)).toEqual(["bindSceneView"])
 	})
 
 	it("exports the DevTools Vite plugin with its overlay and relay parts", function () {

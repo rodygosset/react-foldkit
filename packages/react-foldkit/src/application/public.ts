@@ -1,4 +1,4 @@
-export { define } from "./react"
+export { define, SceneSourceTypeId } from "./react"
 export type {
 	Application,
 	CrashConfig,

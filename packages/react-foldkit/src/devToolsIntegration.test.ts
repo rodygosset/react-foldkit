@@ -1,4 +1,4 @@
-import { ValueMessage, setValue } from "../test/fixtures/valueMessage"
+import { Message } from "../test/fixtures/message"
 import { it } from "@effect/vitest"
 import { Effect, Option, Result, Schema, SubscriptionRef } from "effect"
 import { describe, expect } from "vitest"
@@ -10,7 +10,7 @@ import type * as Update from "foldkit/update"
 
 const makeHarness = (
 	config: { readonly maxEntries?: number; readonly keyframeInterval?: number } = {},
-	commands: Update.Commands<ValueMessage> = []
+	commands: Update.Commands<Message> = []
 ) =>
 	Effect.gen(function* () {
 		let history: DevToolsStore | undefined
@@ -26,7 +26,7 @@ const makeHarness = (
 			),
 			(dispose) => Effect.sync(dispose)
 		)
-		const store = ReactStore.make<number, ValueMessage>(
+		const store = ReactStore.make<number, Message>(
 			{
 				update: (model, message) => ({ model: model + message.value }),
 				devTools: { show: "Always", ...config },
@@ -43,17 +43,17 @@ describe("DevTools history integration", function () {
 		Effect.gen(function* () {
 			const { store, history } = yield* makeHarness({}, [{ name: "OldInit", effect: Effect.never }])
 			expect(SubscriptionRef.getUnsafe(history.stateRef).initCommands).toHaveLength(1)
-			store.commit(setValue(5))
+			store.commit(Message.SetValue({ value: 5 }))
 			yield* history.clear
 			expect(yield* history.getModelAtIndex(-1)).toBe(5)
 			expect(SubscriptionRef.getUnsafe(history.stateRef).entries).toEqual([])
 			expect(SubscriptionRef.getUnsafe(history.stateRef).initCommands).toEqual([])
-			store.commit(setValue(1))
-			store.commit(setValue(1))
+			store.commit(Message.SetValue({ value: 1 }))
+			store.commit(Message.SetValue({ value: 1 }))
 			yield* history.jumpTo(0)
 			expect(store.readView()).toBe(6)
 			expect(store.getModel()).toBe(7)
-			expect(store.commit(setValue(1))).toEqual(Result.void)
+			expect(store.commit(Message.SetValue({ value: 1 }))).toEqual(Result.void)
 			expect(store.getModel()).toBe(7)
 			yield* history.clear
 			expect(store.readView()).toBe(6)
@@ -67,38 +67,38 @@ describe("DevTools history integration", function () {
 		Effect.gen(function* () {
 			yield* Effect.acquireRelease(
 				Effect.sync(() => Overlay.__configure(() => Effect.void, undefined)),
-				(dispose) => Effect.sync(dispose),
+				(dispose) => Effect.sync(dispose)
 			)
-			const first = ReactStore.make<number, ValueMessage>(
+			const first = ReactStore.make<number, Message>(
 				{
 					update: (model, message) => ({ model: model + message.value }),
 					devTools: { show: "Always" },
 				},
 				{ model: 0 },
-				Schema.Finite,
+				Schema.Finite
 			)
-			const second = ReactStore.make<number, ValueMessage>(
+			const second = ReactStore.make<number, Message>(
 				{
 					update: (model, message) => ({ model: model + message.value }),
 					devTools: { show: "Always" },
 				},
 				{ model: 0 },
-				Schema.Finite,
+				Schema.Finite
 			)
 			yield* Effect.all([first.activate, second.activate], { concurrency: "unbounded" }).pipe(
-				Effect.timeout("2 seconds"),
+				Effect.timeout("2 seconds")
 			)
-		}).pipe(Effect.scoped),
+		}).pipe(Effect.scoped)
 	)
 
 	it.live("records tagged Messages and replays their original payload", () =>
 		Effect.gen(function* () {
 			const { store, history } = yield* makeHarness()
-			store.commit(setValue(2))
-			store.commit(setValue(3))
+			store.commit(Message.SetValue({ value: 2 }))
+			store.commit(Message.SetValue({ value: 3 }))
 			const state = SubscriptionRef.getUnsafe(history.stateRef)
 			expect(state.entries.map(({ tag }) => tag)).toEqual(["SetValue", "SetValue"])
-			expect(yield* history.getMessageAtIndex(0)).toEqual(Option.some(setValue(2)))
+			expect(yield* history.getMessageAtIndex(0)).toEqual(Option.some(Message.SetValue({ value: 2 })))
 			yield* history.jumpTo(0)
 			expect(store.readView()).toBe(2)
 			expect(store.getModel()).toBe(5)
@@ -117,23 +117,21 @@ describe("DevTools history integration", function () {
 		{ maxEntries: 20, keyframeInterval: 1 },
 		{ maxEntries: 20, keyframeInterval: 5 },
 		{ keyframeInterval: 10 },
-	])(
-		"keeps every retained entry readable after eviction with %j",
-		(config) =>
-			Effect.gen(function* () {
-				const { store, history } = yield* makeHarness(config)
-				for (let index = 0; index < 123; index++) store.commit(setValue(1))
-				const state = SubscriptionRef.getUnsafe(history.stateRef)
-				expect(state.entries.length).toBeGreaterThan(0)
-				expect(state.entries.length).toBeLessThanOrEqual(config.maxEntries ?? 100)
-				for (let offset = 0; offset < state.entries.length; offset++) {
-					const index = state.startIndex + offset
-					expect(yield* history.getModelAtIndex(index)).toBe(index + 1)
-				}
-				yield* history.jumpTo(state.startIndex)
-				expect(store.readView()).toBe(state.startIndex + 1)
-				yield* history.resume
-				expect(store.readView()).toBe(123)
-			}).pipe(Effect.scoped)
+	])("keeps every retained entry readable after eviction with %j", (config) =>
+		Effect.gen(function* () {
+			const { store, history } = yield* makeHarness(config)
+			for (let index = 0; index < 123; index++) store.commit(Message.SetValue({ value: 1 }))
+			const state = SubscriptionRef.getUnsafe(history.stateRef)
+			expect(state.entries.length).toBeGreaterThan(0)
+			expect(state.entries.length).toBeLessThanOrEqual(config.maxEntries ?? 100)
+			for (let offset = 0; offset < state.entries.length; offset++) {
+				const index = state.startIndex + offset
+				expect(yield* history.getModelAtIndex(index)).toBe(index + 1)
+			}
+			yield* history.jumpTo(state.startIndex)
+			expect(store.readView()).toBe(state.startIndex + 1)
+			yield* history.resume
+			expect(store.readView()).toBe(123)
+		}).pipe(Effect.scoped)
 	)
 })

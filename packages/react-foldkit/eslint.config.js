@@ -28,6 +28,8 @@ export default [
 					"**/scripts/**",
 					"**/src/application/**",
 					"**/src/store/**",
+					// Scene owns a synchronous React root and combines execution and cleanup failures.
+					"**/src/scene/sceneSession.ts",
 					// DevTools recording and the Vite relay are runtime infrastructure, like the Store.
 					"**/src/devToolsIntegration.ts",
 					"**/src/devtoolsOverlay.ts",
@@ -52,6 +54,7 @@ export default [
 			"**/routeTree.gen.ts",
 			"dist/**",
 			"test/docs/.generated/**",
+			"src/scene/vendor/**",
 			"src/devtoolsVendor/**",
 			"src/vite/vendor/**",
 			"src/vite/fixtures/**",

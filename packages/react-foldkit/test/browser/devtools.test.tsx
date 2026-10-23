@@ -7,8 +7,6 @@ import { createRoot, type Root } from "react-dom/client"
 import { afterEach, describe, expect } from "vitest"
 import * as Application from "../../src/application"
 import { __configure } from "../../src/devtoolsOverlay"
-import { ValueMessage, setValue } from "../fixtures/valueMessage"
-
 let root: Root | undefined
 let container: HTMLDivElement | undefined
 let disposeOverlay: (() => void) | undefined
@@ -21,16 +19,14 @@ function mount(children: React.ReactNode): HTMLDivElement {
 	return container
 }
 
-afterEach(async function () {
+afterEach(function () {
 	root?.unmount()
 	container?.remove()
 	disposeOverlay?.()
 	root = undefined
 	container = undefined
 	disposeOverlay = undefined
-	await expect
-		.poll(() => document.querySelector("[data-react-foldkit-devtools='provider-selector']"))
-		.toBeNull()
+	return expect.poll(() => document.querySelector("[data-react-foldkit-devtools='provider-selector']")).toBeNull()
 })
 
 // The overlay renders into an open shadow root on Foldkit's DevTools host element.
@@ -61,14 +57,6 @@ describe("native Foldkit DevTools overlay", function () {
 					},
 					{ devTools: { show: "Always", mode: "TimeTravel", Message, banner: "native overlay" } }
 				)
-				const Other = Application.define(
-					{
-						Model: Schema.Finite,
-						Message: ValueMessage,
-						update: (_model: number, message: ValueMessage) => ({ model: message.value }),
-					},
-					{ devTools: { show: "Always", mode: "TimeTravel" } }
-				)
 				function Counter() {
 					const model = App.useModel()
 					const dispatch = App.useDispatch()
@@ -76,11 +64,29 @@ describe("native Foldkit DevTools overlay", function () {
 						<button onClick={() => dispatch(Message.Increment())}>{`${model.count}:${model.done}`}</button>
 					)
 				}
-				function OtherCounter() {
-					const model = Other.useModel()
-					const dispatch = Other.useDispatch()
-					return <button onClick={() => dispatch(setValue(model + 1))}>{`other:${model}`}</button>
+				function otherApplication() {
+					const Message = defineMessageUnion({ SetValue: { value: Schema.Finite } })
+					type Message = typeof Message.Type
+					const Other = Application.define(
+						{
+							Model: Schema.Finite,
+							Message,
+							update: (_model: number, message: Message) => ({ model: message.value }),
+						},
+						{ devTools: { show: "Always", mode: "TimeTravel" } }
+					)
+					function OtherCounter() {
+						const model = Other.useModel()
+						const dispatch = Other.useDispatch()
+						return (
+							<button
+								onClick={() => dispatch(Message.SetValue({ value: model + 1 }))}
+							>{`other:${model}`}</button>
+						)
+					}
+					return { Other, OtherCounter }
 				}
+				const { Other, OtherCounter } = otherApplication()
 
 				disposeOverlay = __configure(overlay, undefined)
 				const view = mount(

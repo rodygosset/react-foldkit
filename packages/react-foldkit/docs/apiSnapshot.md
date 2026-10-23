@@ -30,7 +30,7 @@ export declare function make<Model, Message>(bootstrap: Exit.Exit<Bootstrap<Mode
 ## dist/application/public.d.ts
 
 ```ts
-export { define } from "./react";
+export { define, SceneSourceTypeId } from "./react";
 export type { Application, CrashConfig, CrashContext, ModelHooks, Options, ProviderProps, ReactivationContext, Send, } from "./react";
 ```
 
@@ -58,12 +58,12 @@ export interface CrashConfig<Model, Message> {
   }) => React.ReactNode;
   readonly report?: (context: CrashContext<Model, Message>) => Effect.Effect<void, unknown>;
 }
-export type Options<Model, Message, R = never> = Omit<ReactStore.Config<Model, Message, R>, "update" | "subscriptions" | "devTools"> & {
+export type Options<Model, Message, R = never, MessageSchema extends Schema.Codec<Message, unknown> = Schema.Codec<Message>> = Omit<ReactStore.Config<Model, Message, R, MessageSchema>, "update" | "subscriptions" | "devTools"> & {
   readonly crash?: CrashConfig<Model, Message>;
   readonly validateInit?: boolean;
-  readonly devTools?: ReactStore.Config<Model, Message, R>["devTools"];
+  readonly devTools?: ReactStore.Config<Model, Message, R, MessageSchema>["devTools"];
 };
-type OptionsArgument<Model, Message, R> = [R] extends [never] ? [options?: Options<Model, Message, R>] : [options: Options<Model, Message, R>];
+type OptionsArgument<Model, Message, R, MessageSchema extends Schema.Codec<Message, unknown> = Schema.Codec<Message>> = [R] extends [never] ? [options?: Options<Model, Message, R, MessageSchema>] : [options: Options<Model, Message, R, MessageSchema>];
 export type ProviderProps<Model, Message, R = never, HasInit extends boolean = false> = {
   readonly children?: React.ReactNode;
   readonly crash?: CrashConfig<Model, Message>;
@@ -86,10 +86,13 @@ export interface ModelHooks<Model, Message> {
   readonly useSubmodel: <ChildModel, ChildMessage>(projection: Projection<Model, Message, ChildModel, ChildMessage>) => ModelSource<ChildModel, ChildMessage>;
   readonly useOptionalSubmodel: <ChildModel, ChildMessage>(projection: OptionalProjection<Model, Message, ChildModel, ChildMessage>) => Option.Option<ModelSource<ChildModel, ChildMessage>>;
 }
+export declare const SceneSourceTypeId: unique symbol;
+export type SceneSourceTypeId = typeof SceneSourceTypeId;
+export type SourceContext<Model, Message> = React.Context<Option.Option<ModelSource<Model, Message>>>;
 export interface Application<Model, Message, R = never, HasInit extends boolean = false> extends ModelHooks<Model, Message> {
   readonly Provider: (props: ProviderProps<Model, Message, R, HasInit>) => React.ReactNode;
+  readonly [SceneSourceTypeId]: SourceContext<Model, Message>;
 }
-export type SourceContext<Model, Message> = React.Context<Option.Option<ModelSource<Model, Message>>>;
 export declare const makeSourceContext: <Model, Message>() => SourceContext<Model, Message>;
 export declare function modelHooks<Model, Message>(Context: SourceContext<Model, Message>, Message: Schema.Schema<Message>, missingProvider: () => Error): {
   useModel: {
@@ -107,10 +110,10 @@ export declare function modelHooks<Model, Message>(Context: SourceContext<Model,
 type Tagged = {
   readonly _tag: string;
 };
-export declare function define<ModelSchema extends Schema.Constraint, MessageSchema extends Schema.Schema<Tagged>, R = never>(program: Program<ModelSchema, MessageSchema, never, R> & {
+export declare function define<ModelSchema extends Schema.Constraint, MessageSchema extends Schema.Codec<Tagged, unknown>, R = never>(program: Program<ModelSchema, MessageSchema, never, R> & {
   readonly init: () => Update.Return<ModelSchema["Type"], MessageSchema["Type"], R>;
-}, ...options: OptionsArgument<ModelSchema["Type"], MessageSchema["Type"], R>): Application<ModelSchema["Type"], MessageSchema["Type"], R, true>;
-export declare function define<ModelSchema extends Schema.Constraint, MessageSchema extends Schema.Schema<Tagged>, R = never>(program: Program<ModelSchema, MessageSchema, never, R>, ...options: OptionsArgument<ModelSchema["Type"], MessageSchema["Type"], R>): Application<ModelSchema["Type"], MessageSchema["Type"], R>;
+}, ...options: OptionsArgument<ModelSchema["Type"], MessageSchema["Type"], R, MessageSchema>): Application<ModelSchema["Type"], MessageSchema["Type"], R, true>;
+export declare function define<ModelSchema extends Schema.Constraint, MessageSchema extends Schema.Codec<Tagged, unknown>, R = never>(program: Program<ModelSchema, MessageSchema, never, R>, ...options: OptionsArgument<ModelSchema["Type"], MessageSchema["Type"], R, MessageSchema>): Application<ModelSchema["Type"], MessageSchema["Type"], R>;
 ```
 
 ## dist/application/reactStore.d.ts
@@ -126,13 +129,12 @@ export type ReactStoreTypeId = typeof ReactStoreTypeId;
 export type ReactStore<Model, Message> = Readonly<{
   [ReactStoreTypeId]: ReactStoreTypeId;
   getModel: () => Model;
-  getDisplayModel: () => Model;
+  readView: () => Model;
   getServerModel: () => Model;
   getCrash: () => Option.Option<Cause.Cause<unknown>>;
   getCrashMessage: () => Option.Option<Message>;
   subscribeCrash: (listener: () => void) => () => void;
   subscribe: (listener: () => void) => () => void;
-  subscribeDisplay: (listener: () => void) => () => void;
   dispatch: (message: Message) => void;
   commit: (message: Message) => Result.Result<void, Store.CommitError>;
   activate: Effect.Effect<void, never, Scope.Scope>;
@@ -141,16 +143,18 @@ export interface ReactivationContext<Model, Message, R = never> {
   readonly model: Model;
   readonly interrupted: Update.Commands<Message, R>;
 }
-export type Config<Model, Message, R = never> = Store.Config<Model, Message, R> & {
+export type Config<Model, Message, R = never, MessageSchema extends Schema.Codec<Message, unknown> = Schema.Codec<Message>> = Store.Config<Model, Message, R> & {
   readonly onReactivate?: (context: ReactivationContext<Model, Message, R>) => Message;
   readonly retainInactive?: Duration.Input;
   readonly restartInterrupted?: boolean | ((command: Update.Commands<Message, R>[number]) => boolean);
   readonly freezeModel?: boolean;
-  readonly devTools?: DevTools.Config<Message>;
+  readonly devTools?: DevTools.Config<MessageSchema>;
 };
 export declare function make<Model, Message extends {
   readonly _tag: string;
-}, ModelSchema extends Schema.Codec<Model, unknown> = Schema.Codec<Model, unknown>, R = never>(config: Config<Model, Message, R>, init: Update.Return<Model, Message, R>, Model?: ModelSchema): ReactStore<Model, Message>;
+}, ModelSchema extends Schema.Codec<unknown, unknown> & {
+  readonly Type: Model;
+} = Schema.Codec<Model>, MessageSchema extends Schema.Codec<Message, unknown> = Schema.Codec<Message>, R = never>(config: Config<Model, Message, R, MessageSchema>, init: Update.Return<Model, Message, R>, Model?: ModelSchema): ReactStore<Model, Message>;
 export {};
 ```
 
@@ -188,31 +192,24 @@ export declare function useOptionalModel<Model>(source: Option.Option<ModelReade
 import { Effect, Schema } from "effect";
 import type { DevToolsConfig } from "foldkit/runtime";
 import type * as Store from "./store/store";
-export type Config<Message> = false | (Exclude<DevToolsConfig, false> & {
-  readonly Message?: Schema.Codec<NoInfer<Message>, unknown, unknown, unknown>;
+export type Config<MessageSchema extends Schema.Codec<unknown, unknown>> = false | (Omit<Exclude<DevToolsConfig, false>, "Message"> & {
+  readonly Message?: MessageSchema;
 });
-export type Display<Model> = Readonly<{
-  get: () => Model;
-  subscribe: (listener: () => void) => () => void;
-  set: (model: Model) => void;
-}>;
-export declare function makeDisplay<Model>(initial: Model): Display<Model>;
-export declare function makeObserver<ModelSchema extends Schema.Codec<unknown, unknown>, Message extends {
-  readonly _tag: string;
-}, R>(options: {
-  readonly config: Config<Message> | undefined;
-  readonly update: (model: ModelSchema["Type"], message: Message) => {
+export declare function makeObserver<ModelSchema extends Schema.Codec<unknown, unknown>, MessageSchema extends Schema.Codec<unknown, unknown>, R>(options: {
+  readonly config: Exclude<Config<MessageSchema>, false>;
+  readonly update: (model: ModelSchema["Type"], message: MessageSchema["Type"]) => {
     readonly model: ModelSchema["Type"];
   };
   readonly Model: ModelSchema;
-  readonly display: Display<ModelSchema["Type"]>;
   readonly freeze: (model: ModelSchema["Type"]) => ModelSchema["Type"];
   readonly readLive: () => ModelSchema["Type"];
-  readonly dispatch: (message: Message) => void;
+  readonly dispatch: (message: MessageSchema["Type"]) => void;
 }): Readonly<{
-  readonly observer: Store.RuntimeObserver<ModelSchema["Type"], Message, R>;
+  readonly observer: Store.RuntimeObserver<ModelSchema["Type"], MessageSchema["Type"], R>;
   readonly install: Effect.Effect<void, never, import("effect").Scope.Scope>;
   readonly isPaused: () => boolean;
+  readonly pausedModel: () => ModelSchema["Type"] | undefined;
+  readonly subscribePause: (listener: () => void) => () => void;
 }>;
 ```
 
@@ -360,6 +357,249 @@ export { make } from "./program";
 export type { Program } from "./program";
 ```
 
+## dist/scene.d.ts
+
+```ts
+export * from "foldkit/scene";
+export { scene, inside, getByRole, getAllByRole, role, all, click, doubleClick, contextMenu, pointerDown, pointerUp, hover, focus, blur, focusEnter, focusLeave, submit, change, changeFiles, dropFiles, type, typeContentEditable, beforeInput, keydown, } from "./scene/index";
+```
+
+## dist/scene/index.d.ts
+
+```ts
+import * as FoldkitScene from "foldkit/scene";
+export * from "foldkit/scene";
+export { getByRole, getAllByRole, role, all } from "./sceneQueries";
+export declare const scene: typeof FoldkitScene.scene;
+export declare const inside: typeof FoldkitScene.inside;
+export { click, doubleClick, contextMenu, pointerDown, pointerUp, hover, focus, blur, focusEnter, focusLeave, submit, change, changeFiles, dropFiles, type, typeContentEditable, beforeInput, keydown, } from "./sceneInteractions";
+```
+
+## dist/scene/react.d.ts
+
+```ts
+import type { Application } from "../application/react";
+import type { SceneView } from "./sceneView";
+export declare const bindSceneView: <Model, Message, R, HasInit extends boolean>(application: Application<Model, Message, R, HasInit>, Component: React.ComponentType) => SceneView<Model, Message>;
+```
+
+## dist/scene/sceneBinding.d.ts
+
+```ts
+import React from "react";
+import Reconciler from "react-reconciler";
+import type { Scene as SceneNamespace } from "foldkit/test";
+import { SceneSourceTypeId } from "../application/react";
+import type { SourceContext } from "../application/react";
+import type { ModelSource } from "../modelSource";
+import type { HostContainer, HostElement, HostText } from "./sceneHost";
+import type { SceneView } from "./sceneView";
+type VNode = SceneNamespace.SceneSimulation<unknown, unknown>["html"];
+export declare const BoundSceneViewTypeId: unique symbol;
+export declare function bindSceneView<Model, Message>(application: {
+  readonly [SceneSourceTypeId]: SourceContext<Model, Message>;
+}, Component: React.ComponentType): SceneView<Model, Message>;
+declare const renderer: Reconciler.Reconciler<HostContainer | HostElement, HostContainer | HostElement, HostText, HostElement | HostText, unknown, HostElement | HostText>;
+type Renderer = typeof renderer;
+export declare function runSceneInteraction<A>(callback: () => A): A;
+interface RenderState {
+  readonly container: HostContainer;
+  readonly root: ReturnType<Renderer["createContainer"]>;
+  readonly source: ModelSource<unknown, unknown>;
+  element?: React.ReactElement;
+  setInput: (model: unknown, dispatch: (message: unknown) => void) => void;
+}
+export interface SceneRenderSession {
+  state?: RenderState;
+}
+export declare const createSceneRenderSession: () => SceneRenderSession;
+export declare const isBoundSceneView: (view: unknown) => view is SceneView<unknown, unknown>;
+export declare const isBoundSceneSimulation: (simulation: unknown) => boolean;
+export declare function renderBoundSceneView<Model, Message>(view: Function, model: Model, dispatch: (message: Message) => void, session: SceneRenderSession): VNode | undefined;
+export declare function disposeSceneRenderSession(session: SceneRenderSession): void;
+type EventHandler = (event?: unknown) => void;
+export declare function getSceneEventHandler(element: {
+  readonly elm?: unknown;
+}, eventName: string): EventHandler | undefined;
+export {};
+```
+
+## dist/scene/sceneEvent.d.ts
+
+```ts
+import type React from "react";
+import type { HostElement } from "./sceneHost";
+export interface HostEvent extends Pick<React.SyntheticEvent, "type" | "defaultPrevented" | "preventDefault" | "stopPropagation" | "isDefaultPrevented" | "isPropagationStopped"> {
+  readonly target: HostElement;
+  currentTarget: HostElement;
+}
+export declare function sceneListeners(node: HostElement): Record<string, (event: HostEvent) => void>;
+export declare function sceneEventNames(eventName: string, target: HostElement): ReadonlyArray<string>;
+export declare function hostPath(target: HostElement): ReadonlyArray<HostElement>;
+export declare function hasSceneListener(target: HostElement, eventName: string): boolean;
+export type HostUpdate = {
+  readonly _tag: "Value";
+  readonly value: string;
+} | {
+  readonly _tag: "Files";
+  readonly files: unknown;
+} | {
+  readonly _tag: "Text";
+  readonly text: string;
+};
+export declare function dispatchSceneEvent(target: HostElement, eventName: string, fields: Readonly<Record<string, unknown>>, additionalEvents?: ReadonlyArray<string>): boolean;
+export declare function hostFromElm(elm: unknown): HostElement | undefined;
+```
+
+## dist/scene/sceneHost.d.ts
+
+```ts
+import { Option } from "effect";
+import type React from "react";
+export interface HostProps extends Record<string, unknown> {
+  readonly children?: React.ReactNode;
+}
+export interface HostText {
+  text: string;
+}
+export type HostNamespace = "html" | "svg";
+export interface HostElement {
+  readonly namespace: HostNamespace;
+  tag: string;
+  readonly type: string;
+  readonly name: string;
+  readonly id: string;
+  readonly dataset: Readonly<Record<string, string>>;
+  props: HostProps;
+  attributes: Record<string, string | null>;
+  children: Array<HostElement | HostText>;
+  parent?: HostElement;
+  readonly tagName: string;
+  value?: string;
+  files?: unknown;
+  checked?: boolean;
+  selected?: boolean;
+  selectedValues?: ReadonlyArray<string>;
+  textContent?: string;
+  innerText?: string;
+  focus: () => void;
+  blur: () => void;
+  getAttribute: (name: string) => string | null;
+  setAttribute: (name: string, value: string) => void;
+  removeAttribute: (name: string) => void;
+  closest: (selector: string) => HostElement | null;
+  contains: (node: unknown) => boolean;
+}
+export interface HostContainer {
+  children: Array<HostElement | HostText>;
+}
+export declare function hostString(value: unknown): string;
+export declare const eventProps: Readonly<Record<string, string>>;
+export declare const isTextInput: (node: HostElement) => boolean;
+export declare const htmlAttributeName: (name: string, namespace?: HostNamespace) => string;
+export type HostProp = {
+  readonly _tag: "ClassList";
+  readonly value: unknown;
+} | {
+  readonly _tag: "Style";
+  readonly value: {
+    readonly [key: string]: unknown;
+  };
+} | {
+  readonly _tag: "Attribute";
+  readonly reactName: string;
+  readonly name: string;
+  readonly value: string;
+};
+export declare function hostProp(name: string, value: unknown, namespace?: HostNamespace): Option.Option<HostProp>;
+export declare function styleDeclarations(value: {
+  readonly [key: string]: unknown;
+}): Record<string, string>;
+export declare function hostAttributes(node: HostElement): Record<string, string>;
+```
+
+## dist/scene/sceneInput.d.ts
+
+```ts
+import type { HostElement, HostText } from "./sceneHost";
+export type Checkable = {
+  readonly _tag: "Checkbox";
+  readonly target: HostElement;
+} | {
+  readonly _tag: "Radio";
+  readonly target: HostElement;
+  readonly group: ReadonlyArray<HostElement>;
+};
+export type CheckedSnapshot = ReadonlyArray<readonly [HostElement, boolean]>;
+export declare function snapshotChecked(checkable: Checkable): CheckedSnapshot;
+export declare function assignChecked(checkable: Checkable): void;
+export declare function revertChecked(snapshot: CheckedSnapshot): void;
+export declare function syncSelect(node: HostElement, selection: unknown, fallback: boolean): void;
+export declare function syncControlledFields(children: ReadonlyArray<HostElement | HostText>): void;
+```
+
+## dist/scene/sceneInteractions.d.ts
+
+```ts
+import * as FoldkitScene from "foldkit/scene";
+export declare const click: typeof FoldkitScene.click;
+export declare const doubleClick: typeof FoldkitScene.doubleClick;
+export declare const contextMenu: typeof FoldkitScene.contextMenu;
+export declare const pointerDown: typeof FoldkitScene.pointerDown;
+export declare const pointerUp: typeof FoldkitScene.pointerUp;
+export declare const hover: typeof FoldkitScene.hover;
+export declare const focus: typeof FoldkitScene.focus;
+export declare const blur: typeof FoldkitScene.blur;
+export declare const focusEnter: typeof FoldkitScene.focusEnter;
+export declare const focusLeave: typeof FoldkitScene.focusLeave;
+export declare const submit: typeof FoldkitScene.submit;
+export declare const change: typeof FoldkitScene.change;
+export declare const changeFiles: typeof FoldkitScene.changeFiles;
+export declare const dropFiles: typeof FoldkitScene.dropFiles;
+export declare const type: typeof FoldkitScene.type;
+export declare const typeContentEditable: typeof FoldkitScene.typeContentEditable;
+export declare const beforeInput: typeof FoldkitScene.beforeInput;
+export declare const keydown: typeof FoldkitScene.keydown;
+```
+
+## dist/scene/sceneQueries.d.ts
+
+```ts
+import * as FoldkitScene from "foldkit/scene";
+export declare const getByRole: typeof FoldkitScene.getByRole;
+export declare const getAllByRole: typeof FoldkitScene.getAllByRole;
+export declare const role: typeof FoldkitScene.role;
+export declare const all: typeof FoldkitScene.all;
+```
+
+## dist/scene/sceneSettle.d.ts
+
+```ts
+export declare const SceneRenderLimit = 100;
+export declare function settleSimulation<Simulation>(simulation: Simulation, render: (simulation: Simulation) => readonly [Simulation, ReadonlyArray<unknown>], applyEffectMessage: (simulation: Simulation, message: unknown) => Simulation): Simulation;
+```
+
+## dist/scene/sceneView.d.ts
+
+```ts
+import type { Html, HtmlBuilder } from "foldkit/html";
+export type SceneView<Model, Message> = (model: Model, html: HtmlBuilder<Message>) => Html;
+```
+
+## dist/scene/vendor/sceneCompat.d.ts
+
+```ts
+import { Option } from "effect";
+export declare const FOLDKIT_MOUNT_KEY = "foldkitMount";
+export declare const FileHandlerSymbol: unique symbol;
+export declare const kebabToPascal: (input: string) => string;
+export declare const tagNameFromSelector: (selector: string) => string;
+export declare const serializedStylePropertyName: (name: string) => string;
+export declare const StringExt: {
+  stripPrefix: (prefix: string) => (input: string) => Option.None<string> | Option.Some<string>;
+};
+```
+
 ## dist/store.d.ts
 
 ```ts
@@ -449,40 +689,28 @@ export declare const takeWhen: {
 export interface ActivateOptions<Message, R> {
   readonly context: Context.Context<never>;
   readonly commands: Update.Commands<Message, R>;
-  readonly commandIds?: ReadonlyArray<number | undefined>;
   readonly firstMessage: Option.Option<Message>;
 }
 export type Runtime<Model, Message, R> = Omit<Store<Model, Message>, "getRunningCommands" | "dispose"> & {
   readonly activate: (options: ActivateOptions<Message, R>) => Effect.Effect<void, never, Scope.Scope>;
   readonly getCrashMessage: () => Option.Option<Message>;
   readonly getRunningCommands: () => Update.Commands<Message, R>;
-  readonly getRunningCommandInvocations: () => ReadonlyArray<RuntimeCommand<Message, R>>;
   readonly dispose: (exit?: Exit.Exit<unknown, unknown>) => Effect.Effect<void>;
 };
-export type RuntimeCommand<Message, R> = Readonly<{
-  readonly id: number | undefined;
-  readonly command: Update.Commands<Message, R>[number];
-}>;
 export interface RuntimeObserver<Model, Message, R> {
-  readonly recordInit: (model: Model, commands: Update.Commands<Message, R>) => ReadonlyArray<number>;
-  readonly recordMessage: (message: Message, modelBeforeUpdate: Model, modelAfterUpdate: Model, commands: Update.Commands<Message, R>) => ReadonlyArray<number>;
-  readonly recordCommandResult: (id: number, message: Message) => void;
+  readonly recordInit: (model: Model, commands: Update.Commands<Message, R>) => void;
+  readonly recordMessage: (message: Message, modelBeforeUpdate: Model, modelAfterUpdate: Model, commands: Update.Commands<Message, R>) => void;
+  readonly adoptCommand: (command: Update.Commands<Message, R>[number]) => Update.Commands<Message, R>[number];
 }
 export declare function makeRuntime<Model, Message, R>(program: Config<Model, Message, R>, initialModel: Model, observer?: RuntimeObserver<Model, Message, R>): Runtime<Model, Message, R>;
 export declare function makeRuntime<Model, Message, R>(program: Program<Model, Message, R> & {
   readonly resources?: Layer.Layer<NoInfer<R>, never, never>;
 }, initialModel: Model, observer?: RuntimeObserver<Model, Message, R>): Runtime<Model, Message, R>;
-export declare function make<Model, Message extends {
-  readonly _tag: string;
-}, R = never>(config: Config<Model, Message, R>, init: Update.Return<Model, Message, R>): Effect.Effect<Store<Model, Message>, never, Scope.Scope>;
-export declare function make<Model, Message extends {
-  readonly _tag: string;
-}, R = never>(config: Program<Model, Message, R> & {
+export declare function make<Model, Message, R = never>(config: Config<Model, Message, R>, init: Update.Return<Model, Message, R>): Effect.Effect<Store<Model, Message>, never, Scope.Scope>;
+export declare function make<Model, Message, R = never>(config: Program<Model, Message, R> & {
   readonly resources?: never;
 }, init: Update.Return<Model, Message, R>): Effect.Effect<Store<Model, Message>, never, R | Scope.Scope>;
-export declare function boot<Model, Message extends {
-  readonly _tag: string;
-}, R = never>(config: Config<Model, Message, R>, init: Update.Return<Model, Message, R>): Store<Model, Message>;
+export declare function boot<Model, Message, R = never>(config: Config<Model, Message, R>, init: Update.Return<Model, Message, R>): Store<Model, Message>;
 export {};
 ```
 

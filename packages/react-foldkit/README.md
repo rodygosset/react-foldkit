@@ -69,6 +69,7 @@ The `Model` Schema supplies type inference. Outside production builds, the Provi
 ## Read next
 
 - [Build a counter with Commands](docs/examples.md) for a step-by-step tutorial.
+- [Test views with Scene](docs/scene.md) for Foldkit Scene tests of React views.
 - [Debug with Foldkit DevTools](docs/devtools.md) for Message history, time travel, and the MCP server.
 - [Public API reference](docs/reference.md) for imports and contracts.
 - [Runtime architecture](docs/architecture.md) for lifecycle, child Models, and async data.
@@ -76,4 +77,4 @@ The `Model` Schema supplies type inference. Outside production builds, the Provi
 - [ESLint presets](eslint/README.md) for architecture rules.
 - [Agent guide](AGENTS.md) for application code.
 
-Import Foldkit vocabulary, such as Messages, Commands, `Update`, `AsyncData`, and Query, from `foldkit` itself; it is a peer dependency, so your application and React Foldkit share one copy. `react-foldkit` exports only what it adds: the React bindings, Store, and Submodels.
+Import Foldkit vocabulary, such as Messages, Commands, `Update`, `AsyncData`, and Query, from `foldkit` itself; it is a peer dependency, so your application and React Foldkit share one copy. `react-foldkit` exports only what it adds: the React bindings, Store, and Submodels. The one exception is `react-foldkit/scene`, which mirrors `foldkit/scene` so Scene tests migrate by changing their import.

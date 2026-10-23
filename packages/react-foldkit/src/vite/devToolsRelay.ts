@@ -1,4 +1,16 @@
-import { Clock, ConfigProvider, Deferred, Effect, Exit, Fiber, Layer, Option, Schema, type Scope } from "effect"
+import {
+	Cause,
+	Clock,
+	ConfigProvider,
+	Deferred,
+	Effect,
+	Exit,
+	Fiber,
+	Layer,
+	Option,
+	Schema,
+	type Scope,
+} from "effect"
 import {
 	Event as DevToolsEvent,
 	EventFrame,
@@ -32,6 +44,19 @@ const REGISTRY_LAYER = Layer.provideMerge(
 	NodeChildProcessSpawner.layer,
 	Layer.mergeAll(NodeFileSystem.layer, NodePath.layer, NodeCrypto.layer)
 )
+class RelayPortUnbound extends Schema.Error<RelayPortUnbound>("react-foldkit/DevToolsRelay/RelayPortUnbound")({
+	_tag: Schema.tag("RelayPortUnbound"),
+}) {
+	get message(): string {
+		return "The DevTools relay did not bind a TCP port"
+	}
+}
+
+class RelayStartFailed extends Schema.Error<RelayStartFailed>("react-foldkit/DevToolsRelay/RelayStartFailed")({
+	_tag: Schema.tag("RelayStartFailed"),
+	cause: Schema.declare<Cause.Cause<unknown>>(Cause.isCause),
+}) {}
+
 const decodeEventFrame = Schema.decodeUnknownExit(EventFrame)
 const decodeResponseFrame = Schema.decodeUnknownExit(ResponseFrame)
 const decodeRequestFrame = Schema.decodeExit(Schema.fromJsonString(RequestFrame))
@@ -244,14 +269,14 @@ const bindLoopback = (): Effect.Effect<HttpServer, Error, Scope.Scope> =>
 const relayProgram = (
 	server: ViteDevServer,
 	state: RelayState,
-	ready: Deferred.Deferred<void, unknown>,
+	ready: Deferred.Deferred<void, RelayStartFailed>,
 ): Effect.Effect<void> =>
 	Effect.scoped(
 		Effect.gen(function* () {
 			const httpServer = yield* bindLoopback()
 			const address = httpServer.address()
 			if (address === null || typeof address === "string") {
-				return yield* Effect.fail(new Error("The DevTools relay did not bind a TCP port"))
+				return yield* new RelayPortUnbound()
 			}
 			const id = randomUUID()
 			const token = randomBytes(32).toString("hex")
@@ -321,7 +346,7 @@ const relayProgram = (
 	).pipe(
 		Effect.provide(REGISTRY_LAYER),
 		Effect.provideService(ConfigProvider.ConfigProvider, ConfigProvider.fromEnv()),
-		Effect.catchCause((cause) => Deferred.fail(ready, cause).pipe(Effect.asVoid)),
+		Effect.catchCause((cause) => Deferred.fail(ready, new RelayStartFailed({ cause })).pipe(Effect.asVoid)),
 	)
 
 /** Starts and owns the browser-to-MCP relay for a Vite development server. */
@@ -345,7 +370,7 @@ export const devToolsRelayPlugin = function (): Plugin {
 			server.ws.on("foldkit:devTools:response", function (data) {
 				handleRuntimeResponse(state, data)
 			})
-			const ready = Deferred.makeUnsafe<void, unknown>()
+			const ready = Deferred.makeUnsafe<void, RelayStartFailed>()
 			const fiber = Effect.runFork(relayProgram(server, state, ready))
 			runs.set(server.config, fiber)
 			await Effect.runPromise(

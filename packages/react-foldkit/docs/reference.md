@@ -11,6 +11,8 @@ Generated from the public exports. See the [counter tutorial](examples.md) for u
 - [react-foldkit/vite](#react-foldkitvite)
 - [react-foldkit/eslint](#react-foldkiteslint)
 - [react-foldkit/modelSource](#react-foldkitmodelSource)
+- [react-foldkit/scene](#react-foldkitscene)
+- [react-foldkit/scene/react](#react-foldkitscenereact)
 
 ## react-foldkit
 
@@ -236,7 +238,7 @@ required when the Program needs services, which also makes the options argument 
   `retainInactive` kept the previous Store running.
 
   ```ts
-  ReactStore.Config<Model, Message, R>["onReactivate"] | undefined
+  ReactStore.Config<Model, Message, R, MessageSchema>["onReactivate"] | undefined
   ```
 
 - `retainInactive` Keeps the Store, its Layer, Commands, and Subscriptions running for this long after the
@@ -247,7 +249,7 @@ required when the Program needs services, which also makes the options argument 
   Commands perform writes or navigation.
 
   ```ts
-  ReactStore.Config<Model, Message, R>["retainInactive"] | undefined
+  ReactStore.Config<Model, Message, R, MessageSchema>["retainInactive"] | undefined
   ```
 
 - `restartInterrupted` Starts Commands interrupted by deactivation again when a replacement Store activates. Pass
@@ -255,7 +257,7 @@ required when the Program needs services, which also makes the options argument 
   Query fetches: an interrupted write may already have reached its server.
 
   ```ts
-  ReactStore.Config<Model, Message, R>["restartInterrupted"] | undefined
+  ReactStore.Config<Model, Message, R, MessageSchema>["restartInterrupted"] | undefined
   ```
 
 - `freezeModel` Freezes every Model the Provider publishes so accidental mutation throws where it happens.
@@ -263,21 +265,21 @@ required when the Program needs services, which also makes the options argument 
   `true` outside production builds.
 
   ```ts
-  ReactStore.Config<Model, Message, R>["freezeModel"] | undefined
+  ReactStore.Config<Model, Message, R, MessageSchema>["freezeModel"] | undefined
   ```
 
 - `onCrash` Called once on terminal failure, with the original Cause and a Message when one triggered
   the failure. Runs before `subscribeCrash` listeners. Observer defects are logged.
 
   ```ts
-  ReactStore.Config<Model, Message, R>["onCrash"] | undefined
+  ReactStore.Config<Model, Message, R, MessageSchema>["onCrash"] | undefined
   ```
 
 - `resources` Supplies all required services. Live work finishes before the Layer releases its
   resources.
 
   ```ts
-  ReactStore.Config<Model, Message, R>["resources"] | undefined
+  ReactStore.Config<Model, Message, R, MessageSchema>["resources"] | undefined
   ```
 
 - `crash` Default failure view and reporting for every Provider of this application.
@@ -303,7 +305,7 @@ required when the Program needs services, which also makes the options argument 
   records no Mounts, so the panel's Mounts tab stays empty.
 
   ```ts
-  ReactStore.Config<Model, Message, R>["devTools"] | undefined
+  ReactStore.Config<Model, Message, R, MessageSchema>["devTools"] | undefined
   ```
 
 ### ProviderProps
@@ -350,6 +352,28 @@ What the Provider knows when it replaces a Store that deactivation disposed.
 
   ```ts
   Update.Commands<Message, R>
+  ```
+
+### SceneSourceTypeId
+
+Identifies the React context an Application uses so Scene can render its hooks.
+
+- `toString` Returns a string representation of an object.
+
+  ```ts
+  () => string
+  ```
+
+- `valueOf` Returns the primitive value of the specified object.
+
+  ```ts
+  () => symbol
+  ```
+
+- `description` Expose the [[Description]] internal slot of a symbol directly.
+
+  ```ts
+  string | undefined
   ```
 
 ### Send
@@ -1261,3 +1285,168 @@ Model and send Messages without depending on the Store implementation.
   ```ts
   (notify: () => void) => () => void
   ```
+
+## react-foldkit/scene
+
+### all
+
+Creates Foldkit collection locators, with React boolean-attribute handling for `role`.
+
+### beforeInput
+
+Simulates a before-input event with React capture, bubbling, and the original host target.
+
+### blur
+
+Simulates a blur event with React capture, bubbling, and the original host target.
+
+### change
+
+Simulates a value change with React capture, bubbling, and the original host target.
+
+### changeFiles
+
+Simulates a file selection with React capture, bubbling, and the original host target.
+
+### click
+
+Clicks an element with React event targets and checkbox activation in a bound React Scene.
+
+**Details**
+
+Foldkit views use Foldkit's click step. React views preserve the clicked element as `target`
+while each handler receives its own element as `currentTarget`. Checkbox and radio change
+handlers read the activated value. A canceled click restores the previous checked state.
+
+### contextMenu
+
+Simulates a context-menu event with React capture, bubbling, and the original host target.
+
+### doubleClick
+
+Simulates a double-click with React capture, bubbling, and the original host target.
+
+### dropFiles
+
+Simulates a file drop with React capture, bubbling, and the original host target.
+
+### focus
+
+Simulates a focus event with React capture, bubbling, and the original host target.
+
+### focusEnter
+
+Simulates focus entering a subtree with React capture, bubbling, and the original host target.
+
+### focusLeave
+
+Simulates focus leaving a subtree with React capture, bubbling, and the original host target.
+
+### getAllByRole
+
+Finds every matching role using React's rendered boolean attributes for bound views.
+
+### getByRole
+
+Finds a role using React's rendered boolean attributes for bound views.
+Foldkit views keep Foldkit's own query behavior.
+
+### hover
+
+Simulates mouseover followed by parent-first mouseenter handlers for a React view.
+
+### inside
+
+Runs steps with locators scoped to a parent element, as Foldkit's `inside` does.
+
+**Details**
+
+Scenes of bound React views re-enter the copied runner, so scoped steps render the React view.
+
+### keydown
+
+Simulates a key press with React capture, bubbling, and the original host target.
+
+### pointerDown
+
+Simulates a pointer press with React capture, bubbling, and the original host target.
+
+### pointerUp
+
+Simulates a pointer release with React capture, bubbling, and the original host target.
+
+### role
+
+Locates a role with React boolean-attribute handling in bound views.
+
+### scene
+
+Runs Foldkit Scene steps against a Foldkit view or a React view bound with `bindSceneView`.
+
+**Details**
+
+The signature and steps are Foldkit's `scene` from `foldkit/scene`. A Foldkit view runs on Foldkit's
+runner. A bound React view runs on a copy of that runner, pinned to the tested Foldkit release, that
+renders the component in a private React root and unmounts it when the scene ends or a step throws.
+
+**Gotchas**
+
+- React views produce no Foldkit Mounts or element hooks, so `Mount` steps and `toHaveHook` do not apply.
+
+### submit
+
+Simulates a form submission with React capture, bubbling, and the original host target.
+
+### type
+
+Simulates a typed value with React capture, bubbling, and the original host target.
+
+### typeContentEditable
+
+Simulates a contenteditable input with React capture, bubbling, and the original host target.
+
+Foldkit reexports inherit their upstream contracts. See [Foldkit documentation](https://foldkit.dev) and the original editor JSDoc.
+
+`AnyCommand`, `AnyMount`, `Command`, `CustomElement`, `Locator`, `LocatorAll`, `ManagedResource`, `Mount`, `MountMatcher`, `MountResolver`, `OutMessageStep`, `OutMessagesStep`, `PendingMount`, `Resolver`, `SceneSimulation`, `SceneStep`, `Subscription`, `SubscriptionMessageStep`, `altText`, `attr`, `displayValue`, `expect`, `expectAll`, `expectHandled`, `expectIgnored`, `expectNoOutMessage`, `expectOutMessage`, `expectOutMessages`, `filter`, `find`, `findAll`, `first`, `getAllByAltText`, `getAllByDisplayValue`, `getAllByLabel`, `getAllByPlaceholder`, `getAllByTestId`, `getAllByText`, `getAllByTitle`, `getByAltText`, `getByDisplayValue`, `getByLabel`, `getByPlaceholder`, `getByTestId`, `getByText`, `getByTitle`, `given`, `label`, `last`, `nth`, `placeholder`, `sceneMatchers`, `selector`, `tap`, `testId`, `text`, `textContent`, `title`, `withViewInputs`, `within`.
+
+## react-foldkit/scene/react
+
+### bindSceneView
+
+Binds a React component that reads an Application's hooks to Foldkit's Scene view contract.
+
+**When to use**
+
+Export the result as the feature's `view`, then pass it to `scene` from `react-foldkit/scene`
+with the feature's `update`. When the feature moves to a Foldkit view, export that view instead and
+change the test import to `foldkit/scene`.
+
+**Details**
+
+Each `scene` call renders the component in a private React root. `useModel` reads the
+Scene's current Model and `useSend` records Messages for Scene instead of dispatching them to a
+Store. Synchronous React state updates and Effects finish before the next step. Effect Messages
+pass through update, and Commands remain pending until the test resolves them. The root unmounts
+when the scene finishes or a step throws.
+
+**Gotchas**
+
+- The component must render one host element at its root.
+- React views produce no Foldkit Mounts or element hooks, so `Mount` steps and `toHaveHook` do not apply.
+- Timers, promises, transitions, and suspended work need an asynchronous test outside Scene.
+- Scene fails after 100 renders if Effect Messages do not settle.
+
+**Example** (Bind a feature view for Scene tests)
+
+```tsx
+import { bindSceneView } from "react-foldkit/scene/react"
+import { App } from "./application"
+
+function Profile() {
+  const model = App.useModel()
+  const send = App.useSend()
+  return <button onClick={() => send.ClickedLoad()}>{model.name}</button>
+}
+
+export const view = bindSceneView(App, Profile)
+```

@@ -203,11 +203,10 @@ export function makeObserver<
 				hot,
 				function (message) {
 					if (messageSchema === undefined) return Effect.void
-					const schema = Schema.toType(messageSchema)
-					return Effect.sync(function () {
-						// @effect-diagnostics-next-line schemaSync:off
-						options.dispatch(Schema.decodeUnknownSync(schema)(message))
-					})
+					return Schema.decodeUnknownEffect(Schema.toType(messageSchema))(message).pipe(
+						Effect.andThen((decoded) => Effect.sync(() => options.dispatch(decoded))),
+						Effect.orDie,
+					)
 				},
 				Option.fromNullishOr(messageSchema)
 			)

@@ -1,5 +1,5 @@
 import { it } from "@effect/vitest"
-import { ValueMessage, setValue } from "../test/fixtures/valueMessage"
+import { Message } from "../test/fixtures/message"
 import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, Option, Result, Scope, Stream } from "effect"
 import { expect } from "vitest"
 import * as ReactStore from "./application/reactStore"
@@ -16,7 +16,7 @@ it.live.each(["update", "command", "subscription"] as const)(
 			const defect = new Error(origin)
 			const events: string[] = []
 			const failing = Deferred.await(crash).pipe(Effect.andThen(Effect.die(defect)))
-			const subscriptions = Subscription.make<number, ValueMessage>()((entry) => ({
+			const subscriptions = Subscription.make<number, Message>()((entry) => ({
 				failure: entry(
 					{},
 					{
@@ -28,7 +28,7 @@ it.live.each(["update", "command", "subscription"] as const)(
 			}))
 			const store = Store.boot(
 				{
-					update(_model: number, message: ValueMessage) {
+					update(_model: number, message: Message) {
 						if (origin === "update" && message.value === 9) throw defect
 						return { model: message.value }
 					},
@@ -61,7 +61,7 @@ it.live.each(["update", "command", "subscription"] as const)(
 				Store.takeWhen(store, () => Option.none()),
 				{ startImmediately: true }
 			)
-			if (origin === "update") store.commit(setValue(9))
+			if (origin === "update") store.commit(Message.SetValue({ value: 9 }))
 			else yield* Deferred.succeed(crash, undefined)
 			const error = yield* Effect.flip(Fiber.join(waiter))
 			expect(error._tag).toBe("Crashed")
@@ -71,7 +71,7 @@ it.live.each(["update", "command", "subscription"] as const)(
 			yield* Deferred.await(released)
 			yield* store.dispose()
 			expect(events).toEqual(["work", "services"])
-			store.dispatch(setValue(2))
+			store.dispatch(Message.SetValue({ value: 2 }))
 			expect(store.getModel()).toBe(0)
 			expect(Option.getOrThrow(store.getCrash())).toBe(error.cause)
 		})
@@ -81,15 +81,15 @@ it.effect("uses ambient services without constructing another closed Layer", fun
 	class Counter extends Context.Service<Counter, number>()("AmbientCounter") {}
 	return Effect.gen(function* () {
 		const store = yield* Store.make(
-			{ update: (_model: number, message: ValueMessage) => ({ model: message.value }) },
+			{ update: (_model: number, message: Message) => ({ model: message.value }) },
 			{
 				model: 0,
-				commands: [{ name: "Read", effect: Counter.pipe(Effect.map(setValue)) }],
+				commands: [{ name: "Read", effect: Counter.pipe(Effect.map((value) => Message.SetValue({ value }))) }],
 			}
 		)
 		expect(yield* Store.takeWhen((n: number) => (n === 42 ? Option.some(n) : Option.none()))(store)).toBe(42)
 		yield* Effect.yieldNow
-		yield* Store.commit(setValue(43))(store)
+		yield* Store.commit(Message.SetValue({ value: 43 }))(store)
 		expect(store.getModel()).toBe(43)
 	}).pipe(Effect.provideService(Counter, 42))
 })
@@ -97,7 +97,7 @@ it.effect("uses ambient services without constructing another closed Layer", fun
 it.effect("retains committed Models when React model observers throw and reactivate", () =>
 	Effect.gen(function* () {
 		const store = ReactStore.make(
-			{ update: (model: number, message: ValueMessage) => ({ model: model + message.value }) },
+			{ update: (model: number, message: Message) => ({ model: model + message.value }) },
 			{ model: 0 }
 		)
 		let notifications = 0
@@ -109,7 +109,7 @@ it.effect("retains committed Models when React model observers throw and reactiv
 		})
 		const first = yield* Scope.make()
 		yield* store.activate.pipe(Scope.provide(first))
-		expect(Result.isSuccess(store.commit(setValue(1)))).toBe(true)
+		expect(Result.isSuccess(store.commit(Message.SetValue({ value: 1 })))).toBe(true)
 		expect(store.getModel()).toBe(1)
 		expect(notifications).toBe(2)
 		expect(store.getCrash()).toEqual(Option.none())
@@ -125,7 +125,7 @@ it.effect("retains committed Models when React model observers throw and reactiv
 it.effect("snapshots observers so resubscription cannot repeat a notification in the same delivery", () =>
 	Effect.gen(function* () {
 		const store = yield* Store.make(
-			{ update: (_model: number, message: ValueMessage) => ({ model: message.value }) },
+			{ update: (_model: number, message: Message) => ({ model: message.value }) },
 			{ model: 0 }
 		)
 		let notifications = 0
@@ -138,7 +138,7 @@ it.effect("snapshots observers so resubscription cannot repeat a notification in
 		}
 		unsubscribe = store.subscribe(observe)
 		store.subscribe(() => later++)
-		expect(store.commit(setValue(1))).toEqual(Result.void)
+		expect(store.commit(Message.SetValue({ value: 1 }))).toEqual(Result.void)
 		expect({ notifications, later }).toEqual({ notifications: 1, later: 1 })
 		unsubscribe()
 	})
