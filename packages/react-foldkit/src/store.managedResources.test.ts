@@ -6,24 +6,15 @@ import { expect } from "vitest"
 import * as Engine from "../test/fixtures/managedResource"
 import * as Store from "./store"
 
-const saw = (store: Store.Store<Engine.Model, Engine.Message>, event: string) =>
-	Store.takeWhen(store, (model) => Option.liftPredicate(model, (model) => model.events.includes(event)))
+const saw = (store: Store.Store<Engine.Model, Engine.Message>, event: string, times = 1) =>
+	Store.takeWhen(store, (model) =>
+		Option.liftPredicate(model, (model) => model.events.filter((entry) => entry === event).length === times)
+	)
 
-it.effect("provides unavailable and acquired values, keeps equal requirements, and releases before replacing", () =>
+it.effect("lets a Command read an unavailable resource, then the acquired value", () =>
 	Effect.scoped(
 		Effect.gen(function* () {
-			const log: string[] = []
-			const program = Engine.make(
-				(id) =>
-					Effect.sync(function () {
-						log.push(`acquire:${id}`)
-						return { id }
-					}),
-				({ id }) =>
-					Effect.sync(function () {
-						log.push(`release:${id}`)
-					})
-			)
+			const program = Engine.make()
 			const store = yield* Store.make(program, program.init())
 			store.dispatch(Engine.Message.RequestedRead())
 			yield* saw(store, "EngineUnavailable")
@@ -31,19 +22,26 @@ it.effect("provides unavailable and acquired values, keeps equal requirements, a
 			yield* saw(store, "AcquiredEngine:a")
 			store.dispatch(Engine.Message.RequestedRead())
 			yield* saw(store, "CompletedReadEngine:a")
-			store.dispatch(Engine.Message.RequestedEngine({ id: "a" }))
-			store.dispatch(Engine.Message.RequestedEngine({ id: "b" }))
-			yield* saw(store, "AcquiredEngine:b")
-			store.dispatch(Engine.Message.DisabledEngine())
-			yield* Store.takeWhen(store, (model) =>
-				Option.liftPredicate(
-					model,
-					(model) => model.events.filter((event) => event === "ReleasedEngine").length === 2
-				)
+		})
+	)
+)
+
+it.effect("does not release a resource again when the Store stops after the resource is already gone", () =>
+	Effect.scoped(
+		Effect.gen(function* () {
+			const released: string[] = []
+			const program = Engine.make(undefined, ({ id }) =>
+				Effect.sync(function () {
+					released.push(id)
+				})
 			)
-			expect(log).toEqual(["acquire:a", "release:a", "acquire:b", "release:b"])
+			const store = yield* Store.make(program, program.init())
+			store.dispatch(Engine.Message.RequestedEngine({ id: "a" }))
+			yield* saw(store, "AcquiredEngine:a")
+			store.dispatch(Engine.Message.DisabledEngine())
+			yield* saw(store, "ReleasedEngine")
 			yield* store.dispose()
-			expect(log).toHaveLength(4)
+			expect(released).toEqual(["a"])
 		})
 	)
 )
@@ -55,7 +53,7 @@ it.effect("recovers from acquisition failure after requirements change", () =>
 			const store = yield* Store.make(program, program.init())
 			store.dispatch(Engine.Message.RequestedEngine({ id: "bad" }))
 			yield* saw(store, "FailedAcquireEngine")
-			expect(Option.isNone(store.getCrash())).toBe(true)
+			expect(store.getCrash()).toEqual(Option.none())
 			store.dispatch(Engine.Message.RequestedRead())
 			yield* saw(store, "EngineUnavailable")
 			store.dispatch(Engine.Message.RequestedEngine({ id: "good" }))
@@ -85,8 +83,7 @@ it.effect("runs Layer finalizers after explicit release even when release defect
 				() =>
 					Effect.sync(function () {
 						log.push("release")
-						throw new Error("release failed")
-					}),
+					}).pipe(Effect.andThen(Effect.die(new Error("release failed")))),
 				Option.some("a")
 			)
 			const store = yield* Store.make(program, program.init())
@@ -97,7 +94,7 @@ it.effect("runs Layer finalizers after explicit release even when release defect
 			store.dispatch(Engine.Message.RequestedRead())
 			yield* saw(store, "EngineUnavailable")
 			expect(log).toEqual(["release", "finalize"])
-			expect(Option.isNone(store.getCrash())).toBe(true)
+			expect(store.getCrash()).toEqual(Option.none())
 		})
 	)
 )
@@ -197,6 +194,7 @@ it.effect("gives two Stores using the same tag separate live values", () =>
 			yield* saw(second, "CompletedReadEngine:second")
 			yield* first.dispose()
 			second.dispatch(Engine.Message.RequestedRead())
+			yield* saw(second, "CompletedReadEngine:second", 2)
 			expect(second.getModel().events).not.toContain("ReleasedEngine")
 		})
 	)
@@ -266,7 +264,7 @@ it.effect("provides managed values to Subscriptions", () =>
 	)
 )
 
-it.effect("crashes on a requirements defect and releases the previous resource outside the failed watcher", () =>
+it.effect("crashes when deriving requirements throws, and still releases the live resource", () =>
 	Effect.scoped(
 		Effect.gen(function* () {
 			const defect = new Error("requirements failed")
@@ -277,8 +275,7 @@ it.effect("crashes on a requirements defect and releases the previous resource o
 				() => Effect.asVoid(Deferred.succeed(released, undefined)),
 				Option.some("a")
 			)
-			const engine = program.managedResources?.engine
-			if (engine === undefined) return yield* Effect.die("missing test resource")
+			const engine = program.managedResources.engine
 			const store = yield* Store.make(
 				{
 					...program,

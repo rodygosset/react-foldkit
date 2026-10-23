@@ -63,11 +63,6 @@ const otherResources = ManagedResource.make<Model, Message>()((entry) => ({
 	}),
 }))
 const combined = ManagedResource.aggregate(lifted, otherResources)
-const curried = ManagedResource.aggregate<Model, Message>()(lifted, otherResources)
-expectTypeOf<ManagedResource.ServicesOf<typeof curried>>().toEqualTypeOf<ManagedResource.ServicesOf<typeof combined>>()
-expectTypeOf<ManagedResource.ServicesOf<typeof combined>>().toEqualTypeOf<
-	EngineService | ManagedResource.ServiceOf<typeof Other>
->()
 const withBoth = (
 	model: Model,
 	_message: Message

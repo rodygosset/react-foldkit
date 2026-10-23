@@ -491,7 +491,7 @@ it when live work first needs it.
   A record supplies its services only when it is present and its keys are known.
 
   ```ts
-  StoreResources<Model, Message, Managed> | ((StoreResources<Model, Message, Managed> | undefined) & NoInfer<StoreResources<Model, Message, Managed>>) | undefined
+  ManagedResourceRecord<Model, Message, Managed> | ((ManagedResourceRecord<Model, Message, Managed> | undefined) & NoInfer<ManagedResourceRecord<Model, Message, Managed>>) | undefined
   ```
 
 - `resources` Supplies services not provided by Managed Resources. Live work finishes before the Layer
@@ -546,7 +546,7 @@ surrounding Effect. Use `Config` when the Store should build its own service Lay
   A record supplies its services only when it is present and its keys are known.
 
   ```ts
-  StoreResources<Model, Message, Managed> | ((StoreResources<Model, Message, Managed> | undefined) & NoInfer<StoreResources<Model, Message, Managed>>) | undefined
+  ManagedResourceRecord<Model, Message, Managed> | ((ManagedResourceRecord<Model, Message, Managed> | undefined) & NoInfer<ManagedResourceRecord<Model, Message, Managed>>) | undefined
   ```
 
 ### Reentrant

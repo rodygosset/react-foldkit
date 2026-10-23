@@ -11,8 +11,8 @@ export type ManagedRegistration<Managed> = {
 	readonly managedResources?: Managed
 } & ({} extends Managed ? {} : { readonly managedResources: Managed })
 
-// Named once so Store.boot can infer Message from the record, and so the docs can print one name.
-export type StoreResources<
+// Repeated once so Store.boot can infer Message from the record, and so the docs print one name.
+export type ManagedResourceRecord<
 	Model,
 	Message,
 	Managed extends ManagedResource.ManagedResources<Model, Message>,

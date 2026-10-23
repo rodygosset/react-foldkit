@@ -17,8 +17,7 @@ it("uses Foldkit's Managed Resource Scene steps without acquiring live resources
 		undefined,
 		Option.some("a")
 	)
-	const engine = program.managedResources?.engine
-	if (engine === undefined) throw new Error("missing test resource")
+	const engine = program.managedResources.engine
 	const App = Application.define(program)
 	function View() {
 		const model = App.useModel()
