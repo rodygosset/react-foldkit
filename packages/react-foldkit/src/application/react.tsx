@@ -1,6 +1,6 @@
 import { Cause, Effect, Equal, Exit, Option, Schema } from "effect"
 import type * as ManagedResource from "foldkit/managedResource"
-import type { RemainingServices } from "../internal/managedResourceTypes"
+import type { RemainingServices } from "../internal/managedResource"
 import type * as Update from "foldkit/update"
 import React from "react"
 import { isDevelopment } from "../internal/deepFreeze"

@@ -18,7 +18,7 @@ import {
 import * as InitCommand from "../internal/initCommand"
 import { CurrentInterruptRegistry, makeInterruptRegistry } from "../internal/interrupt"
 import type * as ManagedResource from "foldkit/managedResource"
-import type { ManagedResourceRecord, RemainingServices, RequireManagedRecord } from "../internal/managedResourceTypes"
+import type { ManagedResourceRecord, RemainingServices, RequireManagedRecord } from "../internal/managedResource"
 import { makeManagedResources } from "./managedResources"
 import type * as Subscription from "foldkit/subscription"
 import type * as Update from "foldkit/update"

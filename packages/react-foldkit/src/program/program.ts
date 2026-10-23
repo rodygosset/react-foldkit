@@ -2,7 +2,7 @@ import type { Schema } from "effect"
 import type * as ManagedResource from "foldkit/managedResource"
 import type * as Subscription from "foldkit/subscription"
 import type * as Update from "foldkit/update"
-import type { ManagedRegistration, WithManagedResources } from "../internal/managedResourceTypes"
+import type { ManagedRegistration, WithManagedResources } from "../internal/managedResource"
 
 type Tagged = { readonly _tag: string }
 

@@ -39,7 +39,7 @@ export type { Application, CrashConfig, CrashContext, ModelHooks, Options, Provi
 ```ts
 import { Cause, Effect, Option, Schema } from "effect";
 import type * as ManagedResource from "foldkit/managedResource";
-import type { RemainingServices } from "../internal/managedResourceTypes";
+import type { RemainingServices } from "../internal/managedResource";
 import type * as Update from "foldkit/update";
 import React from "react";
 import type { ModelSource } from "../modelSource";
@@ -288,7 +288,7 @@ export declare const CurrentInterruptRegistry: Context.Reference<Readonly<{
 export {};
 ```
 
-## dist/internal/managedResourceTypes.d.ts
+## dist/internal/managedResource.d.ts
 
 ```ts
 import type * as ManagedResource from "foldkit/managedResource";
@@ -344,7 +344,7 @@ import type { Schema } from "effect";
 import type * as ManagedResource from "foldkit/managedResource";
 import type * as Subscription from "foldkit/subscription";
 import type * as Update from "foldkit/update";
-import type { ManagedRegistration, WithManagedResources } from "../internal/managedResourceTypes";
+import type { ManagedRegistration, WithManagedResources } from "../internal/managedResource";
 type Tagged = {
   readonly _tag: string;
 };
@@ -671,7 +671,7 @@ export declare const browserScheduler: Scheduler.MixedScheduler;
 ```ts
 import { Cause, Context, Effect, Exit, Layer, Option, Result, Schema, Scope } from "effect";
 import type * as ManagedResource from "foldkit/managedResource";
-import type { ManagedResourceRecord, RemainingServices, RequireManagedRecord } from "../internal/managedResourceTypes";
+import type { ManagedResourceRecord, RemainingServices, RequireManagedRecord } from "../internal/managedResource";
 import type * as Subscription from "foldkit/subscription";
 import type * as Update from "foldkit/update";
 export type Program<Model, Message, R = never, Managed extends ManagedResource.ManagedResources<Model, Message> = {}> = {
