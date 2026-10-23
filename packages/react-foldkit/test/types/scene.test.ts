@@ -9,6 +9,10 @@ import { expectTypeOf, it } from "vitest"
 it("preserves Foldkit's generic Scene step signatures", function () {
 	expectTypeOf<typeof Scene.scene>().toEqualTypeOf<typeof FoldkitScene.scene>()
 	expectTypeOf<typeof Scene.inside>().toEqualTypeOf<typeof FoldkitScene.inside>()
+	expectTypeOf<typeof Scene.getByRole>().toEqualTypeOf<typeof FoldkitScene.getByRole>()
+	expectTypeOf<typeof Scene.getAllByRole>().toEqualTypeOf<typeof FoldkitScene.getAllByRole>()
+	expectTypeOf<typeof Scene.role>().toEqualTypeOf<typeof FoldkitScene.role>()
+	expectTypeOf<typeof Scene.all>().toEqualTypeOf<typeof FoldkitScene.all>()
 	expectTypeOf<typeof Scene.click>().toEqualTypeOf<typeof FoldkitScene.click>()
 	expectTypeOf<typeof Scene.doubleClick>().toEqualTypeOf<typeof FoldkitScene.doubleClick>()
 	expectTypeOf<typeof Scene.contextMenu>().toEqualTypeOf<typeof FoldkitScene.contextMenu>()

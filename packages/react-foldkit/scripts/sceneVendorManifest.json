@@ -105,12 +105,13 @@
   ],
   "patches": [
     "Replace native HTML renderView with the React reconciler bridge for bound views.",
-    "Create and always dispose one reconciler root per Scene run.",
+    "Create and always dispose one reconciler root per Scene run while retaining execution and cleanup failures.",
     "Apply React Effect Messages before the next step while preserving Command boundaries and OutMessages.",
     "Preserve React click targets, batch click handlers, and activate or cancel checkbox and radio changes.",
-    "Keep upstream Scene query, command, subscription, resource, and lifecycle steps unchanged.",
+    "Keep upstream command, subscription, resource, and lifecycle steps unchanged.",
     "Replace private helper imports with package public imports or tiny exact-value compatibility shims.",
-    "Dispatch React interactions through capture and bubble handlers with original host targets; keep native Foldkit interactions on the upstream runner."
+    "Dispatch React interactions through capture and bubble handlers with original host targets; keep native Foldkit interactions on the upstream runner.",
+    "Treat present React boolean disabled attributes, including the empty string, as disabled in adapted role queries; native Foldkit views keep upstream queries."
   ],
   "upstreamOwnedRuntimeExports": [
     "Command",
@@ -118,7 +119,6 @@
     "ManagedResource",
     "Mount",
     "Subscription",
-    "all",
     "altText",
     "attr",
     "displayValue",
@@ -137,7 +137,6 @@
     "getAllByDisplayValue",
     "getAllByLabel",
     "getAllByPlaceholder",
-    "getAllByRole",
     "getAllByTestId",
     "getAllByText",
     "getAllByTitle",
@@ -145,7 +144,6 @@
     "getByDisplayValue",
     "getByLabel",
     "getByPlaceholder",
-    "getByRole",
     "getByTestId",
     "getByText",
     "getByTitle",
@@ -155,7 +153,6 @@
     "last",
     "nth",
     "placeholder",
-    "role",
     "sceneMatchers",
     "selector",
     "tap",

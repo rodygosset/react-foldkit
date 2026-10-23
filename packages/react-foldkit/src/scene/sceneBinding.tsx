@@ -9,8 +9,8 @@ import type { SourceContext } from "../application/react"
 import { deepFreeze, isDevelopment } from "../internal/deepFreeze"
 import type { ModelSource } from "../modelSource"
 import { dispatchSceneEvent, hasSceneListener, hostFromElm, sceneListeners } from "./sceneEvent"
-import { hostProp, hostString, styleDeclarations } from "./sceneHost"
-import type { HostContainer, HostElement, HostProps, HostText } from "./sceneHost"
+import { hostAttributes, hostProp, hostString, styleDeclarations } from "./sceneHost"
+import type { HostContainer, HostElement, HostNamespace, HostProps, HostText } from "./sceneHost"
 import { syncControlledFields } from "./sceneInput"
 import { SceneRenderLimit } from "./sceneSettle"
 import type { SceneView } from "./sceneView"
@@ -55,7 +55,7 @@ function reportHostError(error: unknown): void {
 }
 
 let updatePriority = NoEventPriority
-const rootHostContext = Object.freeze({})
+const rootHostContext: { readonly namespace: HostNamespace } = Object.freeze({ namespace: "html" })
 
 const append = function (parent: HostContainer | HostElement, child: HostElement | HostText): void {
 	remove(parent, child)
@@ -90,11 +90,21 @@ const hostConfig = {
 	resetFormInstance: () => undefined,
 	suspendOnActiveViewTransition: () => undefined,
 	getRootHostContext: () => rootHostContext,
-	getChildHostContext: (context: typeof rootHostContext) => context,
+	getChildHostContext(context: typeof rootHostContext, type: string): typeof rootHostContext {
+		if (type === "svg") return { namespace: "svg" }
+		if (type === "foreignObject") return rootHostContext
+		return context
+	},
 	getPublicInstance: (instance: HostElement | HostText) => instance,
-	createInstance(type: string, props: HostProps): HostElement {
+	createInstance(
+		type: string,
+		props: HostProps,
+		_container: HostContainer,
+		context: typeof rootHostContext
+	): HostElement {
 		const instance: HostElement = {
 			tag: type,
+			namespace: type === "svg" ? "svg" : context.namespace,
 			get type() {
 				return hostString(this.props.type ?? (type === "input" ? "text" : type === "button" ? "submit" : ""))
 			},
@@ -118,7 +128,15 @@ const hostConfig = {
 			attributes: {},
 			children: [],
 			tagName: type.toUpperCase(),
-			value: props.value ?? props.defaultValue,
+			value:
+				type === "select"
+					? undefined
+					: type === "input" ||
+						  type === "textarea" ||
+						  props.value !== undefined ||
+						  props.defaultValue !== undefined
+						? hostString(props.value ?? props.defaultValue)
+						: undefined,
 			checked: Boolean(props.checked ?? props.defaultChecked),
 			selected: Boolean(props.selected),
 			get textContent() {
@@ -127,15 +145,14 @@ const hostConfig = {
 			focus: () => undefined,
 			blur: () => undefined,
 			getAttribute(name) {
-				const key = name === "class" ? "className" : name === "for" ? "htmlFor" : name
-				const value = instance.props[key] ?? instance.attributes[name]
-				return value === undefined || value === null || typeof value === "function" ? null : hostString(value)
+				const key = instance.namespace === "html" ? name.toLowerCase() : name
+				return hostAttributes(instance)[key] ?? null
 			},
 			setAttribute(name, value) {
-				instance.attributes[name] = value
+				instance.attributes[instance.namespace === "html" ? name.toLowerCase() : name] = value
 			},
 			removeAttribute(name) {
-				delete instance.attributes[name]
+				instance.attributes[instance.namespace === "html" ? name.toLowerCase() : name] = null
 			},
 			closest(selector: string) {
 				let current: HostElement | undefined = instance
@@ -176,10 +193,27 @@ const hostConfig = {
 	finalizeInitialChildren: () => false,
 	shouldSetTextContent: () => false,
 	prepareForCommit: () => null,
-	resetAfterCommit() {
+	resetAfterCommit(container: HostContainer) {
+		syncControlledFields(container.children)
 		sceneCommitCount += 1
 	},
 	commitUpdate(instance: HostElement, _type: string, _oldProps: HostProps, newProps: HostProps) {
+		for (const name of new Set([...Object.keys(_oldProps), ...Object.keys(newProps)])) {
+			if (Object.is(_oldProps[name], newProps[name])) continue
+			const before = hostProp(name, _oldProps[name], instance.namespace)
+			const after = hostProp(name, newProps[name], instance.namespace)
+			for (const prop of [before, after]) {
+				if (Option.isSome(prop)) {
+					const key =
+						prop.value._tag === "Attribute"
+							? prop.value.name
+							: prop.value._tag === "ClassList"
+								? "class"
+								: "style"
+					delete instance.attributes[key]
+				}
+			}
+		}
 		instance.props = newProps
 	},
 	commitTextUpdate(instance: HostText, _oldText: string, newText: string) {
@@ -410,33 +444,21 @@ function stampFileHandler(handler: EventHandler, target: HostElement, eventName:
 }
 
 function toVNode(node: HostElement): VNode {
-	const attrs: Record<string, unknown> = {}
+	const attrs: Record<string, unknown> = hostAttributes(node)
 	const props: Record<string, unknown> = {}
 	const on = sceneListeners(node)
 	const classes: Record<string, boolean> = {}
-	let style: Record<string, string> = {}
-	for (const [name, value] of Object.entries(node.props)) {
-		const classified = hostProp(name, value)
-		if (Option.isNone(classified)) continue
-		switch (classified.value._tag) {
-			case "ClassList":
-				for (const className of hostString(classified.value.value).split(/\s+/)) {
-					if (className !== "") classes[className] = true
-				}
-				break
-			case "Style":
-				style = { ...style, ...styleDeclarations(classified.value.value) }
-				break
-			case "Attribute":
-				attrs[classified.value.name] = classified.value.value
-				if (classified.value.reactName === "htmlFor") props.htmlFor = classified.value.value
-				break
-			default: {
-				const unexpected: never = classified.value
-				throw new Error(`Unexpected host prop ${String(unexpected)}`)
-			}
-		}
+	const styleProp = hostProp("style", node.props.style, node.namespace)
+	const style =
+		node.attributes.style === undefined && Option.isSome(styleProp) && styleProp.value._tag === "Style"
+			? styleDeclarations(styleProp.value.value)
+			: {}
+	if (attrs.for !== undefined) props.htmlFor = attrs.for
+	for (const className of hostString(attrs.class).split(/\s+/)) {
+		if (className !== "") classes[className] = true
 	}
+	delete attrs.class
+	if (node.attributes.style === undefined) delete attrs.style
 	if (node.value !== undefined) props.value = node.value
 	if (node.tag === "input" && (node.props.type === "checkbox" || node.props.type === "radio"))
 		props.checked = node.checked

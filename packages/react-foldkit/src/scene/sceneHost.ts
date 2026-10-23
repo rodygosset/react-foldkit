@@ -10,18 +10,21 @@ export interface HostText {
 	text: string
 }
 
+export type HostNamespace = "html" | "svg"
+
 export interface HostElement {
+	readonly namespace: HostNamespace
 	tag: string
 	readonly type: string
 	readonly name: string
 	readonly id: string
 	readonly dataset: Readonly<Record<string, string>>
 	props: HostProps
-	attributes: Record<string, string>
+	attributes: Record<string, string | null>
 	children: Array<HostElement | HostText>
 	parent?: HostElement
 	readonly tagName: string
-	value?: unknown
+	value?: string
 	files?: unknown
 	checked?: boolean
 	selected?: boolean
@@ -170,48 +173,142 @@ export const isTextInput = (node: HostElement): boolean =>
 
 const attributeNames: Readonly<Record<string, string>> = {
 	acceptCharset: "accept-charset",
-	allowFullScreen: "allowfullscreen",
-	autoComplete: "autocomplete",
-	autoFocus: "autofocus",
-	autoPlay: "autoplay",
-	cellPadding: "cellpadding",
-	cellSpacing: "cellspacing",
-	charSet: "charset",
-	colSpan: "colspan",
-	contentEditable: "contenteditable",
-	crossOrigin: "crossorigin",
-	dateTime: "datetime",
-	encType: "enctype",
-	formAction: "formaction",
-	formEncType: "formenctype",
-	formMethod: "formmethod",
-	formNoValidate: "formnovalidate",
-	formTarget: "formtarget",
-	frameBorder: "frameborder",
+	className: "class",
 	htmlFor: "for",
-	httpEquiv: "http-equiv",
-	inputMode: "inputmode",
-	itemID: "itemid",
-	itemProp: "itemprop",
-	itemRef: "itemref",
-	itemScope: "itemscope",
-	itemType: "itemtype",
-	maxLength: "maxlength",
-	minLength: "minlength",
-	noValidate: "novalidate",
-	readOnly: "readonly",
-	rowSpan: "rowspan",
-	srcSet: "srcset",
+	crossOrigin: "crossorigin",
 	tabIndex: "tabindex",
-	useMap: "usemap",
+	httpEquiv: "http-equiv",
 }
 
-/** React prop name to the HTML attribute name Foldkit locators read. */
-export function htmlAttributeName(name: string): string {
-	const mapped = attributeNames[name]
-	if (mapped !== undefined) return mapped
-	return name.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)
+const svgAttributeNames: Readonly<Record<string, string>> = {
+	accentHeight: "accent-height",
+	alignmentBaseline: "alignment-baseline",
+	arabicForm: "arabic-form",
+	baselineShift: "baseline-shift",
+	capHeight: "cap-height",
+	clipPath: "clip-path",
+	clipRule: "clip-rule",
+	colorInterpolation: "color-interpolation",
+	colorInterpolationFilters: "color-interpolation-filters",
+	colorProfile: "color-profile",
+	colorRendering: "color-rendering",
+	dominantBaseline: "dominant-baseline",
+	enableBackground: "enable-background",
+	fillOpacity: "fill-opacity",
+	fillRule: "fill-rule",
+	floodColor: "flood-color",
+	floodOpacity: "flood-opacity",
+	fontFamily: "font-family",
+	fontSize: "font-size",
+	fontSizeAdjust: "font-size-adjust",
+	fontStretch: "font-stretch",
+	fontStyle: "font-style",
+	fontVariant: "font-variant",
+	fontWeight: "font-weight",
+	glyphName: "glyph-name",
+	glyphOrientationHorizontal: "glyph-orientation-horizontal",
+	glyphOrientationVertical: "glyph-orientation-vertical",
+	horizAdvX: "horiz-adv-x",
+	horizOriginX: "horiz-origin-x",
+	imageRendering: "image-rendering",
+	letterSpacing: "letter-spacing",
+	lightingColor: "lighting-color",
+	markerEnd: "marker-end",
+	markerMid: "marker-mid",
+	markerStart: "marker-start",
+	overlinePosition: "overline-position",
+	overlineThickness: "overline-thickness",
+	paintOrder: "paint-order",
+	pointerEvents: "pointer-events",
+	renderingIntent: "rendering-intent",
+	shapeRendering: "shape-rendering",
+	stopColor: "stop-color",
+	stopOpacity: "stop-opacity",
+	strikethroughPosition: "strikethrough-position",
+	strikethroughThickness: "strikethrough-thickness",
+	strokeDasharray: "stroke-dasharray",
+	strokeDashoffset: "stroke-dashoffset",
+	strokeLinecap: "stroke-linecap",
+	strokeLinejoin: "stroke-linejoin",
+	strokeMiterlimit: "stroke-miterlimit",
+	strokeOpacity: "stroke-opacity",
+	strokeWidth: "stroke-width",
+	textAnchor: "text-anchor",
+	textDecoration: "text-decoration",
+	textRendering: "text-rendering",
+	transformOrigin: "transform-origin",
+	underlinePosition: "underline-position",
+	underlineThickness: "underline-thickness",
+	unicodeBidi: "unicode-bidi",
+	unicodeRange: "unicode-range",
+	unitsPerEm: "units-per-em",
+	vAlphabetic: "v-alphabetic",
+	vHanging: "v-hanging",
+	vIdeographic: "v-ideographic",
+	vMathematical: "v-mathematical",
+	vectorEffect: "vector-effect",
+	vertAdvY: "vert-adv-y",
+	vertOriginX: "vert-origin-x",
+	vertOriginY: "vert-origin-y",
+	wordSpacing: "word-spacing",
+	writingMode: "writing-mode",
+	xmlnsXlink: "xmlns:xlink",
+	xHeight: "x-height",
+	xlinkActuate: "xlink:actuate",
+	xlinkArcrole: "xlink:arcrole",
+	xlinkHref: "xlink:href",
+	xlinkRole: "xlink:role",
+	xlinkShow: "xlink:show",
+	xlinkTitle: "xlink:title",
+	xlinkType: "xlink:type",
+	xmlBase: "xml:base",
+	xmlLang: "xml:lang",
+	xmlSpace: "xml:space",
 }
+
+const booleanAttributes = new Set([
+	"allowFullScreen",
+	"async",
+	"autoFocus",
+	"autoPlay",
+	"controls",
+	"default",
+	"defer",
+	"disabled",
+	"disablePictureInPicture",
+	"disableRemotePlayback",
+	"formNoValidate",
+	"hidden",
+	"inert",
+	"itemScope",
+	"loop",
+	"multiple",
+	"muted",
+	"noModule",
+	"noValidate",
+	"open",
+	"playsInline",
+	"readOnly",
+	"required",
+	"reversed",
+	"scoped",
+	"seamless",
+])
+
+const booleanStringAttributes = new Set([
+	"contentEditable",
+	"draggable",
+	"spellCheck",
+	"value",
+	"autoReverse",
+	"externalResourcesRequired",
+	"focusable",
+	"preserveAlpha",
+])
+
+/** React uses lowercase HTML names and preserves SVG case unless the name has an explicit alias. */
+export const htmlAttributeName = (name: string, namespace: HostNamespace = "html"): string =>
+	attributeNames[name] ?? (namespace === "svg" ? (svgAttributeNames[name] ?? name) : name.toLowerCase())
 
 const skippedProps = new Set([
 	"children",
@@ -230,7 +327,7 @@ const skippedProps = new Set([
 export type HostProp =
 	| { readonly _tag: "ClassList"; readonly value: unknown }
 	| { readonly _tag: "Style"; readonly value: { readonly [key: string]: unknown } }
-	| { readonly _tag: "Attribute"; readonly reactName: string; readonly name: string; readonly value: unknown }
+	| { readonly _tag: "Attribute"; readonly reactName: string; readonly name: string; readonly value: string }
 
 function isEventProp(name: string): boolean {
 	if (eventProps[name] !== undefined) return true
@@ -238,7 +335,7 @@ function isEventProp(name: string): boolean {
 }
 
 /** Classifies a React prop for the Foldkit vnode. Live value, checked, and selected stay off attributes. */
-export function hostProp(name: string, value: unknown): Option.Option<HostProp> {
+export function hostProp(name: string, value: unknown, namespace: HostNamespace = "html"): Option.Option<HostProp> {
 	if (
 		skippedProps.has(name) ||
 		isEventProp(name) ||
@@ -252,8 +349,30 @@ export function hostProp(name: string, value: unknown): Option.Option<HostProp> 
 	if (name === "style" && typeof value === "object") {
 		return Option.some({ _tag: "Style", value: value as { readonly [key: string]: unknown } })
 	}
-	if (typeof value === "object") return Option.none()
-	return Option.some({ _tag: "Attribute", reactName: name, name: htmlAttributeName(name), value })
+	if (typeof value === "object" || typeof value === "symbol") return Option.none()
+	const attributeName = htmlAttributeName(name, namespace)
+	if (booleanAttributes.has(name)) {
+		return value
+			? Option.some({ _tag: "Attribute", reactName: name, name: attributeName, value: "" })
+			: Option.none()
+	}
+	if (name === "download" || name === "capture") {
+		if (value === false) return Option.none()
+		return Option.some({
+			_tag: "Attribute",
+			reactName: name,
+			name: attributeName,
+			value: value === true ? "" : hostString(value),
+		})
+	}
+	if (
+		typeof value === "boolean" &&
+		!booleanStringAttributes.has(name) &&
+		!name.startsWith("aria-") &&
+		!name.startsWith("data-")
+	)
+		return Option.none()
+	return Option.some({ _tag: "Attribute", reactName: name, name: attributeName, value: hostString(value) })
 }
 
 export function styleDeclarations(value: { readonly [key: string]: unknown }): Record<string, string> {
@@ -267,4 +386,31 @@ export function styleDeclarations(value: { readonly [key: string]: unknown }): R
 			unitless || typeof styleValue !== "number" ? hostString(styleValue) : `${styleValue}px`
 	}
 	return style
+}
+
+/** The attribute view shared by event targets and Foldkit snapshots, including imperative edits. */
+export function hostAttributes(node: HostElement): Record<string, string> {
+	const attributes: Record<string, string> = {}
+	for (const [name, value] of Object.entries(node.props)) {
+		const prop = hostProp(name, value, node.namespace)
+		if (Option.isNone(prop)) continue
+		switch (prop.value._tag) {
+			case "Attribute":
+				attributes[prop.value.name] = prop.value.value
+				break
+			case "ClassList":
+				attributes.class = hostString(prop.value.value)
+				break
+			case "Style":
+				attributes.style = Object.entries(styleDeclarations(prop.value.value))
+					.map(([property, styleValue]) => `${property}:${styleValue}`)
+					.join(";")
+				break
+		}
+	}
+	for (const [name, value] of Object.entries(node.attributes)) {
+		if (value === null) delete attributes[name]
+		else attributes[name] = value
+	}
+	return attributes
 }

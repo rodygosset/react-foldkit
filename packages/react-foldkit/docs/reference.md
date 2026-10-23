@@ -1288,6 +1288,10 @@ Model and send Messages without depending on the Store implementation.
 
 ## react-foldkit/scene
 
+### all
+
+Creates Foldkit collection locators, with React boolean-attribute handling for `role`.
+
 ### beforeInput
 
 Simulates a before-input event with React capture, bubbling, and the original host target.
@@ -1338,6 +1342,15 @@ Simulates focus entering a subtree with React capture, bubbling, and the origina
 
 Simulates focus leaving a subtree with React capture, bubbling, and the original host target.
 
+### getAllByRole
+
+Finds every matching role using React's rendered boolean attributes for bound views.
+
+### getByRole
+
+Finds a role using React's rendered boolean attributes for bound views.
+Foldkit views keep Foldkit's own query behavior.
+
 ### hover
 
 Simulates mouseover followed by parent-first mouseenter handlers for a React view.
@@ -1361,6 +1374,10 @@ Simulates a pointer press with React capture, bubbling, and the original host ta
 ### pointerUp
 
 Simulates a pointer release with React capture, bubbling, and the original host target.
+
+### role
+
+Locates a role with React boolean-attribute handling in bound views.
 
 ### scene
 
@@ -1390,7 +1407,7 @@ Simulates a contenteditable input with React capture, bubbling, and the original
 
 Foldkit reexports inherit their upstream contracts. See [Foldkit documentation](https://foldkit.dev) and the original editor JSDoc.
 
-`AnyCommand`, `AnyMount`, `Command`, `CustomElement`, `Locator`, `LocatorAll`, `ManagedResource`, `Mount`, `MountMatcher`, `MountResolver`, `OutMessageStep`, `OutMessagesStep`, `PendingMount`, `Resolver`, `SceneSimulation`, `SceneStep`, `Subscription`, `SubscriptionMessageStep`, `all`, `altText`, `attr`, `displayValue`, `expect`, `expectAll`, `expectHandled`, `expectIgnored`, `expectNoOutMessage`, `expectOutMessage`, `expectOutMessages`, `filter`, `find`, `findAll`, `first`, `getAllByAltText`, `getAllByDisplayValue`, `getAllByLabel`, `getAllByPlaceholder`, `getAllByRole`, `getAllByTestId`, `getAllByText`, `getAllByTitle`, `getByAltText`, `getByDisplayValue`, `getByLabel`, `getByPlaceholder`, `getByRole`, `getByTestId`, `getByText`, `getByTitle`, `given`, `label`, `last`, `nth`, `placeholder`, `role`, `sceneMatchers`, `selector`, `tap`, `testId`, `text`, `textContent`, `title`, `withViewInputs`, `within`.
+`AnyCommand`, `AnyMount`, `Command`, `CustomElement`, `Locator`, `LocatorAll`, `ManagedResource`, `Mount`, `MountMatcher`, `MountResolver`, `OutMessageStep`, `OutMessagesStep`, `PendingMount`, `Resolver`, `SceneSimulation`, `SceneStep`, `Subscription`, `SubscriptionMessageStep`, `altText`, `attr`, `displayValue`, `expect`, `expectAll`, `expectHandled`, `expectIgnored`, `expectNoOutMessage`, `expectOutMessage`, `expectOutMessages`, `filter`, `find`, `findAll`, `first`, `getAllByAltText`, `getAllByDisplayValue`, `getAllByLabel`, `getAllByPlaceholder`, `getAllByTestId`, `getAllByText`, `getAllByTitle`, `getByAltText`, `getByDisplayValue`, `getByLabel`, `getByPlaceholder`, `getByTestId`, `getByText`, `getByTitle`, `given`, `label`, `last`, `nth`, `placeholder`, `sceneMatchers`, `selector`, `tap`, `testId`, `text`, `textContent`, `title`, `withViewInputs`, `within`.
 
 ## react-foldkit/scene/react
 

@@ -4,8 +4,9 @@ import * as FoldkitScene from "foldkit/scene"
 import { isBoundSceneSimulation, isBoundSceneView } from "./sceneBinding"
 import { inside as insideBoundReactScene, scene as runBoundReactScene } from "./vendor/scene.js"
 
-// Runners and interactions dispatch on the view. Other names remain Foldkit's own API.
+// Runners, interactions, and role queries adapt bound React views. Other names remain Foldkit's own API.
 export * from "foldkit/scene"
+export { getByRole, getAllByRole, role, all } from "./sceneQueries"
 
 /**
  * Runs Foldkit Scene steps against a Foldkit view or a React view bound with `bindSceneView`.

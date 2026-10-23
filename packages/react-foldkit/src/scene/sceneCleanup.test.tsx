@@ -26,13 +26,21 @@ it("retains the assertion and cleanup failures after completing every React clea
 	const cleanupError = new Error("cleanup failed")
 	const cleaned: string[] = []
 	function View() {
-		React.useEffect(() => function () {
-			cleaned.push("first")
-			throw cleanupError
-		}, [])
-		React.useEffect(() => function () {
-			cleaned.push("second")
-		}, [])
+		React.useEffect(
+			() =>
+				function () {
+					cleaned.push("first")
+					throw cleanupError
+				},
+			[]
+		)
+		React.useEffect(
+			() =>
+				function () {
+					cleaned.push("second")
+				},
+			[]
+		)
 		return <p>ready</p>
 	}
 	let failure: unknown
@@ -58,9 +66,13 @@ it("preserves the original assertion Error when cleanup succeeds", function () {
 	const assertionError = new Error("assertion failed")
 	let cleaned = false
 	function View() {
-		React.useEffect(() => function () {
-			cleaned = true
-		}, [])
+		React.useEffect(
+			() =>
+				function () {
+					cleaned = true
+				},
+			[]
+		)
 		return <p>ready</p>
 	}
 	let failure: unknown
@@ -84,9 +96,13 @@ it("preserves both original Errors when a custom assertion and cleanup fail", fu
 	const assertionError = new Error("assertion failed")
 	const cleanupError = new Error("cleanup failed")
 	function View() {
-		React.useEffect(() => function () {
-			throw cleanupError
-		}, [])
+		React.useEffect(
+			() =>
+				function () {
+					throw cleanupError
+				},
+			[]
+		)
 		return <p>ready</p>
 	}
 	let failure: unknown
@@ -134,13 +150,21 @@ it("preserves a cleanup Error after a successful Scene and still runs later clea
 	const cleanupError = new Error("cleanup failed")
 	const cleaned: string[] = []
 	function View() {
-		React.useEffect(() => function () {
-			cleaned.push("first")
-			throw cleanupError
-		}, [])
-		React.useEffect(() => function () {
-			cleaned.push("second")
-		}, [])
+		React.useEffect(
+			() =>
+				function () {
+					cleaned.push("first")
+					throw cleanupError
+				},
+			[]
+		)
+		React.useEffect(
+			() =>
+				function () {
+					cleaned.push("second")
+				},
+			[]
+		)
 		return <p>ready</p>
 	}
 	let failure: unknown

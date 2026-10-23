@@ -386,7 +386,7 @@
 	{
 		"entryPoint": "react-foldkit/scene",
 		"name": "all",
-		"owner": "foldkit",
+		"owner": "react-foldkit",
 		"introduced": "0.1.0"
 	},
 	{
@@ -566,7 +566,7 @@
 	{
 		"entryPoint": "react-foldkit/scene",
 		"name": "getAllByRole",
-		"owner": "foldkit",
+		"owner": "react-foldkit",
 		"introduced": "0.1.0"
 	},
 	{
@@ -614,7 +614,7 @@
 	{
 		"entryPoint": "react-foldkit/scene",
 		"name": "getByRole",
-		"owner": "foldkit",
+		"owner": "react-foldkit",
 		"introduced": "0.1.0"
 	},
 	{
@@ -698,7 +698,7 @@
 	{
 		"entryPoint": "react-foldkit/scene",
 		"name": "role",
-		"owner": "foldkit",
+		"owner": "react-foldkit",
 		"introduced": "0.1.0"
 	},
 	{

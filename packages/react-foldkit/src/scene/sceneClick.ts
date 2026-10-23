@@ -1,6 +1,6 @@
 import { Array, Option } from "effect"
 import { getSceneEventHandler, runSceneInteraction } from "./sceneBinding"
-import { hasSceneListener, hostFromElm, hostPath, invokeHandlers, makeHostEvent } from "./sceneEvent"
+import { dispatchSceneEvent, hasSceneListener, hostFromElm } from "./sceneEvent"
 import { assignChecked, type Checkable, type CheckedSnapshot, revertChecked, snapshotChecked } from "./sceneInput"
 import type { HostElement } from "./sceneHost"
 import { allSelector, ancestorsOf, type SceneNode } from "./vendor/query.js"
@@ -80,7 +80,8 @@ function checkableOf(root: SceneNode, element: SceneNode): Option.Option<Checkab
 	if (target === undefined) return Option.none()
 	const inputType = stringAttribute(element, "type")
 	if (Option.contains(inputType, "checkbox")) return Option.some({ _tag: "Checkbox", target })
-	if (Option.contains(inputType, "radio")) return Option.some({ _tag: "Radio", target, group: radioGroup(root, element) })
+	if (Option.contains(inputType, "radio"))
+		return Option.some({ _tag: "Radio", target, group: radioGroup(root, element) })
 	return Option.none()
 }
 
@@ -131,14 +132,12 @@ export function runClick(
 	const changeListening = Option.isSome(checkable) && hasSceneListener(host, "change")
 	let submitRan = false
 	runSceneInteraction(function () {
-		const event = makeHostEvent(host, {})
-		invokeHandlers(hostPath(host), "click", event)
 		const changed = Option.match(checkable, {
 			onNone: () => false,
 			onSome: (value) => checkedChanged(snapshot, value),
 		})
-		if (changed && changeListening) invokeHandlers(hostPath(host), "change", event)
-		if (event.defaultPrevented) revertChecked(snapshot)
+		const defaultPrevented = dispatchSceneEvent(host, "click", {}, changed && changeListening ? ["change"] : [])
+		if (defaultPrevented) revertChecked(snapshot)
 		else submitRan = ranSubmit(html, propagationPath)
 	})
 	if (clickListening || changeListening || submitRan) return { _tag: "Found" }

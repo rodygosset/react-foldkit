@@ -1,19 +1,24 @@
 import { Array, Option } from "effect"
+import type React from "react"
 import type { HostElement } from "./sceneHost"
 import { eventProps, isTextInput } from "./sceneHost"
 import { syncSelect } from "./sceneInput"
 
-export interface HostEvent {
+export interface HostEvent extends Pick<
+	React.SyntheticEvent,
+	"type" | "defaultPrevented" | "preventDefault" | "stopPropagation" | "isDefaultPrevented" | "isPropagationStopped"
+> {
 	readonly target: HostElement
 	currentTarget: HostElement
-	readonly defaultPrevented: boolean
-	preventDefault(): void
-	stopPropagation(): void
-	readonly propagationStopped: boolean
-	resetPropagation(): void
+}
+
+interface EventControl {
+	readonly fields: Readonly<Record<string, unknown>>
+	defaultPrevented: boolean
 }
 
 const omittedFields = new Set([
+	"type",
 	"target",
 	"currentTarget",
 	"preventDefault",
@@ -73,14 +78,16 @@ function eventPayload(fields: Readonly<Record<string, unknown>>): Record<string,
 }
 
 export type HostUpdate =
-	| { readonly _tag: "Value"; readonly value: unknown }
+	| { readonly _tag: "Value"; readonly value: string }
 	| { readonly _tag: "Files"; readonly files: unknown }
 	| { readonly _tag: "Text"; readonly text: string }
 
 function hostUpdateFrom(fields: Readonly<Record<string, unknown>>): Option.Option<HostUpdate> {
 	const update = fields.hostUpdate
 	if (update === null || typeof update !== "object" || !("_tag" in update)) return Option.none()
-	if (update._tag === "Value" && "value" in update) return Option.some({ _tag: "Value", value: update.value })
+	if (update._tag === "Value" && "value" in update && typeof update.value === "string") {
+		return Option.some({ _tag: "Value", value: update.value })
+	}
 	if (update._tag === "Files" && "files" in update) return Option.some({ _tag: "Files", files: update.files })
 	if (update._tag === "Text" && "text" in update && typeof update.text === "string") {
 		return Option.some({ _tag: "Text", text: update.text })
@@ -108,13 +115,14 @@ function applyHostUpdate(target: HostElement, update: HostUpdate): void {
 	}
 }
 
-export function makeHostEvent(target: HostElement, fields: Readonly<Record<string, unknown>>): HostEvent {
-	let defaultPrevented = fields.defaultPrevented === true
+function makeHostEvent(target: HostElement, type: string, control: EventControl): HostEvent {
+	let defaultPrevented = control.defaultPrevented
 	let propagationStopped = false
-	const sourcePreventDefault = fields.preventDefault
-	const sourceStopPropagation = fields.stopPropagation
+	const sourcePreventDefault = control.fields.preventDefault
+	const sourceStopPropagation = control.fields.stopPropagation
 	return {
-		...eventPayload(fields),
+		...eventPayload(control.fields),
+		type,
 		target,
 		currentTarget: target,
 		get defaultPrevented() {
@@ -122,18 +130,15 @@ export function makeHostEvent(target: HostElement, fields: Readonly<Record<strin
 		},
 		preventDefault() {
 			defaultPrevented = true
+			control.defaultPrevented = true
 			if (typeof sourcePreventDefault === "function") sourcePreventDefault()
 		},
 		stopPropagation() {
 			propagationStopped = true
 			if (typeof sourceStopPropagation === "function") sourceStopPropagation()
 		},
-		get propagationStopped() {
-			return propagationStopped
-		},
-		resetPropagation() {
-			propagationStopped = false
-		},
+		isDefaultPrevented: () => defaultPrevented,
+		isPropagationStopped: () => propagationStopped,
 	}
 }
 
@@ -143,36 +148,45 @@ function deliver(node: HostElement, name: string, event: HostEvent): void {
 	if (listener !== undefined) listener(event)
 }
 
-export function invokeHandlers(path: ReadonlyArray<HostElement>, eventName: string, event: HostEvent): void {
-	const target = path[0]
-	if (target === undefined) return
-	for (const name of sceneEventNames(eventName, target)) {
-		event.resetPropagation()
-		const rootFirst = Array.reverse(path)
-		for (const node of rootFirst) {
-			deliver(node, `${name}Capture`, event)
-			if (event.propagationStopped) break
-		}
-		if (event.propagationStopped) continue
-		for (const node of name === "mouseenter" ? rootFirst : path) {
-			deliver(node, name, event)
-			if (event.propagationStopped) break
-		}
+function invokeHandlers(
+	path: ReadonlyArray<HostElement>,
+	name: string,
+	event: HostEvent,
+	phase: "capture" | "bubble"
+): void {
+	const rootFirst = Array.reverse(path)
+	const ordered = phase === "capture" || name === "mouseenter" ? rootFirst : path
+	for (const node of ordered) {
+		deliver(node, phase === "capture" ? `${name}Capture` : name, event)
+		if (event.isPropagationStopped()) break
 	}
 }
 
 export function dispatchSceneEvent(
 	target: HostElement,
 	eventName: string,
-	fields: Readonly<Record<string, unknown>>
-): HostEvent {
+	fields: Readonly<Record<string, unknown>>,
+	additionalEvents: ReadonlyArray<string> = []
+): boolean {
 	Option.match(hostUpdateFrom(fields), {
 		onNone: () => undefined,
 		onSome: (update) => applyHostUpdate(target, update),
 	})
-	const event = makeHostEvent(target, fields)
-	invokeHandlers(hostPath(target), eventName, event)
-	return event
+	const control: EventControl = { fields, defaultPrevented: fields.defaultPrevented === true }
+	const path = hostPath(target)
+	const names = [...sceneEventNames(eventName, target), ...additionalEvents]
+	const firstName = names[0]
+	if (firstName === undefined) return control.defaultPrevented
+	const firstEvent = makeHostEvent(target, firstName, control)
+	invokeHandlers(path, firstName, firstEvent, "capture")
+	if (firstEvent.isPropagationStopped()) return control.defaultPrevented
+	// React extracts the logical bubble events after native capture, before any bubble handler runs.
+	const events = names.map((name, index) => (index === 0 ? firstEvent : makeHostEvent(target, name, control)))
+	for (const [index, event] of events.entries()) {
+		if (index > 0) invokeHandlers(path, event.type, event, "capture")
+		if (!event.isPropagationStopped()) invokeHandlers(path, event.type, event, "bubble")
+	}
+	return control.defaultPrevented
 }
 
 export function hostFromElm(elm: unknown): HostElement | undefined {

@@ -3,6 +3,10 @@ export * from "foldkit/scene"
 export {
 	scene,
 	inside,
+	getByRole,
+	getAllByRole,
+	role,
+	all,
 	click,
 	doubleClick,
 	contextMenu,

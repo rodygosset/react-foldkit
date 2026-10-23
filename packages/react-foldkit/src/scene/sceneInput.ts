@@ -68,8 +68,7 @@ export function syncSelect(node: HostElement, selection: unknown, fallback: bool
 	let selected = false
 	for (const option of options) {
 		option.node.value = hostString(option.node.props.value ?? option.node.textContent)
-		option.node.selected =
-			values.includes(option.node.value as string) && (!selected || Boolean(node.props.multiple))
+		option.node.selected = values.includes(option.node.value) && (!selected || Boolean(node.props.multiple))
 		selected = selected || option.node.selected
 	}
 	if (!selected && fallback && !node.props.multiple) {
@@ -84,16 +83,18 @@ export function syncSelect(node: HostElement, selection: unknown, fallback: bool
 
 function syncNode(node: HostElement | HostText): void {
 	if (!("tag" in node)) return
-	if (node.props.value !== undefined && node.props.value !== null) node.value = node.props.value
+	if (node.tag !== "select" && node.props.value !== undefined && node.props.value !== null) {
+		node.value = hostString(node.props.value)
+	}
 	if (node.props.checked !== undefined && node.props.checked !== null) node.checked = Boolean(node.props.checked)
 	for (const child of node.children) syncNode(child)
 	if (node.tag === "select") {
-		const selection = node.props.value ?? node.selectedValues ?? node.value
+		const selection = node.props.value ?? node.selectedValues ?? node.props.defaultValue ?? node.value
 		syncSelect(node, selection, selection === undefined || node.props.value !== undefined)
 	}
 }
 
-/** Copies controlled `value` and `checked` from props after paint. Gesture toggles stay on the click path. */
+/** Synchronizes controlled fields before Effects and after interactions. */
 export function syncControlledFields(children: ReadonlyArray<HostElement | HostText>): void {
 	for (const node of children) syncNode(node)
 }

@@ -6,6 +6,8 @@ These files are Foldkit's Scene runner from the `foldkit` npm release recorded i
 - `scene.js`, `internal.js`, `query.js`, and `matchers.js` are those copies with the patches in [checkSceneVendor.mjs](../../../scripts/checkSceneVendor.mjs) applied. The patches replace private Foldkit imports with public entries or `sceneCompat.ts`, apply React effect messages before the next step, dispatch React interactions through the original host path, handle checkbox and radio activation, and unmount the React root when a scene ends.
 - `sceneCompat.ts` copies the private helpers the runner imports. The manifest records the upstream text each helper must keep matching.
 
+The copied role query treats a present `disabled` attribute with an empty value as disabled, matching React DOM. React views use this query through the adapted role exports. Foldkit views keep Foldkit's own queries. Scene session cleanup uses Effect to preserve both failures when execution and unmounting fail together.
+
 `bun run --filter=react-foldkit check:vendor` runs as part of lint. It fails when the installed Foldkit version, any upstream file hash, the Scene export list, the license, or the patched output differs from the record.
 
 ## Upgrade Foldkit

@@ -361,7 +361,7 @@ export type { Program } from "./program";
 
 ```ts
 export * from "foldkit/scene";
-export { scene, inside, click, doubleClick, contextMenu, pointerDown, pointerUp, hover, focus, blur, focusEnter, focusLeave, submit, change, changeFiles, dropFiles, type, typeContentEditable, beforeInput, keydown, } from "./scene/index";
+export { scene, inside, getByRole, getAllByRole, role, all, click, doubleClick, contextMenu, pointerDown, pointerUp, hover, focus, blur, focusEnter, focusLeave, submit, change, changeFiles, dropFiles, type, typeContentEditable, beforeInput, keydown, } from "./scene/index";
 ```
 
 ## dist/scene/index.d.ts
@@ -369,6 +369,7 @@ export { scene, inside, click, doubleClick, contextMenu, pointerDown, pointerUp,
 ```ts
 import * as FoldkitScene from "foldkit/scene";
 export * from "foldkit/scene";
+export { getByRole, getAllByRole, role, all } from "./sceneQueries";
 export declare const scene: typeof FoldkitScene.scene;
 export declare const inside: typeof FoldkitScene.inside;
 export { click, doubleClick, contextMenu, pointerDown, pointerUp, hover, focus, blur, focusEnter, focusLeave, submit, change, changeFiles, dropFiles, type, typeContentEditable, beforeInput, keydown, } from "./sceneInteractions";
@@ -398,7 +399,7 @@ export declare const BoundSceneViewTypeId: unique symbol;
 export declare function bindSceneView<Model, Message>(application: {
   readonly [SceneSourceTypeId]: SourceContext<Model, Message>;
 }, Component: React.ComponentType): SceneView<Model, Message>;
-declare const renderer: Reconciler.Reconciler<HostContainer, HostContainer | HostElement, HostText, HostElement | HostText, unknown, HostElement | HostText>;
+declare const renderer: Reconciler.Reconciler<HostContainer | HostElement, HostContainer | HostElement, HostText, HostElement | HostText, unknown, HostElement | HostText>;
 type Renderer = typeof renderer;
 export declare function runSceneInteraction<A>(callback: () => A): A;
 interface RenderState {
@@ -426,15 +427,11 @@ export {};
 ## dist/scene/sceneEvent.d.ts
 
 ```ts
+import type React from "react";
 import type { HostElement } from "./sceneHost";
-export interface HostEvent {
+export interface HostEvent extends Pick<React.SyntheticEvent, "type" | "defaultPrevented" | "preventDefault" | "stopPropagation" | "isDefaultPrevented" | "isPropagationStopped"> {
   readonly target: HostElement;
   currentTarget: HostElement;
-  readonly defaultPrevented: boolean;
-  preventDefault(): void;
-  stopPropagation(): void;
-  readonly propagationStopped: boolean;
-  resetPropagation(): void;
 }
 export declare function sceneListeners(node: HostElement): Record<string, (event: HostEvent) => void>;
 export declare function sceneEventNames(eventName: string, target: HostElement): ReadonlyArray<string>;
@@ -442,7 +439,7 @@ export declare function hostPath(target: HostElement): ReadonlyArray<HostElement
 export declare function hasSceneListener(target: HostElement, eventName: string): boolean;
 export type HostUpdate = {
   readonly _tag: "Value";
-  readonly value: unknown;
+  readonly value: string;
 } | {
   readonly _tag: "Files";
   readonly files: unknown;
@@ -450,9 +447,7 @@ export type HostUpdate = {
   readonly _tag: "Text";
   readonly text: string;
 };
-export declare function makeHostEvent(target: HostElement, fields: Readonly<Record<string, unknown>>): HostEvent;
-export declare function invokeHandlers(path: ReadonlyArray<HostElement>, eventName: string, event: HostEvent): void;
-export declare function dispatchSceneEvent(target: HostElement, eventName: string, fields: Readonly<Record<string, unknown>>): HostEvent;
+export declare function dispatchSceneEvent(target: HostElement, eventName: string, fields: Readonly<Record<string, unknown>>, additionalEvents?: ReadonlyArray<string>): boolean;
 export declare function hostFromElm(elm: unknown): HostElement | undefined;
 ```
 
@@ -467,18 +462,20 @@ export interface HostProps extends Record<string, unknown> {
 export interface HostText {
   text: string;
 }
+export type HostNamespace = "html" | "svg";
 export interface HostElement {
+  readonly namespace: HostNamespace;
   tag: string;
   readonly type: string;
   readonly name: string;
   readonly id: string;
   readonly dataset: Readonly<Record<string, string>>;
   props: HostProps;
-  attributes: Record<string, string>;
+  attributes: Record<string, string | null>;
   children: Array<HostElement | HostText>;
   parent?: HostElement;
   readonly tagName: string;
-  value?: unknown;
+  value?: string;
   files?: unknown;
   checked?: boolean;
   selected?: boolean;
@@ -499,7 +496,7 @@ export interface HostContainer {
 export declare function hostString(value: unknown): string;
 export declare const eventProps: Readonly<Record<string, string>>;
 export declare const isTextInput: (node: HostElement) => boolean;
-export declare function htmlAttributeName(name: string): string;
+export declare const htmlAttributeName: (name: string, namespace?: HostNamespace) => string;
 export type HostProp = {
   readonly _tag: "ClassList";
   readonly value: unknown;
@@ -512,12 +509,13 @@ export type HostProp = {
   readonly _tag: "Attribute";
   readonly reactName: string;
   readonly name: string;
-  readonly value: unknown;
+  readonly value: string;
 };
-export declare function hostProp(name: string, value: unknown): Option.Option<HostProp>;
+export declare function hostProp(name: string, value: unknown, namespace?: HostNamespace): Option.Option<HostProp>;
 export declare function styleDeclarations(value: {
   readonly [key: string]: unknown;
 }): Record<string, string>;
+export declare function hostAttributes(node: HostElement): Record<string, string>;
 ```
 
 ## dist/scene/sceneInput.d.ts
@@ -562,6 +560,16 @@ export declare const type: typeof FoldkitScene.type;
 export declare const typeContentEditable: typeof FoldkitScene.typeContentEditable;
 export declare const beforeInput: typeof FoldkitScene.beforeInput;
 export declare const keydown: typeof FoldkitScene.keydown;
+```
+
+## dist/scene/sceneQueries.d.ts
+
+```ts
+import * as FoldkitScene from "foldkit/scene";
+export declare const getByRole: typeof FoldkitScene.getByRole;
+export declare const getAllByRole: typeof FoldkitScene.getAllByRole;
+export declare const role: typeof FoldkitScene.role;
+export declare const all: typeof FoldkitScene.all;
 ```
 
 ## dist/scene/sceneSettle.d.ts

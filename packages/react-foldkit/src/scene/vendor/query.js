@@ -398,7 +398,7 @@ const disabledMatches = (expected) => (vnode) => {
     if (Option.isSome(ariaValue)) {
         return ariaValue.value === globalThis.String(expected);
     }
-    const disabled = pipe(vnode, lookupAttribute('disabled'), Option.exists(Boolean));
+    const disabled = pipe(vnode, lookupAttribute('disabled'), Option.exists(value => value !== false));
     return disabled === expected;
 };
 const currentMatches = (expected) => (vnode) => {

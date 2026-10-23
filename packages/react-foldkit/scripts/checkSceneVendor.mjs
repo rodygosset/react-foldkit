@@ -53,7 +53,7 @@ scene = replaceOnce(scene,
 	"Effect import")
 scene = replaceOnce(scene,
 	"import { kebabToPascal } from '../customElement/index.js';\nimport { serializedStylePropertyName } from '../domReflection.js';\nimport { FOLDKIT_MOUNT_KEY, FileHandlerSymbol, __clearRuntime as clearHtmlRuntime, __htmlBuilder as htmlBuilderFor, __setRuntime as setHtmlRuntime, } from '../html/index.js';\nimport { MountTracker } from '../mount/index.js';\nimport { Dispatch } from '../runtime/dispatch.js';\nimport { tagNameFromSelector } from '../tagName.js';",
-	"import { kebabToPascal, serializedStylePropertyName, FOLDKIT_MOUNT_KEY, FileHandlerSymbol, tagNameFromSelector } from './sceneCompat.js';\nimport { createSceneRenderSession, disposeSceneRenderSession, isBoundSceneView, renderBoundSceneView, getSceneEventHandler } from '../sceneBinding.js';\nimport { runClick } from '../sceneClick.js';\nimport { settleSimulation } from '../sceneSettle.js';",
+	"import { kebabToPascal, serializedStylePropertyName, FOLDKIT_MOUNT_KEY, FileHandlerSymbol, tagNameFromSelector } from './sceneCompat.js';\nimport { createSceneRenderSession, isBoundSceneView, renderBoundSceneView, getSceneEventHandler } from '../sceneBinding.js';\nimport { runClick } from '../sceneClick.js';\nimport { settleSimulation } from '../sceneSettle.js';\nimport { runSceneSession } from '../sceneSession.js';",
 	"private helper import")
 const renderViewStart = scene.indexOf("const renderView = (viewFn, model, dispatch) => {")
 const renderViewEnd = scene.indexOf("\nconst isDocument", renderViewStart)
@@ -326,7 +326,7 @@ scene = replaceOnce(scene,
 	"scene session state")
 scene = replaceOnce(scene,
 	"    const result = runSteps(seed, steps);\n    /* eslint-enable @typescript-eslint/consistent-type-assertions */\n    const internal = toInternal(result);\n    assertAllCommandsResolved(internal.commands);\n    assertAllMountsResolved(internal.mounts);\n    assertAllUnmountsAcknowledged(unacknowledgedEndedMountsOf(internal.mountSlots));\n    assertNoUnacknowledgedIgnored(internal);",
-	"    try {\n        const result = runSteps(seed, steps);\n        /* eslint-enable @typescript-eslint/consistent-type-assertions */\n        const internal = toInternal(result);\n        assertAllCommandsResolved(internal.commands);\n        assertAllMountsResolved(internal.mounts);\n        assertAllUnmountsAcknowledged(unacknowledgedEndedMountsOf(internal.mountSlots));\n        assertNoUnacknowledgedIgnored(internal);\n    } finally {\n        disposeSceneRenderSession(sceneRenderSession);\n    }",
+	"    runSceneSession(sceneRenderSession, () => {\n        const result = runSteps(seed, steps);\n        /* eslint-enable @typescript-eslint/consistent-type-assertions */\n        const internal = toInternal(result);\n        assertAllCommandsResolved(internal.commands);\n        assertAllMountsResolved(internal.mounts);\n        assertAllUnmountsAcknowledged(unacknowledgedEndedMountsOf(internal.mountSlots));\n        assertNoUnacknowledgedIgnored(internal);\n    });",
 	"scene cleanup")
 
 const importPatches = {
@@ -337,6 +337,7 @@ const importPatches = {
 	"query.js": [
 		["import { StringExt } from '../effectExtensions/index.js';", "import { StringExt } from './sceneCompat.js';"],
 		["import { modifyFields } from '../struct/index.js';", "import { modifyFields } from 'foldkit/struct';"],
+		["const disabled = pipe(vnode, lookupAttribute('disabled'), Option.exists(Boolean));", "const disabled = pipe(vnode, lookupAttribute('disabled'), Option.exists(value => value !== false));"],
 	],
 	"matchers.js": [
 		["import { serializedStylePropertyName } from '../domReflection.js';", "import { serializedStylePropertyName } from './sceneCompat.js';"],

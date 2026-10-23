@@ -1,9 +1,10 @@
 import { Array, Effect, Equal, Function, Match, Option, Predicate, String, pipe, } from 'effect';
 import { dual } from 'effect/Function';
 import { kebabToPascal, serializedStylePropertyName, FOLDKIT_MOUNT_KEY, FileHandlerSymbol, tagNameFromSelector } from './sceneCompat.js';
-import { createSceneRenderSession, disposeSceneRenderSession, isBoundSceneView, renderBoundSceneView, getSceneEventHandler } from '../sceneBinding.js';
+import { createSceneRenderSession, isBoundSceneView, renderBoundSceneView, getSceneEventHandler } from '../sceneBinding.js';
 import { runClick } from '../sceneClick.js';
 import { settleSimulation } from '../sceneSettle.js';
+import { runSceneSession } from '../sceneSession.js';
 import { assertAllCommandsResolved, assertAllMountsResolved, assertAllUnmountsAcknowledged, assertExactCommands, assertExactMounts, assertHasCommands, assertHasMounts, assertNoUnacknowledgedUnmounts, assertNoUnresolvedCommands, assertNoUnresolvedMounts, assertResolveUnambiguous, assertZeroCommands, assertZeroMounts, formatCommand, formatMatcher, formatMountList, formatMountMatcher, mountMatches, resolveAllExactInternal, resolveAllInternal, resolveByMatcher, resolveMountByMatcher, } from './internal.js';
 import { accessibleDescription, accessibleName, ancestorsOf, attr, isHidden, resolveTarget, selector, textContent, within, } from './query.js';
 import { allAltText, allDisplayValue, allLabel, allPlaceholder, allRole, allSelector, allTestId, allText, allTitle, } from './query.js';
@@ -1373,7 +1374,7 @@ export const scene = (config, ...steps) => {
         lastInteractionOutcome: NotRun,
         maybeUnacknowledgedIgnored: Option.none(),
     };
-    try {
+    runSceneSession(sceneRenderSession, () => {
         const result = runSteps(seed, steps);
         /* eslint-enable @typescript-eslint/consistent-type-assertions */
         const internal = toInternal(result);
@@ -1381,7 +1382,5 @@ export const scene = (config, ...steps) => {
         assertAllMountsResolved(internal.mounts);
         assertAllUnmountsAcknowledged(unacknowledgedEndedMountsOf(internal.mountSlots));
         assertNoUnacknowledgedIgnored(internal);
-    } finally {
-        disposeSceneRenderSession(sceneRenderSession);
-    }
+    });
 };

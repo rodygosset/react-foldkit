@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render } from "@testing-library/react"
-import { Schema } from "effect"
+import { Option, Schema } from "effect"
 import { defineMessageUnion } from "foldkit/message"
 import React from "react"
 import { afterEach, describe, expect, it } from "vitest"
@@ -67,7 +67,12 @@ describe.each(["React DOM", "Scene"] as const)("%s host contract", function (sur
 
 	it("preserves SVG case and uses explicit SVG aliases", function () {
 		const element = mount(() => (
-			<svg viewBox="0 0 10 10" preserveAspectRatio="xMidYMid" strokeWidth={2} fillOpacity={0.5} />
+			<svg
+				viewBox="0 0 10 10"
+				preserveAspectRatio="xMidYMid"
+				strokeWidth={2}
+				fillOpacity={0.5}
+			/>
 		))
 		expect(element.getAttribute("viewBox")).toBe("0 0 10 10")
 		expect(element.getAttribute("preserveAspectRatio")).toBe("xMidYMid")
@@ -78,9 +83,19 @@ describe.each(["React DOM", "Scene"] as const)("%s host contract", function (sur
 
 	it("exposes numeric and empty input and textarea values as strings", function () {
 		for (const View of [
-			() => <input value={42} readOnly />,
+			() => (
+				<input
+					value={42}
+					readOnly
+				/>
+			),
 			() => <input defaultValue={42} />,
-			() => <textarea value={42} readOnly />,
+			() => (
+				<textarea
+					value={42}
+					readOnly
+				/>
+			),
 			() => <textarea defaultValue={42} />,
 		]) {
 			expect((mount(View) as HTMLInputElement).value).toBe("42")
@@ -91,25 +106,85 @@ describe.each(["React DOM", "Scene"] as const)("%s host contract", function (sur
 	})
 
 	it("keeps a multiple select value scalar while selecting all requested options", function () {
+		for (const props of [{ defaultValue: ["a", "b"] }, { value: ["a", "b"], onChange: () => undefined }]) {
+			const element = mount(() => (
+				<select
+					multiple
+					{...props}
+				>
+					<option value="a">Alpha</option>
+					<option value="b">Beta</option>
+				</select>
+			)) as HTMLSelectElement
+			expect(element.value).toBe("a")
+			expect(Array.from(element.children).map((option) => (option as HTMLOptionElement).selected)).toEqual([
+				true,
+				true,
+			])
+		}
+	})
+
+	it("normalizes numeric select values", function () {
+		for (const props of [{ defaultValue: 42 }, { value: 42, onChange: () => undefined }]) {
+			const element = mount(() => (
+				<select {...props}>
+					<option value={42}>Answer</option>
+				</select>
+			)) as HTMLSelectElement
+			expect(element.value).toBe("42")
+		}
+	})
+
+	it("initializes select values before layout effects observe the ref", function () {
+		const seen: Array<string | undefined> = []
+		function View() {
+			const ref = React.useRef<HTMLSelectElement>(null)
+			React.useLayoutEffect(function observeSelectValue() {
+				seen.push(ref.current?.value)
+			}, [])
+			return (
+				<select
+					ref={ref}
+					multiple
+					defaultValue={["a", "b"]}
+				>
+					<option value="a">Alpha</option>
+					<option value="b">Beta</option>
+				</select>
+			)
+		}
+		mount(View)
+		expect(seen).toEqual(["a"])
+	})
+
+	it("keeps imperative attribute edits visible", function () {
 		const element = mount(() => (
-			<select multiple defaultValue={["a", "b"]}>
-				<option value="a">Alpha</option>
-				<option value="b">Beta</option>
-			</select>
-		)) as HTMLSelectElement
-		expect(element.value).toBe("a")
-		expect(Array.from(element.children).map((option) => (option as HTMLOptionElement).selected)).toEqual([
-			true,
-			true,
-		])
+			<button
+				title="before"
+				tabIndex={0}
+			/>
+		))
+		element.setAttribute("title", "after")
+		element.removeAttribute("tabindex")
+		expect(element.getAttribute("title")).toBe("after")
+		expect(element.getAttribute("tabindex")).toBeNull()
 	})
 })
 
 it("uses normalized HTML and SVG attributes in Scene snapshots and selectors", function () {
 	const { vnode } = sceneElement(() => (
 		<main>
-			<button autoCapitalize="words" tabIndex={0} disabled={false}>Enabled</button>
-			<svg viewBox="0 0 10 10" strokeWidth={2} />
+			<button
+				autoCapitalize="words"
+				tabIndex={0}
+				disabled={false}
+			>
+				Enabled
+			</button>
+			<svg
+				viewBox="0 0 10 10"
+				strokeWidth={2}
+			/>
 		</main>
 	))
 	const children = vnode.children as Array<{ data?: { attrs?: Record<string, unknown> } }>
@@ -117,7 +192,17 @@ it("uses normalized HTML and SVG attributes in Scene snapshots and selectors", f
 	expect(children[0]?.data?.attrs).not.toHaveProperty("disabled")
 	expect(children[1]?.data?.attrs).toMatchObject({ viewBox: "0 0 10 10", "stroke-width": "2" })
 	Scene.scene(
-		{ update, view: bindSceneView(App, () => <button autoCapitalize="words" disabled={false}>Enabled</button>) },
+		{
+			update,
+			view: bindSceneView(App, () => (
+				<button
+					autoCapitalize="words"
+					disabled={false}
+				>
+					Enabled
+				</button>
+			)),
+		},
 		Scene.given(""),
 		Scene.expect(Scene.selector('[autocapitalize="words"]:not([disabled])')).toExist(),
 		Scene.expect(Scene.role("button", { disabled: false })).toExist()
@@ -127,7 +212,14 @@ it("uses normalized HTML and SVG attributes in Scene snapshots and selectors", f
 it("reads mapped attributes from the current target inside handlers", function () {
 	const seen: Array<string | null> = []
 	function View() {
-		return <button tabIndex={0} onKeyDown={(event) => seen.push(event.currentTarget.getAttribute("tabindex"))}>Go</button>
+		return (
+			<button
+				tabIndex={0}
+				onKeyDown={(event) => seen.push(event.currentTarget.getAttribute("tabindex"))}
+			>
+				Go
+			</button>
+		)
 	}
 	const { unmount, getByRole } = render(<View />)
 	fireEvent.keyDown(getByRole("button"), { key: "Enter" })
@@ -143,7 +235,20 @@ it("reads mapped attributes from the current target inside handlers", function (
 
 it("restores rejected numeric controlled values to strings", function () {
 	function View() {
-		return <main><input aria-label="Input" value={42} onChange={() => undefined} /><textarea aria-label="Textarea" value={42} onChange={() => undefined} /></main>
+		return (
+			<main>
+				<input
+					aria-label="Input"
+					value={42}
+					onChange={() => undefined}
+				/>
+				<textarea
+					aria-label="Textarea"
+					value={42}
+					onChange={() => undefined}
+				/>
+			</main>
+		)
 	}
 	const dom = render(<View />)
 	for (const name of ["Input", "Textarea"]) {
@@ -166,8 +271,113 @@ it("restores rejected numeric controlled values to strings", function () {
 
 it("finds disabled Scene buttons and rejects clicking them", function () {
 	let clicks = 0
-	const config = { update, view: bindSceneView(App, () => <button disabled onClick={() => clicks++}>Disabled</button>) }
+	const config = {
+		update,
+		view: bindSceneView(App, () => (
+			<button
+				disabled
+				onClick={() => clicks++}
+			>
+				Disabled
+			</button>
+		)),
+	}
 	Scene.scene(config, Scene.given(""), Scene.expect(Scene.role("button", { disabled: true })).toExist())
 	expect(() => Scene.scene(config, Scene.given(""), Scene.click(Scene.role("button")))).toThrow(/disabled/)
 	expect(clicks).toBe(0)
+})
+
+it("keeps imperative attribute edits in Scene selectors after a handler", function () {
+	function View() {
+		return (
+			<button
+				title="before"
+				tabIndex={0}
+				onKeyDown={function (event) {
+					event.currentTarget.setAttribute("title", "after")
+					event.currentTarget.setAttribute("class", "changed")
+					event.currentTarget.removeAttribute("tabindex")
+				}}
+			>
+				Go
+			</button>
+		)
+	}
+	Scene.scene(
+		{ update, view: bindSceneView(App, View) },
+		Scene.given(""),
+		Scene.keydown(Scene.role("button"), "Enter"),
+		Scene.expectIgnored(),
+		Scene.expect(Scene.selector('.changed[title="after"]:not([tabindex])')).toExist()
+	)
+})
+
+it("uses the HTML namespace inside an SVG foreignObject", function () {
+	function View() {
+		return (
+			<svg>
+				<foreignObject>
+					<button
+						autoCapitalize="words"
+						tabIndex={0}
+					/>
+				</foreignObject>
+			</svg>
+		)
+	}
+	const dom = render(<View />).getByRole("button")
+	const { vnode } = sceneElement(View)
+	const match = Scene.getByRole("button")(vnode)
+	if (Option.isNone(match)) throw new Error("Expected a button inside the SVG foreignObject")
+	const button = match.value.elm as unknown as HostElement
+	expect(button.getAttribute("autocapitalize")).toBe(dom.getAttribute("autocapitalize"))
+	expect(button.getAttribute("tabindex")).toBe(dom.getAttribute("tabindex"))
+})
+
+it("updates controlled host values before layout effects read them", function () {
+	const seen: Array<ReadonlyArray<string>> = []
+	function View() {
+		const [value, setValue] = React.useState(1)
+		const input = React.useRef<HTMLInputElement>(null)
+		const select = React.useRef<HTMLSelectElement>(null)
+		React.useLayoutEffect(
+			function readValues() {
+				seen.push([input.current!.value, select.current!.value])
+			},
+			[value]
+		)
+		return (
+			<main>
+				<input
+					ref={input}
+					value={value}
+					readOnly
+				/>
+				<select
+					ref={select}
+					value={value}
+					onChange={() => undefined}
+				>
+					<option value={1}>One</option>
+					<option value={2}>Two</option>
+				</select>
+				<button onClick={() => setValue(2)}>Next</button>
+			</main>
+		)
+	}
+	const dom = render(<View />)
+	fireEvent.click(dom.getByRole("button"))
+	dom.unmount()
+	Scene.scene(
+		{ update, view: bindSceneView(App, View) },
+		Scene.given(""),
+		Scene.click(Scene.role("button")),
+		Scene.expectIgnored()
+	)
+	expect(seen).toEqual([
+		["1", "1"],
+		["2", "2"],
+		["1", "1"],
+		["2", "2"],
+	])
 })
