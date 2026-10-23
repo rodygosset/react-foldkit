@@ -28,7 +28,7 @@ export interface HostElement {
 	files?: unknown
 	checked?: boolean
 	selected?: boolean
-	selectedValues?: ReadonlyArray<string>
+	selectSnapshot?: ReadonlyArray<HostElement>
 	textContent?: string
 	innerText?: string
 	focus: () => void
