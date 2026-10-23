@@ -18,7 +18,7 @@ import {
 import * as InitCommand from "../internal/initCommand"
 import { CurrentInterruptRegistry, makeInterruptRegistry } from "../internal/interrupt"
 import type * as ManagedResource from "foldkit/managedResource"
-import type { RemainingServices, RequireManagedRecord } from "../internal/managedResourceTypes"
+import type { RemainingServices, RequireManagedRecord, StoreResources } from "../internal/managedResourceTypes"
 import { makeManagedResources } from "./managedResources"
 import type * as Subscription from "foldkit/subscription"
 import type * as Update from "foldkit/update"
@@ -60,8 +60,8 @@ export type Program<
 	 * acquisition, release, and lifecycle Messages. Each activation owns separate live values.
 	 * A record supplies its services only when it is present and its keys are known.
 	 */
-	managedResources?: Managed & ManagedResource.ManagedResources<Model, Message>
-} & RequireManagedRecord<Managed & ManagedResource.ManagedResources<Model, Message>>
+	managedResources?: StoreResources<Model, Message, Managed>
+} & RequireManagedRecord<StoreResources<Model, Message, Managed>>
 
 /**
  * A Program with a Layer that provides the services its Commands and Subscriptions need.

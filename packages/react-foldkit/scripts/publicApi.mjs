@@ -173,7 +173,7 @@ function referenceAndInventory() {
 						const field = checker.typeToString(
 							checker.getTypeOfSymbolAtLocation(member, declaration),
 							declaration,
-							ts.TypeFormatFlags.NoTruncation
+							ts.TypeFormatFlags.NoTruncation | ts.TypeFormatFlags.UseAliasDefinedOutsideCurrentScope
 						)
 						const heading = "- `" + member.name + "`" + (docs ? " " + docs.replace(/\n/g, "\n  ") : "")
 						reference.push(heading + "\n\n  ```ts\n  " + field + "\n  ```", "")

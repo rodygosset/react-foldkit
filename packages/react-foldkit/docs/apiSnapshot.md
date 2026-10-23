@@ -297,6 +297,7 @@ export type ManagedRegistration<Managed> = {
 } & ({} extends Managed ? {} : {
   readonly managedResources: Managed;
 });
+export type StoreResources<Model, Message, Managed extends ManagedResource.ManagedResources<Model, Message>> = Managed & ManagedResource.ManagedResources<Model, Message>;
 export type RequireManagedRecord<Managed> = {} extends NoInfer<Managed> ? {} : {
   readonly managedResources: NoInfer<Managed>;
 };
@@ -670,15 +671,15 @@ export declare const browserScheduler: Scheduler.MixedScheduler;
 ```ts
 import { Cause, Context, Effect, Exit, Layer, Option, Result, Schema, Scope } from "effect";
 import type * as ManagedResource from "foldkit/managedResource";
-import type { RemainingServices, RequireManagedRecord } from "../internal/managedResourceTypes";
+import type { RemainingServices, RequireManagedRecord, StoreResources } from "../internal/managedResourceTypes";
 import type * as Subscription from "foldkit/subscription";
 import type * as Update from "foldkit/update";
 export type Program<Model, Message, R = never, Managed extends ManagedResource.ManagedResources<Model, Message> = {}> = {
   update: (model: Model, message: Message) => Update.Return<Model, Message, R>;
   subscriptions?: Subscription.Subscriptions<Model, Message, R>;
   onCrash?: (cause: Cause.Cause<unknown>, triggeringMessage: Option.Option<Message>) => void;
-  managedResources?: Managed & ManagedResource.ManagedResources<Model, Message>;
-} & RequireManagedRecord<Managed & ManagedResource.ManagedResources<Model, Message>>;
+  managedResources?: StoreResources<Model, Message, Managed>;
+} & RequireManagedRecord<StoreResources<Model, Message, Managed>>;
 export type Config<Model, Message, R = never, Managed extends ManagedResource.ManagedResources<Model, Message> = {}> = [
   RemainingServices<R, Managed>
 ] extends [never] ? Program<Model, Message, R, Managed> & {

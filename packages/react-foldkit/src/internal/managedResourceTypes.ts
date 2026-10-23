@@ -11,6 +11,13 @@ export type ManagedRegistration<Managed> = {
 	readonly managedResources?: Managed
 } & ({} extends Managed ? {} : { readonly managedResources: Managed })
 
+// Named once so Store.boot can infer Message from the record, and so the docs can print one name.
+export type StoreResources<
+	Model,
+	Message,
+	Managed extends ManagedResource.ManagedResources<Model, Message>,
+> = Managed & ManagedResource.ManagedResources<Model, Message>
+
 // NoInfer keeps this check from becoming a second inference site for Managed.
 export type RequireManagedRecord<Managed> =
 	{} extends NoInfer<Managed> ? {} : { readonly managedResources: NoInfer<Managed> }

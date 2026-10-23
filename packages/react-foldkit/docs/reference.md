@@ -491,7 +491,7 @@ it when live work first needs it.
   A record supplies its services only when it is present and its keys are known.
 
   ```ts
-  (Managed & Record<string, ManagedResource.ManagedResourceConfig<Model, Message>> & { readonly __managedResourceServices?: undefined; }) | (((Managed & Record<string, ManagedResource.ManagedResourceConfig<Model, Message>> & { readonly __managedResourceServices?: undefined; }) | undefined) & NoInfer<Managed & Record<string, ManagedResource.ManagedResourceConfig<Model, Message>> & { readonly __managedResourceServices?: undefined; }>) | undefined
+  StoreResources<Model, Message, Managed> | ((StoreResources<Model, Message, Managed> | undefined) & NoInfer<StoreResources<Model, Message, Managed>>) | undefined
   ```
 
 - `resources` Supplies services not provided by Managed Resources. Live work finishes before the Layer
@@ -546,7 +546,7 @@ surrounding Effect. Use `Config` when the Store should build its own service Lay
   A record supplies its services only when it is present and its keys are known.
 
   ```ts
-  (Managed & Record<string, ManagedResource.ManagedResourceConfig<Model, Message>> & { readonly __managedResourceServices?: undefined; }) | (((Managed & Record<string, ManagedResource.ManagedResourceConfig<Model, Message>> & { readonly __managedResourceServices?: undefined; }) | undefined) & NoInfer<Managed & Record<string, ManagedResource.ManagedResourceConfig<Model, Message>> & { readonly __managedResourceServices?: undefined; }>) | undefined
+  StoreResources<Model, Message, Managed> | ((StoreResources<Model, Message, Managed> | undefined) & NoInfer<StoreResources<Model, Message, Managed>>) | undefined
   ```
 
 ### Reentrant
@@ -962,7 +962,7 @@ its Provider to give child views a lifted source without starting another Store.
   while the Provider's source is. Throws outside the matching Provider.
 
   ```ts
-  () => import("../application").Send<Message>
+  () => Send<Message>
   ```
 
 - `useOptionalModel` Reads `Some(Model)` inside the matching Provider and `None` outside it.
