@@ -1,4 +1,5 @@
 import { Array, Context, Effect, Function, Layer, Queue, Ref, Schema, Scope } from "effect"
+import type * as ManagedResource from "foldkit/managedResource"
 import * as Port from "foldkit/port"
 import { embed, makeElement } from "foldkit/runtime"
 import * as Subscription from "foldkit/subscription"
@@ -92,6 +93,7 @@ export interface Program<
 		message: MessageSchema["Type"]
 	) => Update.Return<ModelSchema["Type"], MessageSchema["Type"], R>
 	readonly subscriptions?: Subscription.Subscriptions<ModelSchema["Type"], MessageSchema["Type"], R>
+	readonly managedResources?: ManagedResource.ManagedResources<ModelSchema["Type"], MessageSchema["Type"]>
 	/** Services for Commands and Subscriptions. Each runtime builds it as its own resources Layer. */
 	readonly resources: Layer.Layer<R>
 	/** Projects each update into the value its `Updated` event records. */
@@ -147,12 +149,13 @@ export const storeRuntime: Runtime = <
 ) =>
 	Effect.gen(function* () {
 		const { record } = yield* Trace
-		const store = yield* Store.make(
+		const store = yield* Store.make<ModelSchema["Type"], MessageSchema["Type"], R>(
 			{
 				update: traced(record, program),
 				...(program.subscriptions === undefined ? {} : { subscriptions: program.subscriptions }),
 				onCrash: (_cause, message) => record(Event.cases.Crashed.make({ message })),
 				resources: program.resources,
+				managedResources: program.managedResources,
 			},
 			program.init()
 		)
@@ -195,6 +198,7 @@ export const foldkitRuntime: Runtime = <
 						},
 						crash: { report: ({ message }) => record(Event.cases.Crashed.make({ message })) },
 						resources: program.resources,
+						managedResources: program.managedResources,
 						ports,
 						container,
 					})

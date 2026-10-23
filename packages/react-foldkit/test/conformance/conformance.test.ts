@@ -29,6 +29,9 @@ describe("conformance with the Foldkit runtime", function () {
 	it.live("starts, keeps, restarts, and stops Subscriptions from their dependencies", () =>
 		conforms(Cases.subscriptionLifecycle)
 	)
+	it.live("matches Managed Resource acquisition, replacement, release, and failure recovery", () =>
+		conforms(Cases.managedResources)
+	)
 	it.live("delivers Subscription Messages in emission order", () => conforms(Cases.subscriptionMessages))
 	it.live("interrupts running Commands and reports a missing one", () => conforms(Cases.interrupt))
 	it.live("loads, replaces, and revalidates a Query", () => conforms(Cases.query))

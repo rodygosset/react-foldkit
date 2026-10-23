@@ -38,6 +38,8 @@ export type { Application, CrashConfig, CrashContext, ModelHooks, Options, Provi
 
 ```ts
 import { Cause, Effect, Option, Schema } from "effect";
+import type * as ManagedResource from "foldkit/managedResource";
+import type { RemainingServices } from "../internal/managedResourceTypes";
 import type * as Update from "foldkit/update";
 import React from "react";
 import type { ModelSource } from "../modelSource";
@@ -58,12 +60,12 @@ export interface CrashConfig<Model, Message> {
   }) => React.ReactNode;
   readonly report?: (context: CrashContext<Model, Message>) => Effect.Effect<void, unknown>;
 }
-export type Options<Model, Message, R = never, MessageSchema extends Schema.Codec<Message, unknown> = Schema.Codec<Message>> = Omit<ReactStore.Config<Model, Message, R, MessageSchema>, "update" | "subscriptions" | "devTools"> & {
+export type Options<Model, Message, R = never, MessageSchema extends Schema.Codec<Message, unknown> = Schema.Codec<Message>, Managed extends ManagedResource.ManagedResources<Model, Message> = {}> = Omit<ReactStore.Config<Model, Message, R, MessageSchema, Managed>, "update" | "subscriptions" | "managedResources" | "devTools"> & {
   readonly crash?: CrashConfig<Model, Message>;
   readonly validateInit?: boolean;
-  readonly devTools?: ReactStore.Config<Model, Message, R, MessageSchema>["devTools"];
+  readonly devTools?: ReactStore.Config<Model, Message, R, MessageSchema, Managed>["devTools"];
 };
-type OptionsArgument<Model, Message, R, MessageSchema extends Schema.Codec<Message, unknown> = Schema.Codec<Message>> = [R] extends [never] ? [options?: Options<Model, Message, R, MessageSchema>] : [options: Options<Model, Message, R, MessageSchema>];
+type OptionsArgument<Model, Message, R, MessageSchema extends Schema.Codec<Message, unknown>, Managed extends ManagedResource.ManagedResources<Model, Message>> = [RemainingServices<R, Managed>] extends [never] ? [options?: Options<Model, Message, R, MessageSchema, Managed>] : [options: Options<Model, Message, R, MessageSchema, Managed>];
 export type ProviderProps<Model, Message, R = never, HasInit extends boolean = false> = {
   readonly children?: React.ReactNode;
   readonly crash?: CrashConfig<Model, Message>;
@@ -110,10 +112,10 @@ export declare function modelHooks<Model, Message>(Context: SourceContext<Model,
 type Tagged = {
   readonly _tag: string;
 };
-export declare function define<ModelSchema extends Schema.Constraint, MessageSchema extends Schema.Codec<Tagged, unknown>, R = never>(program: Program<ModelSchema, MessageSchema, never, R> & {
+export declare function define<ModelSchema extends Schema.Constraint, MessageSchema extends Schema.Codec<Tagged, unknown>, R = never, Managed extends ManagedResource.ManagedResources<ModelSchema["Type"], MessageSchema["Type"]> = {}>(program: Program<ModelSchema, MessageSchema, never, R, Managed> & {
   readonly init: () => Update.Return<ModelSchema["Type"], MessageSchema["Type"], R>;
-}, ...options: OptionsArgument<ModelSchema["Type"], MessageSchema["Type"], R, MessageSchema>): Application<ModelSchema["Type"], MessageSchema["Type"], R, true>;
-export declare function define<ModelSchema extends Schema.Constraint, MessageSchema extends Schema.Codec<Tagged, unknown>, R = never>(program: Program<ModelSchema, MessageSchema, never, R>, ...options: OptionsArgument<ModelSchema["Type"], MessageSchema["Type"], R, MessageSchema>): Application<ModelSchema["Type"], MessageSchema["Type"], R>;
+}, ...options: OptionsArgument<ModelSchema["Type"], MessageSchema["Type"], R, MessageSchema, Managed>): Application<ModelSchema["Type"], MessageSchema["Type"], R, true>;
+export declare function define<ModelSchema extends Schema.Constraint, MessageSchema extends Schema.Codec<Tagged, unknown>, R = never, Managed extends ManagedResource.ManagedResources<ModelSchema["Type"], MessageSchema["Type"]> = {}>(program: Program<ModelSchema, MessageSchema, never, R, Managed>, ...options: OptionsArgument<ModelSchema["Type"], MessageSchema["Type"], R, MessageSchema, Managed>): Application<ModelSchema["Type"], MessageSchema["Type"], R>;
 ```
 
 ## dist/application/reactStore.d.ts
@@ -121,6 +123,7 @@ export declare function define<ModelSchema extends Schema.Constraint, MessageSch
 ```ts
 import type { Schema } from "effect";
 import { Cause, Duration, Effect, Option, Result, Scope } from "effect";
+import type * as ManagedResource from "foldkit/managedResource";
 import type * as Update from "foldkit/update";
 import * as DevTools from "../devToolsIntegration";
 import * as Store from "../store/store";
@@ -143,7 +146,7 @@ export interface ReactivationContext<Model, Message, R = never> {
   readonly model: Model;
   readonly interrupted: Update.Commands<Message, R>;
 }
-export type Config<Model, Message, R = never, MessageSchema extends Schema.Codec<Message, unknown> = Schema.Codec<Message>> = Store.Config<Model, Message, R> & {
+export type Config<Model, Message, R = never, MessageSchema extends Schema.Codec<Message, unknown> = Schema.Codec<Message>, Managed extends ManagedResource.ManagedResources<Model, Message> = {}> = Store.Config<Model, Message, R, Managed> & {
   readonly onReactivate?: (context: ReactivationContext<Model, Message, R>) => Message;
   readonly retainInactive?: Duration.Input;
   readonly restartInterrupted?: boolean | ((command: Update.Commands<Message, R>[number]) => boolean);
@@ -154,7 +157,7 @@ export declare function make<Model, Message extends {
   readonly _tag: string;
 }, ModelSchema extends Schema.Codec<unknown, unknown> & {
   readonly Type: Model;
-} = Schema.Codec<Model>, MessageSchema extends Schema.Codec<Message, unknown> = Schema.Codec<Message>, R = never>(config: Config<Model, Message, R, MessageSchema>, init: Update.Return<Model, Message, R>, Model?: ModelSchema): ReactStore<Model, Message>;
+} = Schema.Codec<Model>, MessageSchema extends Schema.Codec<Message, unknown> = Schema.Codec<Message>, R = never, Managed extends ManagedResource.ManagedResources<Model, Message> = {}>(config: Config<Model, Message, R, MessageSchema, Managed>, init: Update.Return<Model, Message, R>, Model?: ModelSchema): ReactStore<Model, Message>;
 export {};
 ```
 
@@ -285,6 +288,13 @@ export declare const CurrentInterruptRegistry: Context.Reference<Readonly<{
 export {};
 ```
 
+## dist/internal/managedResourceTypes.d.ts
+
+```ts
+import type * as ManagedResource from "foldkit/managedResource";
+export type RemainingServices<Requirements, Managed> = unknown extends ManagedResource.ServicesOf<Managed> ? Requirements : Exclude<Requirements, ManagedResource.ServicesOf<Managed>>;
+```
+
 ## dist/modelSource.d.ts
 
 ```ts
@@ -321,32 +331,34 @@ export * from "./program/public";
 
 ```ts
 import type { Schema } from "effect";
+import type * as ManagedResource from "foldkit/managedResource";
 import type * as Subscription from "foldkit/subscription";
 import type * as Update from "foldkit/update";
 type Tagged = {
   readonly _tag: string;
 };
-export interface Program<ModelSchema extends Schema.Constraint, MessageSchema extends Schema.Schema<Tagged>, OutMessage = never, R = never> {
+export interface Program<ModelSchema extends Schema.Constraint, MessageSchema extends Schema.Schema<Tagged>, OutMessage = never, R = never, Managed extends ManagedResource.ManagedResources<ModelSchema["Type"], MessageSchema["Type"]> = {}> {
   readonly Model: ModelSchema;
   readonly Message: MessageSchema;
   readonly OutMessage?: Schema.Schema<OutMessage>;
   readonly init?: () => Update.Return<ModelSchema["Type"], MessageSchema["Type"], R>;
   readonly update: (model: ModelSchema["Type"], message: MessageSchema["Type"]) => Update.ReturnWithOutMessage<ModelSchema["Type"], MessageSchema["Type"], OutMessage, R>;
   readonly subscriptions?: Subscription.Subscriptions<ModelSchema["Type"], MessageSchema["Type"], R>;
+  readonly managedResources?: Managed;
 }
-type ApplicationProgram<ModelSchema extends Schema.Constraint, MessageSchema extends Schema.Schema<Tagged>, R> = Omit<Program<ModelSchema, MessageSchema, never, R>, "OutMessage" | "update"> & {
+type ApplicationProgram<ModelSchema extends Schema.Constraint, MessageSchema extends Schema.Schema<Tagged>, R, Managed extends ManagedResource.ManagedResources<ModelSchema["Type"], MessageSchema["Type"]>> = Omit<Program<ModelSchema, MessageSchema, never, R, Managed>, "OutMessage" | "update"> & {
   readonly OutMessage?: undefined;
   readonly update: (model: ModelSchema["Type"], message: MessageSchema["Type"]) => Update.Return<ModelSchema["Type"], MessageSchema["Type"], R>;
 };
-export declare function make<ModelSchema extends Schema.Constraint, MessageSchema extends Schema.Schema<Tagged>, OutMessage, R = never>(program: Program<ModelSchema, MessageSchema, OutMessage, R> & {
+export declare function make<ModelSchema extends Schema.Constraint, MessageSchema extends Schema.Schema<Tagged>, OutMessage, R = never, Managed extends ManagedResource.ManagedResources<ModelSchema["Type"], MessageSchema["Type"]> = {}>(program: Program<ModelSchema, MessageSchema, OutMessage, R, Managed> & {
   readonly OutMessage: Schema.Schema<OutMessage>;
-}): Program<ModelSchema, MessageSchema, OutMessage, R>;
-export declare function make<ModelSchema extends Schema.Constraint, MessageSchema extends Schema.Schema<Tagged>, R = never>(program: ApplicationProgram<ModelSchema, MessageSchema, R> & {
+}): Program<ModelSchema, MessageSchema, OutMessage, R, Managed>;
+export declare function make<ModelSchema extends Schema.Constraint, MessageSchema extends Schema.Schema<Tagged>, R = never, Managed extends ManagedResource.ManagedResources<ModelSchema["Type"], MessageSchema["Type"]> = {}>(program: ApplicationProgram<ModelSchema, MessageSchema, R, Managed> & {
   readonly init: () => Update.Return<ModelSchema["Type"], MessageSchema["Type"], R>;
-}): Program<ModelSchema, MessageSchema, never, R> & {
+}): Program<ModelSchema, MessageSchema, never, R, Managed> & {
   readonly init: () => Update.Return<ModelSchema["Type"], MessageSchema["Type"], R>;
 };
-export declare function make<ModelSchema extends Schema.Constraint, MessageSchema extends Schema.Schema<Tagged>, R = never>(program: ApplicationProgram<ModelSchema, MessageSchema, R>): Program<ModelSchema, MessageSchema, never, R>;
+export declare function make<ModelSchema extends Schema.Constraint, MessageSchema extends Schema.Schema<Tagged>, R = never, Managed extends ManagedResource.ManagedResources<ModelSchema["Type"], MessageSchema["Type"]> = {}>(program: ApplicationProgram<ModelSchema, MessageSchema, R, Managed>): Program<ModelSchema, MessageSchema, never, R, Managed>;
 export {};
 ```
 
@@ -606,6 +618,29 @@ export declare const StringExt: {
 export * from "./store/public";
 ```
 
+## dist/store/managedResources.d.ts
+
+```ts
+import { type Cause, Context, Effect, Option, type PubSub, Ref, type Scope } from "effect";
+import type * as ManagedResource from "foldkit/managedResource";
+export interface ManagedResourceRef<Model, Message> {
+  readonly config: ManagedResource.ManagedResourceConfig<Model, Message>;
+  readonly ref: Ref.Ref<Option.Option<unknown>>;
+}
+interface Host<Model, Message> {
+  readonly initialModel: Model;
+  readonly modelPubSub: PubSub.PubSub<Model>;
+  readonly scope: Scope.Scope;
+  readonly deliver: (message: Message) => void;
+  readonly crash: (cause: Cause.Cause<unknown>, message: Option.Option<Message>) => void;
+}
+export declare const makeManagedResources: <Model, Message, Managed extends ManagedResource.ManagedResources<Model, Message>>(resources: Managed | undefined) => Effect.Effect<{
+  context: Context.Context<ManagedResource.ServicesOf<Managed>>;
+  start: (host: Host<Model, Message>) => Effect.Effect<void>;
+}, never, never>;
+export {};
+```
+
 ## dist/store/public.d.ts
 
 ```ts
@@ -624,17 +659,22 @@ export declare const browserScheduler: Scheduler.MixedScheduler;
 
 ```ts
 import { Cause, Context, Effect, Exit, Layer, Option, Result, Schema, Scope } from "effect";
+import type * as ManagedResource from "foldkit/managedResource";
+import type { RemainingServices } from "../internal/managedResourceTypes";
 import type * as Subscription from "foldkit/subscription";
 import type * as Update from "foldkit/update";
-export type Program<Model, Message, R = never> = {
+export type Program<Model, Message, R = never, Managed extends ManagedResource.ManagedResources<Model, Message> = {}> = {
   update: (model: Model, message: Message) => Update.Return<Model, Message, R>;
   subscriptions?: Subscription.Subscriptions<Model, Message, R>;
+  managedResources?: Managed & ManagedResource.ManagedResources<Model, Message>;
   onCrash?: (cause: Cause.Cause<unknown>, triggeringMessage: Option.Option<Message>) => void;
 };
-export type Config<Model, Message, R = never> = [R] extends [never] ? Program<Model, Message, R> & {
+export type Config<Model, Message, R = never, Managed extends ManagedResource.ManagedResources<Model, Message> = {}> = [
+  RemainingServices<R, Managed>
+] extends [never] ? Program<Model, Message, R, Managed> & {
   resources?: Layer.Layer<never, never, never>;
-} : Program<Model, Message, R> & {
-  resources: Layer.Layer<NoInfer<R>, never, never>;
+} : Program<Model, Message, R, Managed> & {
+  resources: Layer.Layer<NoInfer<RemainingServices<R, Managed>>, never, never>;
 };
 export declare const StoreTypeId: unique symbol;
 export type StoreTypeId = typeof StoreTypeId;
@@ -702,15 +742,15 @@ export interface RuntimeObserver<Model, Message, R> {
   readonly recordMessage: (message: Message, modelBeforeUpdate: Model, modelAfterUpdate: Model, commands: Update.Commands<Message, R>) => void;
   readonly adoptCommand: (command: Update.Commands<Message, R>[number]) => Update.Commands<Message, R>[number];
 }
-export declare function makeRuntime<Model, Message, R>(program: Config<Model, Message, R>, initialModel: Model, observer?: RuntimeObserver<Model, Message, R>): Runtime<Model, Message, R>;
-export declare function makeRuntime<Model, Message, R>(program: Program<Model, Message, R> & {
-  readonly resources?: Layer.Layer<NoInfer<R>, never, never>;
+export declare function makeRuntime<Model, Message, R, Managed extends ManagedResource.ManagedResources<Model, Message>>(program: Config<Model, Message, R, Managed>, initialModel: Model, observer?: RuntimeObserver<Model, Message, R>): Runtime<Model, Message, R>;
+export declare function makeRuntime<Model, Message, R, Managed extends ManagedResource.ManagedResources<Model, Message>>(program: Program<Model, Message, R, Managed> & {
+  readonly resources?: Layer.Layer<NoInfer<RemainingServices<R, Managed>>, never, never>;
 }, initialModel: Model, observer?: RuntimeObserver<Model, Message, R>): Runtime<Model, Message, R>;
-export declare function make<Model, Message, R = never>(config: Config<Model, Message, R>, init: Update.Return<Model, Message, R>): Effect.Effect<Store<Model, Message>, never, Scope.Scope>;
-export declare function make<Model, Message, R = never>(config: Program<Model, Message, R> & {
+export declare function make<Model, Message, R = never, Managed extends ManagedResource.ManagedResources<Model, Message> = {}>(config: Config<Model, Message, R, Managed>, init: Update.Return<Model, Message, R>): Effect.Effect<Store<Model, Message>, never, Scope.Scope>;
+export declare function make<Model, Message, R = never, Managed extends ManagedResource.ManagedResources<Model, Message> = {}>(config: Program<Model, Message, R, Managed> & {
   readonly resources?: never;
-}, init: Update.Return<Model, Message, R>): Effect.Effect<Store<Model, Message>, never, R | Scope.Scope>;
-export declare function boot<Model, Message, R = never>(config: Config<Model, Message, R>, init: Update.Return<Model, Message, R>): Store<Model, Message>;
+}, init: Update.Return<Model, Message, R>): Effect.Effect<Store<Model, Message>, never, RemainingServices<R, Managed> | Scope.Scope>;
+export declare function boot<Model, Message, R = never, Managed extends ManagedResource.ManagedResources<Model, Message> = {}>(config: Config<Model, Message, R, Managed>, init: Update.Return<Model, Message, R>): Store<Model, Message>;
 export {};
 ```
 

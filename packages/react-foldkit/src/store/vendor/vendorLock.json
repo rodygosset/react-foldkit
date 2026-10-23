@@ -1,0 +1,16 @@
+{
+  "package": "foldkit",
+  "version": "0.168.0",
+  "files": [
+    {
+      "path": "runtime/managedResourceFibers.d.ts",
+      "sourceSha256": "ee6228e658c00f299f9410ad0187b5f94d153f88d9a80859f30bcae81ed279f9",
+      "patchedSha256": "56004c63a01502812ca57677d0b371d655b650607f471d2c58abd88116281a9d"
+    },
+    {
+      "path": "runtime/managedResourceFibers.js",
+      "sourceSha256": "0a15878e9620f4384eba1b48bc9dd7691b41ae714ac5dabddb92c9e01d02bfd0",
+      "patchedSha256": "0a15878e9620f4384eba1b48bc9dd7691b41ae714ac5dabddb92c9e01d02bfd0"
+    }
+  ]
+}

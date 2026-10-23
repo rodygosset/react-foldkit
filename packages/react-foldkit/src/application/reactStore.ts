@@ -1,5 +1,6 @@
 import type { Schema } from "effect"
 import { Array, Cause, Context, Duration, Effect, Exit, Option, Predicate, RcRef, Result, Scope } from "effect"
+import type * as ManagedResource from "foldkit/managedResource"
 import type * as Update from "foldkit/update"
 import * as DevTools from "../devToolsIntegration"
 import { deepFreeze, isDevelopment } from "../internal/deepFreeze"
@@ -50,7 +51,8 @@ export type Config<
 	Message,
 	R = never,
 	MessageSchema extends Schema.Codec<Message, unknown> = Schema.Codec<Message>,
-> = Store.Config<Model, Message, R> & {
+	Managed extends ManagedResource.ManagedResources<Model, Message> = {},
+> = Store.Config<Model, Message, R, Managed> & {
 	/**
 	 * Creates a Message when the Provider reactivates with a replacement Store. Use it to retry
 	 * interrupted work or clear pending state. It is not called on the initial activation or when
@@ -58,8 +60,8 @@ export type Config<
 	 */
 	readonly onReactivate?: (context: ReactivationContext<Model, Message, R>) => Message
 	/**
-	 * Keeps the Store, its Layer, Commands, and Subscriptions running for this long after the
-	 * last activation ends. Reactivating within the window resumes the same Store without
+	 * Keeps the Store, its Layer, Managed Resources, Commands, and Subscriptions running for this
+	 * long after the last activation ends. Reactivating within the window resumes the same Store without
 	 * interrupting anything. Defaults to zero, which disposes the Store on deactivation.
 	 *
 	 * Work started before an unmount can still finish during the window, so keep it short when
@@ -88,14 +90,15 @@ export function make<
 	ModelSchema extends Schema.Codec<unknown, unknown> & { readonly Type: Model } = Schema.Codec<Model>,
 	MessageSchema extends Schema.Codec<Message, unknown> = Schema.Codec<Message>,
 	R = never,
+	Managed extends ManagedResource.ManagedResources<Model, Message> = {},
 >(
-	config: Config<Model, Message, R, MessageSchema>,
+	config: Config<Model, Message, R, MessageSchema, Managed>,
 	init: Update.Return<Model, Message, R>,
 	Model?: ModelSchema
 ): ReactStore<Model, Message> {
 	const freeze = config.freezeModel ?? isDevelopment
 	if (freeze) deepFreeze(init.model)
-	const program: Store.Config<Model, Message, R> = freeze
+	const program: Store.Config<Model, Message, R, Managed> = freeze
 		? { ...config, update: (model, message) => frozen(config.update(model, message)) }
 		: config
 	let runtime: Store.Runtime<Model, Message, R>

@@ -1,4 +1,6 @@
 import { Cause, Effect, Equal, Exit, Option, Schema } from "effect"
+import type * as ManagedResource from "foldkit/managedResource"
+import type { RemainingServices } from "../internal/managedResourceTypes"
 import type * as Update from "foldkit/update"
 import React from "react"
 import { isDevelopment } from "../internal/deepFreeze"
@@ -66,7 +68,8 @@ export interface CrashConfig<Model, Message> {
  * Program.
  *
  * The `resources` Layer must require no additional services and have no typed failures. It is
- * required when the Program needs services, which also makes the options argument required.
+ * required when the Program needs services not supplied by its Managed Resources. That also
+ * makes the options argument required.
  *
  * @category configuration
  * @since 0.2.0
@@ -76,9 +79,10 @@ export type Options<
 	Message,
 	R = never,
 	MessageSchema extends Schema.Codec<Message, unknown> = Schema.Codec<Message>,
+	Managed extends ManagedResource.ManagedResources<Model, Message> = {},
 > = Omit<
-	ReactStore.Config<Model, Message, R, MessageSchema>,
-	"update" | "subscriptions" | "devTools"
+	ReactStore.Config<Model, Message, R, MessageSchema, Managed>,
+	"update" | "subscriptions" | "managedResources" | "devTools"
 > & {
 	/**
 	 * Default failure view and reporting for every Provider of this application.
@@ -99,17 +103,18 @@ export type Options<
 	 * Messages sent from the paused view. Resume renders the latest live Model. React Foldkit
 	 * records no Mounts, so the panel's Mounts tab stays empty.
 	 */
-	readonly devTools?: ReactStore.Config<Model, Message, R, MessageSchema>["devTools"]
+	readonly devTools?: ReactStore.Config<Model, Message, R, MessageSchema, Managed>["devTools"]
 }
 
 type OptionsArgument<
 	Model,
 	Message,
 	R,
-	MessageSchema extends Schema.Codec<Message, unknown> = Schema.Codec<Message>,
-> = [R] extends [never]
-	? [options?: Options<Model, Message, R, MessageSchema>]
-	: [options: Options<Model, Message, R, MessageSchema>]
+	MessageSchema extends Schema.Codec<Message, unknown>,
+	Managed extends ManagedResource.ManagedResources<Model, Message>,
+> = [RemainingServices<R, Managed>] extends [never]
+	? [options?: Options<Model, Message, R, MessageSchema, Managed>]
+	: [options: Options<Model, Message, R, MessageSchema, Managed>]
 
 /**
  * Props for the application Provider that supplies the Model and Message handlers to its views.
@@ -433,27 +438,30 @@ export function define<
 	ModelSchema extends Schema.Constraint,
 	MessageSchema extends Schema.Codec<Tagged, unknown>,
 	R = never,
+	Managed extends ManagedResource.ManagedResources<ModelSchema["Type"], MessageSchema["Type"]> = {},
 >(
-	program: Program<ModelSchema, MessageSchema, never, R> & {
+	program: Program<ModelSchema, MessageSchema, never, R, Managed> & {
 		readonly init: () => Update.Return<ModelSchema["Type"], MessageSchema["Type"], R>
 	},
-	...options: OptionsArgument<ModelSchema["Type"], MessageSchema["Type"], R, MessageSchema>
+	...options: OptionsArgument<ModelSchema["Type"], MessageSchema["Type"], R, MessageSchema, Managed>
 ): Application<ModelSchema["Type"], MessageSchema["Type"], R, true>
 export function define<
 	ModelSchema extends Schema.Constraint,
 	MessageSchema extends Schema.Codec<Tagged, unknown>,
 	R = never,
+	Managed extends ManagedResource.ManagedResources<ModelSchema["Type"], MessageSchema["Type"]> = {},
 >(
-	program: Program<ModelSchema, MessageSchema, never, R>,
-	...options: OptionsArgument<ModelSchema["Type"], MessageSchema["Type"], R, MessageSchema>
+	program: Program<ModelSchema, MessageSchema, never, R, Managed>,
+	...options: OptionsArgument<ModelSchema["Type"], MessageSchema["Type"], R, MessageSchema, Managed>
 ): Application<ModelSchema["Type"], MessageSchema["Type"], R>
 export function define<
 	ModelSchema extends Schema.Constraint,
 	MessageSchema extends Schema.Codec<Tagged, unknown>,
 	R = never,
+	Managed extends ManagedResource.ManagedResources<ModelSchema["Type"], MessageSchema["Type"]> = {},
 >(
-	program: Program<ModelSchema, MessageSchema, never, R>,
-	...[options]: OptionsArgument<ModelSchema["Type"], MessageSchema["Type"], R, MessageSchema>
+	program: Program<ModelSchema, MessageSchema, never, R, Managed>,
+	...[options]: OptionsArgument<ModelSchema["Type"], MessageSchema["Type"], R, MessageSchema, Managed>
 ): Application<ModelSchema["Type"], MessageSchema["Type"], R, boolean> {
 	type Model = ModelSchema["Type"]
 	type Message = MessageSchema["Type"]
@@ -461,7 +469,9 @@ export function define<
 		...options,
 		update: program.update,
 		subscriptions: program.subscriptions,
-	} as ReactStore.Config<Model, Message, R, MessageSchema> & Options<Model, Message, R, MessageSchema>
+		managedResources: program.managedResources,
+	} as ReactStore.Config<Model, Message, R, MessageSchema, Managed> &
+		Options<Model, Message, R, MessageSchema, Managed>
 	const Context = makeSourceContext<Model, Message>()
 	const validateInit = config.validateInit ?? isDevelopment
 	const checkModel = Schema.decodeUnknownExit(Schema.toType(program.Model))

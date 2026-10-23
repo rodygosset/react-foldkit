@@ -12,6 +12,16 @@ const applyPatches = process.argv.includes("--apply")
 // The recorder's Clear patch uses the live Model as the next history baseline.
 const copies = [
 	{
+		vendorRoot: "src/store/vendor",
+		packageName: "foldkit",
+		version: "0.168.0",
+		upstreamRoot: "dist",
+		includes: () => true,
+		patches: new Map([
+			["runtime/managedResourceFibers.d.ts", [["./resourceProvider.js", "../../managedResources.js"]]],
+		]),
+	},
+	{
 		vendorRoot: "src/devtoolsVendor",
 		packageName: "foldkit",
 		version: "0.168.0",

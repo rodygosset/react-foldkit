@@ -69,6 +69,7 @@ The `Model` Schema supplies type inference. Outside production builds, the Provi
 ## Read next
 
 - [Build a counter with Commands](docs/examples.md) for a step-by-step tutorial.
+- [Managed Resources](docs/managedResources.md) for resources whose lifetime follows the Model.
 - [Test views with Scene](docs/scene.md) for Foldkit Scene tests of React views.
 - [Debug with Foldkit DevTools](docs/devtools.md) for Message history, time travel, and the MCP server.
 - [Public API reference](docs/reference.md) for imports and contracts.

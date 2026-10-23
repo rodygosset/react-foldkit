@@ -1,4 +1,5 @@
 import type { Schema } from "effect"
+import type * as ManagedResource from "foldkit/managedResource"
 import type * as Subscription from "foldkit/subscription"
 import type * as Update from "foldkit/update"
 
@@ -6,8 +7,8 @@ type Tagged = { readonly _tag: string }
 
 /**
  * A Foldkit application or child feature without its view: the Model Schema, Message union,
- * update, and optionally an OutMessage union, `init`, and Subscriptions. The field names match
- * Foldkit's `Runtime.makeApplication`.
+ * update, and optionally an OutMessage union, `init`, Subscriptions, and Managed Resources.
+ * The field names match Foldkit's `Runtime.makeApplication`.
  *
  * **When to use**
  *
@@ -18,9 +19,9 @@ type Tagged = { readonly _tag: string }
  *
  * **Details**
  *
- * `R` is the services that Commands and Subscriptions require. A Program does not provide
- * them: the host that runs it supplies `resources`. An application Program has no
- * OutMessage, so its update returns `Update.Return`.
+ * `R` is the services that Commands and Subscriptions require. Registered Managed Resources
+ * supply their own services. The host supplies the remaining services through `resources`.
+ * An application Program has no OutMessage, so its update returns `Update.Return`.
  *
  * @see {@link make} for creating one with checked types
  * @category models
@@ -31,6 +32,7 @@ export interface Program<
 	MessageSchema extends Schema.Schema<Tagged>,
 	OutMessage = never,
 	R = never,
+	Managed extends ManagedResource.ManagedResources<ModelSchema["Type"], MessageSchema["Type"]> = {},
 > {
 	/**
 	 * Supplies the Model type. `Application.define` also checks initial Models against it.
@@ -63,14 +65,22 @@ export interface Program<
 	 * restart their Streams.
 	 */
 	readonly subscriptions?: Subscription.Subscriptions<ModelSchema["Type"], MessageSchema["Type"], R>
+	/**
+	 * Resources whose lifetime follows the Model. Declare them with Foldkit's `ManagedResource.make`.
+	 * The host supplies their services to Commands and Subscriptions and releases them on shutdown.
+	 * Lift a child's resources into the parent Program with `ManagedResource.lift`.
+	 */
+	readonly managedResources?: Managed
 }
 
 // An application Program reports no OutMessages, so OutMessage stays `never` rather than
 // being inferred from update's optional `outMessage` field.
-type ApplicationProgram<ModelSchema extends Schema.Constraint, MessageSchema extends Schema.Schema<Tagged>, R> = Omit<
-	Program<ModelSchema, MessageSchema, never, R>,
-	"OutMessage" | "update"
-> & {
+type ApplicationProgram<
+	ModelSchema extends Schema.Constraint,
+	MessageSchema extends Schema.Schema<Tagged>,
+	R,
+	Managed extends ManagedResource.ManagedResources<ModelSchema["Type"], MessageSchema["Type"]>,
+> = Omit<Program<ModelSchema, MessageSchema, never, R, Managed>, "OutMessage" | "update"> & {
 	readonly OutMessage?: undefined
 	readonly update: (
 		model: ModelSchema["Type"],
@@ -121,22 +131,41 @@ export function make<
 	MessageSchema extends Schema.Schema<Tagged>,
 	OutMessage,
 	R = never,
+	Managed extends ManagedResource.ManagedResources<ModelSchema["Type"], MessageSchema["Type"]> = {},
 >(
-	program: Program<ModelSchema, MessageSchema, OutMessage, R> & { readonly OutMessage: Schema.Schema<OutMessage> }
-): Program<ModelSchema, MessageSchema, OutMessage, R>
-export function make<ModelSchema extends Schema.Constraint, MessageSchema extends Schema.Schema<Tagged>, R = never>(
-	program: ApplicationProgram<ModelSchema, MessageSchema, R> & {
+	program: Program<ModelSchema, MessageSchema, OutMessage, R, Managed> & {
+		readonly OutMessage: Schema.Schema<OutMessage>
+	}
+): Program<ModelSchema, MessageSchema, OutMessage, R, Managed>
+export function make<
+	ModelSchema extends Schema.Constraint,
+	MessageSchema extends Schema.Schema<Tagged>,
+	R = never,
+	Managed extends ManagedResource.ManagedResources<ModelSchema["Type"], MessageSchema["Type"]> = {},
+>(
+	program: ApplicationProgram<ModelSchema, MessageSchema, R, Managed> & {
 		readonly init: () => Update.Return<ModelSchema["Type"], MessageSchema["Type"], R>
 	}
-): Program<ModelSchema, MessageSchema, never, R> & {
+): Program<ModelSchema, MessageSchema, never, R, Managed> & {
 	readonly init: () => Update.Return<ModelSchema["Type"], MessageSchema["Type"], R>
 }
-export function make<ModelSchema extends Schema.Constraint, MessageSchema extends Schema.Schema<Tagged>, R = never>(
-	program: ApplicationProgram<ModelSchema, MessageSchema, R>
-): Program<ModelSchema, MessageSchema, never, R>
+export function make<
+	ModelSchema extends Schema.Constraint,
+	MessageSchema extends Schema.Schema<Tagged>,
+	R = never,
+	Managed extends ManagedResource.ManagedResources<ModelSchema["Type"], MessageSchema["Type"]> = {},
+>(
+	program: ApplicationProgram<ModelSchema, MessageSchema, R, Managed>
+): Program<ModelSchema, MessageSchema, never, R, Managed>
 // eslint-disable-next-line foldkit-style/prefer-arrow-for-expression-return -- Overloads keep a required init and a `never` OutMessage.
-export function make<ModelSchema extends Schema.Constraint, MessageSchema extends Schema.Schema<Tagged>, OutMessage, R>(
-	program: Program<ModelSchema, MessageSchema, OutMessage, R>
-): Program<ModelSchema, MessageSchema, OutMessage, R> {
+export function make<
+	ModelSchema extends Schema.Constraint,
+	MessageSchema extends Schema.Schema<Tagged>,
+	OutMessage,
+	R,
+	Managed extends ManagedResource.ManagedResources<ModelSchema["Type"], MessageSchema["Type"]>,
+>(
+	program: Program<ModelSchema, MessageSchema, OutMessage, R, Managed>
+): Program<ModelSchema, MessageSchema, OutMessage, R, Managed> {
 	return program
 }

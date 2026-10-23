@@ -6,7 +6,7 @@ Import Messages, Commands, `Update`, `AsyncData`, and Query from `foldkit`. Impo
 - Create the application outside React render. Let its Provider own the Store and its resources.
 - Use Submodels for child features. They share the parent Store. Unmounting a child does not cancel its Commands.
 - Keep application state in the Model. Component-only state can stay in React.
-- Supply Effect services through `resources`. Read an HttpApi client service inside Query's `execute` Effect.
+- Declare Model-driven resources with Foldkit's `ManagedResource.make` on the Program's `managedResources`. Registered resource tags supply their own services. Supply remaining Effect services through `resources`. Read an HttpApi client service inside Query's `execute` Effect.
 - Resetting a Query clears cached data and ignores late responses. It does not abort requests.
 - Keep server and client snapshots consistent for hydration.
 - Use the ESLint preset and configure React's hook rules separately.
