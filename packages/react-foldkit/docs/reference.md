@@ -498,7 +498,7 @@ it when live work first needs it.
   releases its resources.
 
   ```ts
-  Layer.Layer<never, never, never> | Layer.Layer<NoInfer<RemainingServices<R, Managed>>, never, never> | undefined
+  Layer.Layer<never, never, never> | Layer.Layer<NoInfer<HostServices<R, Managed>>, never, never> | undefined
   ```
 
 ### Crashed

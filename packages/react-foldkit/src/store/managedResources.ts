@@ -1,6 +1,6 @@
 import { type Cause, Context, Effect, Option, type PubSub, Record, Ref, type Scope } from "effect"
 import type * as ManagedResource from "foldkit/managedResource"
-import type { ProvidedServices } from "../internal/managedResource"
+import type { GuaranteedManagedServices } from "../internal/managedResource"
 import { forkManagedResourceFibers } from "./vendor/runtime/managedResourceFibers.js"
 
 export interface ManagedResourceRef<Model, Message> {
@@ -28,7 +28,7 @@ export const makeManagedResources = <Model, Message, Managed extends ManagedReso
 			Ref.make<Option.Option<unknown>>(Option.none()).pipe(Effect.map((ref) => ({ config, ref })))
 		)
 		// The record's resource tags determine exactly which services these holders supply.
-		const context = Context.makeUnsafe<ProvidedServices<Managed>>(
+		const context = Context.makeUnsafe<GuaranteedManagedServices<Managed>>(
 			new Map(refs.map(({ config, ref }) => [config.resource._tag.key, ref]))
 		)
 		return {

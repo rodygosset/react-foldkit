@@ -18,7 +18,7 @@ import {
 import * as InitCommand from "../internal/initCommand"
 import { CurrentInterruptRegistry, makeInterruptRegistry } from "../internal/interrupt"
 import type * as ManagedResource from "foldkit/managedResource"
-import type { ManagedResourceRecord, RemainingServices, RequireManagedRecord } from "../internal/managedResource"
+import type { ManagedResourceRecord, HostServices, RequireManagedRecord } from "../internal/managedResource"
 import { makeManagedResources } from "./managedResources"
 import type * as Subscription from "foldkit/subscription"
 import type * as Update from "foldkit/update"
@@ -77,7 +77,7 @@ export type Program<
  * @since 0.1.0
  */
 export type Config<Model, Message, R = never, Managed extends ManagedResource.ManagedResources<Model, Message> = {}> = [
-	RemainingServices<R, Managed>,
+	HostServices<R, Managed>,
 ] extends [never]
 	? Program<Model, Message, R, Managed> & {
 			/**
@@ -91,7 +91,7 @@ export type Config<Model, Message, R = never, Managed extends ManagedResource.Ma
 			 * Supplies services not provided by Managed Resources. Live work finishes before the Layer
 			 * releases its resources.
 			 */
-			resources: Layer.Layer<NoInfer<RemainingServices<R, Managed>>, never, never>
+			resources: Layer.Layer<NoInfer<HostServices<R, Managed>>, never, never>
 		}
 
 /**
@@ -455,14 +455,14 @@ export function makeRuntime<Model, Message, R, Managed extends ManagedResource.M
 ): Runtime<Model, Message, R>
 export function makeRuntime<Model, Message, R, Managed extends ManagedResource.ManagedResources<Model, Message>>(
 	program: Program<Model, Message, R, Managed> & {
-		readonly resources?: Layer.Layer<NoInfer<RemainingServices<R, Managed>>, never, never>
+		readonly resources?: Layer.Layer<NoInfer<HostServices<R, Managed>>, never, never>
 	},
 	initialModel: Model,
 	observer?: RuntimeObserver<Model, Message, R>
 ): Runtime<Model, Message, R>
 export function makeRuntime<Model, Message, R, Managed extends ManagedResource.ManagedResources<Model, Message>>(
 	program: Program<Model, Message, R, Managed> & {
-		readonly resources?: Layer.Layer<NoInfer<RemainingServices<R, Managed>>, never, never>
+		readonly resources?: Layer.Layer<NoInfer<HostServices<R, Managed>>, never, never>
 	},
 	initialModel: Model,
 	observer?: RuntimeObserver<Model, Message, R>
@@ -736,7 +736,7 @@ export function makeRuntime<Model, Message, R, Managed extends ManagedResource.M
 				Effect.forkIn(
 					layer === undefined
 						? // Without a Layer, the overloads of `make` require the caller's Context to supply the remaining services.
-							Effect.succeed(context as Context.Context<RemainingServices<R, Managed>>)
+							Effect.succeed(context as Context.Context<HostServices<R, Managed>>)
 						: Layer.buildWithScope(layer, layerScope),
 					layerScope,
 					{ uninterruptible: false }
@@ -916,18 +916,18 @@ export function make<Model, Message, R = never, Managed extends ManagedResource.
 export function make<Model, Message, R = never, Managed extends ManagedResource.ManagedResources<Model, Message> = {}>(
 	config: Program<Model, Message, R, Managed> & { readonly resources?: never },
 	init: Update.Return<Model, Message, R>
-): Effect.Effect<Store<Model, Message>, never, RemainingServices<R, Managed> | Scope.Scope>
+): Effect.Effect<Store<Model, Message>, never, HostServices<R, Managed> | Scope.Scope>
 // eslint-disable-next-line foldkit-style/prefer-arrow-for-expression-return -- Overloads distinguish provided and ambient services.
 export function make<Model, Message, R = never, Managed extends ManagedResource.ManagedResources<Model, Message> = {}>(
 	config: Program<Model, Message, R, Managed> & {
-		readonly resources?: Layer.Layer<NoInfer<RemainingServices<R, Managed>>, never, never>
+		readonly resources?: Layer.Layer<NoInfer<HostServices<R, Managed>>, never, never>
 	},
 	init: Update.Return<Model, Message, R>
-): Effect.Effect<Store<Model, Message>, never, RemainingServices<R, Managed> | Scope.Scope> {
+): Effect.Effect<Store<Model, Message>, never, HostServices<R, Managed> | Scope.Scope> {
 	return Effect.gen(function* () {
 		const runtime = makeRuntime(config, init.model)
 		yield* runtime.activate({
-			context: yield* Effect.context<RemainingServices<R, Managed>>(),
+			context: yield* Effect.context<HostServices<R, Managed>>(),
 			commands: init.commands ?? [],
 			firstMessage: Option.none(),
 		})

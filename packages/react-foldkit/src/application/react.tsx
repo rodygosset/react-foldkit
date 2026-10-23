@@ -1,6 +1,6 @@
 import { Cause, Effect, Equal, Exit, Option, Schema } from "effect"
 import type * as ManagedResource from "foldkit/managedResource"
-import type { RemainingServices } from "../internal/managedResource"
+import type { HostServices } from "../internal/managedResource"
 import type * as Update from "foldkit/update"
 import React from "react"
 import { isDevelopment } from "../internal/deepFreeze"
@@ -112,7 +112,7 @@ type OptionsArgument<
 	R,
 	MessageSchema extends Schema.Codec<Message, unknown>,
 	Managed extends ManagedResource.ManagedResources<Model, Message>,
-> = [RemainingServices<R, Managed>] extends [never]
+> = [HostServices<R, Managed>] extends [never]
 	? [options?: Options<Model, Message, R, MessageSchema, Managed>]
 	: [options: Options<Model, Message, R, MessageSchema, Managed>]
 

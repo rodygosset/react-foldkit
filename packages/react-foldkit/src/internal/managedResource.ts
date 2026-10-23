@@ -49,9 +49,9 @@ type UnprovidedServices<Requirements, Managed> = unknown extends Requirements
 
 type PossibleServices<Managed> = Managed extends unknown ? ManagedResource.ServicesOf<Managed> : never
 
-export type ProvidedServices<Managed> = Exclude<
+export type GuaranteedManagedServices<Managed> = Exclude<
 	PossibleServices<Managed>,
 	UnprovidedServices<PossibleServices<Managed>, Managed>
 >
 
-export type RemainingServices<Requirements, Managed> = Exclude<Requirements, ProvidedServices<Managed>>
+export type HostServices<Requirements, Managed> = Exclude<Requirements, GuaranteedManagedServices<Managed>>
