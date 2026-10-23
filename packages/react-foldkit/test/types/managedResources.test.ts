@@ -133,7 +133,7 @@ if (false) {
 	}
 	void omitted
 	// @ts-expect-error A concrete Store record type still requires that record.
-	const omittedStore: Store.Program<Model, Message, EngineService, typeof managedResources> = { update }
+	const omittedStore: Store.RuntimeProgram<Model, Message, EngineService, typeof managedResources> = { update }
 	void omittedStore
 
 	const dictionary: Record<string, (typeof managedResources)["engine"]> = {}

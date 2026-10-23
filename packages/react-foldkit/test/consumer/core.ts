@@ -20,7 +20,7 @@ const Message = defineMessageUnion({ SetValue: { value: Schema.Finite } })
 type Message = typeof Message.Type
 
 export type Reader = Foldkit.ModelSource.ModelReader<number>
-export type Program = Foldkit.Store.Program<number, Message>
+export type RuntimeProgram = Foldkit.Store.RuntimeProgram<number, Message>
 export type RuntimeStore = Foldkit.Store.Store<number, Message>
 export type CounterApplication = Foldkit.Application.Application<number, Message>
 export type Projection = Foldkit.Submodel.Projection<number, Message, number, Message>

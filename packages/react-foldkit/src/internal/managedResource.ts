@@ -25,7 +25,7 @@ export type RequireManagedRecord<Managed> =
 // `Omit` drops the conditional required field, so public inputs intersect this after `Omit`.
 export type WithManagedResources<Shape, Managed> = Omit<Shape, "managedResources"> & ManagedRegistration<Managed>
 
-type ProvidingKeys<Requirement, Managed> = {
+type KeysRegisteringService<Requirement, Managed> = {
 	[Key in keyof Managed]-?: Key extends string | number
 		? [Managed[Key]] extends [{ readonly resource: infer Resource }]
 			? [ManagedResource.ServiceOf<Resource>] extends [Requirement]
@@ -35,13 +35,13 @@ type ProvidingKeys<Requirement, Managed> = {
 		: never
 }[keyof Managed]
 
-type UnprovidedServices<Requirements, Managed> = unknown extends Requirements
+type ServicesNotAlwaysRegistered<Requirements, Managed> = unknown extends Requirements
 	? Requirements
 	: Managed extends unknown
 		? string extends keyof Managed
 			? Requirements
 			: Requirements extends unknown
-				? [ProvidingKeys<Requirements, Managed>] extends [never]
+				? [KeysRegisteringService<Requirements, Managed>] extends [never]
 					? Requirements
 					: never
 				: never
@@ -51,7 +51,7 @@ type PossibleServices<Managed> = Managed extends unknown ? ManagedResource.Servi
 
 export type GuaranteedManagedServices<Managed> = Exclude<
 	PossibleServices<Managed>,
-	UnprovidedServices<PossibleServices<Managed>, Managed>
+	ServicesNotAlwaysRegistered<PossibleServices<Managed>, Managed>
 >
 
 export type HostServices<Requirements, Managed> = Exclude<Requirements, GuaranteedManagedServices<Managed>>

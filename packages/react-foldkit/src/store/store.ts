@@ -26,15 +26,17 @@ import { browserScheduler } from "./scheduler"
 import { forkSubscriptionFibers } from "./subscriptions"
 
 /**
- * The update function and Subscriptions that describe a Foldkit application.
- * Pass a Program to `make` when its Commands and Subscriptions use services provided by the
- * surrounding Effect. Use `Config` when the Store should build its own service Layer.
+ * The runtime contract a Store needs to run a Foldkit application.
+ * It describes updates, Subscriptions, and Managed Resources without Model or Message Schemas.
+ * `Program.Program` includes those Schemas and an optional `init` for application and child Programs.
+ * Pass a RuntimeProgram to `make` when its Commands and Subscriptions use services provided by
+ * the surrounding Effect. Use `Config` when the Store should build its own service Layer.
  *
  * @see {@link Config} for supplying services through a Layer
  * @category models
- * @since 0.1.0
+ * @since 0.2.0
  */
-export type Program<
+export type RuntimeProgram<
 	Model,
 	Message,
 	R = never,
@@ -64,29 +66,29 @@ export type Program<
 } & RequireManagedRecord<ManagedResourceRecord<Model, Message, Managed>>
 
 /**
- * A Program with a Layer that provides the services its Commands and Subscriptions need.
+ * A RuntimeProgram with a Layer that provides the services its Commands and Subscriptions need.
  * Use this configuration with React or `boot`, where there is no surrounding Effect Context
  * to supply those services.
  *
  * The Layer must require no additional services and have no typed failures. It is optional
- * when Managed Resources supply all services or the Program requires none. The Store builds
+ * when Managed Resources supply all services or the RuntimeProgram requires none. The Store builds
  * it when live work first needs it.
  *
- * @see {@link make} for running a Program with services from an Effect host
+ * @see {@link make} for running a RuntimeProgram with services from an Effect host
  * @category configuration
  * @since 0.1.0
  */
 export type Config<Model, Message, R = never, Managed extends ManagedResource.ManagedResources<Model, Message> = {}> = [
 	HostServices<R, Managed>,
 ] extends [never]
-	? Program<Model, Message, R, Managed> & {
+	? RuntimeProgram<Model, Message, R, Managed> & {
 			/**
 			 * Supplies services not provided by Managed Resources. Live work finishes before the Layer
 			 * releases its resources.
 			 */
 			resources?: Layer.Layer<never, never, never>
 		}
-	: Program<Model, Message, R, Managed> & {
+	: RuntimeProgram<Model, Message, R, Managed> & {
 			/**
 			 * Supplies services not provided by Managed Resources. Live work finishes before the Layer
 			 * releases its resources.
@@ -454,14 +456,14 @@ export function makeRuntime<Model, Message, R, Managed extends ManagedResource.M
 	observer?: RuntimeObserver<Model, Message, R>
 ): Runtime<Model, Message, R>
 export function makeRuntime<Model, Message, R, Managed extends ManagedResource.ManagedResources<Model, Message>>(
-	program: Program<Model, Message, R, Managed> & {
+	program: RuntimeProgram<Model, Message, R, Managed> & {
 		readonly resources?: Layer.Layer<NoInfer<HostServices<R, Managed>>, never, never>
 	},
 	initialModel: Model,
 	observer?: RuntimeObserver<Model, Message, R>
 ): Runtime<Model, Message, R>
 export function makeRuntime<Model, Message, R, Managed extends ManagedResource.ManagedResources<Model, Message>>(
-	program: Program<Model, Message, R, Managed> & {
+	program: RuntimeProgram<Model, Message, R, Managed> & {
 		readonly resources?: Layer.Layer<NoInfer<HostServices<R, Managed>>, never, never>
 	},
 	initialModel: Model,
@@ -914,12 +916,12 @@ export function make<Model, Message, R = never, Managed extends ManagedResource.
 	init: Update.Return<Model, Message, R>
 ): Effect.Effect<Store<Model, Message>, never, Scope.Scope>
 export function make<Model, Message, R = never, Managed extends ManagedResource.ManagedResources<Model, Message> = {}>(
-	config: Program<Model, Message, R, Managed> & { readonly resources?: never },
+	config: RuntimeProgram<Model, Message, R, Managed> & { readonly resources?: never },
 	init: Update.Return<Model, Message, R>
 ): Effect.Effect<Store<Model, Message>, never, HostServices<R, Managed> | Scope.Scope>
 // eslint-disable-next-line foldkit-style/prefer-arrow-for-expression-return -- Overloads distinguish provided and ambient services.
 export function make<Model, Message, R = never, Managed extends ManagedResource.ManagedResources<Model, Message> = {}>(
-	config: Program<Model, Message, R, Managed> & {
+	config: RuntimeProgram<Model, Message, R, Managed> & {
 		readonly resources?: Layer.Layer<NoInfer<HostServices<R, Managed>>, never, never>
 	},
 	init: Update.Return<Model, Message, R>

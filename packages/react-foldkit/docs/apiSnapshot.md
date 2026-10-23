@@ -302,14 +302,14 @@ export type RequireManagedRecord<Managed> = {} extends NoInfer<Managed> ? {} : {
   readonly managedResources: NoInfer<Managed>;
 };
 export type WithManagedResources<Shape, Managed> = Omit<Shape, "managedResources"> & ManagedRegistration<Managed>;
-type ProvidingKeys<Requirement, Managed> = {
+type KeysRegisteringService<Requirement, Managed> = {
   [Key in keyof Managed]-?: Key extends string | number ? [Managed[Key]] extends [{
     readonly resource: infer Resource;
   }] ? [ManagedResource.ServiceOf<Resource>] extends [Requirement] ? Key : never : never : never;
 }[keyof Managed];
-type UnprovidedServices<Requirements, Managed> = unknown extends Requirements ? Requirements : Managed extends unknown ? string extends keyof Managed ? Requirements : Requirements extends unknown ? [ProvidingKeys<Requirements, Managed>] extends [never] ? Requirements : never : never : never;
+type ServicesNotAlwaysRegistered<Requirements, Managed> = unknown extends Requirements ? Requirements : Managed extends unknown ? string extends keyof Managed ? Requirements : Requirements extends unknown ? [KeysRegisteringService<Requirements, Managed>] extends [never] ? Requirements : never : never : never;
 type PossibleServices<Managed> = Managed extends unknown ? ManagedResource.ServicesOf<Managed> : never;
-export type GuaranteedManagedServices<Managed> = Exclude<PossibleServices<Managed>, UnprovidedServices<PossibleServices<Managed>, Managed>>;
+export type GuaranteedManagedServices<Managed> = Exclude<PossibleServices<Managed>, ServicesNotAlwaysRegistered<PossibleServices<Managed>, Managed>>;
 export type HostServices<Requirements, Managed> = Exclude<Requirements, GuaranteedManagedServices<Managed>>;
 export {};
 ```
@@ -666,7 +666,7 @@ export {};
 
 ```ts
 export { StoreTypeId, Disposed, Crashed, Inactive, Reentrant, CommitError, commit, takeWhen, make, boot } from "./store";
-export type { Config, Program, Store } from "./store";
+export type { Config, RuntimeProgram, Store } from "./store";
 ```
 
 ## dist/store/scheduler.d.ts
@@ -684,7 +684,7 @@ import type * as ManagedResource from "foldkit/managedResource";
 import type { ManagedResourceRecord, HostServices, RequireManagedRecord } from "../internal/managedResource";
 import type * as Subscription from "foldkit/subscription";
 import type * as Update from "foldkit/update";
-export type Program<Model, Message, R = never, Managed extends ManagedResource.ManagedResources<Model, Message> = {}> = {
+export type RuntimeProgram<Model, Message, R = never, Managed extends ManagedResource.ManagedResources<Model, Message> = {}> = {
   update: (model: Model, message: Message) => Update.Return<Model, Message, R>;
   subscriptions?: Subscription.Subscriptions<Model, Message, R>;
   onCrash?: (cause: Cause.Cause<unknown>, triggeringMessage: Option.Option<Message>) => void;
@@ -692,9 +692,9 @@ export type Program<Model, Message, R = never, Managed extends ManagedResource.M
 } & RequireManagedRecord<ManagedResourceRecord<Model, Message, Managed>>;
 export type Config<Model, Message, R = never, Managed extends ManagedResource.ManagedResources<Model, Message> = {}> = [
   HostServices<R, Managed>
-] extends [never] ? Program<Model, Message, R, Managed> & {
+] extends [never] ? RuntimeProgram<Model, Message, R, Managed> & {
   resources?: Layer.Layer<never, never, never>;
-} : Program<Model, Message, R, Managed> & {
+} : RuntimeProgram<Model, Message, R, Managed> & {
   resources: Layer.Layer<NoInfer<HostServices<R, Managed>>, never, never>;
 };
 export declare const StoreTypeId: unique symbol;
@@ -764,11 +764,11 @@ export interface RuntimeObserver<Model, Message, R> {
   readonly adoptCommand: (command: Update.Commands<Message, R>[number]) => Update.Commands<Message, R>[number];
 }
 export declare function makeRuntime<Model, Message, R, Managed extends ManagedResource.ManagedResources<Model, Message>>(program: Config<Model, Message, R, Managed>, initialModel: Model, observer?: RuntimeObserver<Model, Message, R>): Runtime<Model, Message, R>;
-export declare function makeRuntime<Model, Message, R, Managed extends ManagedResource.ManagedResources<Model, Message>>(program: Program<Model, Message, R, Managed> & {
+export declare function makeRuntime<Model, Message, R, Managed extends ManagedResource.ManagedResources<Model, Message>>(program: RuntimeProgram<Model, Message, R, Managed> & {
   readonly resources?: Layer.Layer<NoInfer<HostServices<R, Managed>>, never, never>;
 }, initialModel: Model, observer?: RuntimeObserver<Model, Message, R>): Runtime<Model, Message, R>;
 export declare function make<Model, Message, R = never, Managed extends ManagedResource.ManagedResources<Model, Message> = {}>(config: Config<Model, Message, R, Managed>, init: Update.Return<Model, Message, R>): Effect.Effect<Store<Model, Message>, never, Scope.Scope>;
-export declare function make<Model, Message, R = never, Managed extends ManagedResource.ManagedResources<Model, Message> = {}>(config: Program<Model, Message, R, Managed> & {
+export declare function make<Model, Message, R = never, Managed extends ManagedResource.ManagedResources<Model, Message> = {}>(config: RuntimeProgram<Model, Message, R, Managed> & {
   readonly resources?: never;
 }, init: Update.Return<Model, Message, R>): Effect.Effect<Store<Model, Message>, never, HostServices<R, Managed> | Scope.Scope>;
 export declare function boot<Model, Message, R = never, Managed extends ManagedResource.ManagedResources<Model, Message> = {}>(config: Config<Model, Message, R, Managed>, init: Update.Return<Model, Message, R>): Store<Model, Message>;

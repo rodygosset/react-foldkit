@@ -457,12 +457,12 @@ A failure does not undo Model changes already applied while processing Messages.
 
 ### Config
 
-A Program with a Layer that provides the services its Commands and Subscriptions need.
+A RuntimeProgram with a Layer that provides the services its Commands and Subscriptions need.
 Use this configuration with React or `boot`, where there is no surrounding Effect Context
 to supply those services.
 
 The Layer must require no additional services and have no typed failures. It is optional
-when Managed Resources supply all services or the Program requires none. The Store builds
+when Managed Resources supply all services or the RuntimeProgram requires none. The Store builds
 it when live work first needs it.
 
 - `update` Applies a Message to the Model without running side effects. Return Commands for work that
@@ -514,11 +514,18 @@ The failure returned by `takeWhen` when its Store has been disposed.
 
 The `CommitError` reason when React has deactivated the Provider that owns the Store.
 
-### Program
+### Reentrant
 
-The update function and Subscriptions that describe a Foldkit application.
-Pass a Program to `make` when its Commands and Subscriptions use services provided by the
-surrounding Effect. Use `Config` when the Store should build its own service Layer.
+The `CommitError` reason when `commit` is called while the Store is already delivering a
+Message, such as from a Model listener.
+
+### RuntimeProgram
+
+The runtime contract a Store needs to run a Foldkit application.
+It describes updates, Subscriptions, and Managed Resources without Model or Message Schemas.
+`Program.Program` includes those Schemas and an optional `init` for application and child Programs.
+Pass a RuntimeProgram to `make` when its Commands and Subscriptions use services provided by
+the surrounding Effect. Use `Config` when the Store should build its own service Layer.
 
 - `update` Applies a Message to the Model without running side effects. Return Commands for work that
   runs after the transition.
@@ -548,11 +555,6 @@ surrounding Effect. Use `Config` when the Store should build its own service Lay
   ```ts
   ManagedResourceRecord<Model, Message, Managed> | ((ManagedResourceRecord<Model, Message, Managed> | undefined) & NoInfer<ManagedResourceRecord<Model, Message, Managed>>) | undefined
   ```
-
-### Reentrant
-
-The `CommitError` reason when `commit` is called while the Store is already delivering a
-Message, such as from a Model listener.
 
 ### Store
 
