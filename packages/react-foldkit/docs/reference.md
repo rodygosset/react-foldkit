@@ -488,7 +488,7 @@ it when live work first needs it.
 
 - `managedResources` Resources whose lifetime follows the Model. Use Foldkit's `ManagedResource.make` to declare
   acquisition, release, and lifecycle Messages. Each activation owns separate live values.
-  A record supplies its services only when it is present and its keys are known.
+  A record supplies a service only when its known entries guarantee that tag in every alternative.
 
   ```ts
   ManagedResourceRecord<Model, Message, Managed> | ((ManagedResourceRecord<Model, Message, Managed> | undefined) & NoInfer<ManagedResourceRecord<Model, Message, Managed>>) | undefined
@@ -543,7 +543,7 @@ surrounding Effect. Use `Config` when the Store should build its own service Lay
 
 - `managedResources` Resources whose lifetime follows the Model. Use Foldkit's `ManagedResource.make` to declare
   acquisition, release, and lifecycle Messages. Each activation owns separate live values.
-  A record supplies its services only when it is present and its keys are known.
+  A record supplies a service only when its known entries guarantee that tag in every alternative.
 
   ```ts
   ManagedResourceRecord<Model, Message, Managed> | ((ManagedResourceRecord<Model, Message, Managed> | undefined) & NoInfer<ManagedResourceRecord<Model, Message, Managed>>) | undefined
@@ -1099,9 +1099,9 @@ pass the Program to `Store.make` and `Store.boot`.
 **Details**
 
 `R` is the services that Commands and Subscriptions require. A Managed Resource record supplies
-its own services when the Program includes that record and the record's keys are known. The host
-supplies every other service through `resources`. An application Program has no OutMessage, so
-its update returns `Update.Return`.
+the services guaranteed by its known entries. A conditional record or tag supplies only services
+present in every alternative. The host supplies every other service through `resources`.
+An application Program has no OutMessage, so its update returns `Update.Return`.
 
 - `OutMessage` The union of facts a child reports to its parent. Omit it for an application.
 
@@ -1144,10 +1144,10 @@ its update returns `Update.Return`.
   ```
 
 - `managedResources` Resources whose lifetime follows the Model. Declare them with Foldkit's `ManagedResource.make`.
-  A record supplies its services when it is present and its keys are known. A missing record, a
-  record that may be absent, or a string-keyed dictionary does not. The host supplies those
-  remaining services and releases registered resources on shutdown. Each activation owns separate
-  live values. Lift a child's resources with `ManagedResource.lift`.
+  A record supplies a service when its known entries guarantee that tag in every possible
+  registration. A missing record, a record that may be absent, or a string-keyed dictionary does
+  not. The host supplies remaining services and releases registered resources on shutdown.
+  Each activation owns separate live values. Lift a child's resources with `ManagedResource.lift`.
 
   ```ts
   Managed | (undefined & Managed) | undefined

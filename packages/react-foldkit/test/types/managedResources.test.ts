@@ -141,4 +141,41 @@ if (false) {
 	Application.define(Program.make({ Model, Message, init, update, managedResources: dictionary }))
 	// @ts-expect-error A string-keyed dictionary may be empty, so it does not register Engine.
 	Store.boot({ managedResources: dictionary, update }, init())
+
+	const chooseResources = (engine: boolean) => (engine ? managedResources : { engine: otherResources.other })
+	const chosenResources = chooseResources(false)
+	const chosen = Program.make({ Model, Message, init, update, managedResources: chosenResources })
+	// @ts-expect-error Choosing one of two tags does not guarantee Engine is registered.
+	Application.define(chosen)
+	// @ts-expect-error Choosing one of two tags does not guarantee Engine is registered.
+	Store.boot<Model, Message, EngineService, typeof chosenResources>(chosen, init())
+	expectTypeOf(Store.make<Model, Message, EngineService, typeof chosenResources>(chosen, init())).toEqualTypeOf<
+		Effect.Effect<Store.Store<Model, Message>, never, EngineService | Scope.Scope>
+	>()
+
+	const chooseTag = (engine: boolean) => (engine ? Engine : Other)
+	const uncertainTag = { engine: { ...managedResources.engine, resource: chooseTag(false) } }
+	const uncertain = Program.make({ Model, Message, init, update, managedResources: uncertainTag })
+	// @ts-expect-error An entry with an uncertain tag does not guarantee Engine is registered.
+	Application.define(uncertain)
+	// @ts-expect-error An entry with an uncertain tag does not guarantee Engine is registered.
+	Store.boot(uncertain, init())
+	expectTypeOf(Store.make(uncertain, init())).toEqualTypeOf<
+		Effect.Effect<Store.Store<Model, Message>, never, EngineService | Scope.Scope>
+	>()
+
+	const chooseGuaranteed = (full: boolean) => (full ? combined : { renamedEngine: managedResources.engine })
+	const guaranteedResources = chooseGuaranteed(false)
+	const guaranteed = Program.make({ Model, Message, init, update, managedResources: guaranteedResources })
+	Application.define(guaranteed)
+	Store.boot<Model, Message, EngineService, typeof guaranteedResources>(guaranteed, init())
+	expectTypeOf(
+		Store.make<Model, Message, EngineService, typeof guaranteedResources>(guaranteed, init())
+	).toEqualTypeOf<Effect.Effect<Store.Store<Model, Message>, never, Scope.Scope>>()
+
+	const stableAndUncertain = { stable: managedResources.engine, selected: uncertainTag.engine }
+	const partiallyProvided = Program.make({ Model, Message, update: withBoth, managedResources: stableAndUncertain })
+	expectTypeOf(Store.make(partiallyProvided, init())).toEqualTypeOf<
+		Effect.Effect<Store.Store<Model, Message>, never, ManagedResource.ServiceOf<typeof Other> | Scope.Scope>
+	>()
 }

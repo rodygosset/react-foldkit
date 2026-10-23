@@ -88,6 +88,8 @@ When a Command needs a newly acquired Worker, return the Command from the `Compl
 
 Registered resources supply their services to both Commands and Subscriptions when `managedResources` is present and its keys are known. A value that may be `undefined`, or a record typed as `Record<string, ...>`, does not supply those services. Infer the service types with Foldkit's `ManagedResource.ServiceOf` or `ServicesOf` when annotating an update's requirements. Use `Program.make` to preserve the registered tags in the Program's type.
 
+A conditional record or resource tag supplies only services present in every alternative. If a condition selects between two different tags, the host must supply any required service that the selected registration might omit.
+
 ## Supply other services
 
 The host's `resources` Layer supplies services that the managed records do not provide. An application that only needs managed services requires no Layer. `Store.make` can receive the remaining services from its surrounding Effect. React applications and `Store.boot` require a closed Layer for them.

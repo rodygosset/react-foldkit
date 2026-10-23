@@ -11,7 +11,6 @@ interface ProgramFields<
 	MessageSchema extends Schema.Schema<Tagged>,
 	OutMessage = never,
 	R = never,
-	Managed extends ManagedResource.ManagedResources<ModelSchema["Type"], MessageSchema["Type"]> = {},
 > {
 	/**
 	 * Supplies the Model type. `Application.define` also checks initial Models against it.
@@ -61,9 +60,9 @@ interface ProgramFields<
  * **Details**
  *
  * `R` is the services that Commands and Subscriptions require. A Managed Resource record supplies
- * its own services when the Program includes that record and the record's keys are known. The host
- * supplies every other service through `resources`. An application Program has no OutMessage, so
- * its update returns `Update.Return`.
+ * the services guaranteed by its known entries. A conditional record or tag supplies only services
+ * present in every alternative. The host supplies every other service through `resources`.
+ * An application Program has no OutMessage, so its update returns `Update.Return`.
  *
  * @see {@link make} for creating one with checked types
  * @category models
@@ -75,7 +74,7 @@ export type Program<
 	OutMessage = never,
 	R = never,
 	Managed extends ManagedResource.ManagedResources<ModelSchema["Type"], MessageSchema["Type"]> = {},
-> = ProgramFields<ModelSchema, MessageSchema, OutMessage, R, Managed> & ManagedRegistration<Managed>
+> = ProgramFields<ModelSchema, MessageSchema, OutMessage, R> & ManagedRegistration<Managed>
 
 // An application Program reports no OutMessages, so OutMessage stays `never` rather than
 // being inferred from update's optional `outMessage` field.
@@ -85,7 +84,7 @@ type ApplicationProgram<
 	R,
 	Managed extends ManagedResource.ManagedResources<ModelSchema["Type"], MessageSchema["Type"]>,
 > = WithManagedResources<
-	Omit<ProgramFields<ModelSchema, MessageSchema, never, R, Managed>, "OutMessage" | "update">,
+	Omit<ProgramFields<ModelSchema, MessageSchema, never, R>, "OutMessage" | "update">,
 	Managed
 > & {
 	readonly OutMessage?: undefined
@@ -140,7 +139,7 @@ export function make<
 	R = never,
 	Managed extends ManagedResource.ManagedResources<ModelSchema["Type"], MessageSchema["Type"]> = {},
 >(
-	program: WithManagedResources<ProgramFields<ModelSchema, MessageSchema, OutMessage, R, Managed>, Managed> & {
+	program: WithManagedResources<ProgramFields<ModelSchema, MessageSchema, OutMessage, R>, Managed> & {
 		readonly OutMessage: Schema.Schema<OutMessage>
 	}
 ): Program<ModelSchema, MessageSchema, OutMessage, R, Managed>

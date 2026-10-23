@@ -58,7 +58,7 @@ export type Program<
 	/**
 	 * Resources whose lifetime follows the Model. Use Foldkit's `ManagedResource.make` to declare
 	 * acquisition, release, and lifecycle Messages. Each activation owns separate live values.
-	 * A record supplies its services only when it is present and its keys are known.
+	 * A record supplies a service only when its known entries guarantee that tag in every alternative.
 	 */
 	managedResources?: ManagedResourceRecord<Model, Message, Managed>
 } & RequireManagedRecord<ManagedResourceRecord<Model, Message, Managed>>
