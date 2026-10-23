@@ -34,7 +34,7 @@ import { forkSubscriptionFibers } from "./subscriptions"
  *
  * @see {@link Config} for supplying services through a Layer
  * @category models
- * @since 0.2.0
+ * @since 0.1.0
  */
 export type RuntimeProgram<
 	Model,
