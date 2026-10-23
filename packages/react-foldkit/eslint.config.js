@@ -56,6 +56,7 @@ export default [
 			"test/docs/.generated/**",
 			"src/scene/vendor/**",
 			"src/devtoolsVendor/**",
+			"src/store/vendor/**",
 			"src/vite/vendor/**",
 			"src/vite/fixtures/**",
 			"eslint/**",

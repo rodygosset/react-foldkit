@@ -1,6 +1,7 @@
 import { Array, Context, Effect, Layer, Option, Order, Queue, Schema, Stream } from "effect"
 import * as AsyncData from "foldkit/asyncData"
 import * as Command from "foldkit/command"
+import * as ManagedResource from "foldkit/managedResource"
 import * as Query from "foldkit/experimental/query"
 import { defineMessageUnion } from "foldkit/message"
 import * as Subscription from "foldkit/subscription"
@@ -390,5 +391,69 @@ export const crash: Case<typeof ListModel, typeof CrashMessage> = {
 	expected: [
 		updated({ message: CrashMessage.Added({ value: 1 }), model: [1] }),
 		Event.cases.Crashed.make({ message: Option.some(CrashMessage.Exploded()) }),
+	],
+}
+
+const ManagedModel = Schema.Option(Schema.String)
+const ManagedMessage = defineMessageUnion({
+	Requested: { id: Schema.String },
+	Disabled: {},
+	Acquired: { id: Schema.String },
+	Released: {},
+	Failed: {},
+})
+type ManagedMessage = typeof ManagedMessage.Type
+const ManagedEngine = ManagedResource.tag<string>()("ConformanceEngine")
+
+export const managedResources: Case<typeof ManagedModel, typeof ManagedMessage> = {
+	program: Effect.succeed({
+		Model: ManagedModel,
+		Message: ManagedMessage,
+		init: () => ({ model: Option.none<string>() }),
+		update: (model, message) =>
+			ManagedMessage.match<Update.Return<Option.Option<string>, ManagedMessage>>(message, {
+				Requested: ({ id }) => ({ model: Option.some(id) }),
+				Disabled: () => ({ model: Option.none() }),
+				Acquired: () => ({ model }),
+				Released: () => ({ model }),
+				Failed: () => ({ model }),
+			}),
+		managedResources: ManagedResource.make<Option.Option<string>, ManagedMessage>()((entry) => ({
+			engine: entry(Schema.Option(Schema.String), {
+				resource: ManagedEngine,
+				modelToMaybeRequirements: (model) => model,
+				acquire: (id) => (id === "bad" ? Effect.fail("unavailable") : Effect.succeed(id)),
+				release: () => Effect.void,
+				onAcquired: (id) => ManagedMessage.Acquired({ id }),
+				onReleased: () => ManagedMessage.Released(),
+				onAcquireError: () => ManagedMessage.Failed(),
+			}),
+		})),
+		resources: Layer.empty,
+		observe: (message) => message,
+		initialized: until.initialized,
+		steps: [
+			{ act: send(ManagedMessage.Requested({ id: "a" })), until: until.updated(2) },
+			{ act: send(ManagedMessage.Requested({ id: "a" })), until: until.updated(3) },
+			{ act: send(ManagedMessage.Requested({ id: "b" })), until: until.updated(6) },
+			{ act: send(ManagedMessage.Requested({ id: "bad" })), until: until.updated(9) },
+			{ act: send(ManagedMessage.Requested({ id: "c" })), until: until.updated(11) },
+			{ act: send(ManagedMessage.Disabled()), until: until.updated(13) },
+		],
+	}),
+	expected: [
+		updated(ManagedMessage.Requested({ id: "a" })),
+		updated(ManagedMessage.Acquired({ id: "a" })),
+		updated(ManagedMessage.Requested({ id: "a" })),
+		updated(ManagedMessage.Requested({ id: "b" })),
+		updated(ManagedMessage.Released()),
+		updated(ManagedMessage.Acquired({ id: "b" })),
+		updated(ManagedMessage.Requested({ id: "bad" })),
+		updated(ManagedMessage.Released()),
+		updated(ManagedMessage.Failed()),
+		updated(ManagedMessage.Requested({ id: "c" })),
+		updated(ManagedMessage.Acquired({ id: "c" })),
+		updated(ManagedMessage.Disabled()),
+		updated(ManagedMessage.Released()),
 	],
 }

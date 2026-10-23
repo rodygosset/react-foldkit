@@ -121,13 +121,13 @@
 	},
 	{
 		"entryPoint": "react-foldkit/store",
-		"name": "Program",
+		"name": "Reentrant",
 		"owner": "react-foldkit",
 		"introduced": "0.1.0"
 	},
 	{
 		"entryPoint": "react-foldkit/store",
-		"name": "Reentrant",
+		"name": "RuntimeProgram",
 		"owner": "react-foldkit",
 		"introduced": "0.1.0"
 	},

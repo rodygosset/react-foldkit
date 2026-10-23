@@ -1,4 +1,6 @@
 import { strict as assert } from "node:assert"
+import { Command, ManagedResource } from "foldkit"
+import type * as Update from "foldkit/update"
 import { defineMessageUnion } from "foldkit/message"
 import { Effect, Option, Schema } from "effect"
 import { constVoid } from "effect/Function"
@@ -18,7 +20,7 @@ const Message = defineMessageUnion({ SetValue: { value: Schema.Finite } })
 type Message = typeof Message.Type
 
 export type Reader = Foldkit.ModelSource.ModelReader<number>
-export type Program = Foldkit.Store.Program<number, Message>
+export type RuntimeProgram = Foldkit.Store.RuntimeProgram<number, Message>
 export type RuntimeStore = Foldkit.Store.Store<number, Message>
 export type CounterApplication = Foldkit.Application.Application<number, Message>
 export type Projection = Foldkit.Submodel.Projection<number, Message, number, Message>
@@ -156,3 +158,68 @@ await Effect.runPromise(
 		})
 	)
 )
+
+// The packed Store runs Foldkit's resource declarations and supplies their services without a Layer.
+{
+	const Resource = ManagedResource.tag<string>()("PackedResource")
+	const Model = Schema.Struct({ value: Schema.Option(Schema.String) })
+	type Model = typeof Model.Type
+	const Message = defineMessageUnion({ Acquired: {}, Released: {}, Failed: {}, Read: { value: Schema.String } })
+	type Message = typeof Message.Type
+	let acquisitions = 0
+	let releases = 0
+	const Read = Command.define("ReadPackedResource", {
+		messages: [Message.Read, Message.Failed],
+		execute: Resource.get.pipe(
+			Effect.map((value) => Message.Read({ value })),
+			Effect.catchTag("ResourceNotAvailable", () => Effect.succeed(Message.Failed()))
+		),
+	})
+	const managedResources = ManagedResource.make<Model, Message>()((entry) => ({
+		resource: entry(Schema.Option(Schema.Null), {
+			resource: Resource,
+			modelToMaybeRequirements: () => Option.some(null),
+			acquire: () =>
+				Effect.sync(function () {
+					acquisitions += 1
+					return "live"
+				}),
+			release: () =>
+				Effect.sync(function () {
+					releases += 1
+				}),
+			onAcquired: () => Message.Acquired(),
+			onReleased: () => Message.Released(),
+			onAcquireError: () => Message.Failed(),
+		}),
+	}))
+	const program = Foldkit.Program.make({
+		Model,
+		Message,
+		init: () => ({ model: { value: Option.none<string>() } }),
+		update: (
+			model: Model,
+			message: Message
+		): Update.Return<Model, Message, ManagedResource.ServiceOf<typeof Resource>> =>
+			Message.match(message, {
+				Acquired: () => ({ model, commands: [Read()] }),
+				Released: () => ({ model }),
+				Failed: () => ({ model }),
+				Read: ({ value }) => ({ model: { value: Option.some(value) } }),
+			}),
+		managedResources,
+	})
+	const App = Application.define(program)
+	assert.equal(renderToString(createElement(App.Provider, { children: null })), "")
+	assert.equal(acquisitions, 0)
+	await Effect.runPromise(
+		Effect.scoped(
+			Effect.gen(function* () {
+				const store = yield* Store.make(program, program.init())
+				assert.equal(yield* Store.takeWhen(store, (model) => model.value), "live")
+			})
+		)
+	)
+	assert.equal(acquisitions, 1)
+	assert.equal(releases, 1)
+}

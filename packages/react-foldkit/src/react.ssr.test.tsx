@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { Effect, Layer, Schema, Stream } from "effect"
+import { Effect, Layer, Option, Schema, Stream } from "effect"
 import type * as Command from "foldkit/command"
 import { defineMessageUnion } from "foldkit/message"
 import { modifyFields } from "foldkit/struct"
@@ -8,6 +8,7 @@ import type * as Update from "foldkit/update"
 import { renderToString } from "react-dom/server"
 import { describe, expect, it } from "vitest"
 import * as Application from "./application"
+import * as Engine from "../test/fixtures/managedResource"
 
 const Message = defineMessageUnion({
 	CompletedLoad: { value: Schema.String },
@@ -95,4 +96,25 @@ describe("React server rendering", function () {
 		)
 		expect(responses).toEqual(["<span>Success:first request</span>", "<span>Success:second request</span>"])
 	})
+})
+
+it("does not acquire managed resources while rendering on the server", function () {
+	let acquisitions = 0
+	const program = Engine.make(
+		(id) =>
+			Effect.sync(function () {
+				acquisitions += 1
+				return { id }
+			}),
+		undefined,
+		Option.some("a")
+	)
+	const App = Application.define(program)
+	const html = renderToString(
+		<App.Provider>
+			<span>Ready</span>
+		</App.Provider>
+	)
+	expect(html).toContain("Ready")
+	expect(acquisitions).toBe(0)
 })

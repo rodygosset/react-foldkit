@@ -231,25 +231,26 @@ need, its failure handling, and its activation behavior. Pass it to `define` aft
 Program.
 
 The `resources` Layer must require no additional services and have no typed failures. It is
-required when the Program needs services, which also makes the options argument required.
+required when the Program needs services not supplied by its Managed Resources. That also
+makes the options argument required.
 
 - `onReactivate` Creates a Message when the Provider reactivates with a replacement Store. Use it to retry
   interrupted work or clear pending state. It is not called on the initial activation or when
   `retainInactive` kept the previous Store running.
 
   ```ts
-  ReactStore.Config<Model, Message, R, MessageSchema>["onReactivate"] | undefined
+  ReactStore.Config<Model, Message, R, MessageSchema, Managed>["onReactivate"] | undefined
   ```
 
-- `retainInactive` Keeps the Store, its Layer, Commands, and Subscriptions running for this long after the
-  last activation ends. Reactivating within the window resumes the same Store without
+- `retainInactive` Keeps the Store, its Layer, Managed Resources, Commands, and Subscriptions running for this
+  long after the last activation ends. Reactivating within the window resumes the same Store without
   interrupting anything. Defaults to zero, which disposes the Store on deactivation.
   
   Work started before an unmount can still finish during the window, so keep it short when
   Commands perform writes or navigation.
 
   ```ts
-  ReactStore.Config<Model, Message, R, MessageSchema>["retainInactive"] | undefined
+  ReactStore.Config<Model, Message, R, MessageSchema, Managed>["retainInactive"] | undefined
   ```
 
 - `restartInterrupted` Starts Commands interrupted by deactivation again when a replacement Store activates. Pass
@@ -257,7 +258,7 @@ required when the Program needs services, which also makes the options argument 
   Query fetches: an interrupted write may already have reached its server.
 
   ```ts
-  ReactStore.Config<Model, Message, R, MessageSchema>["restartInterrupted"] | undefined
+  ReactStore.Config<Model, Message, R, MessageSchema, Managed>["restartInterrupted"] | undefined
   ```
 
 - `freezeModel` Freezes every Model the Provider publishes so accidental mutation throws where it happens.
@@ -265,21 +266,21 @@ required when the Program needs services, which also makes the options argument 
   `true` outside production builds.
 
   ```ts
-  ReactStore.Config<Model, Message, R, MessageSchema>["freezeModel"] | undefined
+  ReactStore.Config<Model, Message, R, MessageSchema, Managed>["freezeModel"] | undefined
   ```
 
 - `onCrash` Called once on terminal failure, with the original Cause and a Message when one triggered
   the failure. Runs before `subscribeCrash` listeners. Observer defects are logged.
 
   ```ts
-  ReactStore.Config<Model, Message, R, MessageSchema>["onCrash"] | undefined
+  ReactStore.Config<Model, Message, R, MessageSchema, Managed>["onCrash"] | undefined
   ```
 
-- `resources` Supplies all required services. Live work finishes before the Layer releases its
-  resources.
+- `resources` Supplies services not provided by Managed Resources. Live work finishes before the Layer
+  releases its resources.
 
   ```ts
-  ReactStore.Config<Model, Message, R, MessageSchema>["resources"] | undefined
+  ReactStore.Config<Model, Message, R, MessageSchema, Managed>["resources"] | undefined
   ```
 
 - `crash` Default failure view and reporting for every Provider of this application.
@@ -305,7 +306,7 @@ required when the Program needs services, which also makes the options argument 
   records no Mounts, so the panel's Mounts tab stays empty.
 
   ```ts
-  ReactStore.Config<Model, Message, R, MessageSchema>["devTools"] | undefined
+  ReactStore.Config<Model, Message, R, MessageSchema, Managed>["devTools"] | undefined
   ```
 
 ### ProviderProps
@@ -456,25 +457,26 @@ A failure does not undo Model changes already applied while processing Messages.
 
 ### Config
 
-A Program with a Layer that provides the services its Commands and Subscriptions need.
+A RuntimeProgram with a Layer that provides the services its Commands and Subscriptions need.
 Use this configuration with React or `boot`, where there is no surrounding Effect Context
 to supply those services.
 
 The Layer must require no additional services and have no typed failures. It is optional
-when the Program requires no services. The Store builds it when live work first needs it.
+when Managed Resources supply all services or the RuntimeProgram requires none. The Store builds
+it when live work first needs it.
 
 - `update` Applies a Message to the Model without running side effects. Return Commands for work that
   runs after the transition.
 
   ```ts
-  ((model: Model, message: Message) => Readonly<{ model: Model; commands?: Update.Commands<Message, R> | undefined; outMessage?: never; }>) | ((model: Model, message: Message) => Readonly<{ model: Model; commands?: Update.Commands<Message, R> | undefined; outMessage?: never; }>)
+  (model: Model, message: Message) => Readonly<{ model: Model; commands?: Update.Commands<Message, R> | undefined; outMessage?: never; }>
   ```
 
 - `subscriptions` Declares Streams whose dependencies are derived from the Model. Changed dependencies
   restart their Streams.
 
   ```ts
-  Readonly<Record<string, Subscription.Subscription<Model, Message, any, R>>> | Readonly<Record<string, Subscription.Subscription<Model, Message, any, R>>> | undefined
+  Readonly<Record<string, Subscription.Subscription<Model, Message, any, R>>> | undefined
   ```
 
 - `onCrash` Called once on terminal failure, with the original Cause and a Message when one triggered
@@ -484,11 +486,19 @@ when the Program requires no services. The Store builds it when live work first 
   ((cause: Cause.Cause<unknown>, triggeringMessage: Option.Option<Message>) => void) | undefined
   ```
 
-- `resources` Supplies all required services. Live work finishes before the Layer releases its
-  resources.
+- `managedResources` Resources whose lifetime follows the Model. Use Foldkit's `ManagedResource.make` to declare
+  acquisition, release, and lifecycle Messages. Each activation owns separate live values.
+  A record supplies a service only when its known entries guarantee that tag in every alternative.
 
   ```ts
-  Layer.Layer<never, never, never> | Layer.Layer<NoInfer<R>, never, never> | undefined
+  ManagedResourceRecord<Model, Message, Managed> | ((ManagedResourceRecord<Model, Message, Managed> | undefined) & NoInfer<ManagedResourceRecord<Model, Message, Managed>>) | undefined
+  ```
+
+- `resources` Supplies services not provided by Managed Resources. Live work finishes before the Layer
+  releases its resources.
+
+  ```ts
+  Layer.Layer<never, never, never> | Layer.Layer<NoInfer<HostServices<R, Managed>>, never, never> | undefined
   ```
 
 ### Crashed
@@ -504,11 +514,18 @@ The failure returned by `takeWhen` when its Store has been disposed.
 
 The `CommitError` reason when React has deactivated the Provider that owns the Store.
 
-### Program
+### Reentrant
 
-The update function and Subscriptions that describe a Foldkit application.
-Pass a Program to `make` when its Commands and Subscriptions use services provided by the
-surrounding Effect. Use `Config` when the Store should build its own service Layer.
+The `CommitError` reason when `commit` is called while the Store is already delivering a
+Message, such as from a Model listener.
+
+### RuntimeProgram
+
+The runtime contract a Store needs to run a Foldkit application.
+It describes updates, Subscriptions, and Managed Resources without Model or Message Schemas.
+`Program.Program` includes those Schemas and an optional `init` for application and child Programs.
+Pass a RuntimeProgram to `make` when its Commands and Subscriptions use services provided by
+the surrounding Effect. Use `Config` when the Store should build its own service Layer.
 
 - `update` Applies a Message to the Model without running side effects. Return Commands for work that
   runs after the transition.
@@ -531,10 +548,13 @@ surrounding Effect. Use `Config` when the Store should build its own service Lay
   ((cause: Cause.Cause<unknown>, triggeringMessage: Option.Option<Message>) => void) | undefined
   ```
 
-### Reentrant
+- `managedResources` Resources whose lifetime follows the Model. Use Foldkit's `ManagedResource.make` to declare
+  acquisition, release, and lifecycle Messages. Each activation owns separate live values.
+  A record supplies a service only when its known entries guarantee that tag in every alternative.
 
-The `CommitError` reason when `commit` is called while the Store is already delivering a
-Message, such as from a Model listener.
+  ```ts
+  ManagedResourceRecord<Model, Message, Managed> | ((ManagedResourceRecord<Model, Message, Managed> | undefined) & NoInfer<ManagedResourceRecord<Model, Message, Managed>>) | undefined
+  ```
 
 ### Store
 
@@ -944,7 +964,7 @@ its Provider to give child views a lifted source without starting another Store.
   while the Provider's source is. Throws outside the matching Provider.
 
   ```ts
-  () => import("../application").Send<Message>
+  () => Send<Message>
   ```
 
 - `useOptionalModel` Reads `Some(Model)` inside the matching Provider and `None` outside it.
@@ -1068,8 +1088,8 @@ export const update = (model: Model, message: Message) =>
 ### Program
 
 A Foldkit application or child feature without its view: the Model Schema, Message union,
-update, and optionally an OutMessage union, `init`, and Subscriptions. The field names match
-Foldkit's `Runtime.makeApplication`.
+update, and optionally an OutMessage union, `init`, Subscriptions, and Managed Resources.
+The field names match Foldkit's `Runtime.makeApplication`.
 
 **When to use**
 
@@ -1080,9 +1100,10 @@ pass the Program to `Store.make` and `Store.boot`.
 
 **Details**
 
-`R` is the services that Commands and Subscriptions require. A Program does not provide
-them: the host that runs it supplies `resources`. An application Program has no
-OutMessage, so its update returns `Update.Return`.
+`R` is the services that Commands and Subscriptions require. A Managed Resource record supplies
+the services guaranteed by its known entries. A conditional record or tag supplies only services
+present in every alternative. The host supplies every other service through `resources`.
+An application Program has no OutMessage, so its update returns `Update.Return`.
 
 - `OutMessage` The union of facts a child reports to its parent. Omit it for an application.
 
@@ -1107,14 +1128,14 @@ OutMessage, so its update returns `Update.Return`.
   parent creates the child Model.
 
   ```ts
-  (() => Update.Return<ModelSchema["Type"], MessageSchema["Type"], R>) | undefined
+  (() => Readonly<{ model: ModelSchema["Type"]; commands?: Update.Commands<MessageSchema["Type"], R> | undefined; outMessage?: never; }>) | undefined
   ```
 
 - `update` Applies a Message to the Model without running side effects. Return Commands for work that
   runs after the transition.
 
   ```ts
-  (model: ModelSchema["Type"], message: MessageSchema["Type"]) => Update.ReturnWithOutMessage<ModelSchema["Type"], MessageSchema["Type"], OutMessage, R>
+  (model: ModelSchema["Type"], message: MessageSchema["Type"]) => Readonly<{ model: ModelSchema["Type"]; commands?: Update.Commands<MessageSchema["Type"], R> | undefined; outMessage?: OutMessage | undefined; }>
   ```
 
 - `subscriptions` Declares Streams whose dependencies are derived from the Model. Changed dependencies
@@ -1122,6 +1143,16 @@ OutMessage, so its update returns `Update.Return`.
 
   ```ts
   Readonly<Record<string, Subscription.Subscription<ModelSchema["Type"], MessageSchema["Type"], any, R>>> | undefined
+  ```
+
+- `managedResources` Resources whose lifetime follows the Model. Declare them with Foldkit's `ManagedResource.make`.
+  A record supplies a service when its known entries guarantee that tag in every possible
+  registration. A missing record, a record that may be absent, or a string-keyed dictionary does
+  not. The host supplies remaining services and releases registered resources on shutdown.
+  Each activation owns separate live values. Lift a child's resources with `ManagedResource.lift`.
+
+  ```ts
+  Managed | (undefined & Managed) | undefined
   ```
 
 ### make
