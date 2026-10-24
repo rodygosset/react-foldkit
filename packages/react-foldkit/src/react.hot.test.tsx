@@ -1,5 +1,5 @@
-import { act, cleanup, render, screen } from "@testing-library/react"
-import { Schema } from "effect"
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react"
+import { Effect, Schema } from "effect"
 import { defineMessageUnion } from "foldkit/message"
 import type * as Update from "foldkit/update"
 import React from "react"
@@ -106,6 +106,37 @@ describe("hot reload", function () {
 			</second.Provider>
 		)
 		expect(screen.getByTestId("label").textContent).toBe("new:5")
+	})
+
+	it("does not run init Commands again after a reload", async function () {
+		let initRuns = 0
+		const loading = (step: number) =>
+			Application.define({
+				Model: Count,
+				Message,
+				init: (): Update.Return<Count, Message> => ({
+					model: { count: 0 },
+					commands: [
+						{
+							name: "LoadOnce",
+							effect: Effect.sync(function () {
+								initRuns += 1
+								return Message.Clicked()
+							}),
+						},
+					],
+				}),
+				update: (model: Count, _message: Message) => ({ model: { count: model.count + step } }),
+			})
+		const first = evaluate("file:///init.tsx", () => loading(1))
+		const rendered = render(<Tree app={first} />)
+		await waitFor(() => expect(screen.getByRole("button").textContent).toBe("1"))
+
+		const second = evaluate("file:///init.tsx?t=1", () => loading(1))
+		rendered.rerender(<Tree app={second} />)
+		await act(() => Effect.runPromise(Effect.sleep("20 millis")))
+		expect(screen.getByRole("button").textContent).toBe("1")
+		expect(initRuns).toBe(1)
 	})
 
 	it("starts from init when a Provider remounts without a reload", function () {
