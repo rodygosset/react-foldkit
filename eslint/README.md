@@ -1,21 +1,27 @@
-# Repository lint conventions
+# Repository lint rules
 
-The shared ESLint rules keep function syntax consistent across maintained source, tests, and tooling. These repository conventions are separate from the published [React Foldkit architecture presets](../packages/react-foldkit/eslint/README.md).
+These ESLint rules keep code style consistent across the repository's source, tests, and tools. They are separate from [the ESLint presets that React Foldkit publishes](../packages/react-foldkit/eslint/README.md) for apps.
 
-## Function syntax
+## Write functions the same way
 
-- Use expression-bodied arrows for expression-only helpers and callbacks.
-- Use function declarations for helpers, React components, and hooks with block bodies.
-- Use anonymous function expressions for inline callbacks with block bodies. Name the callbacks passed to React effect hooks.
-- Use method syntax for object functions with block bodies. Keep generators and accessors in their existing syntax.
-- Preserve function syntax when `this`, `arguments`, or `new.target` requires it.
+| Function | Syntax |
+| --- | --- |
+| A helper or callback that only returns an expression | An arrow with an expression body: `(item) => item.id` |
+| A helper, React component, or hook with a block body | A function declaration: `function View() { … }` |
+| An inline callback with a block body | An anonymous function expression: `function () { … }` |
+| A callback passed to a React effect hook | A named function expression: `function syncTitle() { … }` |
+| An object member with a block body | Method syntax: `{ start() { … } }` |
 
-The rules live in `function-style.mjs` and `function-style.config.mjs`. Run `bun run test:lint` for their regression tests.
+Keep generators and accessors as they are. Keep any function that needs `this`, `arguments`, or `new.target` in the syntax that provides it.
 
-## Effect checks
+The rules live in `function-style.mjs` and `function-style.config.mjs`. Run `bun run test:lint` to test them.
 
-`bun run lint` runs the shared rules, Oxlint, and workspace lint commands. Oxlint treats warnings as failures. Dependencies, vendored repositories, generated route trees, and build output are excluded.
+## Run the linters
 
-`@effect/tsgo` supplies Effect diagnostics in TypeScript and Oxlint. `bun run prepare` reapplies their installation patches. Run `bun run lint:effect` to inspect package diagnostics directly.
+`bun run lint` runs these rules, Oxlint, and each workspace's lint command. Oxlint fails on warnings. It skips dependencies, the vendored `repos` folder, generated route trees, and build output.
 
-The workspace uses TypeScript 7. `ts6-register.mjs` supplies the TypeScript 6 compiler API needed by the ESLint parser and declaration bundler. Relevant scripts load that shim with `NODE_OPTIONS`. Keep the alias until those tools support the workspace compiler.
+`@effect/tsgo` adds Effect's checks to TypeScript and Oxlint. `bun run prepare` reinstalls its patches. Run `bun run lint:effect` to see the package's Effect diagnostics on their own.
+
+## Why there is a TypeScript 6 shim
+
+The workspace compiles with TypeScript 7, but the ESLint parser and the declaration bundler still need TypeScript 6's compiler API. `ts6-register.mjs` provides it, and the scripts that need it load it through `NODE_OPTIONS`. Remove the shim once those tools support TypeScript 7.

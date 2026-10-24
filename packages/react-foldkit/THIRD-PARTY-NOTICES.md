@@ -1,16 +1,21 @@
 # Third-party notices
 
-React Foldkit depends on [Foldkit](https://github.com/foldkit/foldkit) as a peer dependency and adapts its model freezing. Foldkit is excluded from the bundled output except for the copies described below.
+React Foldkit uses [Foldkit](https://github.com/foldkit/foldkit) as a peer dependency, so the package doesn't bundle it. The exceptions are these copied files, plus React Foldkit's model freezing, which adapts Foldkit's.
 
-- The Store bundles the Managed Resource lifecycle watcher from foldkit 0.169.0 (`dist/runtime/managedResourceFibers`). Its declaration points to the Store adapter. `bun run --filter=react-foldkit check:devtools-vendor` checks this copy.
-- The `react-foldkit/scene` entry bundles a patched copy of the Scene test runner from foldkit 0.169.0 (`dist/test/scene.js`, `internal.js`, `query.js`, and `matchers.js`). `bun run --filter=react-foldkit check:vendor` checks that copy.
-- The DevTools integration bundles the DevTools recorder and MCP bridge modules from foldkit 0.169.0 (`dist/devTools`, with three private import paths redirected to public `foldkit` entries), and the relay registry modules from @foldkit/vite-plugin 0.28.0. `devToolsRelay.ts` and `devToolsPlugin.ts` adapt that plugin's relay and overlay injection. `bun run --filter=react-foldkit check:devtools-vendor` checks those copies.
+| Copy | Source | Checked by |
+| --- | --- | --- |
+| The Store's Managed Resource watcher | `foldkit` 0.169.0, `dist/runtime/managedResourceFibers`. Its type declaration points to the Store adapter. | `check:devtools-vendor` |
+| The `react-foldkit/scene` test runner, patched | `foldkit` 0.169.0, `dist/test/scene.js`, `internal.js`, `query.js`, and `matchers.js` | `check:vendor` |
+| The DevTools recorder and MCP bridge | `foldkit` 0.169.0, `dist/devTools`, with three private imports pointed at public `foldkit` entries | `check:devtools-vendor` |
+| The DevTools relay registry | `@foldkit/vite-plugin` 0.28.0. `devToolsRelay.ts` and `devToolsPlugin.ts` adapt the plugin's relay and overlay loading. | `check:devtools-vendor` |
 
-Both packages use the MIT license reproduced below.
+Run each check with `bun run --filter=react-foldkit <check>`.
 
 ## Foldkit
 
-The copied recorder's Clear action starts new history at the live Model and clears old init Commands. The patch is recorded in `scripts/checkDevToolsVendor.mjs`. Run `bun run --filter=react-foldkit check:devtools-vendor -- --apply --write-lock` to reapply recorded patches and update their hashes.
+The copied DevTools recorder has one behavior patch. Its Clear action starts the new history at the live Model and drops the old init Commands. `scripts/checkDevToolsVendor.mjs` records the patch. To reapply the patches and update their hashes, run `bun run --filter=react-foldkit check:devtools-vendor -- --apply --write-lock`.
+
+Foldkit and `@foldkit/vite-plugin` both use the MIT license:
 
 The MIT License (MIT)
 

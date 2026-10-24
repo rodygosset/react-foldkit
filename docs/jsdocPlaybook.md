@@ -1,79 +1,82 @@
 # Write useful JSDoc
 
-JSDoc helps a consumer choose an API and use it correctly without reading its implementation. Describe what the API is, why someone uses it, and the behavior the type cannot explain.
+A JSDoc comment helps someone pick an API and use it correctly without reading its code. Say what the API is, why someone would use it, and what it does that the type can't show. The prose follows [the writing guide](writing.md).
 
-This package follows Effect's [declaration structure](../repos/effect/.agents/skills/jsdocs/declarations.md) and [example conventions](../repos/effect/.agents/skills/jsdocs/examples.md), with Foldkit's [plain prose style](../repos/foldkit/.agents/writing-prose.md).
+The structure follows Effect's [declaration layout](../repos/effect/.agents/skills/jsdocs/declarations.md) and [example conventions](../repos/effect/.agents/skills/jsdocs/examples.md), and Foldkit's [prose style](../repos/foldkit/.agents/writing-prose.md).
 
-## Decide what needs a comment
+## Choose what to document
 
-Document owned public exports. Do not reexport Foldkit APIs or add JSDoc to internal helpers.
-
-Document public members when their meaning, default, timing, or constraint needs explanation. That includes members inherited from an internal base type. Omit comments that repeat the member's name or type.
+- Document every public export this package owns.
+- Don't reexport Foldkit APIs, and don't document internal helpers.
+- Document a public member when its meaning, default, timing, or limits need explaining. That includes members inherited from an internal base type.
+- Skip a comment that only repeats the member's name or type.
 
 ## Explain the contract
 
-Read the implementation, tests, and a consumer call site before writing a guarantee.
+Read the code, its tests, and a real call site before you promise anything.
 
-Start functions with what they do, such as "Creates", "Decodes", or "Waits". Start data types with what they represent and what consumers use them for. A list of fields does not explain a Model.
+- Start a function's comment with what it does: "Creates", "Decodes", "Waits".
+- Start a type's comment with what it represents and what callers use it for. A list of fields doesn't explain a Model.
+- Give the practical description first, then only the facts that matter.
 
-Give the practical description first. Add only relevant facts.
+Some facts matter for each library:
 
-- For Effects, distinguish construction from execution. Describe typed failures separately from defects, interruption, and synchronous throws. Explain required services and who releases resources.
-- For React, explain the required Provider, initialization lifetime, selector equality, and optional-hook behavior where relevant. Say whether a Schema validates data or supplies inference.
-- For Foldkit, explain Model transitions, Command execution, Subscription restarts, and cancellation when those affect callers.
+| Library | Explain |
+| --- | --- |
+| Effect | When the Effect is built versus when it runs. Typed failures, kept apart from defects, interruption, and thrown errors. The services it needs, and who releases its resources. |
+| React | Which Provider a hook needs, how long initialization lives, how selectors compare values, and what optional hooks return. Whether a Schema checks data or only supplies types. |
+| Foldkit | How the Model changes, when Commands run, when Subscriptions restart, and what cancellation does to callers. |
 
-Optional sections appear in this order. Omit a section that adds nothing.
+Add these sections only when they say something, in this order:
 
-1. `**When to use**` explains a use case or helps choose between related APIs.
-2. `**Details**` explains defaults, ordering, timing, or ownership.
-3. `**Gotchas**` states concrete constraints and failure modes.
+1. `**When to use**` gives a use case or helps choose between related APIs.
+2. `**Details**` covers defaults, ordering, timing, or ownership.
+3. `**Gotchas**` states real limits and ways the call can fail.
 
-Use Model, Message, Command, Subscription, and Submodel consistently. Describe public guarantees rather than private implementation details. Prefer "Commit returns before Commands finish" to "Commands execute asynchronously".
+Use the words Model, Message, Command, Subscription, and Submodel the same way everywhere. Describe what callers can rely on, not private internals. Write "Commit returns before Commands finish", not "Commands execute asynchronously".
 
-## Add metadata and links
+## Add tags and links
 
-Owned root declarations require `@category` and their introduction version in `@since`. Do not repeat those tags on members. Choose categories by purpose, using Effect's [category guidance](../repos/effect/.agents/skills/jsdocs/categories.md).
+Every exported declaration needs `@category` and `@since`, with the version that introduced it. Members don't repeat them. Pick a category by purpose, using Effect's [category guide](../repos/effect/.agents/skills/jsdocs/categories.md).
 
-When applicable, tags follow this order.
+Tags go in this order when a comment has them:
 
-| Tag           | Information                                            |
-| ------------- | ------------------------------------------------------ |
-| `@deprecated` | Replacement and migration condition                    |
-| `@default`    | Verified member default, never a root or namespace tag |
-| `@see`        | Related public API and why the relationship matters    |
-| `@stability`  | Actual compatibility promise                           |
-| `@category`   | Root declaration's purpose                             |
-| `@since`      | Introduction version in this package                   |
+| Tag | What it holds |
+| --- | --- |
+| `@deprecated` | The replacement, and when to switch |
+| `@default` | A member's checked default value. Never on a root declaration or namespace |
+| `@see` | A related public API, and why it is related |
+| `@stability` | A compatibility promise the package actually makes |
+| `@category` | What the declaration is for |
+| `@since` | The package version that introduced it |
 
-Keep upstream release metadata in inherited docs. Do not add stability tags that the package has no policy to support. Effect's third-party exposure policy is not automatically this package's policy.
+- Keep Foldkit's and Effect's release tags on comments inherited from them. Don't add stability tags the package has no policy for.
+- A `{@link Symbol}` must point to a public symbol. Use Markdown links for URLs. Write a symbol in backticks when the reader doesn't need to jump to it.
+- Don't repeat types in JSDoc. A `@param` or `@returns` tag must add something the signature doesn't say. Describe typed failures and thrown errors in prose.
 
-A `{@link Symbol}` must resolve to a public symbol. Use Markdown links for URLs. Omit automatic links to the containing module. Mention a symbol in backticks when navigation is unnecessary.
+## Write examples that teach
 
-Do not repeat TypeScript types in JSDoc annotations. Parameter and return tags must add information beyond the signature. This package uses prose for typed failures and synchronous throws, following Effect's canonical declaration layout.
+Examples are optional, and error classes never have one. When an operation can fail, show the error handling next to it.
 
-## Choose examples that teach usage
+- Use a titled `**Example** (Use case)` section with one `ts` or `tsx` fence. Each title is unique within the comment.
+- Use public imports, short local names, and only the setup the call needs. Use `modifyFields` to change Model fields in an update.
+- Stop once the example shows the use. Don't add loading, decoding, or result checks to an example about construction.
+- Leave out unused declarations, comments that repeat inferred types, and `...` placeholders. Keep explicit types only where inference needs them, or where they define the app's Model and Messages.
+- If an example spans files, name each file before its code, and make each file valid on its own.
+- Run asynchronous Effects with `Effect.runPromise` at the edge of the app. Use `Effect.runSync` only for synchronous work. Coordinate concurrency with Effect, not sleeps or mutable flags.
+- Each extra example must teach something new.
 
-Examples are optional. Error classes have none. When useful, show error handling beside the operation that produces the error.
-
-Use a titled `**Example** (Use case)` section with one TypeScript fence. Titles must be unique within a comment. Use public imports, simple local names, and only the setup needed to understand the call. Use `modifyFields` for Model field changes in updates. Each additional example must teach something different.
-
-Stop once the example demonstrates the intended use. Do not add loading, decoding, or result inspection to a construction example. Omit unused declarations, inspection expressions, and comments that repeat inferred types. Keep explicit types only where inference needs them or they define the application's Model and Messages.
-
-Use ordinary `ts` or `tsx` fences. Examples are illustrative, not automatically executed. If an illustration spans modules, name each file before its code and make each module valid independently. Avoid unexplained variables, ellipses, constructor-only demonstrations, and assertions that merely show a symbol exists.
-
-For asynchronous Effects, use `Effect.runPromise` at the host boundary. Use `Effect.runSync` only for synchronous work. Finish cleanup. Coordinate concurrency with Effect rather than sleeps or mutable flags. Show data-first and data-last calls together only when that distinction is the lesson.
-
-A short member needs no template.
+A short member needs no template:
 
 ```ts
 /** Reads the current Model without dispatching a Message. */
 getModel: () => Model
 ```
 
-## Review and verify
+## Check the result
 
-Read the comment as an editor tooltip without its module. Remove repetition, generic praise, and sentences that could describe any library. Keep familiar words, complete sentences, and conditions beside the behavior they change.
+Read each comment as an editor tooltip, without the rest of the file. Cut repetition, praise, and any sentence that could describe another library.
 
-Follow [the verification guide](verification.md#update-documentation-and-api-records) to build and regenerate docs. Check example imports against the built package and verify any claimed outcome. Markdown fences need separate verification.
+Then build and regenerate the docs, as [verification](verification.md#update-the-api-docs) describes. Compile the examples' imports against the built package, and check any outcome an example claims.
 
-`check:docs` checks owned metadata, tag and section order, example titles, error-class examples, public symbol links, and copied upstream comments. It checks local documentation links. It does not judge prose quality or prove examples work.
+`check:docs` checks tags and their order, section order, example titles, error-class examples, links to public symbols, comments copied from upstream, and local doc links. It doesn't judge the prose or run the examples.
