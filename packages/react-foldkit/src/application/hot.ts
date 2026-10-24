@@ -56,7 +56,11 @@ export function defineKey(): string | undefined {
 export const entry = <Context, Provider, Instance>(key: string): Entry<Context, Provider, Instance> | undefined =>
 	state.entries.get(key) as Entry<Context, Provider, Instance> | undefined
 
-/** Registers the first entry for a key. */
-export function register<Context, Provider, Instance>(key: string, value: Entry<Context, Provider, Instance>): void {
+/** Registers the first entry for a key and returns it. */
+export function register<Context, Provider, Instance>(
+	key: string,
+	value: Entry<Context, Provider, Instance>
+): Entry<Context, Provider, Instance> {
 	state.entries.set(key, value as Entry<unknown, unknown, unknown>)
+	return value
 }

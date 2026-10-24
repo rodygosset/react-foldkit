@@ -485,6 +485,13 @@ export function define<
 			? undefined
 			: Hot.entry<SourceContext<Model, Message>, typeof Provider, typeof ProviderInstance>(hotKey)
 	const Context = hotEntry?.Context ?? makeSourceContext<Model, Message>()
+	// Only the first `define` call for a key registers, so its Provider is the one React keeps.
+	const ownHotEntry =
+		hotKey === undefined || hotEntry !== undefined
+			? undefined
+			: Hot.register(hotKey, { Context, Provider, current: { Instance: ProviderInstance, generation: 1 } })
+	if (hotEntry !== undefined)
+		hotEntry.current = { Instance: ProviderInstance, generation: hotEntry.current.generation + 1 }
 	const validateInit = config.validateInit ?? isDevelopment
 	const checkModel = Schema.decodeUnknownExit(Schema.toType(program.Model))
 
@@ -574,28 +581,20 @@ export function define<
 		const live = React.useRef<LiveModel | undefined>(undefined)
 		// With a hot key, render the newest Program's body. A reload changes the generation, so the
 		// body remounts and starts from the live Model the previous body published.
-		const current =
-			hotKey === undefined ? undefined : Hot.entry<unknown, unknown, typeof ProviderInstance>(hotKey)?.current
+		const current = ownHotEntry?.current
 		const Instance = current?.Instance ?? ProviderInstance
-		const hotGeneration = current?.generation ?? 0
 		const hot = React.useMemo(
-			(): HotSlot | undefined => (current === undefined ? undefined : { generation: hotGeneration, live }),
-			[current, hotGeneration]
+			(): HotSlot | undefined => (current === undefined ? undefined : { generation: current.generation, live }),
+			[current]
 		)
 		return (
 			<Instance
-				key={`${generation}:${hotGeneration}`}
+				key={`${generation}:${current?.generation ?? 0}`}
 				{...props}
 				restart={restart}
 				hot={hot}
 			/>
 		)
-	}
-
-	if (hotKey !== undefined) {
-		if (hotEntry === undefined)
-			Hot.register(hotKey, { Context, Provider, current: { Instance: ProviderInstance, generation: 1 } })
-		else hotEntry.current = { Instance: ProviderInstance, generation: hotEntry.current.generation + 1 }
 	}
 
 	const application = {

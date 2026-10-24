@@ -21,7 +21,7 @@ export type Entry<Context, Provider, Instance> = {
 };
 export declare function defineKey(): string | undefined;
 export declare const entry: <Context, Provider, Instance>(key: string) => Entry<Context, Provider, Instance> | undefined;
-export declare function register<Context, Provider, Instance>(key: string, value: Entry<Context, Provider, Instance>): void;
+export declare function register<Context, Provider, Instance>(key: string, value: Entry<Context, Provider, Instance>): Entry<Context, Provider, Instance>;
 ```
 
 ## dist/application/providerSession.d.ts

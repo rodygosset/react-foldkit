@@ -1261,6 +1261,8 @@ Restored Providers skip their init Commands, because those already ran.
 **Gotchas**
 
 - A Provider remounted for any other reason, such as a `key` change, still starts from `init`.
+- Commands running at the moment of the reload stop and don't run again, as in Foldkit. A
+  Model that waits for one of them keeps waiting until another Message changes it.
 - `vite build` output is unchanged.
 
 **Example** (Keep the Model while editing an application)

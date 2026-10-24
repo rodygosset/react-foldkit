@@ -38,6 +38,13 @@
 			}
 		},
 		{
+			"files": ["packages/react-foldkit/test/package/**"],
+			"rules": {
+				// Built-package tests read the emitted files in dist at the Node filesystem boundary.
+				"effecttsgo/node-builtin-import": "off"
+			}
+		},
+		{
 			"files": ["packages/react-foldkit/scripts/*.mjs"],
 			"rules": {
 				// Standalone verification commands use Node at their filesystem and process boundary.

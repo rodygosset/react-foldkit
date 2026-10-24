@@ -67,6 +67,8 @@ Once deactivation has stopped the live work, the next activation restarts it fro
 
 With the `preserveModel()` Vite plugin, editing the module that calls `Application.define` keeps the Model. `define` returns the same Provider as before the reload, so React keeps it mounted. The Provider restarts from the new Program and keeps the live Model, unless the Model no longer matches the new `Model` Schema. In that case it starts from `init`.
 
+As in Foldkit, Commands running at the moment of the reload stop and don't run again. A Model that waits for one of them, such as `isWaiting: true`, keeps waiting until another Message changes it.
+
 ### Handling crashes
 
 `crash.view` renders a failure with the Model and the Message that caused it, when they are known. It can restart the Provider from `init`. `crash.report` receives client failures as an Effect, and any failure inside the report is logged separately.

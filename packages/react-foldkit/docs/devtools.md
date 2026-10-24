@@ -68,7 +68,7 @@ export default defineConfig({
 })
 ```
 
-Without it, editing the module that calls `Application.define` makes Fast Refresh remount that application's Provider, and the Model starts again from `init`. With it, the Provider keeps the live Model and runs the new code.
+Without it, editing the module that calls `Application.define` makes Fast Refresh remount that application's Provider, and the Model starts again from `init`. With it, the Provider keeps the live Model and runs the new code. Commands that were running when you saved stop and don't run again, as in Foldkit.
 
 ## Move to Foldkit later
 
