@@ -50,9 +50,11 @@ describe("built package entry points", function () {
 		expect(Object.keys(SceneReact)).toEqual(["bindSceneView"])
 	})
 
-	it("exports the DevTools Vite plugin with its overlay and relay parts", function () {
-		expect(Object.keys(Vite)).toEqual(["devTools"])
+	it("exports the DevTools and model-preservation Vite plugins", function () {
+		expect(Object.keys(Vite).sort()).toEqual(["devTools", "preserveModel"])
 		const plugins = [Vite.devTools()].flat(2) as ReadonlyArray<{ readonly name: string }>
 		expect(plugins.map(({ name }) => name)).toEqual(["react-foldkit:devtools", "react-foldkit:devtools-relay"])
+		const preserve = [Vite.preserveModel()].flat(2) as ReadonlyArray<{ readonly name: string }>
+		expect(preserve.map(({ name }) => name)).toEqual(["react-foldkit:preserve-model"])
 	})
 })

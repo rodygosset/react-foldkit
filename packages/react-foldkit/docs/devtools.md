@@ -49,6 +49,8 @@ export const App = Application.define(program, {
 
 The plugin works with plain Vite apps and with frameworks that render HTML on the server, such as TanStack Start. It sends no full-page reloads, so React Fast Refresh keeps working.
 
+To keep the Model when you edit the module that calls `Application.define`, also add `preserveModel()` from `react-foldkit/vite`. Without it, Fast Refresh remounts that application's Provider and its Model starts again from `init`.
+
 React Foldkit records no Mounts, so the panel's Mounts tab stays empty.
 
 ## Migrate to Foldkit
@@ -57,4 +59,4 @@ Move the same `devTools` settings into Foldkit's `Runtime.makeApplication`, and 
 
 ## How it is built
 
-Foldkit does not export its DevTools recorder or MCP relay, so React Foldkit runs copies of them, pinned to the tested Foldkit release. The panel itself comes from your `@foldkit/devtools` install. `check:devtools-vendor` fails when a copy no longer matches the recorded release; see [the third-party notices](../THIRD-PARTY-NOTICES.md).
+Foldkit does not export its DevTools recorder or MCP relay, so React Foldkit runs copies of them, pinned to the tested Foldkit release. The Vite plugin registers the recorder through `react-foldkit/devtools`, the way Foldkit's plugin registers its overlay. An application that never loads that entry ships none of this code, even when it sets `devTools`. The panel itself comes from your `@foldkit/devtools` install. `check:devtools-vendor` fails when a copy no longer matches the recorded release; see [the third-party notices](../THIRD-PARTY-NOTICES.md).

@@ -246,6 +246,12 @@
 		"introduced": "0.1.0"
 	},
 	{
+		"entryPoint": "react-foldkit/vite",
+		"name": "preserveModel",
+		"owner": "react-foldkit",
+		"introduced": "0.1.0"
+	},
+	{
 		"entryPoint": "react-foldkit/eslint",
 		"name": "default",
 		"owner": "react-foldkit",

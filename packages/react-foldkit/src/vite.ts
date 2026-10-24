@@ -1,5 +1,6 @@
 import type { PluginOption } from "vite"
 import { devToolsPlugin } from "./vite/devToolsPlugin.js"
+import { preserveModelPlugin } from "./vite/preserveModelPlugin.js"
 
 /**
  * Creates the Vite plugin that connects Foldkit's DevTools panel and MCP relay to React Foldkit
@@ -41,3 +42,43 @@ import { devToolsPlugin } from "./vite/devToolsPlugin.js"
  * @since 0.2.0
  */
 export const devTools = (): PluginOption => devToolsPlugin()
+
+/**
+ * Creates the Vite plugin that keeps each Provider's Model when you edit the module that calls
+ * `Application.define`.
+ *
+ * **When to use**
+ *
+ * Add it next to `@vitejs/plugin-react`. Without it, React Fast Refresh remounts the Provider of
+ * an edited application module and its Model starts again from `init`. Modules that only render
+ * keep their state either way.
+ *
+ * **Details**
+ *
+ * During `vite serve`, the plugin marks the start and end of every browser module that imports
+ * React Foldkit, which gives each `Application.define` call a key that survives reloads. After a
+ * reload, a Provider takes the live Model of the Provider it replaced at the same place in the
+ * tree, if that Model still decodes with the new `Model` Schema. Otherwise it starts from `init`.
+ * Restored Providers skip their init Commands, because those already ran.
+ *
+ * **Gotchas**
+ *
+ * - A Provider remounted for any other reason, such as a `key` change, still starts from `init`.
+ * - `vite build` output is unchanged.
+ *
+ * **Example** (Keep the Model while editing an application)
+ *
+ * ```ts
+ * import react from "@vitejs/plugin-react"
+ * import { defineConfig } from "vite"
+ * import { preserveModel } from "react-foldkit/vite"
+ *
+ * export default defineConfig({
+ *   plugins: [react(), preserveModel()],
+ * })
+ * ```
+ *
+ * @category configuration
+ * @since 0.2.0
+ */
+export const preserveModel = (): PluginOption => preserveModelPlugin()
