@@ -6,7 +6,7 @@ import React from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, describe, expect } from "vitest"
 import * as Application from "../../src/application"
-import { __configure } from "../../src/devtoolsOverlay"
+import { __configure } from "../../src/devtools"
 let root: Root | undefined
 let container: HTMLDivElement | undefined
 let disposeOverlay: (() => void) | undefined

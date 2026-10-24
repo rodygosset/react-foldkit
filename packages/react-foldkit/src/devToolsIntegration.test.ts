@@ -3,7 +3,7 @@ import { it } from "@effect/vitest"
 import { Effect, Option, Result, Schema, SubscriptionRef } from "effect"
 import { describe, expect } from "vitest"
 import * as ReactStore from "./application/reactStore"
-import * as Overlay from "./devtoolsOverlay"
+import * as DevTools from "./devtools"
 import type { DevToolsStore } from "foldkit/devtools-host"
 import { dispatchRequest } from "./devtoolsVendor/devTools/webSocketBridge.js"
 import type * as Update from "foldkit/update"
@@ -16,7 +16,7 @@ const makeHarness = (
 		let history: DevToolsStore | undefined
 		yield* Effect.acquireRelease(
 			Effect.sync(() =>
-				Overlay.__configure(
+				DevTools.__configure(
 					(store) =>
 						Effect.sync(function () {
 							history = store
@@ -66,7 +66,7 @@ describe("DevTools history integration", function () {
 	it.live("activates every Provider when two register in one turn", () =>
 		Effect.gen(function* () {
 			yield* Effect.acquireRelease(
-				Effect.sync(() => Overlay.__configure(() => Effect.void, undefined)),
+				Effect.sync(() => DevTools.__configure(() => Effect.void, undefined)),
 				(dispose) => Effect.sync(dispose)
 			)
 			const first = ReactStore.make<number, Message>(
@@ -132,6 +132,37 @@ describe("DevTools history integration", function () {
 			expect(store.readView()).toBe(state.startIndex + 1)
 			yield* history.resume
 			expect(store.readView()).toBe(123)
+		}).pipe(Effect.scoped)
+	)
+})
+
+describe("DevTools registration", function () {
+	it.live("records nothing until react-foldkit/devtools registers the recorder", () =>
+		Effect.gen(function* () {
+			const store = ReactStore.make<number, Message>(
+				{
+					update: (model, message) => ({ model: model + message.value }),
+					devTools: { show: "Always" },
+				},
+				{ model: 0 },
+				Schema.Finite
+			)
+			let recorded: DevToolsStore | undefined
+			yield* Effect.acquireRelease(
+				Effect.sync(() =>
+					DevTools.__configure(
+						(history) =>
+							Effect.sync(function () {
+								recorded = history
+							}),
+						undefined
+					)
+				),
+				(dispose) => Effect.sync(dispose)
+			)
+			yield* store.activate
+			yield* Effect.sleep("20 millis")
+			expect(recorded).toBeUndefined()
 		}).pipe(Effect.scoped)
 	)
 })
