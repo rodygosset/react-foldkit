@@ -13,12 +13,12 @@ A Model describes state. A Message describes an event. The pure `update` functio
 Install React Foldkit with its peer dependencies:
 
 ```sh
-npm install react-foldkit foldkit@^0.168.0 effect@4.0.0 react@^19.2.6
+npm install react-foldkit foldkit@^0.169.0 effect@4.0.0 react@^19.2.6
 ```
 
 ## Requirements
 
-- React `^19.2.6`, Foldkit `^0.168.0`, and Effect `4.0.0`.
+- React `^19.2.6`, Foldkit `^0.169.0`, and Effect `4.0.0`.
 - Node.js `20.19.0` or newer for server rendering. Browser applications need an ESM bundler.
 - TypeScript with `strict: true` and `moduleResolution: "bundler"`. Tested with TypeScript `7.0.2`.
 - ESLint 9 only when using `react-foldkit/eslint`.

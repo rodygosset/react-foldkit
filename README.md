@@ -9,7 +9,7 @@ Compatible fixes use patch releases. Features use minor releases.
 ## Install
 
 ```sh
-npm install react-foldkit foldkit@^0.168.0 effect@4.0.0 react@^19.2.6
+npm install react-foldkit foldkit@^0.169.0 effect@4.0.0 react@^19.2.6
 ```
 
 See the [requirements](packages/react-foldkit/README.md#requirements) and [ESLint setup](packages/react-foldkit/eslint/README.md).

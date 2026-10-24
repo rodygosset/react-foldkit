@@ -190,6 +190,11 @@ export const assertZeroCommands = (commands) => {
         throw new Error(`Expected no Commands but found:\n\n${formatCommandList(commands)}`);
     }
 };
+const formatChildCommandHint = (commands) => Array.some(commands, command => Array.isReadonlyArrayNonEmpty(command.messageMappers ?? []))
+    ? '\n\nSome Commands came from a child Submodel. If the child is an\n' +
+        '@foldkit/ui component, check its test namespace for a helper\n' +
+        '(for example, Toast.test.drainEntry).'
+    : '';
 /** Throws when trying to send a message with unresolved Commands. Keyed
  *  Commands (built with an interruptible `Command.define`) and Interrupt
  *  Commands are exempt: they model in-flight async work that legitimately
@@ -204,7 +209,8 @@ export const assertNoUnresolvedCommands = (commands, context) => {
         throw new Error(`I found unresolved Commands ${context}:\n\n${formatCommandList(unresolvable)}\n\n` +
             'Resolve all Commands before sending the next Message.\n' +
             'Use resolve(Definition | instance, ResultMessage) for each one,\n' +
-            'or resolveAll(...resolvers) to resolve them all at once.');
+            'or resolveAll(...resolvers) to resolve them all at once.' +
+            formatChildCommandHint(unresolvable));
     }
 };
 /** Throws when Commands remain at the end of a test. */
@@ -213,7 +219,8 @@ export const assertAllCommandsResolved = (commands) => {
         throw new Error(`I found Commands without resolvers:\n\n${formatCommandList(commands)}\n\n` +
             'Every Command produced by update needs to be resolved.\n' +
             'Use resolve(Definition | instance, ResultMessage) for each one,\n' +
-            'or resolveAll(...resolvers) to resolve them all at once.');
+            'or resolveAll(...resolvers) to resolve them all at once.' +
+            formatChildCommandHint(commands));
     }
 };
 const formatPendingMount = ({ name, args, occurrence, }) => {

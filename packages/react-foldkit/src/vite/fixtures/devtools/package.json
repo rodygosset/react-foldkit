@@ -3,6 +3,6 @@
   "private": true,
   "type": "module",
   "devDependencies": {
-    "@foldkit/devtools": "0.168.0"
+    "@foldkit/devtools": "0.169.0"
   }
 }
