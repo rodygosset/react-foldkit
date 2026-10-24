@@ -1,0 +1,52 @@
+name: Latest Foldkit
+# Runs the package tests against the newest Foldkit release on npm, so a Foldkit release that
+# breaks React Foldkit shows up here before users upgrade.
+on:
+    push:
+        branches: [main]
+    pull_request:
+    schedule:
+        - cron: "17 6 * * *"
+    workflow_dispatch:
+permissions:
+    contents: read
+jobs:
+    latest-foldkit:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+            - uses: oven-sh/setup-bun@v2
+              with:
+                  bun-version: 1.3.14
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 24
+            - run: bun install --frozen-lockfile
+            - name: Install the latest Foldkit release
+              working-directory: packages/react-foldkit
+              run: bun add --dev foldkit@latest @foldkit/devtools@latest @foldkit/ui@latest @foldkit/vite-plugin@latest
+            - name: Install the latest Foldkit release in the demo app
+              working-directory: apps/web
+              run: bun add foldkit@latest
+            - name: Record the Foldkit versions
+              working-directory: packages/react-foldkit
+              run: |
+                  for name in foldkit @foldkit/devtools @foldkit/ui @foldkit/vite-plugin; do
+                      echo "- $name $(node -p "JSON.parse(require('fs').readFileSync('node_modules/$name/package.json', 'utf8')).version")" >> "$GITHUB_STEP_SUMMARY"
+                  done
+            - run: bun run --filter=react-foldkit browser:install -- --with-deps
+            - run: bun run build --filter=react-foldkit
+            - run: bun run --filter=react-foldkit typecheck
+            - run: bun run --filter=react-foldkit test
+            - run: bun run --filter=react-foldkit test:browser
+            - run: bun run --filter=react-foldkit test:types:package
+            - run: bun run --filter=react-foldkit test:types:example
+            - run: bun run --filter=react-foldkit test:package:built
+            # The vendored copies are pinned to one Foldkit release by hash, so a newer release fails
+            # these checks by design. Report it as a warning so the tests above decide the job.
+            - name: Check the vendored Foldkit copies
+              if: success() || failure()
+              run: |
+                  if ! (bun run --filter=react-foldkit check:vendor && bun run --filter=react-foldkit check:devtools-vendor); then
+                      echo "::warning title=Vendored Foldkit copies are stale::The vendored Scene or DevTools files no longer match the latest Foldkit release. Refresh them before widening the foldkit peer range."
+                  fi
