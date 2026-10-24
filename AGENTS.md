@@ -1,33 +1,60 @@
 # Work on React Foldkit
 
-Read [the runtime explanation](packages/react-foldkit/docs/architecture.md) before changing lifecycle behavior. Run checks from the repository root as described in [verification](docs/verification.md).
+These rules apply to every agent and contributor working in this repository.
 
-Use Bun 1.3.14 and Node.js 24. Only `packages/react-foldkit` is published. The demo and UI packages are private.
+## Write for people
 
-## Preserve the contracts
+All prose follows [the writing guide](docs/writing.md). This is required, not a preference. It covers docs, READMEs, JSDoc, changesets, commit messages, pull request descriptions, review comments, and every reply you write to the maintainer during a session.
 
-- Updates, source construction, and snapshot reads are pure. Acquire live source resources in `subscribe` and return cleanup.
+- Write for someone who has never seen this code.
+- For each change or finding, say what it is and why it matters, in plain words.
+- Use short sentences, real file and symbol names, and no jargon. Explain a term the first time you need it.
+- Make text easy to scan, with headings that state the point, tables for comparisons, and numbered steps.
+- Show accurate code snippets in docs, pull request descriptions, review findings, and replies. Commit messages stay plain text.
+- Remove the patterns the guide lists, such as dashes as punctuation, colons mid-sentence, filler, and inflated words.
+
+## Start here
+
+- Use Bun 1.3.14 and Node.js 24.
+- Only `packages/react-foldkit` is published. The demo app and the UI package are private.
+- Read [how the runtime works](packages/react-foldkit/docs/architecture.md) before you change lifecycle behavior.
+- Run the checks from the repository root, as [verification](docs/verification.md) describes.
+- To review and fix a pull request until it is ready, follow [the babysit skill](.claude/skills/babysit/SKILL.md).
+
+## Keep the runtime contracts
+
+- Updates, source construction, and snapshot reads stay pure. Acquire live resources in `subscribe` and return the cleanup.
 - Model snapshots are immutable. Selectors and snapshot reads stay synchronous.
-- Use Effect Scope for ownership. Stop work before releasing its services. Run crash cleanup outside the failing fiber's Scope.
+- Use an Effect Scope for ownership. Stop work before you release its services. Run crash cleanup outside the failing fiber's Scope.
 - Keep observer failures separate from Message delivery. Commit has no rollback and does not wait for Commands.
-- Effect hosts can supply ambient services to `Store.make`. React and `Store.boot` require a closed Layer when services are needed.
-- Preserve Foldkit's interrupt compatibility and the two-Store isolation test.
-- Keep `test/conformance` passing. It runs the same programs on the Store and on Foldkit's runtime; change an expected trace only when Foldkit changed that behavior on purpose.
+- An Effect host can give `Store.make` services from its own context. React and `Store.boot` need a closed Layer when the Program needs services.
+- Keep Foldkit's interrupt behavior and the test that two Stores stay isolated.
+- Keep `test/conformance` passing. It runs the same Programs on the Store and on Foldkit's runtime. Change an expected trace only when Foldkit changed that behavior on purpose.
 
 ## Keep the package consistent
 
-Public barrels define the exports. Do not reexport Foldkit vocabulary; applications import it from `foldkit`, a peer dependency. `react-foldkit/scene` is the one exception: it reexports `foldkit/scene` and adapts Scene runners and interactions, so tests migrate by changing one import. Follow [the JSDoc playbook](docs/jsdocPlaybook.md) for owned exports.
+- The public barrels define the exports.
+- Don't reexport Foldkit vocabulary. Applications import it from `foldkit`, a peer dependency. `react-foldkit/scene` is the one exception. It reexports `foldkit/scene` and adapts the Scene runner, so a test moves to Foldkit by changing one import.
+- Follow [the JSDoc playbook](docs/jsdocPlaybook.md) for exported code.
+- Name implementation files and directories in camelCase. Name public ESLint rules in dash-case. Don't rename web app files. `check:filenames` checks the package names.
+- Don't edit `routeTree.gen.ts`, `dist`, `eslint/dist`, `.release`, or generated docs by hand. After an API or JSDoc change, build, run `docs:generate`, and review the generated diff.
+- Define HttpApi-backed Queries with `Query.define`, and read the client service inside `execute`.
 
-Use camelCase implementation filenames and directories. Keep public ESLint rule IDs in dash-case. Do not rename web app files. `check:filenames` checks the package conventions.
+## Upgrade Foldkit
 
-Do not edit `routeTree.gen.ts`, `dist`, `eslint/dist`, `.release`, or generated documentation by hand. Build and run `docs:generate` after an intentional API or JSDoc change, then review the generated diff.
+Use the official Foldkit release from npm. CI and the packed consumer tests install from the registry, with no sibling checkouts or dependency overrides.
 
-Code copied from Foldkit lives in vendor directories, with the tested release, file hashes, and recorded patches. Scene stores that record in `scripts/sceneVendorManifest.json`. DevTools stores it in a `vendorLock.json` beside the copy. When upgrading Foldkit, run `check:vendor` and `check:devtools-vendor`, recopy changed files, reapply the patches, and update the manifest or the lock. Do not edit copied files except through the recorded patches.
+Some Foldkit code is copied into vendor directories. Each copy records its Foldkit release, its file hashes, and the patches applied to it. Scene keeps that record in `scripts/sceneVendorManifest.json`. The DevTools, Store, and Vite copies keep it in a `vendorLock.json` next to the files. Change copied files only through the recorded patches.
 
-Use the official Foldkit npm release. Keep the demo and package development dependency pinned to the same version, and bound the peer range to tested compatible versions. CI and packed consumer tests must install from the registry without sibling checkouts or dependency overrides. Define HttpApi-backed Queries with `Query.define` and read the client service inside `execute`.
+To move to a new Foldkit release:
+
+1. Pin the same version in `packages/react-foldkit` and `apps/web`, and set the peer ranges to the versions you tested.
+2. Update the version in `scripts/checkDevToolsVendor.mjs`, then run `node scripts/checkDevToolsVendor.mjs --apply --write-lock` from `packages/react-foldkit`.
+3. Update the version in `scripts/sceneVendorManifest.json`. Copy any changed upstream Scene file over its `*.upstream.js` copy, record its new hash, and run `node scripts/checkSceneVendor.mjs --write`.
+4. Run `check:vendor`, `check:devtools-vendor`, and the full checks.
 
 ## Prepare releases
 
-Add a changeset for changes that affect package users. Use `patch` for compatible fixes and `minor` for features or breaking changes before 1.0. Include migration steps for breaking changes.
-
-Run `bun run release:prepare` before publishing. It checks the code and coverage, then saves a tested tarball. Follow [the release procedure](docs/releasing.md). Publish only when the user asks.
+- Add a changeset when package users see a behavior or contract change. Use `patch` for a compatible fix and `minor` for a feature or a breaking change before 1.0. Give migration steps for a breaking change.
+- Run `bun run release:prepare` before publishing. It runs the checks and coverage, then saves a tested tarball. Follow [the release procedure](docs/releasing.md).
+- Publish only when the maintainer asks.

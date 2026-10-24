@@ -8,6 +8,7 @@ import type { ModelSource } from "../modelSource"
 import type { Program } from "../program/program"
 import type { OptionalProjection, Projection } from "../submodel/lift"
 import { project, projectOptional } from "../submodel/lift"
+import * as Hot from "./hot"
 import * as ProviderSession from "./providerSession"
 import * as ReactStore from "./reactStore"
 import { sendFor, type Send } from "./send"
@@ -341,6 +342,12 @@ function projectionHooks<ParentModel, ParentMessage>(useSource: () => ModelSourc
 	return { useSubmodel, useOptionalSubmodel }
 }
 
+/** The live Model a mounted Provider body publishes for the body that replaces it after a hot reload. */
+type LiveModel = Readonly<{ generation: number; read: () => unknown }>
+
+/** What a Provider body needs to restore and publish its Model across hot reloads. */
+type HotSlot = Readonly<{ generation: number; live: React.RefObject<LiveModel | undefined> }>
+
 const missingInit = "An application Provider needs an init prop when its Program has no init"
 
 function DefaultCrashView({ cause }: { readonly cause: Cause.Cause<unknown> }) {
@@ -472,17 +479,42 @@ export function define<
 		managedResources: program.managedResources,
 	} as ReactStore.Config<Model, Message, R, MessageSchema, Managed> &
 		Options<Model, Message, R, MessageSchema, Managed>
-	const Context = makeSourceContext<Model, Message>()
+	const hotKey = Hot.defineKey()
+	const hotEntry =
+		hotKey === undefined
+			? undefined
+			: Hot.entry<SourceContext<Model, Message>, typeof Provider, typeof ProviderInstance>(hotKey)
+	const Context = hotEntry?.Context ?? makeSourceContext<Model, Message>()
+	// Only the first `define` call for a key registers, so its Provider is the one React keeps.
+	const ownHotEntry =
+		hotKey === undefined || hotEntry !== undefined
+			? undefined
+			: Hot.register(hotKey, { Context, Provider, current: { Instance: ProviderInstance, generation: 1 } })
+	if (hotEntry !== undefined)
+		hotEntry.current = { Instance: ProviderInstance, generation: hotEntry.current.generation + 1 }
 	const validateInit = config.validateInit ?? isDevelopment
 	const checkModel = Schema.decodeUnknownExit(Schema.toType(program.Model))
 
 	function ProviderInstance({
 		restart,
+		hot,
 		...props
-	}: ProviderProps<Model, Message, R, boolean> & { readonly restart: () => void }) {
+	}: ProviderProps<Model, Message, R, boolean> & { readonly restart: () => void; readonly hot?: HotSlot }) {
 		const [bootstrap] = React.useState(() =>
 			Effect.runSyncExit(
 				Effect.gen(function* () {
+					// After a hot reload, continue from the replaced Store's Model while it still decodes.
+					// Its init Commands already ran, so they do not run again.
+					const previous = hot?.live.current
+					const restored =
+						hot !== undefined && previous !== undefined && previous.generation < hot.generation
+							? previous.read()
+							: undefined
+					const decoded = restored === undefined ? undefined : checkModel(restored)
+					if (decoded !== undefined && Exit.isSuccess(decoded))
+						return {
+							store: ReactStore.make(config, { model: decoded.value }, Schema.toType(program.Model)),
+						}
 					const source = props.init ?? program.init
 					if (source === undefined) return yield* Effect.die(new Error(missingInit))
 					const init = typeof source === "function" ? source() : source
@@ -492,6 +524,18 @@ export function define<
 			)
 		)
 		const store = Option.map(Exit.getSuccess(bootstrap), (bootstrapped) => bootstrapped.store)
+		React.useLayoutEffect(
+			function publishModelForHotReload() {
+				const live = Option.getOrUndefined(Exit.getSuccess(bootstrap))?.store
+				if (hot === undefined || live === undefined) return
+				const own = { generation: hot.generation, read: () => live.getModel() }
+				hot.live.current = own
+				return function () {
+					if (hot.live.current === own) hot.live.current = undefined
+				}
+			},
+			[bootstrap, hot]
+		)
 		const crashContext = (cause: Cause.Cause<unknown>): CrashContext<Model, Message> => ({
 			cause,
 			model: Option.map(store, (store) => store.getModel()),
@@ -534,18 +578,29 @@ export function define<
 		const restart = React.useCallback(function () {
 			setGeneration((current) => current + 1)
 		}, [])
+		const live = React.useRef<LiveModel | undefined>(undefined)
+		// With a hot key, render the newest Program's body. A reload changes the generation, so the
+		// body remounts and starts from the live Model the previous body published.
+		const current = ownHotEntry?.current
+		const Instance = current?.Instance ?? ProviderInstance
+		const hot = React.useMemo(
+			(): HotSlot | undefined => (current === undefined ? undefined : { generation: current.generation, live }),
+			[current]
+		)
 		return (
-			<ProviderInstance
-				key={generation}
+			<Instance
+				key={`${generation}:${current?.generation ?? 0}`}
 				{...props}
 				restart={restart}
+				hot={hot}
 			/>
 		)
 	}
 
 	const application = {
 		[SceneSourceTypeId]: Context,
-		Provider,
+		// After a hot reload, keep the first Provider so React Fast Refresh does not remount it.
+		Provider: hotEntry?.Provider ?? Provider,
 		...modelHooks<Model, Message>(
 			Context,
 			program.Message,

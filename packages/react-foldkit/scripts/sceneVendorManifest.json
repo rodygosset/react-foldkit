@@ -1,19 +1,19 @@
 {
   "upstream": {
     "package": "foldkit",
-    "version": "0.168.0",
+    "version": "0.169.0",
     "license": "MIT"
   },
   "sourceFiles": {
     "scene.js": "cfde0cf9a93e15d5d8c3e96f4ce66c45a22dd9691ba6b1cc987a090d64d1360d",
-    "internal.js": "c85c614b796783a2f113eae386c707eaa3106315d70a42ca13a88638a03dd854",
+    "internal.js": "788f48159fb4eaae5d08bb35dcd4e7f43429e845c2d62781d5f34f3af6b0dc5f",
     "query.js": "bc189cf224423c3b25401477e3a56746d4e784109721d3fec724cf769488d721",
     "matchers.js": "1da1ceb19be97fbe995de948dff0095c47976aac764ee8fa0cfb9517c9c7fcd8",
     "scene.d.ts": "73b3b6d2b4c135c62e66a3ef13baed8795a4226d0f85d0beff7d8f33c190b4f0",
     "query.d.ts": "62a6ae0e63d5e359b774b47ceb675ade1da5fb76b25111d6b556140da04db8ec",
     "internal.d.ts": "caff54ef0b08697ac13b58e92606705f7cf8725834d67837d05d9b0d70e48840",
     "matchers.d.ts": "49b4f35925a86a035fc0a777d95f38079ac69ac7ee6632979d0940eadfbd2184",
-    "public.d.ts": "b47273602c162dffda1ab1bd080f4039999251eecc909abf5acacd43dafc5515"
+    "public.d.ts": "a2713f4c64de0b194337932111efd38b5cbf23e92ca1c00500f423ea629e76c8"
   },
   "runtimeExports": [
     "Command",

@@ -119,10 +119,10 @@
 	],
 	"peerDependencies": {
 		"effect": "^4.0.0",
-		"foldkit": "^0.168.0",
+		"foldkit": "^0.169.0",
 		"eslint": "^9",
 		"react": "^19.2.6",
-		"@foldkit/devtools": "~0.168.0"
+		"@foldkit/devtools": "~0.169.0"
 	},
 	"peerDependenciesMeta": {
 		"eslint": {
@@ -142,8 +142,8 @@
 	"devDependencies": {
 		"@effect/platform-browser": "4.0.0",
 		"@effect/vitest": "4.0.0",
-		"@foldkit/devtools": "0.168.0",
-		"@foldkit/ui": "0.168.0",
+		"@foldkit/devtools": "0.169.0",
+		"@foldkit/ui": "0.169.0",
 		"@foldkit/vite-plugin": "0.28.0",
 		"@tanstack/react-router": "1.170.33",
 		"@testing-library/react": "^16.3.2",
@@ -158,7 +158,7 @@
 		"@vitest/coverage-v8": "5.0.3",
 		"effect": "4.0.0",
 		"eslint": "^9",
-		"foldkit": "0.168.0",
+		"foldkit": "0.169.0",
 		"happy-dom": "^20.10.4",
 		"playwright": "^1.61.0",
 		"react": "^19.2.6",

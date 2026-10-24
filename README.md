@@ -1,26 +1,24 @@
 # React Foldkit
 
-React bindings for [Foldkit](https://foldkit.dev), built on Effect. Application state lives in a Model. Messages describe events, pure updates change the Model, and Commands run side effects. React renders the result.
+React Foldkit runs [Foldkit](https://foldkit.dev) programs inside React, with Effect for side effects. Your app's state lives in a Model, outside your components. A Message describes something that happened. A pure `update` function turns the Model and a Message into the next Model, plus Commands for any side effects. React renders the result.
 
-> React Foldkit is experimental. Breaking changes may occur in minor releases. See the [changelog](packages/react-foldkit/CHANGELOG.md) for changes and migration steps.
+> React Foldkit is experimental. A minor release may break your code. The [changelog](packages/react-foldkit/CHANGELOG.md) lists each change and how to upgrade.
 
-Compatible fixes use patch releases. Features use minor releases.
+Patch releases fix bugs without breaking anything. Minor releases add features.
 
 ## Install
 
 ```sh
-npm install react-foldkit foldkit@^0.168.0 effect@4.0.0 react@^19.2.6
+npm install react-foldkit foldkit@^0.169.0 effect@4.0.0 react@^19.2.6
 ```
 
-See the [requirements](packages/react-foldkit/README.md#requirements) and [ESLint setup](packages/react-foldkit/eslint/README.md).
+The package README lists [the full requirements](packages/react-foldkit/README.md#install), and the [ESLint guide](packages/react-foldkit/eslint/README.md) sets up the lint rules.
 
-The examples below start with a counter, then add a child feature and load data with a Query. Each example is a separate application; replace the previous `App.tsx` when moving to the next one.
+The examples below build up step by step, from a counter to a child feature, a Query, an optional child, and a Program. Each one is a separate app, so replace the previous `App.tsx` when you move to the next.
 
 ## Run locally
 
-Use Bun 1.3.14 and Node.js 24.
-
-The workspace installs the official Foldkit package from npm.
+To work on this repository, use Bun 1.3.14 and Node.js 24. The workspace installs the official Foldkit package from npm.
 
 ```sh
 bun install --frozen-lockfile
@@ -29,7 +27,7 @@ bun run dev --filter=web
 
 ## Create a counter
 
-We'll start with a button that increments a counter. Create `App.tsx` and render its `App` component from your React entry point.
+First, a button that counts clicks. Create `App.tsx` and render its `App` component from your React entry point.
 
 ```tsx
 import { Schema } from "effect"
@@ -67,17 +65,17 @@ export function App() {
 }
 ```
 
-The button starts at `0`. Each click sends a Message to update, which returns the next Model. `useModel` subscribes the view to the count, so the button displays `1`, then `2`.
+The button starts at `0`. Each click sends a Message to `update`, which returns the next Model. `useModel` re-renders the view when the count changes, so the button shows `1`, then `2`.
 
-`useSend` returns one function per Message tag. `send.ClickedIncrement()` builds the Message with the union's constructor, so it takes the same fields as `Message.ClickedIncrement`. Call `send(message)` to send a Message you already built.
+`useSend` returns one function per Message. `send.ClickedIncrement()` builds the Message with the union's own constructor, so it takes the same fields as `Message.ClickedIncrement`. To send a Message you already built, call `send(message)`.
 
-The Provider owns the application state. Updates are pure; return Commands when an update needs to run an Effect. See the [counter with a delayed increment](packages/react-foldkit/docs/examples.md) for that next step.
+The Provider owns the state. `update` stays pure, and returns Commands when it needs a side effect. [The counter tutorial](packages/react-foldkit/docs/examples.md) adds one.
 
 ## Give a todo form its own Submodel
 
-A Submodel lets a feature define its own state, events, and view while the parent application owns its lifetime. We'll give a todo form a draft field and let it tell the parent when a todo is submitted.
+A Submodel is a child feature with its own state, Messages, and view, while the parent app decides when it exists. Here, a todo form keeps its own draft text and tells the parent when someone submits a todo.
 
-Create `form.tsx`. The form handles editing and clears its draft after submission. Its `OutMessage` describes the submitted todo for the parent.
+Create `form.tsx`. The form handles typing and clears its draft after a submit. Its `OutMessage`, a Message for the parent, carries the submitted todo.
 
 ```tsx
 import { Schema } from "effect"
@@ -136,7 +134,7 @@ export function View() {
 }
 ```
 
-Replace `App.tsx` with the parent application below. `Submodel.lift` describes the form once: it reads and writes the `form` field, wraps form Messages for the parent, and folds the form update, including its `Submitted` event.
+Replace `App.tsx` with the parent app below. `Submodel.lift` describes the form in one place. It reads and writes the parent's `form` field, wraps the form's Messages for the parent, and runs the form's `update`, including its `Submitted` event.
 
 ```tsx
 import { Array, Schema } from "effect"
@@ -198,13 +196,13 @@ export function App() {
 }
 ```
 
-Type **Buy milk**, then click **Add todo**. The draft clears and the list gains an item. Empty submissions do nothing. The form has its own hooks, but shares the parent Store, so its state remains part of the application Model.
+Type **Buy milk**, then click **Add todo**. The draft clears and the list gains an item. An empty submit does nothing. The form has its own hooks but shares the parent's Store, so its state is still part of the app's Model.
 
 ## Load a Query
 
-A Foldkit Query keeps track of a request's data, failure, and pending state. It is a viewless Submodel: update calls its lift, and the lift returns the Commands that fetch the data.
+A Foldkit Query tracks one request's data, its failure, and whether it is still loading. It works like a Submodel with no view. `update` calls the Query's lift, and the lift returns the Commands that fetch the data.
 
-Create `profile.tsx`. The Query returns a local profile so you can try the example without a server. Replace `execute` with your data-loading Effect when connecting a backend.
+Create `profile.tsx`. The Query returns a local profile, so you can try it without a server. To connect a backend, replace `execute` with your own loading Effect.
 
 ```tsx
 import { Effect, Schema } from "effect"
@@ -271,13 +269,13 @@ export function App() {
 }
 ```
 
-Open the page to see **Loading profile...**, then **Hello, Ada**. `init` marks the profile as pending and returns the fetch Command, which the Provider starts on activation. **Refresh** revalidates the profile while keeping the current data on screen.
+Open the page to see **Loading profile...**, then **Hello, Ada**. `init` marks the profile as loading and returns the fetch Command, which the Provider starts when it activates. **Refresh** fetches the profile again and keeps the current data on screen until the new data arrives.
 
-For Queries that take arguments and cache several resources across TanStack routes, see the [project-cache example](packages/react-foldkit/examples/projectCache/README.md).
+For a Query that takes arguments and caches several results across TanStack routes, see the [project-cache example](packages/react-foldkit/examples/projectCache/README.md).
 
 ## Open an optional child
 
-Some children exist only part of the time, such as an editor that opens on double-click. Store the child Model in an `Option` field and give its Provider an `optionalLift`. The Provider renders its children while the field is `Some` and `fallback` while it is `None`.
+Some children exist only part of the time, such as an editor that opens on double-click. Store the child's Model in an `Option` field, and give its Provider an `optionalLift`. The Provider renders its children while the field is `Some`, and `fallback` while it is `None`.
 
 Create `editor.tsx`. It reports `Saved` or `Discarded` to its parent.
 
@@ -331,7 +329,7 @@ export function View() {
 }
 ```
 
-The parent opens the editor by setting `editing` to `Some`, and folds its OutMessages. It drops editor Messages that arrive after the editor closed.
+The parent opens the editor by setting `editing` to `Some`, and handles the editor's OutMessages. It ignores editor Messages that arrive after the editor closed.
 
 ```tsx
 import { Array, Option, Schema } from "effect"
@@ -416,11 +414,11 @@ export function App() {
 }
 ```
 
-Double-click **Buy milk** to open the editor. **Enter** saves the title and **Escape** discards it; both close the editor and show the hint again.
+Double-click **Buy milk** to open the editor. **Enter** saves the title and **Escape** discards it. Both close the editor and show the hint again.
 
 ## Keep the logic in a Program
 
-`Program.make` groups a feature's Model, Message union, `init`, `update`, and Subscriptions without importing React. The field names match Foldkit's `Runtime.makeApplication`, so the same module can run in React, in a Store, in Foldkit Story tests, or later in a Foldkit application with a view.
+`Program.make` puts a feature's Model, Message union, `init`, `update`, and Subscriptions in one value, with no React import. The field names match Foldkit's `Runtime.makeApplication`. So the same module runs in React, in a Store, in Foldkit Story tests, and later in a Foldkit app with a view.
 
 ```ts
 // counter.ts
@@ -446,7 +444,7 @@ export const update = (model: Model, message: Message) =>
 export const program = Program.make({ Model, Message, init, update })
 ```
 
-Pass the Program to `Application.define`, and React-only options and `resources` as the second argument. Because the Program has an `init`, the Provider needs no `init` prop; pass one to replace it, for example with server data.
+Pass the Program to `Application.define`. React-only options and `resources` go in the second argument. The Program has an `init`, so the Provider needs no `init` prop. Pass one only to replace it, for example with data from the server.
 
 ```tsx
 // App.tsx
@@ -471,13 +469,15 @@ export function App() {
 }
 ```
 
-A child Program declares an `OutMessage` union and usually no `init`, since its parent creates the child Model. Pass it to `Submodel.define` to get its hooks.
+A child Program declares an `OutMessage` union and usually no `init`, since its parent creates the child's Model. Pass it to `Submodel.define` to get its hooks.
 
 ## Find your way around
 
-- `packages/react-foldkit` contains the library, its ESLint plugin, tests, and a project-cache example.
-- `apps/web` contains the runnable demo app.
-- `packages/ui` contains shared demo components.
-- `repos/foldkit` and `repos/effect` contain upstream source references. They are outside the workspace build.
+| Folder | What it holds |
+| --- | --- |
+| `packages/react-foldkit` | The library, its ESLint plugin, its tests, and the project-cache example |
+| `apps/web` | The demo app you can run |
+| `packages/ui` | Components shared by the demo |
+| `repos/foldkit`, `repos/effect` | Upstream source, for reference only. The build ignores it. |
 
-Read [how the runtime works](packages/react-foldkit/docs/architecture.md), [how to verify changes](docs/verification.md), and [how to release](docs/releasing.md).
+To contribute, read [how the runtime works](packages/react-foldkit/docs/architecture.md), [how to verify changes](docs/verification.md), [how to release](docs/releasing.md), and [the writing guide](docs/writing.md).

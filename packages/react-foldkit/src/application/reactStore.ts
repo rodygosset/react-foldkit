@@ -2,7 +2,8 @@ import type { Schema } from "effect"
 import { Array, Cause, Context, Duration, Effect, Exit, Option, Predicate, RcRef, Result, Scope } from "effect"
 import type * as ManagedResource from "foldkit/managedResource"
 import type * as Update from "foldkit/update"
-import * as DevTools from "../devToolsIntegration"
+import type * as DevTools from "../devToolsIntegration"
+import * as DevToolsHost from "../internal/devToolsHost"
 import { deepFreeze, isDevelopment } from "../internal/deepFreeze"
 import * as InitCommand from "../internal/initCommand"
 import * as Store from "../store/store"
@@ -80,7 +81,11 @@ export type Config<
 	 * `true` outside production builds.
 	 */
 	readonly freezeModel?: boolean
-	/** Foldkit DevTools configuration. The panel and MCP bridge are enabled by the Vite plugin. */
+	/**
+	 * Foldkit DevTools configuration. It takes effect once `react-foldkit/devtools` has registered
+	 * the recorder, which the Vite plugin does. Without that registration, the Provider records
+	 * nothing.
+	 */
 	readonly devTools?: DevTools.Config<MessageSchema>
 }
 
@@ -102,10 +107,11 @@ export function make<
 		? { ...config, update: (model, message) => frozen(config.update(model, message)) }
 		: config
 	let runtime: Store.Runtime<Model, Message, R>
+	const makeObserver = DevToolsHost.recorder()
 	const devTools =
-		Model === undefined || config.devTools === undefined || config.devTools === false
+		Model === undefined || config.devTools === undefined || config.devTools === false || makeObserver === undefined
 			? undefined
-			: DevTools.makeObserver<ModelSchema, MessageSchema, R>({
+			: makeObserver<ModelSchema, MessageSchema, R>({
 					config: config.devTools,
 					update: config.update,
 					Model,

@@ -8,6 +8,22 @@ Generated from the build. Run docs:generate after an intentional API change and 
 export * from "./application/public";
 ```
 
+## dist/application/hot.d.ts
+
+```ts
+export type Entry<Context, Provider, Instance> = {
+  readonly Context: Context;
+  readonly Provider: Provider;
+  current: Readonly<{
+    Instance: Instance;
+    generation: number;
+  }>;
+};
+export declare function defineKey(): string | undefined;
+export declare const entry: <Context, Provider, Instance>(key: string) => Entry<Context, Provider, Instance> | undefined;
+export declare function register<Context, Provider, Instance>(key: string, value: Entry<Context, Provider, Instance>): Entry<Context, Provider, Instance>;
+```
+
 ## dist/application/providerSession.d.ts
 
 ```ts
@@ -125,7 +141,7 @@ import type { Schema } from "effect";
 import { Cause, Duration, Effect, Option, Result, Scope } from "effect";
 import type * as ManagedResource from "foldkit/managedResource";
 import type * as Update from "foldkit/update";
-import * as DevTools from "../devToolsIntegration";
+import type * as DevTools from "../devToolsIntegration";
 import * as Store from "../store/store";
 declare const ReactStoreTypeId: unique symbol;
 export type ReactStoreTypeId = typeof ReactStoreTypeId;
@@ -219,7 +235,9 @@ export declare function makeObserver<ModelSchema extends Schema.Codec<unknown, u
 ## dist/devtools.d.ts
 
 ```ts
-export { __configure } from "./devtoolsOverlay";
+import type { DevToolsOverlay } from "foldkit/devtools-host";
+import { type Hot } from "./devtoolsOverlay";
+export declare function __configure(overlay: DevToolsOverlay, hot: Hot | undefined): () => void;
 ```
 
 ## dist/devtoolsOverlay.d.ts
@@ -235,7 +253,7 @@ export type Hot = Readonly<{
   off: (event: string, listener: (data: never) => void) => void;
   dispose: (callback: (data: unknown) => void) => void;
 }>;
-export declare function __configure(overlayFactory: DevToolsOverlay, devServerHot: Hot | undefined): () => void;
+export declare function configure(overlayFactory: DevToolsOverlay, devServerHot: Hot | undefined): () => void;
 export declare const getHot: () => Hot | undefined;
 export declare const register: (store: DevToolsStore, position: DevToolsPosition, mode: DevToolsMode, banner: Option.Option<string>) => Effect.Effect<void, never, Scope.Scope>;
 ```
@@ -255,6 +273,16 @@ export * as Program from "./program";
 ```ts
 export declare const isDevelopment: boolean;
 export declare function deepFreeze<T>(value: T): T;
+```
+
+## dist/internal/devToolsHost.d.ts
+
+```ts
+import type { makeObserver } from "../devToolsIntegration";
+type MakeObserver = typeof makeObserver;
+export declare function register(recorder: MakeObserver): () => void;
+export declare const recorder: () => MakeObserver | undefined;
+export {};
 ```
 
 ## dist/internal/initCommand.d.ts
@@ -904,6 +932,7 @@ export {};
 ```ts
 import type { PluginOption } from "vite";
 export declare const devTools: () => PluginOption;
+export declare const preserveModel: () => PluginOption;
 ```
 
 ## dist/vite/devToolsPlugin.d.ts
@@ -918,6 +947,13 @@ export declare const devToolsPlugin: () => PluginOption;
 ```ts
 import type { Plugin } from "vite";
 export declare const devToolsRelayPlugin: () => Plugin;
+```
+
+## dist/vite/preserveModelPlugin.d.ts
+
+```ts
+import type { Plugin } from "vite";
+export declare const preserveModelPlugin: () => Plugin;
 ```
 
 ## eslint/dist/index.d.ts

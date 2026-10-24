@@ -1,9 +1,9 @@
 # Record a change
 
-Run `bun run changeset` for a change that affects package users. Select only `react-foldkit`.
+Add a changeset when package users will notice your change. Tests and internal changes need none.
 
-Use `patch` for compatible fixes and `minor` for features or breaking changes before 1.0. Include migration steps for a breaking change.
+1. Run `bun run changeset` and select only `react-foldkit`.
+2. Pick `patch` for a compatible fix. Pick `minor` for a feature or a breaking change, since the package is before 1.0.
+3. Write what changed and why users care, following [the writing guide](../docs/writing.md). For a breaking change, give the steps to upgrade.
 
-Tests and internal changes with no effect on users need no changeset.
-
-See [the release procedure](../docs/releasing.md).
+[The release procedure](../docs/releasing.md) turns changesets into the changelog.

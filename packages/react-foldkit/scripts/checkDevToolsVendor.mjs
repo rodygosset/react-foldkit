@@ -14,7 +14,7 @@ const copies = [
 	{
 		vendorRoot: "src/store/vendor",
 		packageName: "foldkit",
-		version: "0.168.0",
+		version: "0.169.0",
 		upstreamRoot: "dist",
 		includes: () => true,
 		patches: new Map([
@@ -24,7 +24,7 @@ const copies = [
 	{
 		vendorRoot: "src/devtoolsVendor",
 		packageName: "foldkit",
-		version: "0.168.0",
+		version: "0.169.0",
 		upstreamRoot: "dist",
 		includes: () => true,
 		patches: new Map([

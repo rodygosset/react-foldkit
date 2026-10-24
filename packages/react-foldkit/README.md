@@ -1,31 +1,36 @@
 # React Foldkit
 
-React bindings for Foldkit's Elm Architecture. Keep application state and transitions outside React components while using Effect for side effects and resource cleanup.
+React Foldkit runs [Foldkit](https://foldkit.dev) programs inside React. Your app's state and the rules that change it live outside your components, and Effect runs the side effects and cleans up their resources.
 
-> React Foldkit is experimental. Breaking changes may occur in minor releases. See the [changelog](CHANGELOG.md) for changes and migration steps.
+> React Foldkit is experimental. A minor release may break your code. The [changelog](CHANGELOG.md) lists each change and how to upgrade.
 
-Compatible fixes use patch releases. Features use minor releases.
+Patch releases fix bugs without breaking anything. Minor releases add features.
 
-A Model describes state. A Message describes an event. The pure `update` function returns the next Model and any Commands to run. An application Provider owns that program, and its hooks connect React views to it.
+## How it works
+
+- The **Model** is your app's state.
+- A **Message** describes something that happened, such as a click.
+- The pure `update` function takes the Model and a Message. It returns the next Model and any Commands, which are the side effects to run.
+- An application **Provider** runs this loop. Its hooks let React components read the Model and send Messages.
 
 ## Install
 
 Install React Foldkit with its peer dependencies:
 
 ```sh
-npm install react-foldkit foldkit@^0.168.0 effect@4.0.0 react@^19.2.6
+npm install react-foldkit foldkit@^0.169.0 effect@4.0.0 react@^19.2.6
 ```
 
-## Requirements
+You need:
 
-- React `^19.2.6`, Foldkit `^0.168.0`, and Effect `4.0.0`.
-- Node.js `20.19.0` or newer for server rendering. Browser applications need an ESM bundler.
-- TypeScript with `strict: true` and `moduleResolution: "bundler"`. Tested with TypeScript `7.0.2`.
-- ESLint 9 only when using `react-foldkit/eslint`.
+- React `^19.2.6`, Foldkit `^0.169.0`, and Effect `4.0.0`.
+- An ESM bundler for browser apps, and Node.js `20.19.0` or newer for server rendering.
+- TypeScript with `strict: true` and `moduleResolution: "bundler"`. The package is tested with TypeScript `7.0.2`.
+- ESLint 9, only if you use `react-foldkit/eslint`.
 
-The package is ESM-only. A browser application also needs its renderer, usually `react-dom`.
+The package is ESM-only. A browser app also needs a renderer, usually `react-dom`.
 
-## Create an application
+## Build a counter
 
 Render this `App` from your React entry point:
 
@@ -64,18 +69,26 @@ export function App() {
 }
 ```
 
-The `Model` Schema supplies type inference. Outside production builds, the Provider also checks the initial Model against it and freezes published Models, so accidental mutation throws. Keep updates pure.
+Each click sends `ClickedIncrement`. `update` returns a Model with a higher count, and the button shows it.
+
+The `Model` Schema gives TypeScript the Model's type. In development, the Provider also checks the starting Model against the Schema and freezes every Model it publishes, so code that mutates a Model throws right away.
+
+## Import Foldkit from Foldkit
+
+Import Foldkit's own pieces, such as Messages, Commands, `Update`, `AsyncData`, and Query, from `foldkit`. It is a peer dependency, so your app and React Foldkit share one copy. `react-foldkit` exports only what it adds: the React bindings, the Store, Programs, and Submodels.
+
+The one exception is `react-foldkit/scene`. It mirrors `foldkit/scene`, so a Scene test moves to Foldkit by changing one import.
 
 ## Read next
 
-- [Build a counter with Commands](docs/examples.md) for a step-by-step tutorial.
-- [Managed Resources](docs/managedResources.md) for resources whose lifetime follows the Model.
-- [Test views with Scene](docs/scene.md) for Foldkit Scene tests of React views.
-- [Debug with Foldkit DevTools](docs/devtools.md) for Message history, time travel, and the MCP server.
-- [Public API reference](docs/reference.md) for imports and contracts.
-- [Runtime architecture](docs/architecture.md) for lifecycle, child Models, and async data.
-- [Project-cache example](https://github.com/rodygosset/react-foldkit/tree/v0.1.0/packages/react-foldkit/examples/projectCache) for loading a keyed Query from TanStack routes.
-- [ESLint presets](eslint/README.md) for architecture rules.
-- [Agent guide](AGENTS.md) for application code.
-
-Import Foldkit vocabulary, such as Messages, Commands, `Update`, `AsyncData`, and Query, from `foldkit` itself; it is a peer dependency, so your application and React Foldkit share one copy. `react-foldkit` exports only what it adds: the React bindings, Store, and Submodels. The one exception is `react-foldkit/scene`, which mirrors `foldkit/scene` so Scene tests migrate by changing their import.
+| Guide | What it covers |
+| --- | --- |
+| [Build a counter with Commands](docs/examples.md) | A step-by-step tutorial |
+| [Managed Resources](docs/managedResources.md) | Resources that exist only while the Model needs them |
+| [Test views with Scene](docs/scene.md) | Foldkit Scene tests for React views |
+| [Debug with Foldkit DevTools](docs/devtools.md) | Message history, time travel, and the MCP server |
+| [API reference](docs/reference.md) | Every import and what it guarantees |
+| [How the runtime works](docs/architecture.md) | Lifecycle, child Models, and async data |
+| [Project-cache example](https://github.com/rodygosset/react-foldkit/tree/v0.1.0/packages/react-foldkit/examples/projectCache) | A keyed Query loaded from TanStack routes |
+| [ESLint presets](eslint/README.md) | Lint rules that keep app code in this architecture |
+| [Agent guide](AGENTS.md) | Rules for AI agents writing app code |

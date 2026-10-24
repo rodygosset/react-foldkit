@@ -169,13 +169,8 @@ Effect.runFork(
 	)
 )
 
-/**
- * Connects the injected native Foldkit overlay and Vite HMR bridge to Provider recorders.
- *
- * @category configuration
- * @since 0.2.0
- */
-export function __configure(overlayFactory: DevToolsOverlay, devServerHot: Hot | undefined): () => void {
+/** Connects the injected native Foldkit overlay and Vite HMR bridge to Provider recorders. */
+export function configure(overlayFactory: DevToolsOverlay, devServerHot: Hot | undefined): () => void {
 	Effect.runSync(
 		SubscriptionRef.update(registry, (state) => ({ ...state, overlay: overlayFactory, hot: devServerHot })),
 	)

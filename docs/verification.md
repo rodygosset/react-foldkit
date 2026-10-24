@@ -1,33 +1,46 @@
 # Verify changes
 
-The checks build the package, exercise its contracts, and validate consumers against emitted declarations. Run them from the repository root after [setting up the workspace](../README.md#run-locally).
+Run these checks from the repository root before you push. They build the package, test its behavior, and compile sample apps against the published types. Set up the workspace first, as [Run locally](../README.md#run-locally) describes.
 
-## Check local changes
+## Check every change
 
 ```sh
 bun run check
 ```
 
-This builds the library, checks workspace and consumer types, runs runtime and package tests (including the conformance suite against Foldkit's runtime), lints code, typechecks the project-cache example, and checks generated documentation and API declarations.
+This one command does all of the following:
 
-For a focused check, run `bun run --filter=react-foldkit` with `typecheck`, `test`, or `lint`. The [shared lint guide](../eslint/README.md) explains repository conventions.
+- Builds the library.
+- Type-checks the workspace and a sample consumer.
+- Runs the unit and package tests. These include the conformance suite, which runs the same Programs on the Store and on Foldkit's runtime.
+- Runs the linters. The [repository lint guide](../eslint/README.md) explains the rules.
+- Type-checks the project-cache example.
+- Checks the generated API docs and the API record.
+
+To check one thing, run `bun run --filter=react-foldkit typecheck`, `test`, or `lint`. A typecheck alone is not enough for a change that affects runtime behavior. Run the tests too.
 
 ## Check a release candidate
 
-Install Chromium once, then run the additional checks.
+Install Chromium once, then run the release checks:
 
 ```sh
 bun run --filter=react-foldkit browser:install
 bun run check:release
 ```
 
-This also runs browser tests from a cold cache, installs the React Foldkit tarball with the official Foldkit release in fresh npm consumers, and builds the web app. The core consumer has no ESLint dependency. The plugin consumer installs ESLint and checks its rules. Both compile with their own TypeScript installation and `skipLibCheck: false`. The consumers also check packed documentation and links. CI repeats the consumer checks on Node.js 20.19.0.
+On top of `bun run check`, this:
 
-To save a tested tarball, run `bun run release:prepare`. Follow [the release procedure](releasing.md) before publishing. These checks do not publish anything.
+- Runs the browser tests with an empty cache.
+- Builds the web app.
+- Packs React Foldkit and installs it, with the official Foldkit release, into two fresh npm apps. One app has no ESLint, and the other installs ESLint and checks the plugin's rules. Both compile with their own TypeScript and `skipLibCheck: false`, and both check the packed docs and their links.
 
-## Update documentation and API records
+CI runs the packed-app checks again on Node.js 20.19.0. A separate CI job runs the tests against the newest Foldkit release.
 
-After an intentional public API or JSDoc change, build first and regenerate the reference.
+To save a tested tarball, run `bun run release:prepare`. None of these commands publish anything. To publish, follow [the release procedure](releasing.md).
+
+## Update the API docs
+
+After you change a public API or its JSDoc, rebuild and regenerate the reference:
 
 ```sh
 bun run --filter=react-foldkit build
@@ -36,4 +49,6 @@ bun run --filter=react-foldkit check:docs
 bun run --filter=react-foldkit check:api
 ```
 
-Review the generated changes. Do not regenerate an API snapshot just to silence a failure. Markdown tutorial snippets are illustrative. The normal checks typecheck the project-cache source, not Markdown code fences.
+Review the generated diff. Don't regenerate the API record only to make a failing check pass.
+
+The checks compile the project-cache example, but not the code blocks in Markdown files. When you change a Markdown snippet, compile it yourself against the built package.
