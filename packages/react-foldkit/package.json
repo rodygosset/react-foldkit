@@ -40,7 +40,7 @@
 		"typecheck": "tsc --noEmit",
 		"test": "vitest run",
 		"test:watch": "vitest",
-		"bench:selection": "node scripts/benchSelection.mjs",
+		"bench:selection": "bun scripts/benchSelection.mjs",
 		"test:browser": "vitest run --config vitest.browser.config.ts",
 		"test:package": "bun run build && bun run test:package:built",
 		"test:types:package": "tsc --project test/types/tsconfig.json",

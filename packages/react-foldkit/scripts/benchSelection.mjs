@@ -1,9 +1,10 @@
 import { Equal } from "effect"
+import { selectionEquals } from "../src/application/selectionEquals.ts"
 
 // Measures what one `useModel(selector)` subscriber pays on each Model change. The selector runs,
-// then the default `Equal.equals` compares the new selection with the last one. `Object.is` is
-// the floor. Each change is a keystroke in a form field, so the todos keep their references, as
-// after a Foldkit update.
+// then a compare checks the new selection against the last one. `selectionEquals` is the
+// default, `Equal.equals` gives the same answers, and `Object.is` is the floor. Each change is a
+// keystroke in a form field, so the todos keep their references, as after a Foldkit update.
 //
 // Run with `bun run bench:selection`.
 
@@ -28,7 +29,7 @@ const selectors = {
 	"A small new object": (model) => ({ count: model.todos.length, typing: model.draft.length > 0 }),
 }
 
-const comparisons = { "Equal.equals": Equal.equals, "Object.is": Object.is }
+const comparisons = { selectionEquals, "Equal.equals": Equal.equals, "Object.is": Object.is }
 
 function measure(size, select, isEqual) {
 	let model = makeModel(size)

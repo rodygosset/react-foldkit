@@ -177,6 +177,13 @@ export declare function make<Model, Message extends {
 export {};
 ```
 
+## dist/application/selectionEquals.d.ts
+
+```ts
+import { Equivalence } from "effect";
+export declare const selectionEquals: Equivalence.Equivalence<unknown>;
+```
+
 ## dist/application/send.d.ts
 
 ```ts
