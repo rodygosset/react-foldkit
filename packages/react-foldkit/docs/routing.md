@@ -30,9 +30,9 @@ The route component passes the first value to `init`. `useInbound` sends every l
 ```tsx
 const todoRoute = getRouteApi("/todo")
 
-function SyncFilter({ filter }: { readonly filter: Filter }) {
+function SyncFilter({ filter, children }: { readonly filter: Filter; readonly children: React.ReactNode }) {
 	useInbound(filter, (next) => Message.ChangedFilter({ filter: next }))
-	return null
+	return children
 }
 
 export function Todo() {
@@ -40,8 +40,9 @@ export function Todo() {
 
 	return (
 		<Provider init={() => init({ filter })}>
-			<SyncFilter filter={filter} />
-			<View />
+			<SyncFilter filter={filter}>
+				<View />
+			</SyncFilter>
 		</Provider>
 	)
 }
