@@ -177,13 +177,6 @@ export declare function make<Model, Message extends {
 export {};
 ```
 
-## dist/application/selectionEquals.d.ts
-
-```ts
-import { Equivalence } from "effect";
-export declare const selectionEquals: Equivalence.Equivalence<unknown>;
-```
-
 ## dist/application/send.d.ts
 
 ```ts
@@ -199,6 +192,13 @@ export type Send<Message> = ((message: Message) => void) & {
 };
 export declare function sendFor<Message>(union: Schema.Schema<Message>): (dispatch: (message: Message) => void) => Send<Message>;
 export {};
+```
+
+## dist/application/structuralEquivalence.d.ts
+
+```ts
+import { Equivalence } from "effect";
+export declare const structuralEquivalence: Equivalence.Equivalence<unknown>;
 ```
 
 ## dist/application/useModel.d.ts

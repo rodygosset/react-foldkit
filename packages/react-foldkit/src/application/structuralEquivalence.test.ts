@@ -1,7 +1,7 @@
 import { Data, DateTime, Equal, Hash, Option } from "effect"
 import fc from "fast-check"
 import { expect, it } from "vitest"
-import { selectionEquals } from "./selectionEquals"
+import { structuralEquivalence } from "./structuralEquivalence"
 
 class Point extends Data.Class<{ readonly x: number }> {}
 
@@ -34,14 +34,17 @@ function copyPlain(input: unknown): unknown {
 
 it("gives the same answer as Equal.equals for any two values", function () {
 	fc.assert(
-		fc.property(value, value, (self, that) => selectionEquals(self, that) === Equal.equals(self, that)),
+		fc.property(value, value, (self, that) => structuralEquivalence(self, that) === Equal.equals(self, that)),
 		{ numRuns: 2_000 }
 	)
 })
 
 it("gives the same answer as Equal.equals for a fresh copy of a value", function () {
 	fc.assert(
-		fc.property(value, (self) => selectionEquals(self, copyPlain(self)) === Equal.equals(self, copyPlain(self))),
+		fc.property(
+			value,
+			(self) => structuralEquivalence(self, copyPlain(self)) === Equal.equals(self, copyPlain(self))
+		),
 		{ numRuns: 2_000 }
 	)
 })
@@ -53,16 +56,16 @@ it("compares new rows built by a selector by content", function () {
 	]
 	const select = () => todos.map((todo) => ({ id: todo.id, label: todo.title, tag: Option.some(todo.id) }))
 
-	expect(selectionEquals(select(), select())).toBe(true)
-	expect(selectionEquals(select(), [...select(), { id: "c", label: "New", tag: Option.none() }])).toBe(false)
-	expect(selectionEquals({ ids: ["a"] }, { ids: ["b"] })).toBe(false)
+	expect(structuralEquivalence(select(), select())).toBe(true)
+	expect(structuralEquivalence(select(), [...select(), { id: "c", label: "New", tag: Option.none() }])).toBe(false)
+	expect(structuralEquivalence({ ids: ["a"] }, { ids: ["b"] })).toBe(false)
 })
 
 it("leaves values with their own equality to Equal.equals", function () {
-	expect(selectionEquals(new Point({ x: 1 }), new Point({ x: 1 }))).toBe(true)
-	expect(selectionEquals({ x: 1 }, new Point({ x: 1 }))).toBe(false)
-	expect(selectionEquals(DateTime.makeUnsafe(1), DateTime.makeUnsafe(1))).toBe(true)
-	expect(selectionEquals(Number.NaN, Number.NaN)).toBe(true)
+	expect(structuralEquivalence(new Point({ x: 1 }), new Point({ x: 1 }))).toBe(true)
+	expect(structuralEquivalence({ x: 1 }, new Point({ x: 1 }))).toBe(false)
+	expect(structuralEquivalence(DateTime.makeUnsafe(1), DateTime.makeUnsafe(1))).toBe(true)
+	expect(structuralEquivalence(Number.NaN, Number.NaN)).toBe(true)
 })
 
 it("leaves a plain object with its own equality to Equal.equals", function () {
@@ -73,7 +76,7 @@ it("leaves a plain object with its own equality to Equal.equals", function () {
 	})
 
 	expect(Equal.equals(anyVersion(1), anyVersion(2))).toBe(true)
-	expect(selectionEquals(anyVersion(1), anyVersion(2))).toBe(true)
+	expect(structuralEquivalence(anyVersion(1), anyVersion(2))).toBe(true)
 })
 
 it("compares a by-reference object inside a plain selection by content", function () {
@@ -81,5 +84,5 @@ it("compares a by-reference object inside a plain selection by content", functio
 	const that = Equal.byReference({ x: 1 })
 
 	expect(Equal.equals(self, that)).toBe(false)
-	expect(selectionEquals(self, that)).toBe(true)
+	expect(structuralEquivalence(self, that)).toBe(true)
 })

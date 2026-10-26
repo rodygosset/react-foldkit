@@ -13,11 +13,11 @@ function isPlainRecord(input: unknown): input is Readonly<Record<PropertyKey, un
  * an `Option`, a `Data` class, or a `Date`, still goes to `Equal.equals`. One difference: an
  * object marked with `Equal.byReference` inside a plain selection is compared by content.
  */
-export const selectionEquals: Equivalence.Equivalence<unknown> = Equivalence.make(function (self, that) {
-	if (Array.isArray(self)) return Array.isArray(that) && arrayEquals(self, that)
-	if (isPlainRecord(self)) return isPlainRecord(that) && recordEquals(self, that)
+export const structuralEquivalence: Equivalence.Equivalence<unknown> = Equivalence.make(function (self, that) {
+	if (Array.isArray(self)) return Array.isArray(that) && arrayEquivalence(self, that)
+	if (isPlainRecord(self)) return isPlainRecord(that) && recordEquivalence(self, that)
 	return Equal.equals(self, that)
 })
 
-const arrayEquals = Equivalence.Array(selectionEquals)
-const recordEquals = Equivalence.Record(selectionEquals)
+const arrayEquivalence = Equivalence.Array(structuralEquivalence)
+const recordEquivalence = Equivalence.Record(structuralEquivalence)

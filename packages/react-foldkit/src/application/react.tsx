@@ -11,8 +11,8 @@ import { project, projectOptional } from "../submodel/lift"
 import * as Hot from "./hot"
 import * as ProviderSession from "./providerSession"
 import * as ReactStore from "./reactStore"
-import { selectionEquals } from "./selectionEquals"
 import { sendFor, type Send } from "./send"
+import { structuralEquivalence } from "./structuralEquivalence"
 import * as ModelSelectors from "./useModel"
 
 export type { ReactivationContext } from "./reactStore"
@@ -290,7 +290,7 @@ export function modelHooks<Model, Message>(
 	function useInbound<A>(
 		value: A,
 		toMessage: (value: A) => Message,
-		isEqual: (previous: A, next: A) => boolean = selectionEquals
+		isEqual: (previous: A, next: A) => boolean = structuralEquivalence
 	): void {
 		const { dispatch } = useSource()
 		const previous = React.useRef(value)

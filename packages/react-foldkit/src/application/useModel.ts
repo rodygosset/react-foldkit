@@ -2,7 +2,7 @@ import { Option } from "effect"
 import { constVoid, identity } from "effect/Function"
 import { useSyncExternalStoreWithSelector } from "use-sync-external-store/with-selector"
 import type { ModelReader } from "../modelSource/modelSource"
-import { selectionEquals } from "./selectionEquals"
+import { structuralEquivalence } from "./structuralEquivalence"
 
 export function useModel<Model>(source: ModelReader<Model>): Model
 export function useModel<Model, Selected>(
@@ -26,7 +26,7 @@ export function useModel<Model, Selected>(
 		source.getSnapshot,
 		source.getServerSnapshot,
 		select,
-		selector === undefined ? Object.is : (isEqual ?? selectionEquals)
+		selector === undefined ? Object.is : (isEqual ?? structuralEquivalence)
 	)
 }
 
