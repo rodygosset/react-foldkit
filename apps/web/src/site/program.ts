@@ -1,4 +1,5 @@
 import { Boolean, Context, Effect, Option, Schema, Stream } from "effect"
+import { KeyValueStore } from "effect/persistence"
 import * as Command from "foldkit/command"
 import { defineMessageUnion } from "foldkit/message"
 import { modifyFields } from "foldkit/struct"
@@ -19,7 +20,7 @@ import {
 
 /**
  * The docs site's own state: the theme, the phone menu, and copy-button feedback. Every browser
- * API it touches runs in a Command or a Subscription.
+ * API it touches runs in a Command or a Subscription, through the services the application supplies.
  */
 
 /** Moves the site to another page. The application supplies it, so this module doesn't import the route tree. */
@@ -27,6 +28,8 @@ export class SiteNavigation extends Context.Service<
 	SiteNavigation,
 	{ readonly navigate: (href: string) => Effect.Effect<void> }
 >()("SiteNavigation") {}
+
+type Services = KeyValueStore.KeyValueStore | SiteNavigation
 
 // MODEL
 
@@ -55,32 +58,32 @@ export const Message = defineMessageUnion({
 })
 export type Message = typeof Message.Type
 
-type UpdateReturn = Update.Return<Model, Message, SiteNavigation>
+type UpdateReturn = Update.Return<Model, Message, Services>
 
 // COMMAND
 
 export const LoadTheme = Command.define("LoadTheme", {
 	messages: [Message.CompletedLoadTheme],
 	execute: Effect.gen(function* () {
-		const maybeThemePreference = yield* Effect.try(() => localStorage.getItem(themeStorageKey)).pipe(
-			Effect.option,
-			Effect.map(Option.flatMap(Schema.decodeUnknownOption(ThemePreference)))
-		)
+		const store = yield* KeyValueStore.KeyValueStore
+		const maybeThemePreference = yield* store
+			.get(themeStorageKey)
+			.pipe(Effect.option, Effect.map(Option.flatMap(Schema.decodeUnknownOption(ThemePreference))))
 		const themePreference = Option.getOrElse(maybeThemePreference, (): ThemePreference => "System")
 		const systemTheme = toResolvedTheme(matchMedia(darkSchemeQuery).matches)
 		return Message.CompletedLoadTheme({ themePreference, systemTheme })
 	}),
 })
 
-/** `localStorage` throws when the browser blocks storage. The theme then lasts until the page reloads. */
 export const SaveTheme = Command.define("SaveTheme", {
 	args: { themePreference: ThemePreference },
 	messages: [Message.CompletedSaveTheme],
 	execute: ({ themePreference }) =>
-		Effect.try(() => localStorage.setItem(themeStorageKey, themePreference)).pipe(
-			Effect.ignore,
-			Effect.as(Message.CompletedSaveTheme())
-		),
+		Effect.gen(function* () {
+			const store = yield* KeyValueStore.KeyValueStore
+			yield* store.set(themeStorageKey, themePreference)
+			return Message.CompletedSaveTheme()
+		}).pipe(Effect.orElseSucceed(() => Message.CompletedSaveTheme())),
 })
 
 /** `applySavedThemeScript` in the document head applies the same class before the first paint. */
@@ -159,7 +162,7 @@ const init = (): UpdateReturn => ({ model: initialModel, commands: [LoadTheme()]
 
 // SUBSCRIPTION
 
-const subscriptions = Subscription.make<Model, Message, SiteNavigation>()((entry) => ({
+const subscriptions = Subscription.make<Model, Message, Services>()((entry) => ({
 	systemTheme: entry(
 		{ isSystemPreference: Schema.Boolean },
 		{
