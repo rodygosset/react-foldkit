@@ -8,8 +8,8 @@ import * as Program from "react-foldkit/program"
 import { getRouter } from "../router"
 
 /**
- * The docs site's own state: the theme, the mobile menu, copy-button feedback, and the hero's
- * code tab. Every browser API it touches runs in a Command or a Subscription.
+ * The docs site's own state: the theme, the phone menu, copy-button feedback, and the hero's
+ * code sheet. Every browser API it touches runs in a Command or a Subscription.
  */
 
 const themeStorageKey = "react-foldkit-theme"
@@ -30,6 +30,7 @@ export const Model = Schema.Struct({
 	isMenuOpen: Schema.Boolean,
 	copiedBlockId: Schema.Option(Schema.String),
 	heroTab: HeroTab,
+	isCodeSheetOpen: Schema.Boolean,
 })
 export type Model = typeof Model.Type
 
@@ -52,6 +53,9 @@ export const Message = defineMessageUnion({
 	FailedCopy: {},
 	ElapsedCopiedFeedback: { blockId: Schema.String },
 	ChoseHeroTab: { tab: HeroTab },
+	ClickedShowCode: {},
+	ClosedCodeSheet: {},
+	PressedEscape: {},
 	ClickedInternalLink: { href: Schema.String },
 	Navigated: {},
 })
@@ -139,7 +143,7 @@ export const update = (model: Model, message: Message): UpdateReturn =>
 		AppliedColorScheme: () => ({ model }),
 		ClickedMenuButton: () => ({ model: modifyFields(model, { isMenuOpen: (isOpen) => !isOpen }) }),
 		ClosedMenu: () => ({ model: modifyFields(model, { isMenuOpen: () => false }) }),
-		ChangedPath: () => ({ model: modifyFields(model, { isMenuOpen: () => false }) }),
+		ChangedPath: () => ({ model: modifyFields(model, { isMenuOpen: () => false, isCodeSheetOpen: () => false }) }),
 		ClickedCopy: ({ blockId, text }) => ({ model, commands: [CopyToClipboard({ blockId, text })] }),
 		SucceededCopy: ({ blockId }) => ({
 			model: modifyFields(model, { copiedBlockId: () => Option.some(blockId) }),
@@ -152,6 +156,11 @@ export const update = (model: Model, message: Message): UpdateReturn =>
 				: model,
 		}),
 		ChoseHeroTab: ({ tab }) => ({ model: modifyFields(model, { heroTab: () => tab }) }),
+		ClickedShowCode: () => ({ model: modifyFields(model, { isCodeSheetOpen: () => true }) }),
+		ClosedCodeSheet: () => ({ model: modifyFields(model, { isCodeSheetOpen: () => false }) }),
+		PressedEscape: () => ({
+			model: modifyFields(model, { isMenuOpen: () => false, isCodeSheetOpen: () => false }),
+		}),
 		ClickedInternalLink: ({ href }) => ({
 			model: modifyFields(model, { isMenuOpen: () => false }),
 			commands: [NavigateTo({ href })],
@@ -167,6 +176,7 @@ export const initialModel: Model = {
 	isMenuOpen: false,
 	copiedBlockId: Option.none(),
 	heroTab: "program",
+	isCodeSheetOpen: false,
 }
 
 const init = (): UpdateReturn => ({ model: initialModel, commands: [LoadTheme()] })
@@ -187,14 +197,14 @@ const subscriptions = Subscription.make<Model, Message>()((entry) => ({
 		}
 	),
 	escapeKey: entry(
-		{ isMenuOpen: Schema.Boolean },
+		{ hasOverlay: Schema.Boolean },
 		{
-			modelToDependencies: (model) => ({ isMenuOpen: model.isMenuOpen }),
-			dependenciesToStream: ({ isMenuOpen }) =>
-				isMenuOpen
+			modelToDependencies: (model) => ({ hasOverlay: model.isMenuOpen || model.isCodeSheetOpen }),
+			dependenciesToStream: ({ hasOverlay }) =>
+				hasOverlay
 					? Stream.fromEventListener<KeyboardEvent>(window, "keydown").pipe(
 							Stream.filter((event) => event.key === "Escape"),
-							Stream.map(() => Message.ClosedMenu())
+							Stream.map(() => Message.PressedEscape())
 						)
 					: Stream.empty,
 		}

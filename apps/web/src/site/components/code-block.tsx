@@ -10,7 +10,12 @@ export function CodeBlock(props: {
 	readonly scrollClassName?: string
 }) {
 	return (
-		<div className={cn("code-block group relative rounded-lg border bg-muted/40", props.className)}>
+		<div
+			className={cn(
+				"code-block group relative rounded-2xl border border-foreground/10 bg-muted/40",
+				props.className
+			)}
+		>
 			<div
 				className={cn("overflow-auto py-4 pr-12 pl-4 font-mono text-[13px] leading-6", props.scrollClassName)}
 				dangerouslySetInnerHTML={{ __html: props.snippet.html }}

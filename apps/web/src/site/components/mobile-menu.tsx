@@ -17,7 +17,7 @@ export function MenuButton(props: { readonly className?: string }) {
 			aria-expanded={isOpen}
 			aria-controls={menuId}
 			className={cn(
-				"inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+				"inline-flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
 				props.className
 			)}
 			onClick={() => send.ClickedMenuButton()}
@@ -27,7 +27,7 @@ export function MenuButton(props: { readonly className?: string }) {
 	)
 }
 
-/** The phone menu panel. The site Program closes it on Escape and when the page changes. */
+/** The phone menu card. The site Program closes it on Escape and when the page changes. */
 export function MobileMenu(props: { readonly children: ReactNode }) {
 	const isOpen = Site.useModel((model) => model.isMenuOpen)
 
@@ -35,7 +35,7 @@ export function MobileMenu(props: { readonly children: ReactNode }) {
 		<nav
 			id={menuId}
 			aria-label="Site"
-			className="fixed inset-x-0 top-14 bottom-0 z-40 overflow-y-auto border-t bg-background px-4 py-6 md:hidden"
+			className="glass sheet-panel fixed inset-x-4 top-[4.5rem] z-50 max-h-[calc(100svh-6rem)] overflow-y-auto rounded-3xl p-3 md:hidden"
 		>
 			{props.children}
 		</nav>

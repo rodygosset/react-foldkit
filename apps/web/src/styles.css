@@ -4,7 +4,7 @@
 
 @layer base {
 	html {
-		scroll-padding-top: 4.5rem;
+		scroll-padding-top: 6rem;
 	}
 	:root {
 		color-scheme: light;
@@ -30,6 +30,7 @@
 	color: var(--shiki-dark);
 }
 .code-block pre {
+	tab-size: 2;
 	background: transparent;
 	width: max-content;
 	min-width: 100%;
@@ -97,17 +98,317 @@
 	}
 }
 
-/* The hero counter's view stays free of styling, so its source reads like the guide's. */
+/* Floating surfaces: the nav pill, the phone menu, the install pill, and the code sheet. */
+.glass {
+	@apply border border-foreground/10 bg-background/70 backdrop-blur-xl;
+	box-shadow:
+		inset 0 1px 0 0 oklch(1 0 0 / 0.06),
+		0 12px 40px -16px oklch(0 0 0 / 0.45);
+}
+
+/* Large surfaces: the diagram, the code panels, and the feature cards. */
+.surface {
+	@apply border border-foreground/10 bg-card/60;
+	box-shadow: inset 0 1px 0 0 oklch(1 0 0 / 0.05);
+}
+
+/* The teal light behind the hero and the closing scene. */
+.glow {
+	background: radial-gradient(
+		ellipse 60% 50% at 50% 0%,
+		color-mix(in oklch, var(--primary) 22%, transparent),
+		transparent 70%
+	);
+}
+:root:not(.dark) .glow {
+	background: radial-gradient(
+		ellipse 60% 50% at 50% 0%,
+		color-mix(in oklch, var(--primary) 14%, transparent),
+		transparent 70%
+	);
+}
+
+/* The hero counter's view stays free of class names, so its source reads like the guide's. */
 .hero-counter {
-	@apply flex flex-wrap items-center gap-2;
+	@apply flex flex-col items-center gap-5;
 
 	& output {
-		@apply mr-auto w-full pb-4 font-mono text-6xl font-semibold tracking-tight tabular-nums sm:w-auto sm:pb-0;
+		@apply font-mono text-6xl font-semibold tracking-tight tabular-nums;
+	}
+	& > div {
+		@apply flex flex-wrap justify-center gap-2;
 	}
 	& button {
-		@apply inline-flex h-9 items-center rounded-md border bg-background px-3 text-sm font-medium transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:cursor-wait disabled:opacity-60;
+		@apply inline-flex h-8 items-center rounded-full border border-foreground/15 px-3.5 text-[13px] font-medium transition-colors hover:bg-foreground/5 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:cursor-wait disabled:opacity-60;
 	}
 	& button:first-of-type {
-		@apply border-primary bg-primary text-primary-foreground hover:bg-primary/85;
+		@apply border-foreground bg-foreground text-background hover:bg-foreground/85;
+	}
+}
+
+/* The loop diagram. Each Message replays these animations, one step after another. */
+@keyframes node-pulse {
+	0%,
+	100% {
+		border-color: color-mix(in oklch, var(--foreground) 10%, transparent);
+		box-shadow: 0 0 0 0 transparent;
+	}
+	25% {
+		border-color: var(--primary);
+		box-shadow:
+			0 0 0 4px color-mix(in oklch, var(--primary) 18%, transparent),
+			0 0 32px color-mix(in oklch, var(--primary) 35%, transparent);
+	}
+}
+@keyframes node-pulse-again {
+	0%,
+	100% {
+		border-color: color-mix(in oklch, var(--foreground) 10%, transparent);
+		box-shadow: 0 0 0 0 transparent;
+	}
+	25% {
+		border-color: var(--primary);
+		box-shadow:
+			0 0 0 4px color-mix(in oklch, var(--primary) 18%, transparent),
+			0 0 32px color-mix(in oklch, var(--primary) 35%, transparent);
+	}
+}
+/* Two copies of one animation. Switching between them replays it without remounting the node. */
+.node-pulse,
+.node-pulse-again {
+	animation: node-pulse 1100ms ease-out var(--delay, 0ms) both;
+}
+.node-pulse-again {
+	animation-name: node-pulse-again;
+}
+@keyframes command-wait {
+	0%,
+	100% {
+		box-shadow: 0 0 0 0 color-mix(in oklch, var(--primary) 30%, transparent);
+	}
+	50% {
+		box-shadow: 0 0 0 6px color-mix(in oklch, var(--primary) 0%, transparent);
+	}
+}
+.command-waiting {
+	border-color: var(--primary);
+	animation: command-wait 1s ease-in-out infinite;
+}
+@keyframes travel-x {
+	from {
+		left: 0%;
+		opacity: 0;
+	}
+	15%,
+	85% {
+		opacity: 1;
+	}
+	to {
+		left: 100%;
+		opacity: 0;
+	}
+}
+@keyframes travel-y {
+	from {
+		top: 0%;
+		opacity: 0;
+	}
+	15%,
+	85% {
+		opacity: 1;
+	}
+	to {
+		top: 100%;
+		opacity: 0;
+	}
+}
+.flow-dot {
+	@apply absolute size-2 rounded-full bg-primary;
+	box-shadow: 0 0 12px 2px color-mix(in oklch, var(--primary) 70%, transparent);
+	translate: -50% -50%;
+	opacity: 0;
+	left: 50%;
+	top: 50%;
+	animation: travel-y 450ms ease-in-out var(--delay, 0ms) both;
+}
+.flow-dot[data-reverse] {
+	animation-direction: reverse;
+}
+.flow-line-branch .flow-dot {
+	animation-name: travel-x;
+}
+@media (width >= 64rem) {
+	.flow-line-x .flow-dot {
+		animation-name: travel-x;
+	}
+	.flow-line-branch .flow-dot {
+		animation-name: travel-y;
+	}
+}
+
+/* Scenes rise into place as they enter the screen. */
+@media (prefers-reduced-motion: no-preference) {
+	@supports (animation-timeline: view()) {
+		@keyframes reveal {
+			from {
+				opacity: 0;
+				translate: 0 32px;
+			}
+		}
+		.reveal {
+			animation: reveal linear both;
+			animation-timeline: view();
+			animation-range: entry 0% entry 60%;
+		}
+	}
+}
+
+/* Scene two: features move into Programs as the reader scrolls through the stage. */
+.migrate-stage {
+	view-timeline-name: --migrate;
+}
+.feature-node .status-program {
+	opacity: 0;
+}
+@media (prefers-reduced-motion: no-preference) {
+	@supports (animation-timeline: view()) {
+		.migrate-stage {
+			height: 320vh;
+		}
+		.migrate-sticky {
+			position: sticky;
+			top: 0;
+			height: 100svh;
+		}
+		@keyframes feature-moves {
+			to {
+				border-color: var(--primary);
+				background-color: color-mix(in oklch, var(--primary) 10%, transparent);
+				box-shadow: 0 0 40px -8px color-mix(in oklch, var(--primary) 45%, transparent);
+			}
+		}
+		@keyframes fade-out {
+			to {
+				opacity: 0;
+			}
+		}
+		@keyframes fade-in {
+			to {
+				opacity: 1;
+			}
+		}
+		.feature-node,
+		.feature-node .status-react,
+		.feature-node .status-program {
+			animation-timing-function: linear;
+			animation-fill-mode: both;
+			animation-timeline: --migrate;
+		}
+		.feature-node {
+			animation-name: feature-moves;
+		}
+		.feature-node .status-react {
+			animation-name: fade-out;
+		}
+		.feature-node .status-program {
+			animation-name: fade-in;
+		}
+		.feature-node:nth-child(1),
+		.feature-node:nth-child(1) span {
+			animation-range: contain 4% contain 14%;
+		}
+		.feature-node:nth-child(2),
+		.feature-node:nth-child(2) span {
+			animation-range: contain 30% contain 40%;
+		}
+		.feature-node:nth-child(3),
+		.feature-node:nth-child(3) span {
+			animation-range: contain 56% contain 66%;
+		}
+		.feature-node:nth-child(4),
+		.feature-node:nth-child(4) span {
+			animation-range: contain 82% contain 92%;
+		}
+		@keyframes caption {
+			0% {
+				opacity: 0;
+				translate: 0 12px;
+			}
+			15%,
+			85% {
+				opacity: 1;
+				translate: 0 0;
+			}
+			100% {
+				opacity: 0;
+				translate: 0 -12px;
+			}
+		}
+		.migrate-caption {
+			position: absolute;
+			inset-inline: 0;
+			opacity: 0;
+			animation: caption linear both;
+			animation-timeline: --migrate;
+		}
+		.migrate-caption:nth-child(1) {
+			animation-range: contain 0% contain 28%;
+		}
+		.migrate-caption:nth-child(2) {
+			animation-range: contain 27% contain 76%;
+		}
+		.migrate-caption:nth-child(3) {
+			animation-range: contain 75% contain 100%;
+		}
+	}
+}
+/* Without scroll-driven animations, show where the story ends. */
+@supports not (animation-timeline: view()) {
+	.feature-node {
+		border-color: var(--primary);
+	}
+	.feature-node .status-react {
+		opacity: 0;
+	}
+	.feature-node .status-program {
+		opacity: 1;
+	}
+	.migrate-caption:not(:last-child) {
+		display: none;
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.feature-node {
+		border-color: var(--primary);
+	}
+	.feature-node .status-react {
+		opacity: 0;
+	}
+	.feature-node .status-program {
+		opacity: 1;
+	}
+	.migrate-caption:not(:last-child) {
+		display: none;
+	}
+}
+
+/* The code sheet slides up over a dimmed page. */
+@media (prefers-reduced-motion: no-preference) {
+	@keyframes sheet-in {
+		from {
+			opacity: 0;
+			translate: 0 24px;
+		}
+	}
+	@keyframes backdrop-in {
+		from {
+			opacity: 0;
+		}
+	}
+	.sheet-panel {
+		animation: sheet-in 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+	}
+	.sheet-backdrop {
+		animation: backdrop-in 200ms ease-out both;
 	}
 }

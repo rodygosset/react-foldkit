@@ -10,4 +10,4 @@ pnpm-lock.yaml
 .pnpm-store/
 # The home page shows these files as code. They are wrapped by hand to fit its code panels.
 apps/web/src/home/hero-counter
-apps/web/src/home/migration
+apps/web/src/home/view-swap

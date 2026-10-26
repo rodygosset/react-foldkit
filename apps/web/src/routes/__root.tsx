@@ -3,7 +3,7 @@ import type { ReactNode } from "react"
 import appCss from "../styles.css?url"
 import { Site } from "../site/application"
 import { SiteFooter } from "../site/components/site-footer"
-import { SiteHeader } from "../site/components/site-header"
+import { SiteNav } from "../site/components/site-nav"
 import { Message } from "../site/program"
 
 /** Applies the saved theme before the first paint. The site Program takes over after hydration. */
@@ -33,7 +33,7 @@ export const Route = createRootRoute({
 
 function NotFound() {
 	return (
-		<main className="mx-auto flex max-w-[1120px] flex-1 flex-col items-center justify-center px-4 py-32 text-center">
+		<main className="mx-auto flex max-w-[1120px] flex-1 flex-col items-center justify-center px-5 py-40 text-center">
 			<p className="font-mono text-5xl font-semibold tracking-tight">404</p>
 			<p className="mt-3 text-muted-foreground">This page doesn't exist.</p>
 		</main>
@@ -60,7 +60,7 @@ function RootDocument(props: { readonly children: ReactNode }) {
 				<Site.Provider>
 					<SyncPath>
 						<div className="flex min-h-svh flex-col">
-							<SiteHeader />
+							<SiteNav />
 							<div className="flex flex-1 flex-col">{props.children}</div>
 							<SiteFooter />
 						</div>

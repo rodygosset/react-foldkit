@@ -7,7 +7,7 @@ export function ExampleGrid() {
 			{examples.map((example) => (
 				<div
 					key={example.slug}
-					className="relative flex flex-col rounded-lg border p-5 transition-colors hover:border-link/50"
+					className="surface relative flex flex-col rounded-[20px] p-6 transition-colors hover:border-foreground/25"
 				>
 					<Link
 						{...example.link}

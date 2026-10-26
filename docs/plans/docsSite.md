@@ -25,18 +25,17 @@ The site speaks to React developers who want to move to Foldkit step by step. Re
 
 The old `/counter`-style URLs go away with no redirects, because nothing is public yet.
 
-## Build the home page in five sections
+## Build the home page as five scenes
 
-1. **Hero.** The headline "Move your React app to Foldkit, one feature at a time." The subhead "React Foldkit runs Foldkit programs inside React. Move your state and side effects into Foldkit now, then swap React out when you're ready." A "Get started" button to the first guide and a "GitHub" button. The install command with a copy button. The experimental warning as one quiet line. On the right, a live counter and its source in two tabs, "Program" and "View".
-2. **The migration path.** Three steps, each with a snippet:
-   1. Wrap one feature in a Program.
-   2. Move its logic out of components and into `update` and Commands.
-   3. Swap the React view for a Foldkit view. The Program and its tests don't change.
-3. **The four ideas.** Model, Message, `update`, and Commands as four cards that link to foldkit.dev.
-4. **Examples.** A grid of the six demos.
-5. **Footer.** "Built on Foldkit", GitHub, npm, and a note that the site is built with React Foldkit, with a link to its source.
+The home page reads like a product page. Each scene has one headline, one sentence, and one thing to look at.
 
-The hero counter has a "+1" button and a "+1 in a second" button. The second one returns a Command, and the button shows a pending state while it waits.
+1. **Hero.** "Leave React one feature at a time." One sentence, a white "Get started" pill, a quiet "GitHub" link, and the install command in a glass pill. Below sits a live diagram of the Foldkit loop. The counter renders inside the View node, and each Message it sends lights the path through Message, `update`, and Model, then back to the View. The delayed increment shows its Command running. "View the code" opens the counter's source in a sheet.
+2. **"Your logic moves first."** A sticky stage shows an app as four features. As the reader scrolls, each feature turns from React state into a Foldkit Program, with one caption per step.
+3. **"Then the view."** The same cart Program with a React view and a Foldkit view, side by side.
+4. **"Tested the same way."** One large diff that changes `react-foldkit/scene` to `foldkit/scene`.
+5. **"Start with one feature."** The install command, "Get started", and a link to the Move to Foldkit guide.
+
+The examples live on `/examples`, linked from the nav. The diagram's labels link Message, `update`, Model, and Command to foldkit.dev.
 
 ## Render the guides from the package
 
@@ -59,34 +58,34 @@ The site renders the Markdown files in `packages/react-foldkit/docs` at build ti
 
 ## Keep shown code real
 
-- Every code panel on the home page comes from a real `.ts` or `.tsx` file in the site, imported as text and type-checked.
+- Every code panel on the home page comes from a real `.ts` or `.tsx` file in the site, imported as text and type-checked. The one exception is the single import line in scene four.
 - Shiki highlights code at build time with the `github-light` and `github-dark` themes. The browser gets no highlighter.
 - Each code block has a copy button in its top-right corner.
 
 ## Use React Foldkit for site state
 
-- A site Program at the root owns the theme (light, dark, or system), the mobile menu, and copy-button feedback.
+- A site Program at the root owns the theme (light, dark, or system), the phone menu, the code sheet, and copy-button feedback.
 - Saving the theme and copying to the clipboard are Commands.
 - The live counter is its own Program.
 - Routing follows `packages/react-foldkit/docs/routing.md`. Views never call `navigate`.
 - Scene tests cover the site Program.
 
-## Look quiet and typographic
+## Look like a product page
 
 | Element | Choice |
 | --- | --- |
-| Fonts | Geist and Geist Mono, self-hosted from the `geist` package |
-| Accent | Teal, `oklch(0.6 0.12 185)`, for links, the primary button, the active sidebar item, and focus rings |
-| Surfaces | Flat white and near-black. 1px neutral borders, 6px radius, no shadows. `site-atmosphere` is removed |
-| Motion | Color fades on hover only |
-| Theme | Follows the system, with a light, dark, or system toggle in the header |
+| Fonts | Geist and Geist Mono, self-hosted. Headlines at 80 to 100px, weight 600, tracking -0.045em |
+| Color | Dark first, near-black background. Teal, `oklch(0.6 0.12 185)`, is used as light: glows, status dots, and the diagram's pulses |
+| Surfaces | Large surfaces have a 20 to 32px radius, a 1px border at 10% foreground, and a faint inner highlight. Buttons are pills |
+| Navigation | A floating glass pill. The theme button cycles system, light, and dark |
+| Motion | Scenes rise in as they enter. Scene two runs on CSS scroll-driven animations. All motion stops under `prefers-reduced-motion` |
+| Theme | Follows the system until the reader picks one |
 
 ## Lay out the pages
 
-- **Header.** Sticky, 56px tall. The wordmark "react-foldkit" in Geist Mono on the left. Docs, Examples, and GitHub links on the right, then the theme toggle.
-- **Home.** Content up to 1120px wide.
+- **Nav.** A floating pill 16px from the top. On phones it keeps the wordmark, the theme button, and a menu that opens as a glass card.
+- **Home.** Content up to 1120px wide, with generous space between scenes.
 - **Docs.** A 240px sidebar and a text column up to 720px. No "On this page" panel.
-- **Phone, under 768px.** The sidebar becomes a menu opened from the header. The site Program owns whether it is open.
 - **Titles.** Each page has a `<title>` such as "Routing · react-foldkit" and a meta description.
 
 ## Leave these out of v1
@@ -97,7 +96,7 @@ Search, versioned docs, a blog, a logo, analytics, social preview images, and de
 
 1. `bun run check` passes from the repository root.
 2. `bun run --filter=web build` prerenders every route to static HTML.
-3. Scene tests cover the theme toggle, the mobile menu, and copy feedback.
+3. Scene tests cover the theme button, the phone menu, the code sheet, and copy feedback.
 4. The site works at 375px wide and in both themes.
 5. Screenshots of home, a guide, and the examples page, in light and dark, at desktop and phone sizes.
 

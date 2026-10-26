@@ -1,42 +1,40 @@
 import { repositoryUrl, sourceUrl } from "../examples"
 
-const linkClass = "text-foreground underline-offset-4 hover:underline"
+const linkClass = "transition-colors hover:text-foreground"
 
 export function SiteFooter() {
 	return (
-		<footer className="border-t">
-			<div className="mx-auto flex max-w-[1120px] flex-col gap-3 px-4 py-8 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:px-6">
-				<p>
-					Built on{" "}
-					<a
-						href="https://foldkit.dev"
-						className={linkClass}
-					>
-						Foldkit
-					</a>
-					. This site is built with React Foldkit.{" "}
-					<a
-						href={sourceUrl("apps/web")}
-						className={linkClass}
-					>
-						Read its source
-					</a>
-					.
-				</p>
-				<div className="flex gap-5">
-					<a
-						href={repositoryUrl}
-						className={linkClass}
-					>
-						GitHub
-					</a>
-					<a
-						href="https://www.npmjs.com/package/react-foldkit"
-						className={linkClass}
-					>
-						npm
-					</a>
-				</div>
+		<footer className="mx-auto flex w-full max-w-[1120px] flex-col gap-3 px-5 py-10 text-[13px] text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+			<p>
+				Built on{" "}
+				<a
+					href="https://foldkit.dev"
+					className="text-foreground/80 hover:text-foreground"
+				>
+					Foldkit
+				</a>
+				, with React Foldkit.{" "}
+				<a
+					href={sourceUrl("apps/web")}
+					className="text-foreground/80 hover:text-foreground"
+				>
+					Read the source
+				</a>
+				.
+			</p>
+			<div className="flex gap-5">
+				<a
+					href={repositoryUrl}
+					className={linkClass}
+				>
+					GitHub
+				</a>
+				<a
+					href="https://www.npmjs.com/package/react-foldkit"
+					className={linkClass}
+				>
+					npm
+				</a>
 			</div>
 		</footer>
 	)

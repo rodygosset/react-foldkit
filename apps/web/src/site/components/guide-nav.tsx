@@ -10,8 +10,8 @@ export function GuideNav() {
 					<Link
 						to="/docs/$slug"
 						params={{ slug: guide.slug }}
-						className="block rounded-md px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-						activeProps={{ className: "bg-muted font-medium text-link! hover:text-link" }}
+						className="block rounded-xl px-3 py-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
+						activeProps={{ className: "bg-foreground/[0.06] font-medium text-foreground!" }}
 					>
 						{guide.title}
 					</Link>
