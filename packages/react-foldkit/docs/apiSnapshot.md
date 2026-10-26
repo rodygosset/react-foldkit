@@ -194,6 +194,13 @@ export declare function sendFor<Message>(union: Schema.Schema<Message>): (dispat
 export {};
 ```
 
+## dist/application/structuralEquivalence.d.ts
+
+```ts
+import { Equivalence } from "effect";
+export declare const structuralEquivalence: Equivalence.Equivalence<unknown>;
+```
+
 ## dist/application/useModel.d.ts
 
 ```ts

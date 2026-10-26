@@ -417,9 +417,9 @@ function View() {
 }
 
 /** Sends route search changes to update, so changing the filter keeps the loaded list. */
-function SyncFilter({ filter }: { readonly filter: Filter }) {
+function SyncFilter({ filter, children }: { readonly filter: Filter; readonly children: React.ReactNode }) {
 	useInbound(filter, (next) => Message.ChangedFilter({ filter: next }))
-	return null
+	return children
 }
 
 export function Todo() {
@@ -427,8 +427,9 @@ export function Todo() {
 
 	return (
 		<Provider init={() => init({ filter })}>
-			<SyncFilter filter={filter} />
-			<View />
+			<SyncFilter filter={filter}>
+				<View />
+			</SyncFilter>
 		</Provider>
 	)
 }

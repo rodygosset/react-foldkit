@@ -84,6 +84,7 @@ The one exception is `react-foldkit/scene`. It mirrors `foldkit/scene`, so a Sce
 | Guide | What it covers |
 | --- | --- |
 | [Build a counter with Commands](docs/examples.md) | A step-by-step tutorial |
+| [Use a router](docs/routing.md) | Keep the URL and the Model in sync |
 | [Managed Resources](docs/managedResources.md) | Resources that exist only while the Model needs them |
 | [Test views with Scene](docs/scene.md) | Foldkit Scene tests for React views |
 | [Debug with Foldkit DevTools](docs/devtools.md) | Message history, time travel, and the MCP server |

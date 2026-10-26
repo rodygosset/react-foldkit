@@ -1,4 +1,4 @@
-import { Cause, Effect, Equal, Exit, Option, Schema } from "effect"
+import { Cause, Effect, Exit, Option, Schema } from "effect"
 import type * as ManagedResource from "foldkit/managedResource"
 import type { HostServices } from "../internal/managedResource"
 import type * as Update from "foldkit/update"
@@ -12,6 +12,7 @@ import * as Hot from "./hot"
 import * as ProviderSession from "./providerSession"
 import * as ReactStore from "./reactStore"
 import { sendFor, type Send } from "./send"
+import { structuralEquivalence } from "./structuralEquivalence"
 import * as ModelSelectors from "./useModel"
 
 export type { ReactivationContext } from "./reactStore"
@@ -155,9 +156,10 @@ type Init<Model, Message, R> = Update.Return<Model, Message, R> | (() => Update.
 export interface ModelHooks<Model, Message> {
 	/**
 	 * Subscribes the view to the Model or a selected value. Pass a selector to read only the
-	 * value the view needs. Whole Models use `Object.is`. Selections use `Equal.equals`, which
-	 * compares plain objects and arrays structurally on every Model change; pass `isEqual` when
-	 * a selection is large or already reference-stable. Throws outside the matching Provider.
+	 * value the view needs. Whole Models use `Object.is`. Selections follow the same rules as
+	 * `Equal.equals`. Plain objects and arrays compare by content, and Effect values such as
+	 * `Option` use their own equality. Pass `isEqual` when a selection is large or already
+	 * reference-stable. Throws outside the matching Provider.
 	 */
 	readonly useModel: {
 		(): Model
@@ -185,7 +187,7 @@ export interface ModelHooks<Model, Message> {
 	/**
 	 * Sends a Message whenever an external value changes, such as a route parameter or prop.
 	 * The first value is not sent; include it in `init`. Values are compared with `isEqual`,
-	 * which defaults to `Equal.equals`. Throws outside the matching Provider.
+	 * which defaults to the same rules as `Equal.equals`. Throws outside the matching Provider.
 	 */
 	readonly useInbound: <A>(
 		value: A,
@@ -288,7 +290,7 @@ export function modelHooks<Model, Message>(
 	function useInbound<A>(
 		value: A,
 		toMessage: (value: A) => Message,
-		isEqual: (previous: A, next: A) => boolean = Equal.equals
+		isEqual: (previous: A, next: A) => boolean = structuralEquivalence
 	): void {
 		const { dispatch } = useSource()
 		const previous = React.useRef(value)

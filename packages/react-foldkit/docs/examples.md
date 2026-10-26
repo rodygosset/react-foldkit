@@ -183,7 +183,7 @@ function SyncStep({ step }: { readonly step: number }) {
 }
 ```
 
-Render `SyncStep` inside the Provider. `useInbound` skips the first value, since `init` already has it, and sends a Message only when `Equal.equals` says the value changed.
+Render `SyncStep` inside the Provider. `useInbound` skips the first value, since `init` already has it, and sends a Message only when the value changed, by the rules of `Equal.equals`.
 
 ## Recover from a crash
 

@@ -104,7 +104,7 @@ A Program registers resources that follow the Model through `managedResources`. 
 | Hook | Compares | Notes |
 | --- | --- | --- |
 | `useModel()` | Whole snapshots, with `Object.is` | |
-| `useModel(selector)` | Selected values, with `Equal.equals` by default | `Equal.equals` compares plain objects and arrays by content on every change. Pass your own equality function for large or already-stable values. |
+| `useModel(selector)` | Selected values, with the rules of `Equal.equals` by default | Plain objects and arrays compare by content on every change, without hashing them first. Pass your own equality function for large or already-stable values. |
 
 Required hooks need their Provider. Optional hooks return an `Option`. An optional child source keeps its last snapshot while the child is absent.
 

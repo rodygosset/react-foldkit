@@ -52,9 +52,10 @@ independent Model and the Commands and Subscriptions that update it.
   ```
 
 - `useModel` Subscribes the view to the Model or a selected value. Pass a selector to read only the
-  value the view needs. Whole Models use `Object.is`. Selections use `Equal.equals`, which
-  compares plain objects and arrays structurally on every Model change; pass `isEqual` when
-  a selection is large or already reference-stable. Throws outside the matching Provider.
+  value the view needs. Whole Models use `Object.is`. Selections follow the same rules as
+  `Equal.equals`. Plain objects and arrays compare by content, and Effect values such as
+  `Option` use their own equality. Pass `isEqual` when a selection is large or already
+  reference-stable. Throws outside the matching Provider.
 
   ```ts
   { (): Model; <Selected>(selector: (model: Model) => Selected, isEqual?: ((a: Selected, b: Selected) => boolean) | undefined): Selected; }
@@ -89,7 +90,7 @@ independent Model and the Commands and Subscriptions that update it.
 
 - `useInbound` Sends a Message whenever an external value changes, such as a route parameter or prop.
   The first value is not sent; include it in `init`. Values are compared with `isEqual`,
-  which defaults to `Equal.equals`. Throws outside the matching Provider.
+  which defaults to the same rules as `Equal.equals`. Throws outside the matching Provider.
 
   ```ts
   <A>(value: A, toMessage: (value: A) => Message, isEqual?: ((previous: A, next: A) => boolean) | undefined) => void
@@ -164,9 +165,10 @@ Use them inside the matching Provider to read its Model, send Messages, or give 
 Submodel access to part of that Model.
 
 - `useModel` Subscribes the view to the Model or a selected value. Pass a selector to read only the
-  value the view needs. Whole Models use `Object.is`. Selections use `Equal.equals`, which
-  compares plain objects and arrays structurally on every Model change; pass `isEqual` when
-  a selection is large or already reference-stable. Throws outside the matching Provider.
+  value the view needs. Whole Models use `Object.is`. Selections follow the same rules as
+  `Equal.equals`. Plain objects and arrays compare by content, and Effect values such as
+  `Option` use their own equality. Pass `isEqual` when a selection is large or already
+  reference-stable. Throws outside the matching Provider.
 
   ```ts
   { (): Model; <Selected>(selector: (model: Model) => Selected, isEqual?: (a: Selected, b: Selected) => boolean): Selected; }
@@ -201,7 +203,7 @@ Submodel access to part of that Model.
 
 - `useInbound` Sends a Message whenever an external value changes, such as a route parameter or prop.
   The first value is not sent; include it in `init`. Values are compared with `isEqual`,
-  which defaults to `Equal.equals`. Throws outside the matching Provider.
+  which defaults to the same rules as `Equal.equals`. Throws outside the matching Provider.
 
   ```ts
   <A>(value: A, toMessage: (value: A) => Message, isEqual?: (previous: A, next: A) => boolean) => void
@@ -944,9 +946,10 @@ its Provider to give child views a lifted source without starting another Store.
   ```
 
 - `useModel` Subscribes the view to the Model or a selected value. Pass a selector to read only the
-  value the view needs. Whole Models use `Object.is`. Selections use `Equal.equals`, which
-  compares plain objects and arrays structurally on every Model change; pass `isEqual` when
-  a selection is large or already reference-stable. Throws outside the matching Provider.
+  value the view needs. Whole Models use `Object.is`. Selections follow the same rules as
+  `Equal.equals`. Plain objects and arrays compare by content, and Effect values such as
+  `Option` use their own equality. Pass `isEqual` when a selection is large or already
+  reference-stable. Throws outside the matching Provider.
 
   ```ts
   { (): Model; <Selected>(selector: (model: Model) => Selected, isEqual?: ((a: Selected, b: Selected) => boolean) | undefined): Selected; }
@@ -981,7 +984,7 @@ its Provider to give child views a lifted source without starting another Store.
 
 - `useInbound` Sends a Message whenever an external value changes, such as a route parameter or prop.
   The first value is not sent; include it in `init`. Values are compared with `isEqual`,
-  which defaults to `Equal.equals`. Throws outside the matching Provider.
+  which defaults to the same rules as `Equal.equals`. Throws outside the matching Provider.
 
   ```ts
   <A>(value: A, toMessage: (value: A) => Message, isEqual?: ((previous: A, next: A) => boolean) | undefined) => void
