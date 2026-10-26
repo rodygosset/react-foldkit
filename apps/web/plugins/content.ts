@@ -24,9 +24,9 @@ import { visit } from "unist-util-visit"
 import type { Plugin } from "vite"
 import { guides } from "../src/site/guides.ts"
 import type { Guide, GuideBlock } from "../src/site/guides.ts"
+import { blobUrl } from "../src/site/repository.ts"
 
 const repositoryRoot = path.resolve(import.meta.dirname, "../../..")
-const blobUrl = "https://github.com/rodygosset/react-foldkit/blob/main"
 const languages = ["ts", "tsx", "js", "jsx", "json", "sh", "bash", "diff", "md", "yaml"] as const
 
 const guidesId = "virtual:guides"
@@ -132,7 +132,7 @@ function rewriteLinks(tree: MdastRoot, guide: Guide): void {
 		const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(guide.source), target))
 		const site = guides.find((candidate) => candidate.source === resolved)
 		const suffix = hash === "" ? "" : `#${hash}`
-		node.url = site === undefined ? `${blobUrl}/${resolved}${suffix}` : `/docs/${site.slug}${suffix}`
+		node.url = site === undefined ? `${blobUrl(resolved)}${suffix}` : `/docs/${site.slug}${suffix}`
 	})
 }
 

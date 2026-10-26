@@ -257,8 +257,7 @@ function View() {
 
 	return (
 		<ApiCacheLayout
-			title="API cache with Query"
-			description="The same cache as the API cache example, with Foldkit Query handling fetch results, retries, deduplication, and keyed entries. The parent Program handles the user's clicks."
+			slug="api-cache-query"
 			activeTab={activeTab}
 			onSelectTab={(tab) => send.ClickedTab({ tab })}
 		>

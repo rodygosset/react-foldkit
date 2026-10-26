@@ -3,8 +3,9 @@ import { ArrowRightIcon, ArrowUpRightIcon } from "lucide-react"
 import installCommand from "virtual:install-command"
 import { CodeBlock } from "../site/components/code-block"
 import { CopyButton } from "../site/components/copy-button"
-import { repositoryUrl } from "../site/examples"
 import { firstGuide } from "../site/guides"
+import type { HighlightedSnippet } from "../site/guides"
+import { blobUrl } from "../site/repository"
 import reactViewSnippet from "./cart/cart.tsx?highlight"
 import foldkitViewSnippet from "./cart/view.ts?highlight"
 import { HeroCode } from "./hero-code"
@@ -20,9 +21,9 @@ const captions = [
 
 /** The imports a team uses while it moves, with the guide for each. */
 const entryPoints = [
-	{ path: "react-foldkit/program", use: "Define a feature's logic", slug: "move-to-foldkit" },
-	{ path: "react-foldkit/application", use: "Run it under React", slug: "get-started" },
-	{ path: "react-foldkit/scene", use: "Test it like Foldkit", slug: "scene" },
+	{ path: "react-foldkit/program", purpose: "Define a feature's logic", slug: "move-to-foldkit" },
+	{ path: "react-foldkit/application", purpose: "Run it under React", slug: "get-started" },
+	{ path: "react-foldkit/scene", purpose: "Test it like Foldkit", slug: "scene" },
 ]
 
 const primaryButton =
@@ -44,7 +45,7 @@ function GetStarted() {
 }
 
 /** Shows the short command and copies the full one, with the peer dependencies. */
-function InstallCommand(props: { readonly blockId: string }) {
+function InstallCommand(props: { readonly snippetId: string }) {
 	return (
 		<div className="flex items-center gap-2 font-mono text-[13px] text-muted-foreground">
 			<span>
@@ -52,14 +53,14 @@ function InstallCommand(props: { readonly blockId: string }) {
 				<span className="text-foreground">npm install react-foldkit</span>
 			</span>
 			<CopyButton
-				blockId={props.blockId}
+				snippetId={props.snippetId}
 				text={installCommand.code}
 			/>
 		</div>
 	)
 }
 
-function SceneHeading(props: { readonly title: string; readonly lead: string }) {
+function SectionHeading(props: { readonly title: string; readonly lead: string }) {
 	return (
 		<div className="reveal max-w-xl">
 			<h2 className="text-[clamp(1.75rem,3vw,2.25rem)] leading-[1.15] font-semibold tracking-[-0.03em] text-balance">
@@ -75,7 +76,7 @@ function Hero() {
 		<section className="mx-auto grid min-h-svh max-w-[1120px] items-center gap-14 px-5 pt-32 pb-20 lg:grid-cols-12 lg:gap-16 lg:pt-28">
 			<div className="flex flex-col items-start lg:col-span-5">
 				<a
-					href={`${repositoryUrl}/blob/main/packages/react-foldkit/CHANGELOG.md`}
+					href={blobUrl("packages/react-foldkit/CHANGELOG.md")}
 					className="font-mono text-[12px] text-muted-foreground transition-colors hover:text-foreground"
 				>
 					v0.1 · experimental
@@ -98,7 +99,7 @@ function Hero() {
 					</a>
 				</div>
 				<div className="mt-6">
-					<InstallCommand blockId="install-hero" />
+					<InstallCommand snippetId="install-hero" />
 				</div>
 			</div>
 			<div className="min-w-0 lg:col-span-7">
@@ -108,11 +109,11 @@ function Hero() {
 	)
 }
 
-function LogicMovesFirst() {
+function MigrationSection() {
 	return (
 		<section className="migrate-stage relative border-t border-foreground/10">
 			<div className="migrate-sticky mx-auto flex max-w-[1120px] flex-col justify-center px-5 py-24">
-				<SceneHeading
+				<SectionHeading
 					title="Your logic moves first."
 					lead="Wrap one feature in a Program. Its state and side effects leave React, and every view keeps rendering."
 				/>
@@ -159,8 +160,8 @@ function LogicMovesFirst() {
 function CodePanel(props: {
 	readonly label: string
 	readonly file: string
-	readonly blockId: string
-	readonly snippet: { readonly code: string; readonly html: string }
+	readonly snippetId: string
+	readonly snippet: HighlightedSnippet
 }) {
 	return (
 		<div className="flex min-w-0 flex-col overflow-hidden rounded-xl border border-foreground/12 bg-card">
@@ -169,7 +170,7 @@ function CodePanel(props: {
 				<span className="font-mono text-xs text-muted-foreground">{props.file}</span>
 			</div>
 			<CodeBlock
-				blockId={props.blockId}
+				snippetId={props.snippetId}
 				snippet={props.snippet}
 				className="flex-1 rounded-none border-0 bg-transparent"
 				scrollClassName="max-h-[460px] px-5 py-5"
@@ -178,11 +179,11 @@ function CodePanel(props: {
 	)
 }
 
-function ThenTheView() {
+function ViewSection() {
 	return (
 		<section className="border-t border-foreground/10">
 			<div className="mx-auto max-w-[1120px] px-5 py-28 sm:py-32">
-				<SceneHeading
+				<SectionHeading
 					title="Then the view."
 					lead="With the cart's logic in a Program, its React view is a thin layer. Rewrite it as a Foldkit view, and keep the Program as it is."
 				/>
@@ -190,13 +191,13 @@ function ThenTheView() {
 					<CodePanel
 						label="React view"
 						file="cart.tsx"
-						blockId="view-react"
+						snippetId="view-react"
 						snippet={reactViewSnippet}
 					/>
 					<CodePanel
 						label="Foldkit view"
 						file="view.ts"
-						blockId="view-foldkit"
+						snippetId="view-foldkit"
 						snippet={foldkitViewSnippet}
 					/>
 				</div>
@@ -205,11 +206,11 @@ function ThenTheView() {
 	)
 }
 
-function TestedTheSameWay() {
+function TestingSection() {
 	return (
 		<section className="border-t border-foreground/10">
 			<div className="mx-auto max-w-[1120px] px-5 py-28 sm:py-32">
-				<SceneHeading
+				<SectionHeading
 					title="Tested the same way."
 					lead="Scene tests run on React views and on Foldkit views. When the cart moves, its test changes one import."
 				/>
@@ -237,17 +238,17 @@ function TestedTheSameWay() {
 	)
 }
 
-function StartWithOneFeature() {
+function InstallSection() {
 	return (
 		<section className="border-t border-foreground/10">
 			<div className="mx-auto grid max-w-[1120px] items-start gap-12 px-5 py-28 sm:py-32 lg:grid-cols-12">
 				<div className="lg:col-span-5">
-					<SceneHeading
+					<SectionHeading
 						title="Start with one feature."
 						lead="Install React Foldkit, wrap one feature in a Program, and keep shipping."
 					/>
 					<div className="reveal mt-8 flex flex-col items-start gap-5">
-						<InstallCommand blockId="install-closing" />
+						<InstallCommand snippetId="install-closing" />
 						<div className="flex items-center gap-6">
 							<GetStarted />
 							<Link
@@ -281,7 +282,9 @@ function StartWithOneFeature() {
 							>
 								<span>
 									<span className="block font-mono text-[13px]">{entry.path}</span>
-									<span className="mt-0.5 block text-[13px] text-muted-foreground">{entry.use}</span>
+									<span className="mt-0.5 block text-[13px] text-muted-foreground">
+										{entry.purpose}
+									</span>
 								</span>
 								<ArrowRightIcon className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" />
 							</Link>
@@ -297,10 +300,10 @@ export function HomePage() {
 	return (
 		<main>
 			<Hero />
-			<LogicMovesFirst />
-			<ThenTheView />
-			<TestedTheSameWay />
-			<StartWithOneFeature />
+			<MigrationSection />
+			<ViewSection />
+			<TestingSection />
+			<InstallSection />
 		</main>
 	)
 }

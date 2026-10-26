@@ -1,12 +1,12 @@
 import { cn } from "@workspace/ui/lib/utils"
 import { Option } from "effect"
 import { CheckIcon, CopyIcon } from "lucide-react"
-import { Site } from "../application"
+import * as SnippetCopy from "../snippet-copy"
 
-/** Copies `text` through a Command. The site Program shows "Copied" for this block only. */
-export function CopyButton(props: { readonly blockId: string; readonly text: string; readonly className?: string }) {
-	const isCopied = Site.useModel((model) => Option.contains(model.copiedBlockId, props.blockId))
-	const send = Site.useSend()
+/** Copies `text` through a Command. The snippet copy Submodel shows "Copied" for this snippet only. */
+export function CopyButton(props: { readonly snippetId: string; readonly text: string; readonly className?: string }) {
+	const isCopied = SnippetCopy.useModel((model) => Option.contains(model.maybeCopiedSnippetId, props.snippetId))
+	const send = SnippetCopy.useSend()
 
 	return (
 		<button
@@ -18,7 +18,7 @@ export function CopyButton(props: { readonly blockId: string; readonly text: str
 				isCopied && "text-link",
 				props.className
 			)}
-			onClick={() => send.ClickedCopy({ blockId: props.blockId, text: props.text })}
+			onClick={() => send.ClickedCopySnippet({ snippetId: props.snippetId, text: props.text })}
 		>
 			{isCopied ? <CheckIcon className="size-4" /> : <CopyIcon className="size-4" />}
 		</button>

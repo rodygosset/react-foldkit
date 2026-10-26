@@ -1,7 +1,7 @@
-import { Link, useRouterState } from "@tanstack/react-router"
+import { Link, useMatchRoute } from "@tanstack/react-router"
 import { cn } from "@workspace/ui/lib/utils"
-import { repositoryUrl } from "../examples"
 import { firstGuide } from "../guides"
+import { repositoryUrl } from "../repository"
 import { GuideNav } from "./guide-nav"
 import { MenuButton, MobileMenu } from "./mobile-menu"
 import { ThemeButton } from "./theme-button"
@@ -12,7 +12,9 @@ const activePillLink = "bg-foreground/10 text-foreground"
 
 /** A floating glass pill. On phones it keeps the wordmark, the theme button, and the menu. */
 export function SiteNav() {
-	const pathname = useRouterState({ select: (state) => state.location.pathname })
+	const matchRoute = useMatchRoute()
+	const isInDocs = matchRoute({ to: "/docs", fuzzy: true }) !== false
+	const isInExamples = matchRoute({ to: "/examples", fuzzy: true }) !== false
 
 	return (
 		<>
@@ -31,13 +33,13 @@ export function SiteNav() {
 						<Link
 							to="/docs/$slug"
 							params={{ slug: firstGuide.slug }}
-							className={cn(pillLink, pathname.startsWith("/docs") && activePillLink)}
+							className={cn(pillLink, isInDocs && activePillLink)}
 						>
 							Docs
 						</Link>
 						<Link
 							to="/examples"
-							className={cn(pillLink, pathname.startsWith("/examples") && activePillLink)}
+							className={cn(pillLink, isInExamples && activePillLink)}
 						>
 							Examples
 						</Link>

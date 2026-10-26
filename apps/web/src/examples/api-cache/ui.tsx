@@ -5,6 +5,7 @@ import { Array, DateTime, Option, Schema } from "effect"
 import * as AsyncData from "foldkit/asyncData"
 import type { ReactNode } from "react"
 import { ExampleShell } from "../../components/example-shell"
+import type { ExampleSlug } from "../../site/examples"
 import type { Post, PostDetail, Stats } from "./data"
 
 export const Tab = Schema.Literals(["Posts", "Stats"])
@@ -201,17 +202,13 @@ function TabList(props: { activeTab: Tab; onSelect: (tab: Tab) => void }) {
 
 /** Lays out an API cache example: the shell, the tab list, and the active tab's panel. */
 export function ApiCacheLayout(props: {
-	title: string
-	description: string
+	slug: ExampleSlug
 	activeTab: Tab
 	onSelectTab: (tab: Tab) => void
 	children: ReactNode
 }) {
 	return (
-		<ExampleShell
-			title={props.title}
-			description={props.description}
-		>
+		<ExampleShell slug={props.slug}>
 			<div className="mx-auto flex w-full max-w-lg flex-1 flex-col gap-6 px-6 pt-8 pb-16">
 				<TabList
 					activeTab={props.activeTab}

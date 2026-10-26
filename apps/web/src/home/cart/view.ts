@@ -1,3 +1,4 @@
+import { Array } from "effect"
 import type { Html, HtmlBuilder } from "foldkit/html"
 import { Message, products, saveLabel, totalOf } from "./program"
 import type { Model } from "./program"
@@ -9,17 +10,15 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Html =>
 		[
 			h.ul(
 				[],
-				products.map((product) =>
-					h.li(
-						[h.Key(product.name)],
+				Array.map(products, (product) =>
+					h.keyed("li")(
+						product.name,
+						[],
 						[
 							h.span([], [product.name]),
 							h.span([], [`€${product.price}`]),
 							h.button(
-								[
-									h.AriaLabel(`Add ${product.name}`),
-									h.OnClick(Message.ClickedAdd({ item: product.name })),
-								],
+								[h.AriaLabel(`Add ${product.name}`), h.OnClick(Message.ClickedAdd({ product }))],
 								["Add"]
 							),
 						]
@@ -32,7 +31,7 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Html =>
 					h.p([], [`${model.items.length} in cart · €${totalOf(model.items)}`]),
 					h.button(
 						[
-							h.Disabled(model.status === "saving" || model.items.length === 0),
+							h.Disabled(model.status === "Saving" || Array.isReadonlyArrayEmpty(model.items)),
 							h.OnClick(Message.ClickedSave()),
 						],
 						[saveLabel(model.status)]

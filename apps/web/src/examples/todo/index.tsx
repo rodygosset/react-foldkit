@@ -377,10 +377,7 @@ function View() {
 	const send = useSend()
 
 	return (
-		<ExampleShell
-			title="Todo"
-			description="The list is AsyncData. Commands load and save it, and their Results settle back into the Model. The filter lives in the URL."
-		>
+		<ExampleShell slug="todo">
 			<div className="mx-auto flex w-full max-w-lg flex-1 flex-col px-6 pt-10 pb-16">
 				<TodoForm.Provider
 					from={TodoApp}

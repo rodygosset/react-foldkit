@@ -1,4 +1,4 @@
-import { repositoryUrl, sourceUrl } from "../examples"
+import { repositoryUrl, treeUrl } from "../repository"
 
 const linkClass = "transition-colors hover:text-foreground"
 
@@ -15,7 +15,7 @@ export function SiteFooter() {
 				</a>
 				, with React Foldkit.{" "}
 				<a
-					href={sourceUrl("apps/web")}
+					href={treeUrl("apps/web")}
 					className="text-foreground/80 hover:text-foreground"
 				>
 					Read the source

@@ -38,10 +38,7 @@ function View() {
 	const send = useSend()
 
 	return (
-		<ExampleShell
-			title="Counter"
-			description="Buttons send Messages, and update returns the next Model. The view holds no React state."
-		>
+		<ExampleShell slug="counter">
 			<div className="mx-auto flex w-full max-w-lg flex-1 flex-col items-center justify-center px-6 pb-20">
 				<p
 					className="text-[7.5rem] leading-none font-semibold tracking-tight tabular-nums transition-transform duration-300 sm:text-[9rem]"

@@ -4,10 +4,9 @@ import appCss from "../styles.css?url"
 import { Site } from "../site/application"
 import { SiteFooter } from "../site/components/site-footer"
 import { SiteNav } from "../site/components/site-nav"
-import { Message } from "../site/program"
-
-/** Applies the saved theme before the first paint. The site Program takes over after hydration. */
-const themeScript = `try{var t=localStorage.getItem("react-foldkit-theme");var d=t==="dark"||(t!=="light"&&matchMedia("(prefers-color-scheme: dark)").matches);document.documentElement.classList.toggle("dark",d)}catch(e){}`
+import { Message, snippetCopy } from "../site/program"
+import * as SnippetCopy from "../site/snippet-copy"
+import { applySavedThemeScript } from "../site/theme"
 
 export const Route = createRootRoute({
 	head: () => ({
@@ -26,7 +25,7 @@ export const Route = createRootRoute({
 			{ rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },
 			{ rel: "manifest", href: "/manifest.json" },
 		],
-		scripts: [{ children: themeScript }],
+		scripts: [{ children: applySavedThemeScript }],
 	}),
 	notFoundComponent: NotFound,
 	shellComponent: RootDocument,
@@ -59,13 +58,18 @@ function RootDocument(props: { readonly children: ReactNode }) {
 			</head>
 			<body>
 				<Site.Provider>
-					<SyncPath>
-						<div className="flex min-h-svh flex-col">
-							<SiteNav />
-							<div className="flex flex-1 flex-col">{props.children}</div>
-							<SiteFooter />
-						</div>
-					</SyncPath>
+					<SnippetCopy.Provider
+						from={Site}
+						lift={snippetCopy}
+					>
+						<SyncPath>
+							<div className="flex min-h-svh flex-col">
+								<SiteNav />
+								<div className="flex flex-1 flex-col">{props.children}</div>
+								<SiteFooter />
+							</div>
+						</SyncPath>
+					</SnippetCopy.Provider>
 				</Site.Provider>
 				<Scripts />
 			</body>

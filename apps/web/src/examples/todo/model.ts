@@ -12,6 +12,6 @@ export type Filter = typeof Filter.Type
 
 /** The `/examples/todo` route search. A URL without a filter shows every todo. */
 export const TodoSearch = Schema.Struct({
-	filter: Filter.pipe(Schema.withDecodingDefaultKey(Effect.succeed("all" as const))),
+	filter: Filter.pipe(Schema.withDecodingDefaultKey(Effect.succeed<Filter>("all"))),
 })
 export type TodoSearch = typeof TodoSearch.Type

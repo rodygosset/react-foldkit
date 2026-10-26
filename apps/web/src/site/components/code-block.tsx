@@ -1,10 +1,11 @@
 import { cn } from "@workspace/ui/lib/utils"
+import type { HighlightedSnippet } from "../guides"
 import { CopyButton } from "./copy-button"
 
 /** Code highlighted at build time by Shiki, with a copy button in the top-right corner. */
 export function CodeBlock(props: {
-	readonly blockId: string
-	readonly snippet: { readonly code: string; readonly html: string }
+	readonly snippetId: string
+	readonly snippet: HighlightedSnippet
 	readonly className?: string
 	/** Classes for the scrolling area, such as a maximum height. */
 	readonly scrollClassName?: string
@@ -21,7 +22,7 @@ export function CodeBlock(props: {
 				dangerouslySetInnerHTML={{ __html: props.snippet.html }}
 			/>
 			<CopyButton
-				blockId={props.blockId}
+				snippetId={props.snippetId}
 				text={props.snippet.code}
 				className="absolute top-2 right-2 border-border bg-background/90"
 			/>

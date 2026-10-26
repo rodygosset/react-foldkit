@@ -1,15 +1,15 @@
 import * as Application from "react-foldkit/application"
-import { cart, products, saveLabel, totalOf } from "./program"
+import { SaveCart, cart, products, saveLabel, totalOf } from "./program"
 
-export const Shop = Application.define(cart, {
-	restartInterrupted: (command) => command.name === "SaveCart",
+export const Cart = Application.define(cart, {
+	restartInterrupted: (command) => command.name === SaveCart.name,
 })
 
 // #region snippet
 export function CartView() {
-	const items = Shop.useModel((model) => model.items)
-	const status = Shop.useModel((model) => model.status)
-	const send = Shop.useSend()
+	const items = Cart.useModel((model) => model.items)
+	const status = Cart.useModel((model) => model.status)
+	const send = Cart.useSend()
 
 	return (
 		<section className="shop">
@@ -20,7 +20,7 @@ export function CartView() {
 						<span>€{product.price}</span>
 						<button
 							aria-label={`Add ${product.name}`}
-							onClick={() => send.ClickedAdd({ item: product.name })}
+							onClick={() => send.ClickedAdd({ product })}
 						>
 							Add
 						</button>
@@ -32,7 +32,7 @@ export function CartView() {
 					{items.length} in cart · €{totalOf(items)}
 				</p>
 				<button
-					disabled={status === "saving" || items.length === 0}
+					disabled={status === "Saving" || items.length === 0}
 					onClick={() => send.ClickedSave()}
 				>
 					{saveLabel(status)}

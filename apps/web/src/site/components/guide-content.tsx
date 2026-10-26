@@ -32,7 +32,7 @@ export function GuideContent(props: { readonly slug: string; readonly blocks: Re
 				) : (
 					<CodeBlock
 						key={index}
-						blockId={`${props.slug}-${index}`}
+						snippetId={`${props.slug}-${index}`}
 						snippet={block}
 						className="my-5"
 					/>

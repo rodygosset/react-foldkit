@@ -1,75 +1,79 @@
-import { Effect, Schema } from "effect"
+import { Array, Effect, Match, Number, Schema } from "effect"
 import * as Command from "foldkit/command"
 import { defineMessageUnion } from "foldkit/message"
 import { modifyFields } from "foldkit/struct"
 import type * as Update from "foldkit/update"
 import * as Program from "react-foldkit/program"
 
-export const products = [
+export const Product = Schema.Struct({ name: Schema.String, price: Schema.Finite })
+export type Product = typeof Product.Type
+
+export const products: ReadonlyArray<Product> = [
 	{ name: "Wool socks", price: 12 },
 	{ name: "Linen cap", price: 24 },
 ]
 
-export const Status = Schema.Literals(["unsaved", "saving", "saved"])
+export const Status = Schema.Literals(["Unsaved", "Saving", "Saved"])
 export type Status = typeof Status.Type
 
-export const totalOf = (items: ReadonlyArray<string>): number =>
-	items.reduce(
-		(sum, item) =>
-			sum + (products.find((product) => product.name === item)?.price ?? 0),
-		0
-	)
+export const totalOf = (items: ReadonlyArray<Product>): number => Number.sumAll(Array.map(items, (item) => item.price))
 
 export const saveLabel = (status: Status): string =>
-	status === "saving" ? "Saving..." : status === "saved" ? "Saved" : "Save cart"
+	Match.value(status).pipe(
+		Match.when("Unsaved", () => "Save cart"),
+		Match.when("Saving", () => "Saving..."),
+		Match.when("Saved", () => "Saved"),
+		Match.exhaustive
+	)
 
 // #region snippet
 export const Model = Schema.Struct({
-	items: Schema.Array(Schema.String),
+	items: Schema.Array(Product),
 	status: Status,
 })
 export type Model = typeof Model.Type
 
 export const Message = defineMessageUnion({
-	ClickedAdd: { item: Schema.String },
+	ClickedAdd: { product: Product },
 	ClickedSave: {},
-	SavedCart: {},
+	CompletedSaveCart: {},
 })
 export type Message = typeof Message.Type
 
 // Saving is a side effect, so it runs as a Command.
 export const SaveCart = Command.define("SaveCart", {
-	args: { items: Schema.Array(Schema.String) },
-	messages: [Message.SavedCart],
-	execute: ({ items }) =>
-		Api.saveCart(items).pipe(Effect.as(Message.SavedCart())),
+	args: { items: Schema.Array(Product) },
+	messages: [Message.CompletedSaveCart],
+	execute: ({ items }) => Api.saveCart(items).pipe(Effect.as(Message.CompletedSaveCart())),
 })
 
 const update = (model: Model, message: Message) =>
 	Message.match<Update.Return<Model, Message>>(message, {
-		ClickedAdd: ({ item }) => ({
+		ClickedAdd: ({ product }) => ({
 			model: modifyFields(model, {
-				items: (items) => [...items, item],
-				status: () => "unsaved",
+				items: Array.append(product),
+				status: () => "Unsaved",
 			}),
 		}),
 		ClickedSave: () => ({
-			model: modifyFields(model, { status: () => "saving" }),
+			model: modifyFields(model, { status: () => "Saving" }),
 			commands: [SaveCart({ items: model.items })],
 		}),
-		SavedCart: () => ({
-			model: modifyFields(model, { status: () => "saved" }),
+		CompletedSaveCart: () => ({
+			model: modifyFields(model, { status: () => "Saved" }),
 		}),
 	})
 
-export const initialModel: Model = { items: [], status: "unsaved" }
+export const initialModel: Model = { items: [], status: "Unsaved" }
 
 const init = () => ({ model: initialModel })
 
 export const cart = Program.make({ Model, Message, init, update })
 // #endregion snippet
 
+const saveDelay = "900 millis"
+
 /** Stands in for a request to the store's API. */
 const Api = {
-	saveCart: (_items: ReadonlyArray<string>) => Effect.sleep("900 millis"),
+	saveCart: (_items: ReadonlyArray<Product>) => Effect.sleep(saveDelay),
 }

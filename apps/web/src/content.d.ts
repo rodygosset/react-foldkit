@@ -5,11 +5,15 @@ declare module "virtual:guides" {
 }
 
 declare module "virtual:install-command" {
-	const command: { readonly code: string; readonly html: string }
+	import type { HighlightedSnippet } from "./site/guides"
+
+	const command: HighlightedSnippet
 	export default command
 }
 
 declare module "*?highlight" {
-	const snippet: { readonly code: string; readonly html: string }
+	import type { HighlightedSnippet } from "./site/guides"
+
+	const snippet: HighlightedSnippet
 	export default snippet
 }

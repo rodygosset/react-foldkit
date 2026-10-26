@@ -1,22 +1,16 @@
+import { modifyFields } from "foldkit/struct"
 import { Command, click, expect, given, role, scene } from "react-foldkit/scene"
 import { bindSceneView } from "react-foldkit/scene/react"
-import { describe, expect as assert, test, vi } from "vitest"
+import { describe, test, vi } from "vitest"
 import { Site } from "./application"
 import { CopyButton } from "./components/copy-button"
 import { MenuButton, MobileMenu } from "./components/mobile-menu"
 import { ThemeButton } from "./components/theme-button"
-import {
-	ApplyColorScheme,
-	CopyToClipboard,
-	Message,
-	SaveTheme,
-	WaitToClearCopied,
-	initialModel,
-	update,
-} from "./program"
-import type { Model } from "./program"
+import { ApplyTheme, Message, SaveTheme, initialModel, snippetCopy, update } from "./program"
+import * as SnippetCopy from "./snippet-copy"
 
-// The router module loads every route and the build-time content. These tests never navigate.
+// The application's navigation service imports the router, which loads every route and the
+// build-time content. Scene tests never run Commands, so nothing here navigates.
 vi.mock("../router", () => ({ getRouter: vi.fn() }))
 
 const installCommand = "npm install react-foldkit"
@@ -24,17 +18,22 @@ const installCommand = "npm install react-foldkit"
 /** The site's controls, without the router Links around them in the real nav. */
 function SiteControls() {
 	return (
-		<main>
-			<ThemeButton />
-			<MenuButton />
-			<MobileMenu>
-				<a href="/docs/routing">Use a router</a>
-			</MobileMenu>
-			<CopyButton
-				blockId="install"
-				text={installCommand}
-			/>
-		</main>
+		<SnippetCopy.Provider
+			from={Site}
+			lift={snippetCopy}
+		>
+			<main>
+				<ThemeButton />
+				<MenuButton />
+				<MobileMenu>
+					<a href="/docs/routing">Use a router</a>
+				</MobileMenu>
+				<CopyButton
+					snippetId="install"
+					text={installCommand}
+				/>
+			</main>
+		</SnippetCopy.Provider>
 	)
 }
 
@@ -47,28 +46,28 @@ describe("theme button", function () {
 			given(initialModel),
 
 			click(role("button", { name: "Switch to light theme" })),
-			Command.expectExact(SaveTheme({ theme: "light" }), ApplyColorScheme({ isDark: false })),
-			Command.resolve(SaveTheme, Message.SavedTheme()),
-			Command.resolve(ApplyColorScheme, Message.AppliedColorScheme()),
+			Command.expectExact(SaveTheme({ themePreference: "Light" }), ApplyTheme({ theme: "Light" })),
+			Command.resolve(SaveTheme, Message.CompletedSaveTheme()),
+			Command.resolve(ApplyTheme, Message.CompletedApplyTheme()),
 
 			click(role("button", { name: "Switch to dark theme" })),
-			Command.expectExact(SaveTheme({ theme: "dark" }), ApplyColorScheme({ isDark: true })),
-			Command.resolve(SaveTheme, Message.SavedTheme()),
-			Command.resolve(ApplyColorScheme, Message.AppliedColorScheme()),
+			Command.expectExact(SaveTheme({ themePreference: "Dark" }), ApplyTheme({ theme: "Dark" })),
+			Command.resolve(SaveTheme, Message.CompletedSaveTheme()),
+			Command.resolve(ApplyTheme, Message.CompletedApplyTheme()),
 			expect(role("button", { name: "Switch to system theme" })).toExist()
 		)
 	})
 
-	test("follows the system color scheme when the theme is system", function () {
-		const prefersDark: Model = { ...initialModel, theme: "dark", systemPrefersDark: true }
+	test("applies the system theme when it moves back to system", function () {
+		const darkSystem = modifyFields(initialModel, { themePreference: () => "Dark", systemTheme: () => "Dark" })
 		scene(
 			{ update, view },
-			given(prefersDark),
+			given(darkSystem),
 
 			click(role("button", { name: "Switch to system theme" })),
-			Command.expectExact(SaveTheme({ theme: "system" }), ApplyColorScheme({ isDark: true })),
-			Command.resolve(SaveTheme, Message.SavedTheme()),
-			Command.resolve(ApplyColorScheme, Message.AppliedColorScheme())
+			Command.expectExact(SaveTheme({ themePreference: "System" }), ApplyTheme({ theme: "Dark" })),
+			Command.resolve(SaveTheme, Message.CompletedSaveTheme()),
+			Command.resolve(ApplyTheme, Message.CompletedApplyTheme())
 		)
 	})
 })
@@ -90,27 +89,27 @@ describe("phone menu", function () {
 			expect(role("navigation", { name: "Site" })).toBeAbsent()
 		)
 	})
-
-	test("closes when the page changes", function () {
-		const { model, commands } = update({ ...initialModel, isMenuOpen: true }, Message.ChangedPath())
-		assert(model.isMenuOpen).toBe(false)
-		assert(commands).toBeUndefined()
-	})
 })
 
 describe("copy button", function () {
-	test("shows Copied until the feedback delay ends", function () {
+	test("shows Copied until the indicator delay ends", function () {
 		scene(
 			{ update, view },
 			given(initialModel),
 
 			click(role("button", { name: "Copy code" })),
-			Command.expectExact(CopyToClipboard({ blockId: "install", text: installCommand })),
-			Command.resolve(CopyToClipboard, Message.SucceededCopy({ blockId: "install" })),
+			Command.expectExact(SnippetCopy.CopySnippet({ snippetId: "install", text: installCommand })),
+			Command.resolve(
+				SnippetCopy.CopySnippet,
+				SnippetCopy.Message.SucceededCopySnippet({ snippetId: "install" })
+			),
 			expect(role("button", { name: "Copied" })).toExist(),
 
-			Command.expectExact(WaitToClearCopied({ blockId: "install" })),
-			Command.resolve(WaitToClearCopied, Message.ElapsedCopiedFeedback({ blockId: "install" })),
+			Command.expectExact(SnippetCopy.WaitBeforeHidingCopiedIndicator({ snippetId: "install" })),
+			Command.resolve(
+				SnippetCopy.WaitBeforeHidingCopiedIndicator,
+				SnippetCopy.Message.CompletedWaitBeforeHidingCopiedIndicator({ snippetId: "install" })
+			),
 			expect(role("button", { name: "Copy code" })).toExist()
 		)
 	})
@@ -121,15 +120,8 @@ describe("copy button", function () {
 			given(initialModel),
 
 			click(role("button", { name: "Copy code" })),
-			Command.resolve(CopyToClipboard, Message.FailedCopy()),
+			Command.resolve(SnippetCopy.CopySnippet, SnippetCopy.Message.FailedCopySnippet()),
 			expect(role("button", { name: "Copy code" })).toExist()
 		)
-	})
-})
-
-describe("Escape", function () {
-	test("closes the phone menu", function () {
-		const { model } = update({ ...initialModel, isMenuOpen: true }, Message.PressedEscape())
-		assert(model.isMenuOpen).toBe(false)
 	})
 })

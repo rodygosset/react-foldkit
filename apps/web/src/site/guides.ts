@@ -12,10 +12,15 @@ export interface Guide {
 	readonly section?: { readonly from: string; readonly to: string }
 }
 
+/** Source code and its Shiki HTML, both made at build time by the content plugin. */
+export interface HighlightedSnippet {
+	readonly code: string
+	readonly html: string
+}
+
 /** A rendered guide is HTML split around its code blocks, so each code block gets a copy button. */
 export type GuideBlock =
-	| { readonly kind: "html"; readonly html: string }
-	| { readonly kind: "code"; readonly code: string; readonly html: string }
+	{ readonly kind: "html"; readonly html: string } | ({ readonly kind: "code" } & HighlightedSnippet)
 
 export const guides: ReadonlyArray<Guide> = [
 	{
