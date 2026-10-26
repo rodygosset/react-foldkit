@@ -63,7 +63,7 @@ function GuidePage() {
 						<Link
 							to="/docs/$slug"
 							params={{ slug: previous.slug }}
-							className="surface group rounded-2xl p-4 transition-colors hover:border-foreground/25"
+							className="surface group rounded-xl p-4 transition-colors hover:border-foreground/25"
 						>
 							<span className="flex items-center gap-1 text-xs text-muted-foreground">
 								<ArrowLeftIcon className="size-3" />
@@ -76,7 +76,7 @@ function GuidePage() {
 						<Link
 							to="/docs/$slug"
 							params={{ slug: next.slug }}
-							className="surface group rounded-2xl p-4 text-right transition-colors hover:border-foreground/25"
+							className="surface group rounded-xl p-4 text-right transition-colors hover:border-foreground/25"
 						>
 							<span className="flex items-center justify-end gap-1 text-xs text-muted-foreground">
 								Next

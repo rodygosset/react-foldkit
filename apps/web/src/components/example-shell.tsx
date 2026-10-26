@@ -24,7 +24,7 @@ export function ExampleShell(props: { title: string; description: string; childr
 				{example === undefined ? null : (
 					<a
 						href={sourceUrl(example.source)}
-						className="glass inline-flex h-9 shrink-0 items-center gap-1.5 self-start rounded-full px-4 text-sm font-medium transition-colors hover:bg-foreground/5 sm:self-auto"
+						className="inline-flex h-9 shrink-0 items-center gap-1.5 self-start rounded-full border border-foreground/12 px-4 text-sm font-medium transition-colors hover:bg-foreground/5 sm:self-auto"
 					>
 						View source
 						<ArrowUpRightIcon className="size-3.5" />

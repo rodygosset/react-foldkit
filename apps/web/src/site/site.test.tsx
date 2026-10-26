@@ -4,7 +4,6 @@ import { describe, expect as assert, test, vi } from "vitest"
 import { Site } from "./application"
 import { CopyButton } from "./components/copy-button"
 import { MenuButton, MobileMenu } from "./components/mobile-menu"
-import { CodeSheet } from "./components/code-sheet"
 import { ThemeButton } from "./components/theme-button"
 import {
 	ApplyColorScheme,
@@ -22,17 +21,6 @@ vi.mock("../router", () => ({ getRouter: vi.fn() }))
 
 const installCommand = "npm install react-foldkit"
 
-const sheetTabs = [
-	{ tab: "program", file: "program.ts", snippet: { code: "const a = 1", html: "<pre>const a = 1</pre>" } },
-	{ tab: "view", file: "view.tsx", snippet: { code: "const b = 2", html: "<pre>const b = 2</pre>" } },
-] as const
-
-/** Opens the code sheet, like the hero's "View the code" button. */
-function ShowCodeButton() {
-	const send = Site.useSend()
-	return <button onClick={() => send.ClickedShowCode()}>View the code</button>
-}
-
 /** The site's controls, without the router Links around them in the real nav. */
 function SiteControls() {
 	return (
@@ -45,11 +33,6 @@ function SiteControls() {
 			<CopyButton
 				blockId="install"
 				text={installCommand}
-			/>
-			<ShowCodeButton />
-			<CodeSheet
-				title="Counter source"
-				tabs={sheetTabs}
 			/>
 		</main>
 	)
@@ -144,28 +127,9 @@ describe("copy button", function () {
 	})
 })
 
-describe("code sheet", function () {
-	test("opens, switches tabs, and closes", function () {
-		scene(
-			{ update, view },
-			given(initialModel),
-			expect(role("dialog", { name: "Counter source" })).toBeAbsent(),
-
-			click(role("button", { name: "View the code" })),
-			expect(role("dialog", { name: "Counter source" })).toExist(),
-			expect(role("tab", { name: "program.ts" })).toHaveAttr("aria-selected", "true"),
-
-			click(role("tab", { name: "view.tsx" })),
-			expect(role("tab", { name: "view.tsx" })).toHaveAttr("aria-selected", "true"),
-
-			click(role("button", { name: "Close" })),
-			expect(role("dialog", { name: "Counter source" })).toBeAbsent()
-		)
-	})
-
-	test("Escape closes the sheet and the menu", function () {
-		const { model } = update({ ...initialModel, isMenuOpen: true, isCodeSheetOpen: true }, Message.PressedEscape())
+describe("Escape", function () {
+	test("closes the phone menu", function () {
+		const { model } = update({ ...initialModel, isMenuOpen: true }, Message.PressedEscape())
 		assert(model.isMenuOpen).toBe(false)
-		assert(model.isCodeSheetOpen).toBe(false)
 	})
 })

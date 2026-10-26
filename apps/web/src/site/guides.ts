@@ -21,20 +21,26 @@ export const guides: ReadonlyArray<Guide> = [
 	{
 		slug: "get-started",
 		title: "Get started",
-		description: "Install React Foldkit and run your first Program in React.",
+		description: "What React Foldkit is, how to install it, and how to run a Foldkit Program in React.",
 		source: "packages/react-foldkit/README.md",
-		section: { from: "How it works", to: "Read next" },
+		section: { from: "What React Foldkit is", to: "Read next" },
 	},
 	{
-		slug: "tutorial",
-		title: "Build a counter with Commands",
-		description: "A step-by-step tutorial that adds a delayed increment as an Effect Command.",
-		source: "packages/react-foldkit/docs/examples.md",
+		slug: "provider",
+		title: "How the Provider runs a Program",
+		description: "When work starts and stops, React Activity, changing props, services, and crashes.",
+		source: "packages/react-foldkit/docs/provider.md",
+	},
+	{
+		slug: "submodels",
+		title: "Give child Programs their own hooks",
+		description: "Foldkit Submodels in React components, including children that exist only some of the time.",
+		source: "packages/react-foldkit/docs/submodels.md",
 	},
 	{
 		slug: "move-to-foldkit",
 		title: "Move to Foldkit",
-		description: "What stays the same and what changes when a feature leaves React.",
+		description: "Move a React app to Foldkit one feature at a time, without a rewrite.",
 		source: "packages/react-foldkit/docs/moveToFoldkit.md",
 	},
 	{
@@ -46,20 +52,26 @@ export const guides: ReadonlyArray<Guide> = [
 	{
 		slug: "managed-resources",
 		title: "Managed Resources",
-		description: "Resources that exist only while the Model needs them.",
+		description: "How Foldkit's Managed Resources start and stop under a Provider.",
 		source: "packages/react-foldkit/docs/managedResources.md",
 	},
 	{
 		slug: "scene",
 		title: "Test views with Scene",
-		description: "Run Foldkit Scene tests against React views.",
+		description: "Run Foldkit's Scene tests against React views.",
 		source: "packages/react-foldkit/docs/scene.md",
 	},
 	{
 		slug: "devtools",
 		title: "Debug with Foldkit DevTools",
-		description: "Message history, time travel, and the MCP server.",
+		description: "Foldkit's DevTools panel, connected to your React Providers.",
 		source: "packages/react-foldkit/docs/devtools.md",
+	},
+	{
+		slug: "limitations",
+		title: "Limitations",
+		description: "What React Foldkit doesn't do today, so you can decide whether it fits.",
+		source: "packages/react-foldkit/docs/limitations.md",
 	},
 ]
 

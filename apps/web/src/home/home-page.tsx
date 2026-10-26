@@ -1,37 +1,34 @@
 import { Link } from "@tanstack/react-router"
-import { cn } from "@workspace/ui/lib/utils"
-import { ArrowRightIcon } from "lucide-react"
+import { ArrowRightIcon, ArrowUpRightIcon } from "lucide-react"
 import installCommand from "virtual:install-command"
-import { Site } from "../site/application"
 import { CodeBlock } from "../site/components/code-block"
-import { CodeSheet } from "../site/components/code-sheet"
-import type { CodeSheetTab } from "../site/components/code-sheet"
 import { CopyButton } from "../site/components/copy-button"
 import { repositoryUrl } from "../site/examples"
 import { firstGuide } from "../site/guides"
-import programSnippet from "./hero-counter/program.ts?highlight"
-import viewSnippet from "./hero-counter/view.tsx?highlight"
-import { LoopDiagram } from "./loop-diagram"
-import foldkitViewSnippet from "./view-swap/view-foldkit.ts?highlight"
-import reactViewSnippet from "./view-swap/view-react.tsx?highlight"
+import reactViewSnippet from "./cart/cart.tsx?highlight"
+import foldkitViewSnippet from "./cart/view.ts?highlight"
+import { HeroCode } from "./hero-code"
 
-const heroCode: ReadonlyArray<CodeSheetTab> = [
-	{ tab: "program", file: "program.ts", snippet: programSnippet },
-	{ tab: "view", file: "view.tsx", snippet: viewSnippet },
-]
-
+/** The store's features. Cart moves first, then Checkout, Search, and Profile. */
 const features = ["Search", "Cart", "Checkout", "Profile"]
 
 const captions = [
-	"Start with one feature. Its state and side effects move into a Program.",
-	"Move the next one when you're ready. The rest of the app doesn't notice.",
+	"Start with the cart. Its state and side effects move into a Program.",
+	"Move checkout when you're ready. Search and profile don't notice.",
 	"Every view still renders in React, until you swap it.",
 ]
 
+/** The imports a team uses while it moves, with the guide for each. */
+const entryPoints = [
+	{ path: "react-foldkit/program", use: "Define a feature's logic", slug: "move-to-foldkit" },
+	{ path: "react-foldkit/application", use: "Run it under React", slug: "get-started" },
+	{ path: "react-foldkit/scene", use: "Test it like Foldkit", slug: "scene" },
+]
+
 const primaryButton =
-	"inline-flex h-11 items-center gap-2 rounded-full bg-foreground px-6 text-[15px] font-medium text-background transition-colors hover:bg-foreground/85 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-none"
-const quietButton =
-	"inline-flex h-11 items-center gap-1.5 rounded-full px-5 text-[15px] text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+	"inline-flex h-10 items-center gap-2 rounded-full bg-foreground px-5 text-sm font-medium text-background transition-colors hover:bg-foreground/85 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-none"
+const textLink =
+	"inline-flex h-10 items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:text-foreground focus-visible:outline-none"
 
 function GetStarted() {
 	return (
@@ -47,123 +44,81 @@ function GetStarted() {
 }
 
 /** Shows the short command and copies the full one, with the peer dependencies. */
-function InstallPill(props: { readonly blockId: string; readonly className?: string }) {
+function InstallCommand(props: { readonly blockId: string }) {
 	return (
-		<div
-			className={cn(
-				"glass flex h-11 w-fit max-w-full items-center gap-3 rounded-full py-1 pr-1.5 pl-5",
-				props.className
-			)}
-		>
-			<code className="min-w-0 flex-1 [scrollbar-width:none] overflow-x-auto text-left font-mono text-[13px] whitespace-nowrap">
-				<span className="text-muted-foreground select-none">$ </span>
-				npm install react-foldkit
-			</code>
+		<div className="flex items-center gap-2 font-mono text-[13px] text-muted-foreground">
+			<span>
+				<span className="select-none">$ </span>
+				<span className="text-foreground">npm install react-foldkit</span>
+			</span>
 			<CopyButton
 				blockId={props.blockId}
 				text={installCommand.code}
-				className="rounded-full"
 			/>
 		</div>
 	)
 }
 
-function SceneHeading(props: { readonly title: string; readonly lead: string; readonly className?: string }) {
+function SceneHeading(props: { readonly title: string; readonly lead: string }) {
 	return (
-		<div className={cn("reveal flex flex-col items-start text-left", props.className)}>
-			<h2 className="max-w-3xl text-[clamp(2.5rem,6.5vw,4.75rem)] leading-[1] font-semibold tracking-[-0.045em] text-balance">
+		<div className="reveal max-w-xl">
+			<h2 className="text-[clamp(1.75rem,3vw,2.25rem)] leading-[1.15] font-semibold tracking-[-0.03em] text-balance">
 				{props.title}
 			</h2>
-			<p className="mt-6 max-w-xl text-lg leading-relaxed text-balance text-muted-foreground sm:text-xl">
-				{props.lead}
-			</p>
+			<p className="mt-3 text-base leading-relaxed text-balance text-muted-foreground">{props.lead}</p>
 		</div>
 	)
 }
 
 function Hero() {
-	const send = Site.useSend()
-
 	return (
-		<section className="relative overflow-hidden">
-			<div
-				aria-hidden
-				className="top-light pointer-events-none absolute inset-0"
-			/>
-			<div className="relative mx-auto grid min-h-svh max-w-[1120px] items-center gap-14 px-5 pt-32 pb-20 lg:grid-cols-12 lg:gap-10 lg:pt-28">
-				<div className="flex flex-col items-start lg:col-span-5">
+		<section className="mx-auto grid min-h-svh max-w-[1120px] items-center gap-14 px-5 pt-32 pb-20 lg:grid-cols-12 lg:gap-16 lg:pt-28">
+			<div className="flex flex-col items-start lg:col-span-5">
+				<a
+					href={`${repositoryUrl}/blob/main/packages/react-foldkit/CHANGELOG.md`}
+					className="font-mono text-[12px] text-muted-foreground transition-colors hover:text-foreground"
+				>
+					v0.1 · experimental
+				</a>
+				<h1 className="mt-5 text-[clamp(2.4rem,4.2vw,3.4rem)] leading-[1.04] font-semibold tracking-[-0.04em] text-balance">
+					Leave React one feature at a time.
+				</h1>
+				<p className="mt-5 max-w-md text-[17px] leading-relaxed text-muted-foreground">
+					Move a feature's state and side effects into a Foldkit Program. React keeps rendering it until you
+					swap the view.
+				</p>
+				<div className="mt-8 flex items-center gap-6">
+					<GetStarted />
 					<a
-						href={`${repositoryUrl}/blob/main/packages/react-foldkit/CHANGELOG.md`}
-						className="glass inline-flex items-center gap-2 rounded-full py-1 pr-3 pl-2.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+						href="https://foldkit.dev"
+						className={textLink}
 					>
-						<span className="size-1.5 rounded-full bg-primary" />
-						Experimental. Read the changelog
-						<ArrowRightIcon className="size-3" />
+						Read Foldkit's docs
+						<ArrowUpRightIcon className="size-3.5" />
 					</a>
-					<h1 className="mt-8 text-[clamp(2.9rem,5.6vw,4.6rem)] leading-[0.95] font-semibold tracking-[-0.05em] text-balance">
-						Leave React one feature at a time.
-					</h1>
-					<p className="mt-7 max-w-md text-lg leading-relaxed text-muted-foreground">
-						React Foldkit runs Foldkit programs inside your React app. Move state and side effects now, and
-						swap the views when you're ready.
-					</p>
-					<div className="mt-10 flex flex-wrap items-center gap-2">
-						<GetStarted />
-						<a
-							href={repositoryUrl}
-							className={quietButton}
-						>
-							GitHub
-						</a>
-					</div>
-					<InstallPill
-						blockId="install-hero"
-						className="mt-5"
-					/>
 				</div>
-
-				<div className="relative lg:col-span-7">
-					<div
-						aria-hidden
-						className="grid-backdrop pointer-events-none absolute -inset-16"
-					/>
-					<div className="hero-card relative rounded-[32px] px-5 pt-6 pb-7 sm:px-8 sm:pt-8">
-						<div className="flex items-center justify-between">
-							<span className="flex items-center gap-2 text-[13px] text-muted-foreground">
-								<span className="size-1.5 animate-pulse rounded-full bg-primary" />
-								Live
-							</span>
-							<button
-								type="button"
-								className="inline-flex h-8 items-center rounded-full px-3 text-[13px] text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-								onClick={() => send.ClickedShowCode()}
-							>
-								View the code
-							</button>
-						</div>
-						<LoopDiagram />
-					</div>
+				<div className="mt-6">
+					<InstallCommand blockId="install-hero" />
 				</div>
 			</div>
-			<CodeSheet
-				title="Counter source"
-				tabs={heroCode}
-			/>
+			<div className="min-w-0 lg:col-span-7">
+				<HeroCode />
+			</div>
 		</section>
 	)
 }
 
 function LogicMovesFirst() {
 	return (
-		<section className="migrate-stage relative mt-16">
+		<section className="migrate-stage relative border-t border-foreground/10">
 			<div className="migrate-sticky mx-auto flex max-w-[1120px] flex-col justify-center px-5 py-24">
 				<SceneHeading
 					title="Your logic moves first."
 					lead="Wrap one feature in a Program. Its state and side effects leave React, and every view keeps rendering."
 				/>
-				<div className="mt-14 w-full">
-					<div className="mx-auto w-fit rounded-full border border-foreground/10 bg-background px-5 py-2 font-mono text-sm">
-						App
+				<div className="mt-12 w-full">
+					<div className="mx-auto w-fit rounded-full border border-foreground/12 px-4 py-1.5 font-mono text-[13px]">
+						Store
 					</div>
 					<div className="mx-auto h-8 w-px bg-foreground/15" />
 					<div className="mx-[12.5%] hidden h-px bg-foreground/15 sm:block" />
@@ -171,15 +126,14 @@ function LogicMovesFirst() {
 						{features.map((feature) => (
 							<div
 								key={feature}
-								className="feature-node surface relative rounded-[20px] px-4 py-5 text-left sm:before:absolute sm:before:-top-6 sm:before:left-1/2 sm:before:h-6 sm:before:w-px sm:before:bg-foreground/15"
+								className="feature-node relative rounded-xl border border-foreground/12 px-4 py-4 text-left sm:before:absolute sm:before:-top-6 sm:before:left-1/2 sm:before:h-6 sm:before:w-px sm:before:bg-foreground/15"
 							>
 								<p className="text-[15px] font-medium">{feature}</p>
 								<p className="relative mt-1 h-5 text-[13px]">
 									<span className="status-react absolute inset-0 text-muted-foreground">
 										React state
 									</span>
-									<span className="status-program absolute inset-0 flex items-center gap-1.5 text-link">
-										<span className="size-1.5 rounded-full bg-primary" />
+									<span className="status-program absolute inset-0 text-c-model">
 										Foldkit Program
 									</span>
 								</p>
@@ -187,7 +141,7 @@ function LogicMovesFirst() {
 						))}
 					</div>
 				</div>
-				<div className="relative mt-12 min-h-16 w-full max-w-xl text-lg leading-relaxed text-balance text-foreground/80">
+				<div className="relative mt-10 min-h-14 w-full max-w-xl text-base leading-relaxed text-muted-foreground">
 					{captions.map((caption) => (
 						<p
 							key={caption}
@@ -209,7 +163,7 @@ function CodePanel(props: {
 	readonly snippet: { readonly code: string; readonly html: string }
 }) {
 	return (
-		<div className="surface flex min-w-0 flex-col overflow-hidden rounded-[24px]">
+		<div className="flex min-w-0 flex-col overflow-hidden rounded-xl border border-foreground/12 bg-card">
 			<div className="flex items-center justify-between border-b border-foreground/10 px-5 py-3">
 				<span className="text-sm font-medium">{props.label}</span>
 				<span className="font-mono text-xs text-muted-foreground">{props.file}</span>
@@ -218,7 +172,7 @@ function CodePanel(props: {
 				blockId={props.blockId}
 				snippet={props.snippet}
 				className="flex-1 rounded-none border-0 bg-transparent"
-				scrollClassName="px-5 py-5"
+				scrollClassName="max-h-[460px] px-5 py-5"
 			/>
 		</div>
 	)
@@ -226,21 +180,16 @@ function CodePanel(props: {
 
 function ThenTheView() {
 	return (
-		<section className="mx-auto max-w-[1120px] px-5 py-32 sm:py-44">
-			<SceneHeading
-				title="Then the view."
-				lead="With the logic in a Program, the React view is a thin layer. Rewrite it for Foldkit. The Program stays exactly as it is."
-			/>
-			<div className="reveal mt-16 flex flex-col items-start">
-				<div className="glass flex items-center gap-2 rounded-full px-4 py-2 text-[13px] whitespace-nowrap">
-					<span className="size-1.5 rounded-full bg-primary" />
-					Same Program, two views
-				</div>
-				<div className="ml-6 h-6 w-px bg-foreground/15" />
-				<div className="grid w-full gap-4 lg:grid-cols-2">
+		<section className="border-t border-foreground/10">
+			<div className="mx-auto max-w-[1120px] px-5 py-28 sm:py-32">
+				<SceneHeading
+					title="Then the view."
+					lead="With the cart's logic in a Program, its React view is a thin layer. Rewrite it as a Foldkit view, and keep the Program as it is."
+				/>
+				<div className="reveal mt-12 grid gap-4 lg:grid-cols-2">
 					<CodePanel
 						label="React view"
-						file="view.tsx"
+						file="cart.tsx"
 						blockId="view-react"
 						snippet={reactViewSnippet}
 					/>
@@ -258,22 +207,31 @@ function ThenTheView() {
 
 function TestedTheSameWay() {
 	return (
-		<section className="mx-auto flex max-w-[1120px] flex-col items-start px-5 py-32 sm:py-44">
-			<SceneHeading
-				title="Tested the same way."
-				lead="Scene tests run on React views and on Foldkit views. When a feature moves, its test changes one import."
-			/>
-			<div className="reveal surface mt-16 max-w-full overflow-x-auto rounded-[24px] px-5 py-7 font-mono text-[clamp(0.7rem,2.5vw,1.5rem)] leading-[1.9] whitespace-nowrap sm:px-10 sm:py-9">
-				<p className="text-muted-foreground">
-					<span className="mr-4 text-red-500/80 select-none">-</span>
-					{'import { scene } from "'}
-					<span className="text-red-500/80 line-through decoration-red-500/60">react-</span>
-					{'foldkit/scene"'}
-				</p>
-				<p>
-					<span className="mr-4 text-link select-none">+</span>
-					{'import { scene } from "foldkit/scene"'}
-				</p>
+		<section className="border-t border-foreground/10">
+			<div className="mx-auto max-w-[1120px] px-5 py-28 sm:py-32">
+				<SceneHeading
+					title="Tested the same way."
+					lead="Scene tests run on React views and on Foldkit views. When the cart moves, its test changes one import."
+				/>
+				<div className="reveal mt-12 max-w-3xl overflow-hidden rounded-xl border border-foreground/12 bg-card">
+					<div className="border-b border-foreground/10 px-5 py-3 font-mono text-xs text-muted-foreground">
+						cart.test.tsx
+					</div>
+					<div className="overflow-x-auto py-3 font-mono text-[13px] leading-7 whitespace-nowrap">
+						<p className="bg-red-500/8 px-5 text-muted-foreground">
+							<span className="mr-4 text-red-500 select-none">-</span>
+							{'import { Command, click, expect, given, role, scene } from "react-foldkit/scene"'}
+						</p>
+						<p className="bg-c-model/10 px-5">
+							<span className="mr-4 text-c-model select-none">+</span>
+							{'import { Command, click, expect, given, role, scene } from "foldkit/scene"'}
+						</p>
+						<p className="px-5 text-muted-foreground">
+							<span className="mr-4 select-none"> </span>
+							{'import { Message, SaveCart, cart, initialModel } from "./program"'}
+						</p>
+					</div>
+				</div>
 			</div>
 		</section>
 	)
@@ -281,29 +239,55 @@ function TestedTheSameWay() {
 
 function StartWithOneFeature() {
 	return (
-		<section className="relative overflow-hidden border-t border-foreground/10">
-			<div
-				aria-hidden
-				className="top-light pointer-events-none absolute inset-0"
-			/>
-			<div className="relative mx-auto flex max-w-[1120px] flex-col items-start px-5 py-32 sm:py-44">
-				<SceneHeading
-					title="Start with one feature."
-					lead="Install React Foldkit, wrap one feature in a Program, and keep shipping."
-				/>
-				<div className="reveal mt-12 flex w-full flex-col items-start gap-5">
-					<InstallPill blockId="install-closing" />
-					<div className="flex flex-wrap items-center gap-2">
-						<GetStarted />
-						<Link
-							to="/docs/$slug"
-							params={{ slug: "move-to-foldkit" }}
-							className={quietButton}
-						>
-							Read Move to Foldkit
-						</Link>
+		<section className="border-t border-foreground/10">
+			<div className="mx-auto grid max-w-[1120px] items-start gap-12 px-5 py-28 sm:py-32 lg:grid-cols-12">
+				<div className="lg:col-span-5">
+					<SceneHeading
+						title="Start with one feature."
+						lead="Install React Foldkit, wrap one feature in a Program, and keep shipping."
+					/>
+					<div className="reveal mt-8 flex flex-col items-start gap-5">
+						<InstallCommand blockId="install-closing" />
+						<div className="flex items-center gap-6">
+							<GetStarted />
+							<Link
+								to="/docs/$slug"
+								params={{ slug: "move-to-foldkit" }}
+								className={textLink}
+							>
+								Read Move to Foldkit
+							</Link>
+						</div>
+						<p className="mt-3 max-w-sm text-sm leading-relaxed text-muted-foreground">
+							React Foldkit is experimental, and built to be left behind.{" "}
+							<Link
+								to="/docs/$slug"
+								params={{ slug: "limitations" }}
+								className="text-foreground underline decoration-foreground/30 underline-offset-4 transition-colors hover:decoration-foreground"
+							>
+								Read the limitations
+							</Link>{" "}
+							before you adopt it.
+						</p>
 					</div>
 				</div>
+				<ul className="reveal divide-y divide-foreground/10 overflow-hidden rounded-xl border border-foreground/12 lg:col-span-6 lg:col-start-7">
+					{entryPoints.map((entry) => (
+						<li key={entry.path}>
+							<Link
+								to="/docs/$slug"
+								params={{ slug: entry.slug }}
+								className="group flex items-center justify-between gap-4 px-5 py-4 transition-colors hover:bg-foreground/[0.03]"
+							>
+								<span>
+									<span className="block font-mono text-[13px]">{entry.path}</span>
+									<span className="mt-0.5 block text-[13px] text-muted-foreground">{entry.use}</span>
+								</span>
+								<ArrowRightIcon className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" />
+							</Link>
+						</li>
+					))}
+				</ul>
 			</div>
 		</section>
 	)

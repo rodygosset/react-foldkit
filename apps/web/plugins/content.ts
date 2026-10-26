@@ -18,7 +18,7 @@ import remarkParse from "remark-parse"
 import remarkRehype from "remark-rehype"
 import rehypeSlug from "rehype-slug"
 import { createHighlighter } from "shiki"
-import type { Highlighter } from "shiki"
+import type { Highlighter, ThemeRegistration } from "shiki"
 import { unified } from "unified"
 import { visit } from "unist-util-visit"
 import type { Plugin } from "vite"
@@ -33,17 +33,64 @@ const guidesId = "virtual:guides"
 const guidePrefix = "virtual:guide/"
 const installId = "virtual:install-command"
 
+/**
+ * The light code theme, built from Foldkit's colors: View blue, Message violet, update amber,
+ * Model teal, and Command coral. Dark mode uses Shiki's Vesper theme.
+ */
+const foldkitLight: ThemeRegistration = {
+	name: "foldkit-light",
+	type: "light",
+	colors: { "editor.background": "#00000000", "editor.foreground": "#1e2331" },
+	tokenColors: [
+		{
+			scope: ["comment", "punctuation.definition.comment"],
+			settings: { foreground: "#8a90a0", fontStyle: "italic" },
+		},
+		{
+			scope: [
+				"keyword",
+				"storage",
+				"storage.type",
+				"storage.modifier",
+				"keyword.operator.new",
+				"keyword.operator.expression",
+			],
+			settings: { foreground: "#7445d1" },
+		},
+		{ scope: ["string", "string.template", "punctuation.definition.string"], settings: { foreground: "#0d7f72" } },
+		{
+			scope: ["entity.name.function", "support.function", "meta.function-call entity.name.function"],
+			settings: { foreground: "#2867c9" },
+		},
+		{ scope: ["constant.numeric", "constant.language", "variable.parameter"], settings: { foreground: "#9a6200" } },
+		{
+			scope: [
+				"entity.name.type",
+				"support.type",
+				"support.class",
+				"entity.name.class",
+				"entity.name.tag",
+				"support.class.component",
+			],
+			settings: { foreground: "#c2452b" },
+		},
+		{ scope: ["punctuation", "meta.brace", "keyword.operator"], settings: { foreground: "#5d6474" } },
+		{ scope: ["markup.deleted"], settings: { foreground: "#c2452b" } },
+		{ scope: ["markup.inserted"], settings: { foreground: "#0d7f72" } },
+	],
+}
+
 let highlighterPromise: Promise<Highlighter> | undefined
 
 const getHighlighter = () =>
-	(highlighterPromise ??= createHighlighter({ themes: ["github-light", "github-dark"], langs: [...languages] }))
+	(highlighterPromise ??= createHighlighter({ themes: [foldkitLight, "vesper"], langs: [...languages] }))
 
 async function highlight(code: string, lang: string): Promise<string> {
 	const highlighter = await getHighlighter()
 	const known = (languages as ReadonlyArray<string>).includes(lang)
 	return highlighter.codeToHtml(code, {
 		lang: known ? lang : "text",
-		themes: { light: "github-light", dark: "github-dark" },
+		themes: { light: "foldkit-light", dark: "vesper" },
 		defaultColor: false,
 	})
 }
