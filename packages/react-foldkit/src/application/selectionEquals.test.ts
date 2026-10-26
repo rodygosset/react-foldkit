@@ -1,4 +1,4 @@
-import { Data, Equal, Hash, Option } from "effect"
+import { Data, DateTime, Equal, Hash, Option } from "effect"
 import fc from "fast-check"
 import { expect, it } from "vitest"
 import { selectionEquals } from "./selectionEquals"
@@ -10,7 +10,7 @@ const leaf = fc.oneof(
 	fc.constantFrom(0, -0, Number.NaN, "a", "b", true, false, null, undefined),
 	fc.integer({ min: 0, max: 2 }).map((n) => (n === 0 ? Option.none() : Option.some(n))),
 	fc.integer({ min: 0, max: 2 }).map((x) => new Point({ x })),
-	fc.integer({ min: 0, max: 2 }).map((ms) => new Date(ms)),
+	fc.integer({ min: 0, max: 2 }).map((ms) => DateTime.makeUnsafe(ms)),
 	fc.constantFrom(new Map([[1, "a"]]), new Set([1]))
 )
 
@@ -61,7 +61,7 @@ it("compares new rows built by a selector by content", function () {
 it("leaves values with their own equality to Equal.equals", function () {
 	expect(selectionEquals(new Point({ x: 1 }), new Point({ x: 1 }))).toBe(true)
 	expect(selectionEquals({ x: 1 }, new Point({ x: 1 }))).toBe(false)
-	expect(selectionEquals(new Date(1), new Date(1))).toBe(true)
+	expect(selectionEquals(DateTime.makeUnsafe(1), DateTime.makeUnsafe(1))).toBe(true)
 	expect(selectionEquals(Number.NaN, Number.NaN)).toBe(true)
 })
 
