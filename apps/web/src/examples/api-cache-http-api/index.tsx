@@ -266,8 +266,8 @@ function View() {
 
 	return (
 		<ApiCacheLayout
-			title="API Cache (HttpApi)"
-			description="Query defines the cache Model and transitions. Its execute Effect reads BlogClient from the application Layer and calls a typed HttpApi endpoint. The parent folds Query Messages and handles user intent."
+			title="API cache with HttpApi"
+			description="Query defines the cache. Its execute Effect reads BlogClient from the application Layer and calls a typed HttpApi endpoint."
 			activeTab={activeTab}
 			onSelectTab={(tab) => send.ClickedTab({ tab })}
 		>

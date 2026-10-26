@@ -13,11 +13,13 @@ type AppRouter = ReturnType<typeof createAppRouter>
 
 let router: AppRouter | undefined
 
-/** Single router instance — Commands call `getRouter().navigate`, Links use the same tree. */
+/**
+ * One router in the browser, so Commands that call `getRouter().navigate` and Links share it.
+ * The server builds a new router for each request, because prerendering runs requests at once.
+ */
 export function getRouter(): AppRouter {
-	if (router === undefined) {
-		router = createAppRouter()
-	}
+	if (typeof window === "undefined") return createAppRouter()
+	router ??= createAppRouter()
 	return router
 }
 

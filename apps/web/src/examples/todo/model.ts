@@ -1,4 +1,4 @@
-import { Schema } from "effect"
+import { Effect, Schema } from "effect"
 
 export const TodoItem = Schema.Struct({
 	id: Schema.Finite,
@@ -10,8 +10,8 @@ export type TodoItem = typeof TodoItem.Type
 export const Filter = Schema.Literals(["all", "active", "completed"])
 export type Filter = typeof Filter.Type
 
-/** The `/todo` route search. */
+/** The `/examples/todo` route search. A URL without a filter shows every todo. */
 export const TodoSearch = Schema.Struct({
-	filter: Filter,
+	filter: Filter.pipe(Schema.withDecodingDefaultKey(Effect.succeed("all" as const))),
 })
 export type TodoSearch = typeof TodoSearch.Type

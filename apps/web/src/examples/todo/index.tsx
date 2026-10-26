@@ -20,7 +20,7 @@ import { Filter, TodoItem } from "./model"
 import { TodoRepository } from "./repository"
 import * as TodoForm from "./todo-form"
 
-const todoRoute = getRouteApi("/todo")
+const todoRoute = getRouteApi("/examples/todo")
 
 const ItemsData = AsyncData.Schema(Schema.Array(TodoItem), Schema.String)
 
@@ -94,7 +94,7 @@ const NavigateFilter = Command.define("NavigateFilter", {
 	execute: ({ filter }) =>
 		Effect.promise(() =>
 			getRouter().navigate({
-				to: "/todo",
+				to: "/examples/todo",
 				search: { filter },
 				replace: true,
 			})
@@ -250,7 +250,7 @@ function FilterNav() {
 						nativeButton={false}
 						render={
 							<Link
-								to="/todo"
+								to="/examples/todo"
 								search={{ filter: link.filter }}
 							/>
 						}
@@ -282,7 +282,7 @@ function TodoRow(props: { item: TodoItem; disabled: boolean }) {
 	const checkboxId = `todo-${item.id}`
 
 	return (
-		<li className="group flex items-center gap-3 rounded-2xl px-2 py-2 transition-colors hover:bg-muted/60">
+		<li className="group flex items-center gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-muted/60">
 			<Checkbox
 				id={checkboxId}
 				checked={item.done}
@@ -379,7 +379,7 @@ function View() {
 	return (
 		<ExampleShell
 			title="Todo"
-			description="List state is AsyncData: load/refresh via Commands, settle Results back into the Model."
+			description="The list is AsyncData. Commands load and save it, and their Results settle back into the Model. The filter lives in the URL."
 		>
 			<div className="mx-auto flex w-full max-w-lg flex-1 flex-col px-6 pt-10 pb-16">
 				<TodoForm.Provider

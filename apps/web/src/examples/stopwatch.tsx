@@ -183,7 +183,7 @@ function View() {
 	return (
 		<ExampleShell
 			title="Stopwatch"
-			description="A Subscription ticks while isRunning is true — Start/Stop gates the stream without remounting."
+			description="A Subscription ticks while isRunning is true. Start and Stop switch the stream on and off without remounting anything."
 		>
 			<div className="mx-auto flex w-full max-w-lg flex-1 flex-col items-center justify-center gap-8 px-6 pt-10 pb-16">
 				<ElapsedDisplay />

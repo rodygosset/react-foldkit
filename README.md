@@ -476,8 +476,8 @@ A child Program declares an `OutMessage` union and usually no `init`, since its 
 | Folder | What it holds |
 | --- | --- |
 | `packages/react-foldkit` | The library, its ESLint plugin, its tests, and the project-cache example |
-| `apps/web` | The demo app you can run |
-| `packages/ui` | Components shared by the demo |
+| `apps/web` | The docs site, built with React Foldkit. Its demos live under `/examples` |
+| `packages/ui` | Components and theme shared by the site |
 | `repos/foldkit`, `repos/effect` | Upstream source, for reference only. The build ignores it. |
 
 To contribute, read [how the runtime works](packages/react-foldkit/docs/architecture.md), [how to verify changes](docs/verification.md), [how to release](docs/releasing.md), and [the writing guide](docs/writing.md).

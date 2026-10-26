@@ -40,7 +40,7 @@ function View() {
 	return (
 		<ExampleShell
 			title="Counter"
-			description="Dispatch Messages. Update returns a new Model. No local React state."
+			description="Buttons send Messages, and update returns the next Model. The view holds no React state."
 		>
 			<div className="mx-auto flex w-full max-w-lg flex-1 flex-col items-center justify-center px-6 pb-20">
 				<p
