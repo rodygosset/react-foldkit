@@ -27,9 +27,9 @@ The old `/counter`-style URLs go away with no redirects, because nothing is publ
 
 ## Build the home page as five scenes
 
-The home page reads like a product page. Each scene has one headline, one sentence, and one thing to look at.
+The home page reads like a product page. Each scene has one headline, one sentence, and one thing to look at. Text sits left aligned on a 1120px rail, and visuals run full width under it.
 
-1. **Hero.** "Leave React one feature at a time." One sentence, a white "Get started" pill, a quiet "GitHub" link, and the install command in a glass pill. Below sits a live diagram of the Foldkit loop. The counter renders inside the View node, and each Message it sends lights the path through Message, `update`, and Model, then back to the View. The delayed increment shows its Command running. "View the code" opens the counter's source in a sheet.
+1. **Hero.** A split layout. On the left, left aligned: the headline "Leave React one feature at a time.", one sentence, a "Get started" pill, a "GitHub" link, and `npm install react-foldkit` in a glass pill that copies the full command. On the right, a live card shows the Foldkit loop as a ring. The count in the center is the View, and Message, `update`, and Model sit on the ring. Each Message sends one teal dot clockwise around the ring, lighting each node as it passes. The delayed increment branches to a Command that shows it is running. "View the code" opens the counter's source in a sheet.
 2. **"Your logic moves first."** A sticky stage shows an app as four features. As the reader scrolls, each feature turns from React state into a Foldkit Program, with one caption per step.
 3. **"Then the view."** The same cart Program with a React view and a Foldkit view, side by side.
 4. **"Tested the same way."** One large diff that changes `react-foldkit/scene` to `foldkit/scene`.
@@ -75,7 +75,7 @@ The site renders the Markdown files in `packages/react-foldkit/docs` at build ti
 | Element | Choice |
 | --- | --- |
 | Fonts | Geist and Geist Mono, self-hosted. Headlines at 80 to 100px, weight 600, tracking -0.045em |
-| Color | Dark first, near-black background. Teal, `oklch(0.6 0.12 185)`, is used as light: glows, status dots, and the diagram's pulses |
+| Color | Dark first, near-black background, lit by neutral light only: a soft top-left light and a faint grid behind the hero card. Teal, `oklch(0.6 0.12 185)`, appears only where it means something: the diagram's dot and pulses, the running Command, and status dots |
 | Surfaces | Large surfaces have a 20 to 32px radius, a 1px border at 10% foreground, and a faint inner highlight. Buttons are pills |
 | Navigation | A floating glass pill. The theme button cycles system, light, and dark |
 | Motion | Scenes rise in as they enter. Scene two runs on CSS scroll-driven animations. All motion stops under `prefers-reduced-motion` |

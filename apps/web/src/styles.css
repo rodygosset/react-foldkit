@@ -112,38 +112,48 @@
 	box-shadow: inset 0 1px 0 0 oklch(1 0 0 / 0.05);
 }
 
-/* The teal light behind the hero and the closing scene. */
-.glow {
-	background: radial-gradient(
-		ellipse 60% 50% at 50% 0%,
-		color-mix(in oklch, var(--primary) 22%, transparent),
-		transparent 70%
-	);
+/* Neutral light: a faint grid that fades out from the center, and a soft top-left light. */
+.grid-backdrop {
+	background-image:
+		linear-gradient(to right, color-mix(in oklch, var(--foreground) 5%, transparent) 1px, transparent 1px),
+		linear-gradient(to bottom, color-mix(in oklch, var(--foreground) 5%, transparent) 1px, transparent 1px);
+	background-size: 40px 40px;
+	mask-image: radial-gradient(ellipse 55% 55% at 50% 50%, black, transparent 75%);
 }
-:root:not(.dark) .glow {
+.top-light {
 	background: radial-gradient(
-		ellipse 60% 50% at 50% 0%,
-		color-mix(in oklch, var(--primary) 14%, transparent),
+		ellipse 70% 60% at 0% 0%,
+		color-mix(in oklch, var(--foreground) 6%, transparent),
 		transparent 70%
 	);
 }
 
-/* The hero counter's view stays free of class names, so its source reads like the guide's. */
-.hero-counter {
-	@apply flex flex-col items-center gap-5;
+/* The hero counter's view uses two class names, so its source stays short. */
+.hero-count {
+	@apply font-mono text-[clamp(3.5rem,9vw,5.5rem)] leading-none font-semibold tracking-tight tabular-nums;
+}
+.hero-controls {
+	@apply flex flex-wrap justify-center gap-2;
 
-	& output {
-		@apply font-mono text-6xl font-semibold tracking-tight tabular-nums;
-	}
-	& > div {
-		@apply flex flex-wrap justify-center gap-2;
-	}
 	& button {
-		@apply inline-flex h-8 items-center rounded-full border border-foreground/15 px-3.5 text-[13px] font-medium transition-colors hover:bg-foreground/5 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:cursor-wait disabled:opacity-60;
+		@apply inline-flex h-9 items-center rounded-full border border-foreground/15 px-4 text-[13px] font-medium transition-colors hover:bg-foreground/5 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:cursor-wait disabled:opacity-60;
 	}
 	& button:first-of-type {
 		@apply border-foreground bg-foreground text-background hover:bg-foreground/85;
 	}
+}
+
+/* The card that holds the ring. A brighter top edge and a deep, soft shadow lift it off the page. */
+.hero-card {
+	@apply border border-foreground/10 bg-card/70 backdrop-blur-sm;
+	box-shadow:
+		inset 0 1px 0 0 oklch(1 0 0 / 0.08),
+		0 40px 80px -32px oklch(0 0 0 / 0.6);
+}
+:root:not(.dark) .hero-card {
+	box-shadow:
+		inset 0 1px 0 0 oklch(1 0 0 / 0.8),
+		0 40px 80px -40px oklch(0 0 0 / 0.25);
 }
 
 /* The loop diagram. Each Message replays these animations, one step after another. */
@@ -194,56 +204,63 @@
 	border-color: var(--primary);
 	animation: command-wait 1s ease-in-out infinite;
 }
-@keyframes travel-x {
+/* One dot travels the ring. The stroke is a short dash that moves along the circle's path. */
+@keyframes comet {
 	from {
-		left: 0%;
-		opacity: 0;
+		stroke-dashoffset: var(--from);
+		opacity: 1;
 	}
-	15%,
-	85% {
+	90% {
 		opacity: 1;
 	}
 	to {
-		left: 100%;
+		stroke-dashoffset: var(--to);
 		opacity: 0;
 	}
 }
-@keyframes travel-y {
-	from {
-		top: 0%;
-		opacity: 0;
-	}
-	15%,
-	85% {
-		opacity: 1;
-	}
-	to {
-		top: 100%;
-		opacity: 0;
-	}
-}
-.flow-dot {
-	@apply absolute size-2 rounded-full bg-primary;
-	box-shadow: 0 0 12px 2px color-mix(in oklch, var(--primary) 70%, transparent);
-	translate: -50% -50%;
+.ring-comet {
+	fill: none;
+	stroke: var(--primary);
+	stroke-width: 3;
+	stroke-linecap: round;
+	stroke-dasharray: 3 97;
+	stroke-dashoffset: var(--from);
 	opacity: 0;
-	left: 50%;
-	top: 50%;
-	animation: travel-y 450ms ease-in-out var(--delay, 0ms) both;
+	filter: drop-shadow(0 0 6px var(--primary));
+	animation: comet var(--duration) linear var(--delay, 0ms) both;
 }
-.flow-dot[data-reverse] {
-	animation-direction: reverse;
+.ring-comet-line {
+	stroke-dasharray: 30 100;
 }
-.flow-line-branch .flow-dot {
-	animation-name: travel-x;
-}
-@media (width >= 64rem) {
-	.flow-line-x .flow-dot {
-		animation-name: travel-x;
+@keyframes count-pop {
+	0%,
+	100% {
+		scale: 1;
+		color: var(--foreground);
 	}
-	.flow-line-branch .flow-dot {
-		animation-name: travel-y;
+	35% {
+		scale: 1.08;
+		color: var(--link);
 	}
+}
+@keyframes count-pop-again {
+	0%,
+	100% {
+		scale: 1;
+		color: var(--foreground);
+	}
+	35% {
+		scale: 1.08;
+		color: var(--link);
+	}
+}
+.count-pop .hero-count,
+.count-pop-again .hero-count {
+	display: inline-block;
+	animation: count-pop 600ms ease-out var(--delay, 0ms) both;
+}
+.count-pop-again .hero-count {
+	animation-name: count-pop-again;
 }
 
 /* Scenes rise into place as they enter the screen. */
