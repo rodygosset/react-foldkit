@@ -130,7 +130,7 @@ function referenceAndInventory() {
 	const reference = [
 		"# Public API reference",
 		"",
-		"Generated from the public exports. See the [counter tutorial](examples.md) for usage and [runtime architecture](architecture.md) for ownership. Regenerate with `bun run --filter=react-foldkit docs:generate` from the repository root.",
+		"Generated from the public exports. See [Get started](../README.md#run-a-program-in-react) for usage and [runtime architecture](architecture.md) for ownership. Regenerate with `bun run --filter=react-foldkit docs:generate` from the repository root.",
 		"",
 		...entries.map(({ entry }) => "- [" + entry + "](#" + entry.replace(/[^\w-]/g, "") + ")"),
 		"",

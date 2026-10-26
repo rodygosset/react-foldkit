@@ -31,7 +31,8 @@ Follow these rules when you write application code with React Foldkit.
 
 ## Read more
 
-- [Build a counter with Commands](docs/examples.md)
+- [How the Provider runs a Program](docs/provider.md)
+- [Give child Programs their own hooks](docs/submodels.md)
 - [The API reference](docs/reference.md)
 - [How the runtime works](docs/architecture.md)
 - [ESLint setup](eslint/README.md)

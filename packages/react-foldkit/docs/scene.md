@@ -1,6 +1,6 @@
 # Test views with Scene
 
-Foldkit's [Scene](https://foldkit.dev) tests a feature through its view. It renders the view for a Model, clicks and types like a user, runs each Message through `update`, and makes you resolve every Command by hand.
+Foldkit's [Scene](https://foldkit.dev/testing/scene) tests a feature through its view. It renders the view for a Model, clicks and types like a user, runs each Message through `update`, and makes you resolve every Command by hand.
 
 React Foldkit runs the same Scene steps on React components. If the feature's view later moves to Foldkit, the test changes one import.
 
@@ -14,15 +14,15 @@ import { bindSceneView } from "react-foldkit/scene/react"
 import { App } from "./application"
 
 function Profile() {
-	const model = App.useModel()
-	const send = App.useSend()
+  const model = App.useModel()
+  const send = App.useSend()
 
-	return (
-		<main>
-			<button onClick={() => send.ClickedLoad()}>Load user</button>
-			<p role="status">{model.loading ? "Loading" : model.name}</p>
-		</main>
-	)
+  return (
+    <main>
+      <button onClick={() => send.ClickedLoad()}>Load user</button>
+      <p role="status">{model.loading ? "Loading" : model.name}</p>
+    </main>
+  )
 }
 
 export const view = bindSceneView(App, Profile)
@@ -39,18 +39,18 @@ import { FetchUser, Message, initialModel, update } from "./program"
 import { view } from "./view"
 
 test("loads a user", () => {
-	scene(
-		{ update, view },
-		given(initialModel),
+  scene(
+    { update, view },
+    given(initialModel),
 
-		click(role("button", { name: "Load user" })),
-		expect(role("status")).toHaveText("Loading"),
+    click(role("button", { name: "Load user" })),
+    expect(role("status")).toHaveText("Loading"),
 
-		Command.expectExact(FetchUser({ userId: "42" })),
-		Command.resolve(FetchUser, Message.LoadedUser({ name: "Ada" })),
+    Command.expectExact(FetchUser({ userId: "42" })),
+    Command.resolve(FetchUser, Message.LoadedUser({ name: "Ada" })),
 
-		expect(role("status")).toHaveText("Ada"),
-	)
+    expect(role("status")).toHaveText("Ada")
+  )
 })
 ```
 
@@ -78,13 +78,13 @@ When `./view` exports a Foldkit view instead, change the import and keep the res
 
 ## What runs on React views
 
-| Scene feature | React views |
-| --- | --- |
-| Locators, `inside`, `within`, `expectAll` | Supported |
-| Interactions such as click, change, type, keyboard, pointer, focus, submit, and files | Supported. Checkbox and radio clicks fire `onChange`, as in React DOM |
-| Element matchers such as text, value, attributes, `className`, `style`, disabled, checked, visible, and `toHaveHandler` | Supported |
-| `Command`, `Subscription`, `ManagedResource`, OutMessage, and ignored-interaction steps | Supported. These steps work on `update`, not on the view |
-| `Mount` steps and `toHaveHook` | Not available. React views have no Foldkit Mounts or element hooks |
+| Scene feature                                                                                                           | React views                                                           |
+| ----------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| Locators, `inside`, `within`, `expectAll`                                                                               | Supported                                                             |
+| Interactions such as click, change, type, keyboard, pointer, focus, submit, and files                                   | Supported. Checkbox and radio clicks fire `onChange`, as in React DOM |
+| Element matchers such as text, value, attributes, `className`, `style`, disabled, checked, visible, and `toHaveHandler` | Supported                                                             |
+| `Command`, `Subscription`, `ManagedResource`, OutMessage, and ignored-interaction steps                                 | Supported. These steps work on `update`, not on the view              |
+| `Mount` steps and `toHaveHook`                                                                                          | Not available. React views have no Foldkit Mounts or element hooks    |
 
 ### Limits
 

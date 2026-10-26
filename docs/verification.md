@@ -1,6 +1,6 @@
 # Verify changes
 
-Run these checks from the repository root before you push. They build the package, test its behavior, and compile sample apps against the published types. Set up the workspace first, as [Run locally](../README.md#run-locally) describes.
+Run these checks from the repository root before you push. They build the package, test its behavior, and compile sample apps against the published types. Set up the workspace first, as [Work on this repository](../README.md#work-on-this-repository) describes.
 
 ## Check every change
 
