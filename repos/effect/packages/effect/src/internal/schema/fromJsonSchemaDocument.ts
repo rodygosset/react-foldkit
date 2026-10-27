@@ -1067,15 +1067,13 @@ function translateJsonSchemaMultiDocument(
         )
       case "ignore":
         return undefined
-      case "apply": {
-        let regex: RegExp
+      case "apply":
         try {
-          regex = globalThis.RegExp(pattern, jsonSchemaPatternFlags)
+          globalThis.RegExp(pattern, jsonSchemaPatternFlags)
         } catch {
           throw errorWithPath("Cannot import pattern using ECMAScript Unicode mode.", path)
         }
-        return jsonSchemaFilter("effect/schema/isPattern", { source: regex.source, flags: regex.flags })
-      }
+        return jsonSchemaFilter("effect/schema/isPattern", { source: pattern, flags: jsonSchemaPatternFlags })
     }
   }
 

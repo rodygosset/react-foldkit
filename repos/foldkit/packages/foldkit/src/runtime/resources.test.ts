@@ -187,7 +187,7 @@ describe('resources', () => {
   it('renders the crash view when the Layer fails to build for a Subscription', async () => {
     const subscriptions = Subscription.make<Model, Message, ResourceService>()(
       _entry => ({
-        resourceValue: Subscription.persistent(
+        resourceValue: Subscription.persistentEntry(
           Stream.fromEffect(
             Effect.gen(function* () {
               const { value } = yield* ResourceService
@@ -316,7 +316,7 @@ describe('resources', () => {
     expect(releaseCount).toBe(1)
   })
 
-  it('leaves the Layer unbuilt when an HMR restore skips init', async () => {
+  it('leaves the Layer unbuilt when a preserved Model skips init', async () => {
     let buildCount = 0
 
     const CountedResourceLive = Layer.effect(
@@ -349,7 +349,7 @@ describe('resources', () => {
     }
   })
 
-  it('does not run the flags Effect when an HMR restore skips init', async () => {
+  it('does not run the flags Effect when a preserved Model skips init', async () => {
     let flagsRunCount = 0
 
     const element = makeElement({
@@ -376,7 +376,7 @@ describe('resources', () => {
     }
   })
 
-  it('builds the Layer when an unreadable HMR Model falls back to init', async () => {
+  it('builds the Layer when an unreadable preserved Model falls back to init', async () => {
     let buildCount = 0
 
     const CountedResourceLive = Layer.effect(

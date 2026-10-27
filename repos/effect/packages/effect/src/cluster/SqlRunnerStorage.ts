@@ -11,14 +11,13 @@
  * @since 4.0.0
  */
 import * as Arr from "../Array.ts"
-import * as Cause from "../Cause.ts"
 import * as Duration from "../Duration.ts"
 import * as Effect from "../Effect.ts"
+import * as Exit from "../Exit.ts"
 import * as Fiber from "../Fiber.ts"
 import * as Layer from "../Layer.ts"
 import * as Scope from "../Scope.ts"
 import * as SqlClient from "../sql/SqlClient.ts"
-import type { Connection } from "../sql/SqlConnection.ts"
 import type { SqlError } from "../sql/SqlError.ts"
 import type * as Statement from "../sql/Statement.ts"
 import { PersistenceError } from "./ClusterError.ts"
@@ -157,28 +156,47 @@ export const make = Effect.fnUntraced(function*(options: {
     )
   })
 
-  const rebuildLockConn = (from?: readonly [Connection, number]) => {
-    const rebuild = lockConn?.rebuildUnsafe({ from })
-    if (!rebuild) return Effect.void
-    // Bound release so a stalled connection cannot block subsequent rebuilds.
-    return withDeadline(rebuild).pipe(
+  let lockConnRebuilding = false
+  // Incremented every time the reserved connection is replaced, so failures
+  // from operations that ran on an already replaced connection do not trigger
+  // another rebuild.
+  let lockConnGeneration = 0
+  const rebuildLockConn = (generation: number) => {
+    if (
+      !lockConn ||
+      lockConnRebuilding ||
+      generation !== lockConnGeneration ||
+      lockConn.state.current._tag === "Closed"
+    ) return Effect.void
+    lockConnRebuilding = true
+    // The rebuild starts by closing the previous scope, releasing the
+    // unresponsive connection back to the pool. Bound it with `withDeadline`
+    // so a release that never completes cannot leave `lockConnRebuilding` set
+    // forever, which would disable every subsequent rebuild.
+    return withDeadline(lockConn.rebuildUnsafe()).pipe(
       Effect.exit,
+      Effect.tap((exit) =>
+        Effect.sync(() => {
+          if (Exit.isSuccess(exit) && lockConn.state.current._tag === "Acquired") {
+            lockConnGeneration++
+          }
+        })
+      ),
+      Effect.ensuring(Effect.sync(() => {
+        lockConnRebuilding = false
+      })),
       Effect.forkIn(layerScope, { startImmediately: true }),
       Effect.asVoid
     )
   }
-  // SQL failures replace the held connection; deadlines are handled by withLockOperationDeadline.
-  const useLockConn = <A, E, R>(
-    f: (conn: Connection, pid: number) => Effect.Effect<A, E, R>
-  ): Effect.Effect<A, E, R> =>
-    Effect.flatMap(
-      lockConn!.await,
-      (held) =>
-        Effect.onError(
-          f(held[0], held[1]),
-          (cause) => Cause.hasInterruptsOnly(cause) ? Effect.void : rebuildLockConn(held)
-        )
-    )
+  // Rebuild the reserved connection when `effect` fails on it. Failures keep
+  // scheduling rebuilds, so a rebuilt connection that is also unresponsive is
+  // replaced again.
+  const onErrorRebuildLockConn = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+    Effect.suspend(() => {
+      const generation = lockConnGeneration
+      return Effect.onError(effect, () => rebuildLockConn(generation))
+    })
 
   const runnersTable = table("runners")
   const runnersTableSql = sql(runnersTable)
@@ -360,21 +378,30 @@ export const make = Effect.fnUntraced(function*(options: {
   const execWithLockConn = <A>(effect: Statement.Statement<A>): Effect.Effect<unknown, SqlError> => {
     if (!lockConn) return effect
     const [query, params] = effect.compile()
-    return useLockConn((conn) => conn.executeRaw(query, params))
+    return lockConn.await.pipe(
+      Effect.flatMap(([conn]) => conn.executeRaw(query, params)),
+      onErrorRebuildLockConn
+    )
   }
   const execWithLockConnUnprepared = <A>(
     effect: Statement.Statement<A>
   ): Effect.Effect<ReadonlyArray<ReadonlyArray<any>>, SqlError> => {
     if (!lockConn) return effect.values
     const [query, params] = effect.compile()
-    return useLockConn((conn) => conn.executeUnprepared(query, params, undefined))
+    return lockConn.await.pipe(
+      Effect.flatMap(([conn]) => conn.executeUnprepared(query, params, undefined)),
+      onErrorRebuildLockConn
+    )
   }
   const execWithLockConnValues = <A>(
     effect: Statement.Statement<A>
   ): Effect.Effect<ReadonlyArray<ReadonlyArray<any>>, SqlError> => {
     if (!lockConn) return effect.values
     const [query, params] = effect.compile()
-    return useLockConn((conn) => conn.executeValues(query, params))
+    return lockConn.await.pipe(
+      Effect.flatMap(([conn]) => conn.executeValues(query, params)),
+      onErrorRebuildLockConn
+    )
   }
 
   const acquireLock = sql.onDialectOrElse({
@@ -398,33 +425,33 @@ export const make = Effect.fnUntraced(function*(options: {
           )
         }
       }
-      return (_address: string, shardIds: ReadonlyArray<string>) =>
-        useLockConn(Effect.fnUntraced(function*(conn, pid) {
-          const acquiredShardIds: Array<string> = []
-          const toAcquire = new Map(shardIds.map((shardId) => [lockNumbers.get(shardId)!, shardId]))
-          const takenLocks = yield* conn.executeValues(
-            `SELECT objid FROM pg_locks WHERE locktype = 'advisory' AND granted = true AND classid = ${pgLockNamespaceOid} AND objsubid = 2 AND pid = ${pid} ORDER BY objid`,
-            []
-          )
-          for (let i = 0; i < takenLocks.length; i++) {
-            const lockNum = takenLocks[i][0] as number
-            const shardId = toAcquire.get(lockNum)
-            if (shardId === undefined) continue
-            acquiredShardIds.push(shardId)
-            toAcquire.delete(lockNum)
-          }
-          if (toAcquire.size === 0) {
-            return acquiredShardIds
-          }
-          const rows = yield* conn.executeUnprepared(`SELECT ${pgLocks(toAcquire)}`, [], undefined)
-          const results = rows[0] as Record<string, boolean>
-          for (const shardId in results) {
-            if (results[shardId]) {
-              acquiredShardIds.push(shardId)
-            }
-          }
+      return Effect.fnUntraced(function*(_address: string, shardIds: ReadonlyArray<string>) {
+        const [conn, pid] = yield* lockConn!.await
+        const acquiredShardIds: Array<string> = []
+        const toAcquire = new Map(shardIds.map((shardId) => [lockNumbers.get(shardId)!, shardId]))
+        const takenLocks = yield* conn.executeValues(
+          `SELECT objid FROM pg_locks WHERE locktype = 'advisory' AND granted = true AND classid = ${pgLockNamespaceOid} AND objsubid = 2 AND pid = ${pid} ORDER BY objid`,
+          []
+        )
+        for (let i = 0; i < takenLocks.length; i++) {
+          const lockNum = takenLocks[i][0] as number
+          const shardId = toAcquire.get(lockNum)
+          if (shardId === undefined) continue
+          acquiredShardIds.push(shardId)
+          toAcquire.delete(lockNum)
+        }
+        if (toAcquire.size === 0) {
           return acquiredShardIds
-        }))
+        }
+        const rows = yield* conn.executeUnprepared(`SELECT ${pgLocks(toAcquire)}`, [], undefined)
+        const results = rows[0] as Record<string, boolean>
+        for (const shardId in results) {
+          if (results[shardId]) {
+            acquiredShardIds.push(shardId)
+          }
+        }
+        return acquiredShardIds
+      }, onErrorRebuildLockConn)
     },
 
     mysql: () => {
@@ -444,31 +471,31 @@ export const make = Effect.fnUntraced(function*(options: {
           )
         }
       }
-      return (_address: string, shardIds: ReadonlyArray<string>) =>
-        useLockConn(Effect.fnUntraced(function*(conn, pid) {
-          const takenLocks = (yield* conn.executeValues(`SELECT ${allMySqlTakenLocks}`, []))[0] as Array<number | null>
-          const acquiredShardIds: Array<string> = []
-          const toAcquire: Array<string> = []
-          for (let i = 0; i < shardIds.length; i++) {
-            const shardId = shardIds[i]
-            const lockTakenBy = takenLocks[shardIdsIndex.get(shardId)!]
-            if (lockTakenBy === pid) {
-              acquiredShardIds.push(shardId)
-            } else if (shardIds.includes(shardId)) {
-              toAcquire.push(shardId)
-            }
+      return Effect.fnUntraced(function*(_address: string, shardIds: ReadonlyArray<string>) {
+        const [conn, pid] = yield* lockConn!.await
+        const takenLocks = (yield* conn.executeValues(`SELECT ${allMySqlTakenLocks}`, []))[0] as Array<number | null>
+        const acquiredShardIds: Array<string> = []
+        const toAcquire: Array<string> = []
+        for (let i = 0; i < shardIds.length; i++) {
+          const shardId = shardIds[i]
+          const lockTakenBy = takenLocks[shardIdsIndex.get(shardId)!]
+          if (lockTakenBy === pid) {
+            acquiredShardIds.push(shardId)
+          } else if (shardIds.includes(shardId)) {
+            toAcquire.push(shardId)
           }
-          if (toAcquire.length === 0) {
-            return acquiredShardIds
-          }
-          const results = (yield* conn.executeValues(`SELECT ${mysqlLocks(toAcquire)}`, []))[0] as Array<number>
-          for (let i = 0; i < results.length; i++) {
-            if (results[i] === 1) {
-              acquiredShardIds.push(toAcquire[i])
-            }
-          }
+        }
+        if (toAcquire.length === 0) {
           return acquiredShardIds
-        }))
+        }
+        const results = (yield* conn.executeValues(`SELECT ${mysqlLocks(toAcquire)}`, []))[0] as Array<number>
+        for (let i = 0; i < results.length; i++) {
+          if (results[i] === 1) {
+            acquiredShardIds.push(toAcquire[i])
+          }
+        }
+        return acquiredShardIds
+      }, onErrorRebuildLockConn)
     },
 
     mssql: () => (address: string, shardIds: ReadonlyArray<string>) => {
@@ -620,16 +647,8 @@ export const make = Effect.fnUntraced(function*(options: {
       `.pipe(execWithLockConnValues, Effect.map((rows) => rows.map((row) => row[0] as string)))
   })
 
-  // On failure, replace the connection ready at entry. If none was ready,
-  // retry only a failed rebuild, leaving pending or newly ready connections alone.
   const withLockOperationDeadline = <A, E, R>(operation: Effect.Effect<A, E, R>) =>
-    Effect.suspend(() => {
-      const ready = lockConn?.getUnsafe()
-      return Effect.onError(withDeadline(operation), () => {
-        if (ready !== undefined) return rebuildLockConn(ready)
-        return lockConn?.getUnsafe() === undefined ? rebuildLockConn() : Effect.void
-      })
-    })
+    onErrorRebuildLockConn(withDeadline(operation))
 
   const releaseShard = sql.onDialectOrElse({
     pg: () => {
@@ -637,10 +656,11 @@ export const make = Effect.fnUntraced(function*(options: {
         return (address: string, shardId: string) =>
           sql`DELETE FROM ${locksTableSql} WHERE address = ${address} AND shard_id = ${shardId}`.pipe(execWithLockConn)
       }
-      return (_address: string, shardId: string) =>
-        useLockConn(Effect.fnUntraced(function*(conn) {
+      return Effect.fnUntraced(
+        function*(_address, shardId) {
           const lockNum = lockNumbers.get(shardId)!
           for (let i = 0; i < 5; i++) {
+            const [conn] = yield* lockConn!.await
             yield* conn.executeRaw(`SELECT pg_advisory_unlock(${pgLockNamespace}, ${lockNum})`, [])
             const takenLocks = yield* conn.executeValues(
               `SELECT 1 FROM pg_locks WHERE locktype = 'advisory' AND granted = true AND classid = ${pgLockNamespaceOid} AND objid = ${lockNum} AND objsubid = 2 AND pid = pg_backend_pid()`,
@@ -648,18 +668,23 @@ export const make = Effect.fnUntraced(function*(options: {
             )
             if (takenLocks.length === 0) return
           }
+          const [conn] = yield* lockConn!.await
           yield* conn.executeRaw(`SELECT pg_advisory_unlock_all()`, [])
-        }))
+        },
+        onErrorRebuildLockConn,
+        Effect.asVoid
+      )
     },
     mysql: () => {
       if (disableAdvisoryLocks) {
         return (address: string, shardId: string) =>
           sql`DELETE FROM ${locksTableSql} WHERE address = ${address} AND shard_id = ${shardId}`.pipe(execWithLockConn)
       }
-      return (_address: string, shardId: string) =>
-        useLockConn(Effect.fnUntraced(function*(conn, pid) {
+      return Effect.fnUntraced(
+        function*(_address, shardId) {
           const lockName = lockNames.get(shardId)!
           while (true) {
+            const [conn, pid] = yield* lockConn!.await
             yield* conn.executeRaw(`SELECT RELEASE_LOCK('${lockName}')`, [])
             const takenLocks = yield* conn.executeValues(
               `SELECT IS_USED_LOCK('${lockName}')`,
@@ -667,7 +692,10 @@ export const make = Effect.fnUntraced(function*(options: {
             )
             if (takenLocks.length === 0 || takenLocks[0][0] !== pid) return
           }
-        }))
+        },
+        onErrorRebuildLockConn,
+        Effect.asVoid
+      )
     },
     orElse: () => (address: string, shardId: string) =>
       sql`DELETE FROM ${locksTableSql} WHERE address = ${address} AND shard_id = ${shardId}`

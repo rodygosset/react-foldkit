@@ -419,6 +419,7 @@ export const mobileView = (model: Model, h: HtmlBuilder<Message>): Html => {
     model: model.mobileMenuDialog,
     view: Dialog.view,
     viewInputs: {
+      hasDescription: true,
       toView: renderInfo =>
         h.dialog(
           [...renderInfo.dialog, h.Class('md:hidden')],

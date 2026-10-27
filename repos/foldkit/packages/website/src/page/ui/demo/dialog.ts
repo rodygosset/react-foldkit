@@ -30,7 +30,7 @@ const confirmPanelClassName =
 
 const titleClassName = 'text-lg font-normal text-gray-900 dark:text-white mb-2'
 
-const descriptionClassName = 'text-gray-600 dark:text-gray-300 mb-4'
+const descriptionClassName = 'text-gray-700 dark:text-gray-300 mb-4'
 
 const dialogClassName =
   'bg-transparent p-0 open:flex items-center justify-center'
@@ -49,7 +49,6 @@ const OVERLAY_COMBOBOX_ANCHOR = {
   placement: 'bottom-start' as const,
   gap: 8,
   padding: 8,
-  portal: false,
 }
 
 // PANEL CONTENT
@@ -102,7 +101,7 @@ const editFiltersContent = (
       h.p(
         [...description, h.Class(descriptionClassName)],
         [
-          'With portal: false, the combobox panel stays inside the dialog instead of rendering behind it.',
+          'The combobox panel portals into the dialog, so it renders above the dialog content.',
         ],
       ),
       h.submodel({
@@ -198,6 +197,7 @@ export const view = (dialogModel: Dialog.Model, h: HtmlBuilder<Message>) => {
       model: dialogModel,
       view: Dialog.view,
       viewInputs: {
+        hasDescription: true,
         toView: ({
           dialog,
           backdrop,
@@ -246,6 +246,7 @@ export const overlayDialogDemo = (
       model: dialogModel,
       view: Dialog.view,
       viewInputs: {
+        hasDescription: true,
         toView: ({ dialog, backdrop, panel, title, description, isVisible }) =>
           h.dialog(
             [...dialog, h.Class(dialogClassName)],
@@ -286,6 +287,7 @@ export const nestedDialogDemo = (
       model: parentDialogModel,
       view: Dialog.view,
       viewInputs: {
+        hasDescription: true,
         toView: ({
           dialog,
           backdrop,
@@ -323,6 +325,7 @@ export const nestedDialogDemo = (
       model: childDialogModel,
       view: Dialog.view,
       viewInputs: {
+        hasDescription: true,
         toView: ({
           dialog,
           backdrop,
@@ -362,6 +365,7 @@ export const dialogAnimatedDemo = (
       model: dialogModel,
       view: Dialog.view,
       viewInputs: {
+        hasDescription: true,
         toView: ({
           dialog,
           backdrop,

@@ -7934,18 +7934,19 @@ export const scan: {
   f: (s: S, a: A) => S
 ): Stream<S, E, R> =>
   suspend(() => {
-    const seed = initial()
-    return concat(
-      succeed(seed),
-      fromChannel(Channel.mapAccum(self.channel, () => seed, (state, arr) => {
-        const states = Arr.empty<S>() as Arr.NonEmptyArray<S>
-        for (let index = 0; index < arr.length; index++) {
-          state = f(state, arr[index])
-          states.push(state)
-        }
-        return [state, Arr.of(states)]
-      }))
-    )
+    let isFirst = true
+    return fromChannel(Channel.mapAccum(self.channel, initial, (state, arr) => {
+      const states = Arr.empty<S>() as Arr.NonEmptyArray<S>
+      if (isFirst) {
+        isFirst = false
+        states.push(state)
+      }
+      for (let index = 0; index < arr.length; index++) {
+        state = f(state, arr[index])
+        states.push(state)
+      }
+      return [state, Arr.of(states)]
+    }))
   }))
 
 /**
@@ -8214,36 +8215,37 @@ const throttleShapeEffect = <A, E, R, E2, R2>(
       const durationMs = Duration.toMillis(Duration.fromInputUnsafe(duration))
       const max = units + burst < 0 ? Number.POSITIVE_INFINITY : units + burst
       let tokens = units
-      let timestampNanos = clock.monotonicTimeNanosUnsafe()
+      let timestampMs = clock.currentTimeMillisUnsafe()
 
       return Effect.succeed(Effect.flatMap(pull, (arr) =>
         Effect.flatMap(cost(arr), (weight) => {
-          const currentNanos = clock.monotonicTimeNanosUnsafe()
-          const elapsed = Number(currentNanos - timestampNanos) / 1_000_000
+          const currentMs = clock.currentTimeMillisUnsafe()
+          const elapsed = currentMs - timestampMs
           const cycles = elapsed / durationMs
           const sum = tokens + (cycles * units)
-          const available = Math.min(sum, max)
+          const available = sum < 0 ? max : Math.min(sum, max)
           const remaining = available - weight
 
           if (remaining >= 0) {
             tokens = remaining
-            timestampNanos = currentNanos
+            timestampMs = currentMs
             return Effect.succeed(arr)
           }
 
+          // Calculate delay needed
           const waitCycles = -remaining / units
           const delayMs = Math.max(0, waitCycles * durationMs)
 
           if (delayMs > 0) {
             return Effect.flatMap(Effect.sleep(delayMs), () => {
               tokens = remaining
-              timestampNanos = currentNanos
+              timestampMs = currentMs
               return Effect.succeed(arr)
             })
           }
 
           tokens = remaining
-          timestampNanos = currentNanos
+          timestampMs = currentMs
           return Effect.succeed(arr)
         })))
     }))
@@ -8369,9 +8371,8 @@ export const grouped: {
  *
  * **Details**
  *
- * The duration starts when the first element of a group arrives, so an idle
- * stream does not wake up. Finite fractional chunk sizes are rounded down.
- * `NaN` and non-positive sizes are treated as `1`.
+ * Finite fractional chunk sizes are rounded down. `NaN` and non-positive sizes
+ * are treated as `1`.
  *
  * **Example** (Grouping elements by size or time)
  *
@@ -8801,18 +8802,6 @@ export const aggregate: {
  * **Details**
  *
  * The schedule can flush the current aggregation even if the sink has not finished.
- * It is stepped at most once per aggregation, when the aggregation receives its
- * first element, with the previous aggregation's output as input. An aggregation
- * the sink completes immediately, such as one built from leftovers, may finish
- * without stepping the schedule.
- *
- * Time between aggregations is hidden from the schedule, so an idle stream does
- * not run it. Time-based schedules such as `Schedule.fixed` and
- * `Schedule.upTo({ duration })` only count time spent aggregating; use
- * `Schedule.spaced` for a flush timer.
- *
- * When the schedule ends, the stream emits the current aggregation and any sink
- * leftovers, then ends without pulling more from upstream.
  *
  * **Example** (Aggregating with a sink and schedule)
  *
@@ -8859,70 +8848,73 @@ export const aggregateWithin: {
       capacity: 0
     })
 
+    // upstream -> buffer
     yield* pull.pipe(
       pullLatch.whenOpen,
       Effect.flatMap((arr) => {
         pullLatch.closeUnsafe()
         return Queue.offer(buffer, arr)
       }),
-      Effect.forever, // Keep autoYield enabled so the schedule can run.
+      Effect.forever, // don't disable autoYield to prevent choking the schedule
       Effect.catchCause((cause) => Queue.failCause(buffer, cause)),
       Effect.forkIn(scope)
     )
 
-    // The schedule clock excludes time between aggregations.
-    const clock = yield* Clock
-    const step = yield* Schedule.toStep(schedule)
-    const hasInput = Latch.makeUnsafe(false)
-    let scheduleTime = clock.currentTimeMillisUnsafe()
-    let openedAt = 0
+    // schedule -> buffer
     let lastOutput = Option.none<B>()
     let leftover: Arr.NonEmptyReadonlyArray<A2> | undefined
-    const onInput = <X>(chunk: X): Effect.Effect<X> => {
-      if (hasInput.openUnsafe()) {
-        openedAt = clock.currentTimeMillisUnsafe()
-      }
-      return Effect.succeed(chunk)
-    }
-    const stepToBuffer: Pull.Pull<never, E3, void, R3> = hasInput.await.pipe(
-      Effect.flatMap(() => step(scheduleTime, lastOutput)),
-      Effect.flatMap(([, delay]) => Effect.sleep(delay)),
-      Effect.flatMap(() => Queue.offer(buffer, scheduleStep)),
-      // End input so the sink drains leftovers without further upstream pulls.
-      Pull.catchDone(() => Queue.end(buffer)),
-      Effect.flatMap(() => Effect.never)
+    let sinkHasInput = false
+    const step = yield* Schedule.toStepWithSleep(schedule)
+    const stepLoop = Effect.suspend(function loop(): Pull.Pull<void, E3, C | void, R3> {
+      return Effect.flatMap(step(lastOutput), () => !sinkHasInput ? loop() : Queue.offer(buffer, scheduleStep))
+    })
+    const stepToBuffer: Pull.Pull<never, E3, void, R3> = stepLoop.pipe(
+      Effect.flatMap(() => Effect.never),
+      Pull.catchDone(() => Cause.done())
+    )
+
+    // buffer -> sink
+    const pullFromBuffer: Pull.Pull<
+      Arr.NonEmptyReadonlyArray<A>,
+      E
+    > = Queue.take(buffer).pipe(
+      Effect.flatMap((arr) => {
+        if (arr === scheduleStep) {
+          return Cause.done()
+        }
+        sinkHasInput = true
+        return Effect.succeed(arr)
+      })
     )
 
     const sinkUpstream = Effect.suspend((): Pull.Pull<Arr.NonEmptyReadonlyArray<A | A2>, E> => {
       if (leftover !== undefined) {
         const chunk = leftover
         leftover = undefined
-        return onInput(chunk)
+        sinkHasInput = true
+        return Effect.succeed(chunk)
       }
-      if (buffer.state._tag === "Open") {
-        pullLatch.openUnsafe()
-      }
-      return Effect.flatMap(Queue.take(buffer), (arr) => arr === scheduleStep ? Cause.done() : onInput(arr))
+      pullLatch.openUnsafe()
+      return pullFromBuffer
     })
-    const emit = Effect.flatMap(([value, leftover_]: Sink.End<B, A2>) => {
-      if (hasInput.isOpen()) {
-        scheduleTime += clock.currentTimeMillisUnsafe() - openedAt
-      } else if (buffer.state._tag === "Done") {
-        return Cause.done()
-      }
+    const catchSinkHalt = Effect.flatMap(([value, leftover_]: Sink.End<B, A2>) => {
+      // ignore the last output if the upstream only pulled a halt
+      if (!sinkHasInput && buffer.state._tag === "Done") return Cause.done()
       lastOutput = Option.some(value)
       leftover = leftover_
       return Effect.succeed(Arr.of(value))
     })
 
-    return Effect.suspend((): Pull.Pull<Arr.NonEmptyReadonlyArray<B>, E | E2 | E3, void, R2 | R3> => {
+    return Effect.suspend(() => {
+      // if the buffer has exited and there is no more data to process
       if (buffer.state._tag === "Done" && leftover === undefined) {
         return buffer.state.exit as Exit.Exit<never, Cause.Done<void> | E>
       }
-      hasInput.closeUnsafe()
-      const pull = emit(Effect.suspend(() => sink.transform(sinkUpstream as any, scope)))
-      return buffer.state._tag === "Open" ? Effect.raceFirst(pull, stepToBuffer) : pull
-    })
+      sinkHasInput = leftover !== undefined
+      return Effect.succeed(Effect.suspend(() => sink.transform(sinkUpstream as any, scope)))
+    }).pipe(
+      Effect.flatMap((pull) => Effect.raceFirst(catchSinkHalt(pull), stepToBuffer))
+    )
   }))))
 
 /**

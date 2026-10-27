@@ -245,7 +245,6 @@ describe("HttpStaticServer", () => {
       new Request("http://localhost/file.txt", {
         headers: {
           "If-None-Match": "\"etag-value\"",
-          "If-Range": "\"stale\"",
           Range: "bytes=1000-1001"
         }
       })

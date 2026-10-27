@@ -14,15 +14,11 @@ import * as Dom from 'foldkit/dom'
 import type { ChildAttribute, Html } from 'foldkit/html'
 import { defineMessageUnion } from 'foldkit/message'
 import * as Mount from 'foldkit/mount'
-import { evo } from 'foldkit/struct'
+import { modifyFields } from 'foldkit/struct'
 import { type View as SubmodelView, defineView } from 'foldkit/submodel'
 import * as Update from 'foldkit/update'
 
-import {
-  AnchorConfig,
-  anchorSetup,
-  portalToContainingRoot,
-} from '../anchor/index.js'
+import { AnchorConfig, anchorSetup, portalBackdrop } from '../anchor/index.js'
 // NOTE: Animation imports are split across schema + update to avoid a circular
 // dependency: animation → html → runtime → devtools → menu → animation.
 // The barrel (../animation) imports from html, which starts the cycle.
@@ -103,6 +99,7 @@ export const Message = defineMessageUnion({
   CompletedRestoreInert: {},
   CompletedScrollIntoView: {},
   CompletedClickItem: {},
+  ClickedButton: {},
   IgnoredMouseClick: {},
   SuppressedSpaceScroll: {},
   CompletedAnchorMenu: {},
@@ -154,6 +151,8 @@ export type RequestedItemClick = typeof Message.RequestedItemClick.Type
 export type Searched = typeof Message.Searched.Type
 export type CompletedDelayClearSearch =
   typeof Message.CompletedDelayClearSearch.Type
+/** A click on the Menu trigger button. */
+export type ClickedButton = typeof Message.ClickedButton.Type
 export type IgnoredMouseClick = typeof Message.IgnoredMouseClick.Type
 export type SuppressedSpaceScroll = typeof Message.SuppressedSpaceScroll.Type
 export type PressedPointerOnButton = typeof Message.PressedPointerOnButton.Type
@@ -192,7 +191,7 @@ export const init = (config: InitConfig): Model => ({
 // UPDATE
 
 const closedModel = (model: Model): Model =>
-  evo(model, {
+  modifyFields(model, {
     isOpen: () => false,
     maybeActiveItemIndex: () => Option.none(),
     searchQuery: () => '',
@@ -294,21 +293,21 @@ export const DelayClearSearch = Command.define('DelayClearSearch', {
 export const DetectMovementOrAnimationEnd = Command.define(
   'DetectMovementOrAnimationEnd',
   {
-    args: { id: Schema.String },
+    args: { id: Schema.String, generation: Schema.Number },
     messages: [Message.GotAnimationMessage],
-    execute: ({ id }) =>
+    execute: ({ id, generation }) =>
       Effect.raceFirst(
         Dom.detectElementMovement(buttonSelector(id)).pipe(
           Effect.as(
             Message.GotAnimationMessage({
-              message: Animation.Message.EndedAnimation(),
+              message: Animation.Message.EndedAnimation({ generation }),
             }),
           ),
         ),
         Dom.waitForAnimationSettled(itemsSelector(id)).pipe(
           Effect.as(
             Message.GotAnimationMessage({
-              message: Animation.Message.EndedAnimation(),
+              message: Animation.Message.EndedAnimation({ generation }),
             }),
           ),
         ),
@@ -319,10 +318,12 @@ export const DetectMovementOrAnimationEnd = Command.define(
 const foldAnimationOutMessage = Animation.OutMessage.match<
   Update.Step<Model, Message>
 >({
-  StartedLeaveAnimating: () => model => ({
-    model,
-    commands: [DetectMovementOrAnimationEnd({ id: model.id })],
-  }),
+  StartedLeaveAnimating:
+    ({ generation }) =>
+    model => ({
+      model,
+      commands: [DetectMovementOrAnimationEnd({ id: model.id, generation })],
+    }),
   TransitionedOut: () => model => ({ model }),
 })
 
@@ -330,7 +331,7 @@ const foldAnimation = Update.foldChild({
   update: animationUpdate,
   read: (model: Model) => Option.some(model.animation),
   write: (model, nextAnimation) =>
-    evo(model, { animation: () => nextAnimation }),
+    modifyFields(model, { animation: () => nextAnimation }),
   toParentMessage: message => Message.GotAnimationMessage({ message }),
   foldOutMessage: foldAnimationOutMessage,
 })
@@ -339,7 +340,7 @@ const foldAnimationShow = Update.foldChildStep({
   update: animationShow,
   read: (model: Model) => Option.some(model.animation),
   write: (model, nextAnimation) =>
-    evo(model, { animation: () => nextAnimation }),
+    modifyFields(model, { animation: () => nextAnimation }),
   toParentMessage: message => Message.GotAnimationMessage({ message }),
 })
 
@@ -347,7 +348,7 @@ const foldAnimationHide = Update.foldChildStep({
   update: animationHide,
   read: (model: Model) => Option.some(model.animation),
   write: (model, nextAnimation) =>
-    evo(model, { animation: () => nextAnimation }),
+    modifyFields(model, { animation: () => nextAnimation }),
   toParentMessage: message => Message.GotAnimationMessage({ message }),
 })
 
@@ -387,13 +388,13 @@ export const update = (model: Model, message: Message) => {
         stepModel => ({ model: stepModel, commands: openCommands }),
         foldAnimationShow,
         stepModel => ({
-          model: evo(stepModel, { isOpen: () => true }),
+          model: modifyFields(stepModel, { isOpen: () => true }),
         }),
       ])
     }
 
     return {
-      model: evo(baseModel, { isOpen: () => true }),
+      model: modifyFields(baseModel, { isOpen: () => true }),
       commands: openCommands,
     }
   }
@@ -431,9 +432,13 @@ export const update = (model: Model, message: Message) => {
     CompletedAnchorMenu: () => ({ model }),
     CompletedPortalMenuBackdrop: () => ({ model }),
 
-    Opened: ({ maybeActiveItemIndex }) =>
-      openMenu(
-        evo(model, {
+    Opened: ({ maybeActiveItemIndex }) => {
+      if (model.isOpen) {
+        return { model }
+      }
+
+      return openMenu(
+        modifyFields(model, {
           maybeActiveItemIndex: () => maybeActiveItemIndex,
           activationTrigger: () =>
             Option.match(maybeActiveItemIndex, {
@@ -444,7 +449,8 @@ export const update = (model: Model, message: Message) => {
           searchVersion: () => 0,
           maybeLastPointerPosition: () => Option.none(),
         }),
-      ),
+      )
+    },
 
     Closed: () => closeMenu(model, closeWithFocusCommands),
 
@@ -459,7 +465,7 @@ export const update = (model: Model, message: Message) => {
     },
 
     ActivatedItem: ({ index, activationTrigger }) => ({
-      model: evo(model, {
+      model: modifyFields(model, {
         maybeActiveItemIndex: () => Option.some(index),
         activationTrigger: () => activationTrigger,
       }),
@@ -481,7 +487,7 @@ export const update = (model: Model, message: Message) => {
       }
 
       return {
-        model: evo(model, {
+        model: modifyFields(model, {
           maybeActiveItemIndex: () => Option.some(index),
           activationTrigger: () => 'Pointer',
           maybeLastPointerPosition: () => Option.some({ screenX, screenY }),
@@ -491,7 +497,11 @@ export const update = (model: Model, message: Message) => {
 
     DeactivatedItem: () =>
       model.activationTrigger === 'Pointer'
-        ? { model: evo(model, { maybeActiveItemIndex: () => Option.none() }) }
+        ? {
+            model: modifyFields(model, {
+              maybeActiveItemIndex: () => Option.none(),
+            }),
+          }
         : { model },
 
     SelectedItem: ({ index, item }) =>
@@ -510,7 +520,7 @@ export const update = (model: Model, message: Message) => {
       const nextSearchVersion = model.searchVersion + 1
 
       return {
-        model: evo(model, {
+        model: modifyFields(model, {
           searchQuery: () => nextSearchQuery,
           searchVersion: () => nextSearchVersion,
           maybeActiveItemIndex: () =>
@@ -525,7 +535,7 @@ export const update = (model: Model, message: Message) => {
         return { model }
       }
 
-      return { model: evo(model, { searchQuery: () => '' }) }
+      return { model: modifyFields(model, { searchQuery: () => '' }) }
     },
 
     GotAnimationMessage: ({ message: animationMessage }) =>
@@ -538,7 +548,7 @@ export const update = (model: Model, message: Message) => {
       screenY,
       timeStamp,
     }) => {
-      const withPointerType = evo(model, {
+      const withPointerType = modifyFields(model, {
         maybeLastButtonPointerType: () => Option.some(pointerType),
       })
 
@@ -550,7 +560,7 @@ export const update = (model: Model, message: Message) => {
         return Update.combine(withPointerType, [
           stepModel => closeMenu(stepModel, closeWithFocusCommands),
           stepModel => ({
-            model: evo(stepModel, {
+            model: modifyFields(stepModel, {
               maybeLastButtonPointerType: () => Option.some(pointerType),
             }),
           }),
@@ -558,7 +568,7 @@ export const update = (model: Model, message: Message) => {
       }
 
       return openMenu(
-        evo(withPointerType, {
+        modifyFields(withPointerType, {
           maybeActiveItemIndex: () => Option.none(),
           activationTrigger: () => 'Pointer',
           searchQuery: () => '',
@@ -611,15 +621,43 @@ export const update = (model: Model, message: Message) => {
     },
 
     IgnoredMouseClick: () => ({
-      model: evo(model, { maybeLastButtonPointerType: () => Option.none() }),
+      model: modifyFields(model, {
+        maybeLastButtonPointerType: () => Option.none(),
+      }),
     }),
+    ClickedButton: () => {
+      if (
+        Option.exists(model.maybeLastButtonPointerType, Equal.equals('mouse'))
+      ) {
+        return {
+          model: modifyFields(model, {
+            maybeLastButtonPointerType: () => Option.none(),
+          }),
+        }
+      }
+
+      if (model.isOpen) {
+        return closeMenu(model, closeWithFocusCommands)
+      }
+
+      return openMenu(
+        modifyFields(model, {
+          maybeActiveItemIndex: () => Option.none(),
+          activationTrigger: () => 'Pointer',
+          searchQuery: () => '',
+          searchVersion: () => 0,
+          maybeLastPointerPosition: () => Option.none(),
+        }),
+      )
+    },
   })
 }
 
 /** The anchor-positioning Mount this Menu renders on its panel. The panel is
  *  always anchored to the button via Floating UI and portaled to the document
- *  body (opt out of portaling with `anchor.portal: false`), so it escapes
- *  ancestor stacking contexts and overflow clipping.
+ *  body, or into the enclosing `<dialog>` when there is one (opt out of
+ *  portaling with `anchor.portal: false`), so it escapes ancestor stacking
+ *  contexts and overflow clipping.
  *
  *  It also carries the open-focus for the anchored panel. An anchored panel
  *  renders `visibility: hidden` until Floating UI resolves its first position,
@@ -657,7 +695,7 @@ export const PortalMenuBackdrop = Mount.define('PortalMenuBackdrop', {
   execute: ({ element }) =>
     Effect.gen(function* () {
       yield* Effect.acquireRelease(
-        Effect.sync(() => portalToContainingRoot(element)),
+        Effect.sync(() => portalBackdrop(element)),
         cleanup => Effect.sync(cleanup),
       )
       return Message.CompletedPortalMenuBackdrop()
@@ -665,7 +703,8 @@ export const PortalMenuBackdrop = Mount.define('PortalMenuBackdrop', {
 })
 
 /** Programmatically opens the Menu, updating the Model and returning focus and
- *  modal Commands. Use this in domain-event handlers. */
+ *  modal Commands. When it is already open, returns the Model unchanged with
+ *  no Commands. Use this in domain-event handlers. */
 export const open = (model: Model): UpdateReturn =>
   update(model, Message.Opened({ maybeActiveItemIndex: Option.none() }))
 
@@ -759,7 +798,6 @@ const menuViewImpl = defineView<Model, Message, ViewInputs<string>>(
       animation: { transitionState },
       maybeActiveItemIndex,
       searchQuery,
-      maybeLastButtonPointerType,
     } = model
 
     const {
@@ -882,21 +920,6 @@ const menuViewImpl = defineView<Model, Message, ViewInputs<string>>(
         }),
       )
 
-    const handleButtonClick = (): Message => {
-      const isMouse = Option.exists(
-        maybeLastButtonPointerType,
-        type => type === 'mouse',
-      )
-
-      if (isMouse) {
-        return Message.IgnoredMouseClick()
-      } else if (isOpen) {
-        return Message.Closed()
-      } else {
-        return Message.Opened({ maybeActiveItemIndex: Option.none() })
-      }
-    }
-
     const handleSpaceKeyUp = (key: string): Option.Option<Message> =>
       OptionExt.when(key === ' ', Message.SuppressedSpaceScroll())
 
@@ -983,7 +1006,7 @@ const menuViewImpl = defineView<Model, Message, ViewInputs<string>>(
       h.Type('button'),
       h.AriaHasPopup('menu'),
       h.AriaExpanded(isVisible),
-      h.AriaControls(`${id}-items`),
+      ...(isVisible ? [h.AriaControls(`${id}-items`)] : []),
       ...buttonLabelAttributes,
       ...(isButtonDisabled
         ? [h.AriaDisabled(true), h.DataAttribute('disabled', '')]
@@ -991,7 +1014,7 @@ const menuViewImpl = defineView<Model, Message, ViewInputs<string>>(
             h.OnPointerDown(handleButtonPointerDown),
             h.OnKeyDownPreventDefault(handleButtonKeyDown),
             h.OnKeyUpPreventDefault(handleSpaceKeyUp),
-            h.OnClick(handleButtonClick()),
+            h.OnClick(Message.ClickedButton()),
           ]),
       ...(isVisible
         ? [
@@ -1018,7 +1041,7 @@ const menuViewImpl = defineView<Model, Message, ViewInputs<string>>(
       h.Role('menu'),
       h.AriaLabelledBy(`${id}-button`),
       ...maybeActiveDescendant,
-      h.Tabindex(0),
+      h.Tabindex(-1),
       ...anchorAttributes,
       ...animationAttributes,
       ...(isLeaving

@@ -53,7 +53,6 @@ const projectCapabilities = (
   capabilities: McpCore.CanonicalServerCapabilities
 ): typeof McpSchema.ServerCapabilities.Type => ({
   experimental: capabilities.experimental,
-  extensions: capabilities.extensions,
   logging: capabilities.logging ? {} : undefined,
   prompts: capabilities.prompts,
   resources: capabilities.resources,

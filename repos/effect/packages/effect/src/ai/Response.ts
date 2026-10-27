@@ -152,24 +152,6 @@ export type AllPartsEncoded =
   | FinishPartEncoded
   | ErrorPartEncoded
 
-// Tools are immutable, so response schemas can share their per-tool parts.
-const toolPartSchemaCache = new WeakMap<Tool.Any, {
-  readonly toolCall: Schema.Top
-  readonly toolResult: Schema.Top
-}>()
-
-const toolPartSchemas = (tool: Tool.Any) => {
-  let parts = toolPartSchemaCache.get(tool)
-  if (parts === undefined) {
-    parts = {
-      toolCall: ToolCallPart(tool.name, tool.parametersSchema),
-      toolResult: ToolResultPart(tool.name, tool.successSchema, Tool.failureResultSchema(tool))
-    }
-    toolPartSchemaCache.set(tool, parts)
-  }
-  return parts
-}
-
 /**
  * Creates a Schema for all response parts based on a toolkit.
  *
@@ -210,9 +192,10 @@ export const AllParts = <T extends Toolkit.Any | Toolkit.WithHandler<any>>(
   const toolCalls: Array<Schema.Top> = []
   const toolResults: Array<Schema.Top> = []
   for (const tool of Object.values(toolkit.tools as Record<string, Tool.Any>)) {
-    const parts = toolPartSchemas(tool)
-    toolCalls.push(parts.toolCall)
-    toolResults.push(parts.toolResult)
+    const toolCall = ToolCallPart(tool.name, tool.parametersSchema)
+    const toolResult = ToolResultPart(tool.name, tool.successSchema, Tool.failureResultSchema(tool))
+    toolCalls.push(toolCall)
+    toolResults.push(toolResult)
   }
   return Schema.Union([
     TextPart,
@@ -304,9 +287,10 @@ export const Part = <T extends Toolkit.Any | Toolkit.WithHandler<any>>(
   const toolCalls: Array<Schema.Top> = []
   const toolResults: Array<Schema.Top> = []
   for (const tool of Object.values(toolkit.tools as Record<string, Tool.Any>)) {
-    const parts = toolPartSchemas(tool)
-    toolCalls.push(parts.toolCall)
-    toolResults.push(parts.toolResult)
+    const toolCall = ToolCallPart(tool.name, tool.parametersSchema)
+    const toolResult = ToolResultPart(tool.name, tool.successSchema, Tool.failureResultSchema(tool))
+    toolCalls.push(toolCall)
+    toolResults.push(toolResult)
   }
   return Schema.Union([
     TextPart,
@@ -401,9 +385,10 @@ export const StreamPart = <T extends Toolkit.Any | Toolkit.WithHandler<any>>(
   const toolCalls: Array<Schema.Top> = []
   const toolResults: Array<Schema.Top> = []
   for (const tool of Object.values(toolkit.tools as Record<string, Tool.Any>)) {
-    const parts = toolPartSchemas(tool)
-    toolCalls.push(parts.toolCall)
-    toolResults.push(parts.toolResult)
+    const toolCall = ToolCallPart(tool.name, tool.parametersSchema)
+    const toolResult = ToolResultPart(tool.name, tool.successSchema, Tool.failureResultSchema(tool))
+    toolCalls.push(toolCall)
+    toolResults.push(toolResult)
   }
   return Schema.Union([
     TextStartPart,

@@ -1,22 +1,17 @@
-import {
-  Effect,
-  Fiber,
-  Function,
-  Option,
-  Predicate,
-  Runtime,
-  pipe,
-} from 'effect'
+import { Cause, Effect, Fiber, Option, Predicate, Runtime, pipe } from 'effect'
 
+import { BrowserRuntime } from '@effect/platform-browser'
+
+import { buildIdOrInjected } from '../buildToken.js'
 import type { Ports } from '../port/index.js'
 import { provideBrowserScheduler } from './browserScheduler.js'
-import { resolveHmrModel } from './hmrModelBridge.js'
 import {
   type EmbedHandle,
   buildPortHandles,
   makeHostConnector,
 } from './hostConnector.js'
 import type { BootMode } from './hydrationHandoff.js'
+import { resolvePreservedModel } from './modelPreservationBridge.js'
 import { type MakeRuntimeReturn, runtimeInternals } from './runtime.js'
 
 /** Client-only startup input for an application that declares Flags. Pass it
@@ -29,7 +24,7 @@ export type RunOptions<Flags, Resources = never> = Readonly<{
 
 type RuntimeProgram = Readonly<{
   runtimeId: string
-  start: (hmrModel?: unknown) => Effect.Effect<void>
+  start: (preservedModel?: unknown) => Effect.Effect<void>
   ports: Ports | undefined
 }>
 
@@ -37,7 +32,7 @@ type RuntimeProgram = Readonly<{
  * @internal */
 export const __startProgram = (
   program: RuntimeProgram,
-  hmrModel: unknown,
+  preservedModel: unknown,
   bootMode: BootMode,
   flags?: Effect.Effect<unknown, never, any>,
   buildId?: string,
@@ -61,20 +56,32 @@ export const __startProgram = (
     )
   }
 
-  return internals.startWith(Option.none(), hmrModel, bootMode, flags, buildId)
+  return internals.startWith(
+    Option.none(),
+    preservedModel,
+    bootMode,
+    flags,
+    buildId,
+  )
 }
 
-// NOTE: deliberately not `BrowserRuntime.runMain`, which interrupts the
-// runtime on `beforeunload`. `beforeunload` is a question, not a commitment:
-// the browser also fires it for a click on a download link, for a navigation
-// the user cancels, and when freezing the page into the back/forward cache.
-// The document survives all three, but the interrupt finalizer has already
-// put the container element back empty, so the page is left alive with no app
-// in it. A page-owning runtime gains nothing from tearing itself down while
-// the document is on its way out, so it starts with no page-lifecycle
-// interrupt at all and lets the document take the runtime with it. Error
-// reporting and the keep-alive interval come from `makeRunMain` either way.
-const runMainWithoutUnloadInterrupt = Runtime.makeRunMain(Function.constVoid)
+/** Reports unhandled non-interrupt Causes using Effect's runtime policy.
+ * @internal */
+export const __reportUnhandledCause = <E>(
+  cause: Cause.Cause<E>,
+): Effect.Effect<void> => {
+  if (Cause.hasInterruptsOnly(cause)) {
+    return Effect.void
+  }
+
+  return Runtime.getErrorReported(Cause.squash(cause))
+    ? Effect.logError(cause)
+    : Effect.void
+}
+
+const withUnhandledCauseReporting = <A, E, R>(
+  effect: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R> => Effect.tapCause(effect, __reportUnhandledCause)
 
 const startProgram = (
   program: RuntimeProgram,
@@ -82,20 +89,25 @@ const startProgram = (
   flags?: Effect.Effect<unknown, never, any>,
   buildId?: string,
 ): void => {
-  runMainWithoutUnloadInterrupt(
-    provideBrowserScheduler(
-      Effect.flatMap(resolveHmrModel(program.runtimeId), hmrModel =>
-        __startProgram(program, hmrModel, bootMode, flags, buildId),
+  BrowserRuntime.runMain(
+    withUnhandledCauseReporting(
+      provideBrowserScheduler(
+        Effect.flatMap(
+          resolvePreservedModel(program.runtimeId),
+          preservedModel =>
+            __startProgram(program, preservedModel, bootMode, flags, buildId),
+        ),
       ),
     ),
+    { disableErrorReporting: true },
   )
 }
 
 /** Starts a Foldkit runtime that owns the page for the page's whole lifetime,
- *  with HMR support for development. The first render builds the DOM fresh in
- *  the container, replacing whatever is there. On a server-rendered page use
- *  `hydrate` instead, which adopts the existing DOM. To start a runtime under a
- *  host-controlled lifecycle, use `embed`. */
+ *  with state-preserving live reload for development. The first render builds
+ *  the DOM fresh in the container, replacing whatever is there. On a
+ *  server-rendered page use `hydrate` instead, which adopts the existing DOM.
+ *  To start a runtime under a host-controlled lifecycle, use `embed`. */
 export function run<
   P extends Ports | undefined,
   Resources,
@@ -123,14 +135,16 @@ export type HydrateOptions = Readonly<{
    * The deployment this client belongs to, compared against the id the server
    * stamped on the root before the Flags payload text is accessed or decoded,
    * so a page from a different deployment stops startup rather than handing its
-   * Flags to this build. Required, and must be non-empty: an absent id would
-   * equal the absent marker on a page served before build ids existed.
+   * Flags to this build. When omitted, Foldkit uses the identity compiled into
+   * this artifact by `@foldkit/vite-plugin`. An explicit id overrides that
+   * value and must be non-empty: an absent id would equal the absent marker on
+   * a page served before build ids existed.
    *
-   * Pass `import.meta.env.FOLDKIT_BUILD_ID`, which `@foldkit/vite-plugin` fills
-   * from its `buildId` option or the `FOLDKIT_BUILD_ID` environment variable,
-   * the same value the server entry passes to `renderToString`.
+   * This explicit option is for integrations that cannot compile the shared
+   * identity into the artifact. Give the server the same public,
+   * deployment-specific value.
    */
-  buildId: string
+  buildId?: string
 }>
 
 /** Starts a Foldkit runtime by adopting a server-rendered DOM in place instead
@@ -159,9 +173,14 @@ export type HydrateOptions = Readonly<{
  * contracts settle. */
 export const hydrate = <P extends Ports | undefined, Flags, Resources>(
   program: MakeRuntimeReturn<P, Flags, Resources, 'Application'>,
-  options: HydrateOptions,
+  options?: HydrateOptions,
 ): void => {
-  startProgram(program, 'Hydrate', undefined, options?.buildId)
+  startProgram(
+    program,
+    'Hydrate',
+    undefined,
+    buildIdOrInjected(options?.buildId),
+  )
 }
 
 /**
@@ -235,18 +254,20 @@ export function embed<P extends Ports | undefined = undefined>(
       onNone: () => Effect.void,
       onSome: previousFiber => Effect.asVoid(Fiber.await(previousFiber)),
     }),
-    Effect.andThen(resolveHmrModel(program.runtimeId)),
-    Effect.flatMap(hmrModel =>
+    Effect.andThen(resolvePreservedModel(program.runtimeId)),
+    Effect.flatMap(preservedModel =>
       internals.startWith(
         Option.some(connector),
-        hmrModel,
+        preservedModel,
         'Fresh',
         options?.flags,
       ),
     ),
   )
 
-  const fiber = Effect.runFork(provideBrowserScheduler(startEffect))
+  const fiber = Effect.runFork(
+    withUnhandledCauseReporting(provideBrowserScheduler(startEffect)),
+  )
   internals.maybeActiveFiber = Option.some(fiber)
 
   let isHandleDisposed = false

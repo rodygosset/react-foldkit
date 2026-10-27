@@ -52,7 +52,8 @@ To move to a new Foldkit release:
 1. Pin the same version in `packages/react-foldkit` and `apps/web`, and set the peer ranges to the versions you tested.
 2. Update the version in `scripts/checkDevToolsVendor.mjs`, then run `node scripts/checkDevToolsVendor.mjs --apply --write-lock` from `packages/react-foldkit`.
 3. Update the version in `scripts/sceneVendorManifest.json`. Copy any changed upstream Scene file over its `*.upstream.js` copy, record its new hash, and run `node scripts/checkSceneVendor.mjs --write`.
-4. Run `check:vendor`, `check:devtools-vendor`, and the full checks.
+4. Replace `repos/foldkit` with the tracked files of the release's `foldkit@<version>` tag, so agents read the source you install. Do the same for `repos/effect` when the `effect` version changes.
+5. Run `check:vendor`, `check:devtools-vendor`, and the full checks.
 
 ## Prepare releases
 

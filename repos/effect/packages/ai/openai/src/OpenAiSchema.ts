@@ -726,8 +726,7 @@ export const CreateResponse = Schema.Struct({
   prompt_cache_key: Schema.optional(Schema.String),
   prompt_cache_options: Schema.optional(Schema.Struct({
     mode: Schema.optional(Schema.Literals(["implicit", "explicit"])),
-    ttl: Schema.optional(Schema.Literal("30m")),
-    comparison_response_id: Schema.optional(Schema.NullOr(Schema.String))
+    ttl: Schema.optional(Schema.Literal("30m"))
   })),
   service_tier: Schema.optional(Schema.String),
   previous_response_id: Schema.optional(Schema.String),
@@ -912,46 +911,6 @@ const ResponseError = Schema.Struct({
 })
 
 /**
- * Schema for prompt cache diagnostics comparing two responses.
- *
- * **Details**
- *
- * Cache misses report a reason and token estimates, separate from response usage.
- *
- * @category schemas
- * @since 4.0.0
- */
-export const PromptCacheDiagnostics = Schema.Union([
-  Schema.Struct({
-    type: Schema.Literal("cache_miss"),
-    reason: Schema.Literals([
-      "model_changed",
-      "prompt_cache_key_changed",
-      "tools_changed",
-      "text_format_changed",
-      "reasoning_effort_changed",
-      "verbosity_changed",
-      "context_compacted",
-      "input_changed",
-      "service_tier_changed"
-    ]),
-    cache_missed_tokens: Schema.Int,
-    comparison_reusable_tokens: Schema.optionalKey(Schema.Int)
-  }),
-  Schema.Struct({ type: Schema.Literal("cache_hit") }),
-  Schema.Struct({ type: Schema.Literal("comparison_response_not_found") }),
-  Schema.Struct({ type: Schema.Literal("unavailable") })
-])
-
-/**
- * Prompt cache comparison result reported by the OpenAI Responses API.
- *
- * @category models
- * @since 4.0.0
- */
-export type PromptCacheDiagnostics = typeof PromptCacheDiagnostics.Type
-
-/**
  * Schema for an OpenAI Responses API response object.
  *
  * **When to use**
@@ -961,8 +920,7 @@ export type PromptCacheDiagnostics = typeof PromptCacheDiagnostics.Type
  * **Details**
  *
  * Response objects include the response id, model, creation time, output items,
- * optional token usage, optional incomplete details, optional service tier, and
- * optional prompt cache diagnostics.
+ * optional token usage, optional incomplete details, and optional service tier.
  *
  * @see {@link CreateResponse} for the request schema that creates responses
  * @see {@link ResponseUsage} for token accounting on responses
@@ -989,8 +947,7 @@ export const Response = Schema.Struct({
       })
     )
   ),
-  service_tier: Schema.optionalKey(Schema.String),
-  prompt_cache_diagnostics: Schema.optionalKey(PromptCacheDiagnostics)
+  service_tier: Schema.optionalKey(Schema.String)
 })
 
 /**

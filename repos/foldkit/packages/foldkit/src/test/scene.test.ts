@@ -1,14 +1,17 @@
-import { Option, pipe } from 'effect'
+import { Array, Option, Schema, pipe } from 'effect'
 import { describe, expect, expectTypeOf, test } from 'vitest'
 
+import * as CustomElement from '../customElement/index.js'
 import {
   type HtmlBuilder,
   __htmlBuilder as attributeHtml,
   inertHtml,
 } from '../html/index.js'
 import { defineMessageUnion } from '../message/index.js'
+import * as PublicScene from '../scene/public.js'
 import { h } from '../snabbdom/index.js'
 import type { VNode } from '../snabbdom/index.js'
+import { modifyFields } from '../struct/index.js'
 import { defineView } from '../submodel/public.js'
 import type * as Update from '../update/index.js'
 import {
@@ -32,6 +35,11 @@ import {
   viewWithoutHandler as colorPickerViewWithoutHandler,
   hexColorPicker,
 } from './apps/colorPicker.js'
+import {
+  initialModel as contentEditableInitialModel,
+  update as contentEditableUpdate,
+  view as contentEditableView,
+} from './apps/contentEditableEditor.js'
 import {
   initialModel as contextMenuInitialModel,
   update as contextMenuUpdate,
@@ -74,6 +82,10 @@ import {
   view as interactionsView,
 } from './apps/interactions.js'
 import { update as keyUpdate, view as keyView } from './apps/keypress.js'
+import {
+  update as keySelfUpdate,
+  view as keySelfView,
+} from './apps/keypressSelf.js'
 import {
   Authenticate,
   Message as LoginMessage,
@@ -167,28 +179,33 @@ import * as Scene from './scene.js'
 // TEST
 
 describe('parseSelector', () => {
+  const requireSelectorAt = (
+    selectors: ReturnType<typeof parseSelector>,
+    index: number,
+  ) => pipe(selectors, Array.get(index), Option.getOrThrow)
+
   test('parses a tag selector', () => {
     const selector = parseSelector('button')
     expect(selector).toHaveLength(1)
-    expect(selector[0]?.tag).toEqual(Option.some('button'))
+    expect(requireSelectorAt(selector, 0).tag).toEqual(Option.some('button'))
   })
 
   test('parses an id selector', () => {
     const selector = parseSelector('#email')
     expect(selector).toHaveLength(1)
-    expect(selector[0]?.id).toEqual(Option.some('email'))
+    expect(requireSelectorAt(selector, 0).id).toEqual(Option.some('email'))
   })
 
   test('parses a class selector', () => {
     const selector = parseSelector('.primary')
     expect(selector).toHaveLength(1)
-    expect(selector[0]?.classes).toEqual(['primary'])
+    expect(requireSelectorAt(selector, 0).classes).toEqual(['primary'])
   })
 
   test('parses an attribute selector', () => {
     const selector = parseSelector('[role="tab"]')
     expect(selector).toHaveLength(1)
-    expect(selector[0]?.attributes).toEqual([
+    expect(requireSelectorAt(selector, 0).attributes).toEqual([
       { name: 'role', value: Option.some('tab'), mode: 'Exact' },
     ])
   })
@@ -196,7 +213,7 @@ describe('parseSelector', () => {
   test('parses a presence-only attribute selector', () => {
     const selector = parseSelector('[disabled]')
     expect(selector).toHaveLength(1)
-    expect(selector[0]?.attributes).toEqual([
+    expect(requireSelectorAt(selector, 0).attributes).toEqual([
       { name: 'disabled', value: Option.none(), mode: 'Exact' },
     ])
   })
@@ -204,9 +221,9 @@ describe('parseSelector', () => {
   test('parses a compound selector', () => {
     const selector = parseSelector('button.primary[type="submit"]')
     expect(selector).toHaveLength(1)
-    expect(selector[0]?.tag).toEqual(Option.some('button'))
-    expect(selector[0]?.classes).toEqual(['primary'])
-    expect(selector[0]?.attributes).toEqual([
+    expect(requireSelectorAt(selector, 0).tag).toEqual(Option.some('button'))
+    expect(requireSelectorAt(selector, 0).classes).toEqual(['primary'])
+    expect(requireSelectorAt(selector, 0).attributes).toEqual([
       { name: 'type', value: Option.some('submit'), mode: 'Exact' },
     ])
   })
@@ -214,14 +231,14 @@ describe('parseSelector', () => {
   test('parses a descendant selector', () => {
     const selector = parseSelector('form button')
     expect(selector).toHaveLength(2)
-    expect(selector[0]?.tag).toEqual(Option.some('form'))
-    expect(selector[1]?.tag).toEqual(Option.some('button'))
+    expect(requireSelectorAt(selector, 0).tag).toEqual(Option.some('form'))
+    expect(requireSelectorAt(selector, 1).tag).toEqual(Option.some('button'))
   })
 
   test('parses a starts-with attribute selector', () => {
     const selector = parseSelector('[key^="tab-"]')
     expect(selector).toHaveLength(1)
-    expect(selector[0]?.attributes).toEqual([
+    expect(requireSelectorAt(selector, 0).attributes).toEqual([
       { name: 'key', value: Option.some('tab-'), mode: 'StartsWith' },
     ])
   })
@@ -232,6 +249,188 @@ describe('parseSelector', () => {
 
   test('throws on invalid selector', () => {
     expect(() => parseSelector('>>>')).toThrow('I could not parse the selector')
+  })
+
+  test('throws on whitespace-only selector', () => {
+    expect(() => parseSelector('   ')).toThrow('I received an empty selector')
+  })
+
+  test('ignores leading, trailing, and repeated whitespace between compounds', () => {
+    expect(parseSelector('  form   button ')).toEqual(
+      parseSelector('form button'),
+    )
+  })
+
+  test('treats tabs and newlines between compounds as descendant combinators', () => {
+    expect(parseSelector('form\tbutton')).toEqual(parseSelector('form button'))
+    expect(parseSelector('form\n  button')).toEqual(
+      parseSelector('form button'),
+    )
+  })
+
+  test('parses a double-quoted attribute value containing whitespace', () => {
+    const selector = parseSelector('[aria-label="Open menu"]')
+    expect(selector).toHaveLength(1)
+    expect(requireSelectorAt(selector, 0).attributes).toEqual([
+      { name: 'aria-label', value: Option.some('Open menu'), mode: 'Exact' },
+    ])
+  })
+
+  test('parses a single-quoted attribute value', () => {
+    const selector = parseSelector("[aria-label='Open menu']")
+    expect(selector).toHaveLength(1)
+    expect(requireSelectorAt(selector, 0).attributes).toEqual([
+      { name: 'aria-label', value: Option.some('Open menu'), mode: 'Exact' },
+    ])
+  })
+
+  test('parses a :not() pseudo-class', () => {
+    const selector = parseSelector('path[d]:not([d=""])')
+    expect(selector).toHaveLength(1)
+    const negatedSelectors = requireSelectorAt(selector, 0).negatedSelectors
+    expect(negatedSelectors).toHaveLength(1)
+    expect(requireSelectorAt(negatedSelectors, 0).attributes).toEqual([
+      { name: 'd', value: Option.some(''), mode: 'Exact' },
+    ])
+  })
+
+  test.each([
+    'a:not(b, c)',
+    'a:not(b c)',
+    'a:not()',
+    'a:first-child',
+    'a:not(b',
+    'a[x="y',
+    'a:not(:not(b) .c)',
+  ])('throws on unsupported or malformed selector %s', selector => {
+    expect(() => parseSelector(selector)).toThrow(
+      /I could not parse the selector[\s\S]*:not\(<compound selector>\)/,
+    )
+  })
+})
+
+describe('selector grammar', () => {
+  const tree: VNode = h('header', {}, [
+    h('a', { attrs: { href: '/', 'aria-label': 'Home' } }, [
+      h('svg', {}, [h('path', { attrs: { d: 'M0 0' } })]),
+    ]),
+    h('a', { attrs: { href: '/x', 'aria-label': 'Open menu' } }, [
+      h('svg', {}, [h('path', { attrs: { d: '' } })]),
+    ]),
+  ])
+
+  const attrOfEach = (matches: ReadonlyArray<VNode>, name: string) =>
+    matches.map(match => attr(match, name))
+
+  test('excludes matches of a :not() attribute selector', () => {
+    const matches = findAll(tree, 'header a svg path[d]:not([d=""])')
+    expect(attrOfEach(matches, 'd')).toEqual([Option.some('M0 0')])
+  })
+
+  test('matches a double-quoted attribute value containing whitespace', () => {
+    const matches = findAll(tree, 'a[aria-label="Open menu"]')
+    expect(attrOfEach(matches, 'href')).toEqual([Option.some('/x')])
+  })
+
+  test('treats whitespace after a quoted value as a descendant combinator', () => {
+    const matches = findAll(tree, 'a[aria-label="Open menu"] path')
+    expect(attrOfEach(matches, 'd')).toEqual([Option.some('')])
+  })
+
+  test('matches a single-quoted attribute value', () => {
+    const matches = findAll(tree, "a[aria-label='Home']")
+    expect(attrOfEach(matches, 'href')).toEqual([Option.some('/')])
+  })
+
+  test('excludes an element whose attribute matches the :not() argument', () => {
+    const matches = findAll(tree, 'a:not([aria-label="Open menu"])')
+    expect(attrOfEach(matches, 'href')).toEqual([Option.some('/')])
+  })
+
+  test('matches :not() without a tag', () => {
+    const matches = findAll(tree, 'header :not(svg)')
+    expect(matches.map(match => match.sel)).toEqual(['a', 'path', 'a', 'path'])
+  })
+
+  test('accepts whitespace and compound selectors inside :not()', () => {
+    const paddedMatches = findAll(tree, 'path:not( [d=""] )')
+    expect(attrOfEach(paddedMatches, 'd')).toEqual([Option.some('M0 0')])
+
+    const compoundMatches = findAll(tree, 'path:not(path[d=""])')
+    expect(attrOfEach(compoundMatches, 'd')).toEqual([Option.some('M0 0')])
+  })
+
+  test('ignores parentheses inside a quoted value in a :not() argument', () => {
+    const buttonTree: VNode = h('div', {}, [
+      h('button', { attrs: { title: 'x)' } }),
+      h('button', { attrs: { title: '(y' } }),
+      h('button', { attrs: { title: 'z' } }),
+    ])
+    const matches = findAll(
+      buttonTree,
+      'button:not([title="x)"]):not([title="(y"])',
+    )
+    expect(attrOfEach(matches, 'title')).toEqual([Option.some('z')])
+  })
+
+  test('matches a nested :not()', () => {
+    const matches = findAll(tree, 'path:not(:not([d=""]))')
+    expect(attrOfEach(matches, 'd')).toEqual([Option.some('')])
+  })
+
+  test('applies every clause of a repeated :not()', () => {
+    expect(findAll(tree, 'a:not([href="/"]):not([href="/x"])')).toHaveLength(0)
+
+    const matches = findAll(tree, 'a:not([href="/x"]):not(.x)')
+    expect(attrOfEach(matches, 'href')).toEqual([Option.some('/')])
+  })
+
+  test('matches a starts-with value in single quotes containing whitespace', () => {
+    const matches = findAll(tree, "a[aria-label^='Open m']")
+    expect(attrOfEach(matches, 'href')).toEqual([Option.some('/x')])
+  })
+
+  test('treats a false attribute as absent inside :not()', () => {
+    const buttonTree: VNode = h('div', {}, [
+      h('button', { attrs: { title: 'enabled', disabled: false } }),
+      h('button', { attrs: { title: 'disabled', disabled: true } }),
+    ])
+    const matches = findAll(buttonTree, 'button:not([disabled])')
+    expect(attrOfEach(matches, 'title')).toEqual([Option.some('enabled')])
+  })
+
+  describe('quotes, parentheses, and whitespace', () => {
+    const quotedTree: VNode = h('div', {}, [
+      h('p', { attrs: { title: "it's" } }, [h('span', {}, ['apostrophe'])]),
+      h('p', { attrs: { title: 'say "hi"' } }, [h('span', {}, ['quotation'])]),
+      h('p', { attrs: { title: 'a (b' } }, [h('span', {}, ['parenthesis'])]),
+      h('p', { attrs: { title: 'x y' } }, [h('span', {}, ['space'])]),
+    ])
+
+    const textOfEach = (selector: string) =>
+      findAll(quotedTree, selector).map(textContent)
+
+    test('opens a quoted value with either quote character', () => {
+      expect(textOfEach(`p[title="x y"] span`)).toEqual(['space'])
+      expect(textOfEach(`p[title='x y'] span`)).toEqual(['space'])
+    })
+
+    test('closes a quoted value only with the quote character that opened it', () => {
+      expect(textOfEach(`p[title="it's"] span`)).toEqual(['apostrophe'])
+      expect(textOfEach(`p[title='say "hi"'] span`)).toEqual(['quotation'])
+    })
+
+    test('ignores parentheses inside a quoted value when splitting compounds', () => {
+      expect(textOfEach(`p[title="a (b"] span`)).toEqual(['parenthesis'])
+    })
+
+    test('ignores whitespace inside parentheses when splitting compounds', () => {
+      expect(textOfEach(`p:not( [title="x y"] ) span`)).toEqual([
+        'apostrophe',
+        'quotation',
+        'parenthesis',
+      ])
+    })
   })
 })
 
@@ -702,6 +901,90 @@ describe('accessible locators', () => {
       })(locatorTree)
       expect(Option.isSome(result)).toBe(true)
     })
+
+    describe('current', () => {
+      const navigation = h('nav', [
+        h('a', { attrs: { href: '/work', 'aria-current': 'page' } }, ['Work']),
+        h('a', { attrs: { href: '/contact', 'aria-current': 'false' } }, [
+          'Contact',
+        ]),
+        h('a', { attrs: { href: '/about' } }, ['About']),
+        h('a', { attrs: { href: '/team', 'aria-current': 'true' } }, ['Team']),
+      ])
+
+      test('a token matches itself exactly', () => {
+        const result = getByRole('link', { current: 'page' })(navigation)
+        expect(Option.isSome(result)).toBe(true)
+        expect(textContent(Option.getOrThrow(result))).toBe('Work')
+        expect(
+          Option.isNone(getByRole('link', { current: 'step' })(navigation)),
+        ).toBe(true)
+      })
+
+      test('false matches an absent attribute and an explicit false alike', () => {
+        const links = getAllByRole('link', { current: false })(navigation)
+        const names = links.map(textContent)
+        expect(names).toEqual(['Contact', 'About'])
+      })
+
+      test('true matches only aria-current="true"', () => {
+        const links = getAllByRole('link', { current: true })(navigation)
+        const names = links.map(textContent)
+        expect(names).toEqual(['Team'])
+      })
+
+      test('true does not match a token', () => {
+        const page = h('nav', [
+          h('a', { attrs: { href: '/work', 'aria-current': 'page' } }, [
+            'Work',
+          ]),
+        ])
+        expect(Option.isNone(getByRole('link', { current: true })(page))).toBe(
+          true,
+        )
+      })
+
+      test('reads aria-current from props', () => {
+        const page = h('nav', [
+          h('a', { attrs: { href: '/about' } }, ['About']),
+          h('a', { props: { href: '/work', 'aria-current': 'page' } }, [
+            'Work',
+          ]),
+        ])
+        const result = getByRole('link', { current: 'page' })(page)
+        expect(Option.isSome(result)).toBe(true)
+        expect(textContent(Option.getOrThrow(result))).toBe('Work')
+      })
+
+      test('names the option in the locator description', () => {
+        expect(
+          Scene.role('link', { name: 'Work', current: 'page' }).description,
+        ).toBe('link "Work" current=page')
+      })
+
+      test('selects the current link through a Scene', () => {
+        Scene.scene(
+          {
+            update,
+            view: (_model, html) =>
+              html.nav(
+                [],
+                [
+                  html.a([html.Href('/about')], ['About']),
+                  html.a(
+                    [html.Href('/work'), html.AriaCurrent('page')],
+                    ['Work'],
+                  ),
+                ],
+              ),
+          },
+          Scene.given(initialModel),
+          Scene.expect(Scene.role('link', { current: 'page' })).toHaveText(
+            'Work',
+          ),
+        )
+      })
+    })
   })
 
   describe('getAllByRole', () => {
@@ -1111,6 +1394,151 @@ describe('expanded implicit role map', () => {
     const result = getByRole('rowheader')(tree)
     expect(Option.isSome(result)).toBe(true)
     expect(textContent(Option.getOrThrow(result))).toBe('Alice')
+  })
+})
+
+describe('confirmed implicit role mappings', () => {
+  const cases = [
+    { tag: 'blockquote', role: 'blockquote', parent: 'div' },
+    { tag: 'address', role: 'group', parent: 'div' },
+    { tag: 'caption', role: 'caption', parent: 'table' },
+    { tag: 'code', role: 'code', parent: 'div' },
+    { tag: 'del', role: 'deletion', parent: 'div' },
+    { tag: 'dfn', role: 'term', parent: 'div' },
+    { tag: 'em', role: 'emphasis', parent: 'div' },
+    { tag: 'hgroup', role: 'group', parent: 'div' },
+    { tag: 'ins', role: 'insertion', parent: 'div' },
+    { tag: 'menu', role: 'list', parent: 'div' },
+    { tag: 'optgroup', role: 'group', parent: 'select' },
+    { tag: 's', role: 'deletion', parent: 'div' },
+    { tag: 'search', role: 'search', parent: 'div' },
+    { tag: 'strong', role: 'strong', parent: 'div' },
+    { tag: 'sub', role: 'subscript', parent: 'div' },
+    { tag: 'sup', role: 'superscript', parent: 'div' },
+    { tag: 'tbody', role: 'rowgroup', parent: 'table' },
+    { tag: 'tfoot', role: 'rowgroup', parent: 'table' },
+    { tag: 'thead', role: 'rowgroup', parent: 'table' },
+    { tag: 'time', role: 'time', parent: 'div' },
+  ]
+
+  const childrenByTag: Record<string, Array<VNode>> = {
+    hgroup: [h('h1', {}, ['Heading'])],
+    menu: [h('li', {}, ['Item'])],
+    optgroup: [h('option', {}, ['Choice'])],
+    tbody: [h('tr', {}, [h('td', {}, ['Body'])])],
+    tfoot: [h('tr', {}, [h('td', {}, ['Footer'])])],
+    thead: [h('tr', {}, [h('th', {}, ['Column'])])],
+  }
+
+  test.each(cases)('finds $tag by its $role role', ({ tag, role, parent }) => {
+    const element = h(
+      tag,
+      tag === 'optgroup' ? { attrs: { label: 'Choices' } } : {},
+      childrenByTag[tag] ?? ['Example'],
+    )
+    const tree = h(parent, {}, [element])
+
+    expect(Scene.role(role)(tree)).toEqual(Option.some(element))
+  })
+
+  test.each(cases)(
+    'finds all $tag elements by their $role role',
+    ({ tag, role, parent }) => {
+      const element = h(
+        tag,
+        tag === 'optgroup' ? { attrs: { label: 'Choices' } } : {},
+        childrenByTag[tag] ?? ['Example'],
+      )
+      const tree = h(parent, {}, [element])
+
+      expect(Scene.all.role(role)(tree)).toEqual([element])
+    },
+  )
+
+  test('returns native blockquotes in traversal order', () => {
+    const first = h('blockquote', {}, ['First'])
+    const second = h('blockquote', {}, ['Second'])
+    const tree = h('div', {}, [h('div', {}, [first]), second])
+
+    expect(Scene.role('blockquote')(tree)).toEqual(Option.some(first))
+    expect(Scene.all.role('blockquote')(tree)).toEqual([first, second])
+  })
+
+  test('finds a native blockquote within the target container', () => {
+    const outside = h('blockquote', {}, ['Outside'])
+    const inside = h('blockquote', {}, ['Inside'])
+    const tree = h('div', {}, [
+      h('div', {}, [outside]),
+      h('div', { attrs: { id: 'target' } }, [inside]),
+    ])
+    const locator = Scene.within(
+      Scene.selector('#target'),
+      Scene.role('blockquote'),
+    )
+
+    expect(locator(tree)).toEqual(Option.some(inside))
+  })
+
+  test('filters native blockquotes by accessible name', () => {
+    const first = h('blockquote', { attrs: { 'aria-label': 'First quote' } }, [
+      'First',
+    ])
+    const second = h(
+      'blockquote',
+      { attrs: { 'aria-label': 'Second quote' } },
+      ['Second'],
+    )
+    const tree = h('div', {}, [first, second])
+
+    expect(Scene.role('blockquote', { name: 'Second quote' })(tree)).toEqual(
+      Option.some(second),
+    )
+    expect(
+      Scene.all.role('blockquote', { name: 'Second quote' })(tree),
+    ).toEqual([second])
+  })
+
+  test('keeps an explicit role authoritative over the native role', () => {
+    const element = h('blockquote', { attrs: { role: 'note' } }, ['Example'])
+
+    expect(Scene.role('note')(element)).toEqual(Option.some(element))
+    expect(Scene.all.role('note')(element)).toEqual([element])
+    expect(Scene.role('blockquote')(element)).toEqual(Option.none())
+    expect(Scene.all.role('blockquote')(element)).toEqual([])
+  })
+
+  test('finds an explicit blockquote role on a div', () => {
+    const element = h('div', { attrs: { role: 'blockquote' } }, ['Example'])
+
+    expect(Scene.role('blockquote')(element)).toEqual(Option.some(element))
+    expect(Scene.all.role('blockquote')(element)).toEqual([element])
+  })
+
+  test.each([
+    { tag: 'dd', role: 'definition' },
+    { tag: 'dl', role: 'list' },
+    { tag: 'dt', role: 'term' },
+    { tag: 'figcaption', role: 'caption' },
+    { tag: 'mark', role: 'mark' },
+  ])('does not infer the draft-only $tag to $role mapping', ({ tag, role }) => {
+    const element = h(tag, {}, ['Example'])
+
+    expect(Scene.role(role)(element)).toEqual(Option.none())
+    expect(Scene.all.role(role)(element)).toEqual([])
+  })
+
+  test('still finds a native blockquote by selector', () => {
+    const element = h('blockquote', {}, ['Example'])
+    const tree = h('div', {}, [element])
+
+    expect(Scene.selector('blockquote')(tree)).toEqual(Option.some(element))
+  })
+
+  test('does not infer a blockquote role for a neutral element', () => {
+    const element = h('div', {}, ['Example'])
+
+    expect(Scene.role('blockquote')(element)).toEqual(Option.none())
+    expect(Scene.all.role('blockquote')(element)).toEqual([])
   })
 })
 
@@ -1631,12 +2059,11 @@ describe('scene', () => {
   })
 
   test('clicking a disabled element throws a clear error', () => {
-    const submittingModel: Model = {
-      ...initialModel,
-      status: 'Submitting',
-      email: 'alice@example.com',
-      password: 'secret',
-    }
+    const submittingModel: Model = modifyFields(initialModel, {
+      status: () => 'Submitting',
+      email: () => 'alice@example.com',
+      password: () => 'secret',
+    })
 
     expect(() =>
       Scene.scene(
@@ -1664,11 +2091,10 @@ describe('scene', () => {
   })
 
   test('click dispatches the button Message', () => {
-    const loggedInModel: Model = {
-      ...initialModel,
-      status: 'LoggedIn',
-      username: 'alice',
-    }
+    const loggedInModel: Model = modifyFields(initialModel, {
+      status: () => 'LoggedIn',
+      username: () => 'alice',
+    })
 
     Scene.scene(
       { update, view },
@@ -1770,15 +2196,70 @@ describe('scene', () => {
       }),
     )
   })
+
+  test('typeContentEditable dispatches the rendered text through OnInput', () => {
+    Scene.scene(
+      { update: contentEditableUpdate, view: contentEditableView },
+      Scene.given(contentEditableInitialModel),
+      Scene.typeContentEditable(Scene.testId('editor'), 'Hello, world'),
+      Scene.expect(Scene.testId('editor')).toHaveText('Hello, world'),
+    )
+  })
+
+  test('typeContentEditable replaces the rendered text on the next input', () => {
+    Scene.scene(
+      { update: contentEditableUpdate, view: contentEditableView },
+      Scene.given(contentEditableInitialModel),
+      Scene.typeContentEditable(Scene.testId('editor'), 'first'),
+      Scene.typeContentEditable(Scene.testId('editor'), 'second'),
+      Scene.expect(Scene.testId('editor')).toHaveText('second'),
+    )
+  })
+
+  test('beforeInput lets update own contenteditable insertions', () => {
+    Scene.scene(
+      { update: contentEditableUpdate, view: contentEditableView },
+      Scene.given(contentEditableInitialModel),
+      Scene.beforeInput(Scene.testId('editor'), 'insertText', Option.some('A')),
+      Scene.beforeInput(Scene.testId('editor'), 'insertText', Option.some('B')),
+      Scene.expect(Scene.testId('editor')).toHaveText('AB'),
+    )
+  })
+
+  test('beforeInput records an unclaimed edit as ignored', () => {
+    Scene.scene(
+      { update: contentEditableUpdate, view: contentEditableView },
+      Scene.given(contentEditableInitialModel),
+      Scene.beforeInput(Scene.testId('editor'), 'insertText', Option.some('A')),
+      Scene.beforeInput(
+        Scene.testId('editor'),
+        'deleteContentBackward',
+        Option.none(),
+      ),
+      Scene.expectIgnored(),
+      Scene.expect(Scene.testId('editor')).toHaveText('A'),
+    )
+  })
+
+  test('keydown is self-targeted, so it reaches an OnKeyDownSelf handler', () => {
+    Scene.scene(
+      { update: keySelfUpdate, view: keySelfView },
+      Scene.given({ lastKey: '' }),
+      Scene.keydown(
+        Scene.role('application', { name: 'Self key press area' }),
+        'a',
+      ),
+      Scene.expect(Scene.label('Last key')).toHaveText('a'),
+    )
+  })
 })
 
 describe('scene with locators', () => {
   test('click accepts a Locator', () => {
-    const loggedInModel: Model = {
-      ...initialModel,
-      status: 'LoggedIn',
-      username: 'alice',
-    }
+    const loggedInModel: Model = modifyFields(initialModel, {
+      status: () => 'LoggedIn',
+      username: () => 'alice',
+    })
 
     Scene.scene(
       { update, view },
@@ -1949,11 +2430,10 @@ describe('scene with expect', () => {
   })
 
   test('toContainText checks substring', () => {
-    const loggedInModel: Model = {
-      ...initialModel,
-      status: 'LoggedIn',
-      username: 'alice',
-    }
+    const loggedInModel: Model = modifyFields(initialModel, {
+      status: () => 'LoggedIn',
+      username: () => 'alice',
+    })
 
     Scene.scene(
       { update, view },
@@ -2071,11 +2551,10 @@ describe('scene with expect', () => {
   })
 
   test('toBeEmpty passes for empty element', () => {
-    const loggedInModel: Model = {
-      ...initialModel,
-      status: 'LoggedIn',
-      username: 'alice',
-    }
+    const loggedInModel: Model = modifyFields(initialModel, {
+      status: () => 'LoggedIn',
+      username: () => 'alice',
+    })
     Scene.scene(
       { update, view: (_model, h) => view(loggedInModel, h) },
       Scene.given(loggedInModel),
@@ -2122,11 +2601,10 @@ describe('scene with expect', () => {
   })
 
   test('toHaveAccessibleName matches aria-label', () => {
-    const loggedInModel: Model = {
-      ...initialModel,
-      status: 'LoggedIn',
-      username: 'alice',
-    }
+    const loggedInModel: Model = modifyFields(initialModel, {
+      status: () => 'LoggedIn',
+      username: () => 'alice',
+    })
     Scene.scene(
       { update, view },
       Scene.given(loggedInModel),
@@ -2278,10 +2756,11 @@ describe('scene with file uploads', () => {
   test('changeFiles dispatches an empty array when no files are provided', () => {
     Scene.scene(
       { update: fileUploadUpdate, view: fileUploadView },
-      Scene.given({
-        ...fileUploadInitialModel,
-        receivedFiles: [resumePdf],
-      }),
+      Scene.given(
+        modifyFields(fileUploadInitialModel, {
+          receivedFiles: () => [resumePdf],
+        }),
+      ),
       Scene.changeFiles(Scene.label('resume'), []),
       Scene.expect(Scene.selector('[key="received-count"]')).toContainText(
         'count=0',
@@ -2372,12 +2851,11 @@ describe('scene with Command-based file upload flow', () => {
   const readingStatus = Scene.role('status')
   const errorAlert = Scene.role('alert')
 
-  const resumeSelectedModel: ResumeModel = {
-    ...resumeInitialModel,
-    maybeResume: Option.some(resumePdf),
-    maybePreviewDataUrl: Option.some(previewDataUrl),
-    readStatus: 'Idle',
-  }
+  const resumeSelectedModel: ResumeModel = modifyFields(resumeInitialModel, {
+    maybeResume: () => Option.some(resumePdf),
+    maybePreviewDataUrl: () => Option.some(previewDataUrl),
+    readStatus: () => 'Idle',
+  })
 
   test('happy path: click → resolve select → resolve preview → file visible', () => {
     Scene.scene(
@@ -2493,11 +2971,24 @@ describe('scene with Command-based file upload flow', () => {
 })
 
 describe('scene with expectAll', () => {
-  const loggedInModel: Model = {
-    ...initialModel,
-    status: 'LoggedIn',
-    username: 'alice',
-  }
+  const loggedInModel: Model = modifyFields(initialModel, {
+    status: () => 'LoggedIn',
+    username: () => 'alice',
+  })
+  const selectorGrammarView = (_model: Model, h: HtmlBuilder<LoginMessage>) =>
+    h.header(
+      [],
+      [
+        h.a(
+          [h.Href('/'), h.AriaLabel('Home')],
+          [h.svg([], [h.path([h.D('M0 0')])])],
+        ),
+        h.a(
+          [h.Href('/x'), h.AriaLabel('Open menu')],
+          [h.svg([], [h.path([h.D('')])])],
+        ),
+      ],
+    )
 
   test('toHaveCount matches the number of elements', () => {
     Scene.scene(
@@ -2545,6 +3036,22 @@ describe('scene with expectAll', () => {
       { update, view },
       Scene.given(initialModel),
       Scene.expectAll(Scene.all.role('button')).not.toHaveCount(3),
+    )
+  })
+
+  test('selector locators accept :not() and quoted values with whitespace', () => {
+    Scene.scene(
+      { update, view: selectorGrammarView },
+      Scene.given(initialModel),
+      Scene.expect(
+        Scene.selector('header a svg path[d]:not([d=""])'),
+      ).toHaveAttr('d', 'M0 0'),
+      Scene.expectAll(
+        Scene.all.selector('header a svg path[d]:not([d=""])'),
+      ).toHaveCount(1),
+      Scene.expectAll(
+        Scene.all.selector('a[aria-label="Open menu"]'),
+      ).toHaveCount(1),
     )
   })
 
@@ -2758,7 +3265,7 @@ describe('Scene.Subscription.emit', () => {
   })
 
   test('throws when unresolved Mounts are pending', () => {
-    const openModel = { ...mountInitialModel, isOpen: true }
+    const openModel = modifyFields(mountInitialModel, { isOpen: () => true })
     expect(() =>
       Scene.scene(
         { update: mountUpdate, view: mountView },
@@ -2771,7 +3278,7 @@ describe('Scene.Subscription.emit', () => {
   })
 
   test('throws when unacknowledged unmounts are pending', () => {
-    const openModel = { ...mountInitialModel, isOpen: true }
+    const openModel = modifyFields(mountInitialModel, { isOpen: () => true })
     expect(() =>
       Scene.scene(
         { update: mountUpdate, view: mountView },
@@ -2943,6 +3450,59 @@ describe('Scene.CustomElement.emit', () => {
       'color-changed',
       // @ts-expect-error detail must match the color-changed Schema
       { value: 5 },
+    )
+  })
+
+  test('accepts encoded detail and dispatches the decoded value', () => {
+    const transformedDetailElement = CustomElement.define({
+      tag: 'fk-transformed-detail',
+      properties: {},
+      events: { changed: Schema.NumberFromString },
+    })
+    const TransformedMessage = defineMessageUnion({
+      ChangedValue: { value: Schema.Number },
+    })
+    type TransformedMessage = typeof TransformedMessage.Type
+    const TransformedModel = Schema.Struct({ value: Schema.Number })
+    type TransformedModel = typeof TransformedModel.Type
+    const initialModel = TransformedModel.make({ value: 0 })
+    const update = (model: TransformedModel, message: TransformedMessage) =>
+      TransformedMessage.match<
+        Update.Return<TransformedModel, TransformedMessage>
+      >(message, {
+        ChangedValue: ({ value }) => ({
+          model: modifyFields(model, { value: () => value }),
+        }),
+      })
+    const view = (
+      model: TransformedModel,
+      h: HtmlBuilder<TransformedMessage>,
+    ) => {
+      const element = transformedDetailElement.withMessage(h)
+
+      return h.div(
+        [],
+        [
+          element([
+            element.OnChanged(value =>
+              TransformedMessage.ChangedValue({ value }),
+            ),
+          ]),
+          h.span([h.Role('status')], [globalThis.String(model.value)]),
+        ],
+      )
+    }
+
+    Scene.scene(
+      { update, view },
+      Scene.given(initialModel),
+      Scene.CustomElement.emit(
+        transformedDetailElement,
+        Scene.selector('fk-transformed-detail'),
+        'changed',
+        '5',
+      ),
+      Scene.expect(Scene.role('status')).toHaveText('5'),
     )
   })
 
@@ -3220,7 +3780,7 @@ describe('Scene OutMessage assertions', () => {
   test('preserves every OutMessage from Mount.resolveAll', () => {
     Scene.scene(
       { update: multipleMountOutMessagesUpdate, view: mountView },
-      Scene.given({ ...mountInitialModel, isOpen: true }),
+      Scene.given(modifyFields(mountInitialModel, { isOpen: () => true })),
       Scene.Mount.resolveAll(
         [FocusButton, MountPanelMessage.CompletedFocusButton()],
         [MeasurePanel, MountPanelMessage.MeasuredPanel({ width: 100 })],
@@ -3328,11 +3888,10 @@ describe('Scene.withViewInputs', () => {
 
 describe('scene with within', () => {
   test('within scopes a locator to a parent', () => {
-    const loggedInModel: Model = {
-      ...initialModel,
-      status: 'LoggedIn',
-      username: 'alice',
-    }
+    const loggedInModel: Model = modifyFields(initialModel, {
+      status: () => 'LoggedIn',
+      username: () => 'alice',
+    })
 
     Scene.scene(
       { update, view },
@@ -3377,11 +3936,10 @@ describe('scene with within', () => {
   })
 
   test('click works with within', () => {
-    const loggedInModel: Model = {
-      ...initialModel,
-      status: 'LoggedIn',
-      username: 'alice',
-    }
+    const loggedInModel: Model = modifyFields(initialModel, {
+      status: () => 'LoggedIn',
+      username: () => 'alice',
+    })
 
     Scene.scene(
       { update, view },
@@ -3415,11 +3973,10 @@ describe('scene with within', () => {
 })
 
 describe('scene with inside', () => {
-  const loggedInModel: Model = {
-    ...initialModel,
-    status: 'LoggedIn',
-    username: 'alice',
-  }
+  const loggedInModel: Model = modifyFields(initialModel, {
+    status: () => 'LoggedIn',
+    username: () => 'alice',
+  })
 
   test('inside scopes multiple assertion steps to a parent', () => {
     Scene.scene(
@@ -3522,6 +4079,184 @@ describe('scene with inside', () => {
         }),
       ),
     )
+  })
+})
+
+describe('RegExp text locators', () => {
+  test('accepts a RegExp in a single locator', () => {
+    const button = h('button', {}, 'Save 3 items')
+    expect(Option.getOrThrow(Scene.text(/Save \d+ items/)(button))).toBe(button)
+  })
+
+  test('accepts a RegExp in a multi-match locator', () => {
+    const button = h('button', {}, 'Save 3 items')
+    expect(Scene.all.text(/Save \d+ items/)(button)).toEqual([button])
+  })
+
+  test('honors anchors and the case-insensitive flag', () => {
+    const button = h('button', {}, 'SAVE 3 items')
+    expect(Option.getOrThrow(Scene.text(/^save \d+ items$/i)(button))).toBe(
+      button,
+    )
+    expect(Scene.all.text(/^save \d+ items$/i)(button)).toEqual([button])
+    expect(Option.isNone(Scene.text(/^save$/i)(button))).toBe(true)
+    expect(Scene.all.text(/^save$/i)(button)).toEqual([])
+  })
+
+  test('returns the descendant from a single locator and both matches from a multi-match locator', () => {
+    const button = h('button', {}, 'Save 3 items')
+    const tree = h('div', {}, [button])
+    expect(Option.getOrThrow(Scene.text(/Save \d+ items/)(tree))).toBe(button)
+    expect(Scene.all.text(/Save \d+ items/)(tree)).toEqual([tree, button])
+  })
+
+  test('restarts a global RegExp for every element and query', () => {
+    const firstButton = h('button', {}, 'Save')
+    const secondButton = h('button', {}, 'Save')
+    const tree = h('div', {}, [firstButton, secondButton])
+    const single = Scene.text(/^Save$/g)
+    const multiple = Scene.all.text(/^Save$/g)
+    expect(Option.getOrThrow(single(tree))).toBe(firstButton)
+    expect(multiple(tree)).toEqual([firstButton, secondButton])
+    expect(Option.getOrThrow(single(tree))).toBe(firstButton)
+    expect(multiple(tree)).toEqual([firstButton, secondButton])
+  })
+
+  test("restarts a sticky RegExp without changing the caller's lastIndex", () => {
+    const firstButton = h('button', {}, 'Save')
+    const secondButton = h('button', {}, 'xSave')
+    const tree = h('div', {}, ['Controls: ', firstButton, secondButton])
+    const pattern = /Save/gy
+    pattern.lastIndex = 2
+    const single = Scene.text(pattern)
+    const multiple = Scene.all.text(pattern)
+    expect(Option.getOrThrow(single(tree))).toBe(firstButton)
+    expect(pattern.lastIndex).toBe(2)
+    expect(multiple(tree)).toEqual([firstButton])
+    expect(pattern.lastIndex).toBe(2)
+    expect(Option.getOrThrow(single(tree))).toBe(firstButton)
+    expect(multiple(tree)).toEqual([firstButton])
+    expect(pattern.lastIndex).toBe(2)
+  })
+
+  test.each([undefined, true, false])(
+    'matches all text regardless of exact=%s',
+    exact => {
+      const button = h('button', {}, ['Save ', h('strong', {}, '3'), ' items'])
+      const options = exact === undefined ? undefined : { exact }
+      expect(
+        Option.getOrThrow(Scene.text(/^Save 3 items$/, options)(button)),
+      ).toBe(button)
+      expect(Scene.all.text(/^Save 3 items$/, options)(button)).toEqual([
+        button,
+      ])
+    },
+  )
+
+  test("uses the element's full text for a RegExp", () => {
+    const link = h('a', {}, ['Hello', h('span', {}, '→')])
+    expect(Option.getOrThrow(Scene.text(/Hello/)(link))).toBe(link)
+    expect(Scene.all.text(/Hello/)(link)).toEqual([link])
+    expect(Option.isNone(Scene.text(/^Hello$/)(link))).toBe(true)
+    expect(Scene.all.text(/^Hello$/)(link)).toEqual([])
+  })
+
+  test('includes RegExp syntax in locator and assertion descriptions', () => {
+    expect(Scene.text(/save/i).description).toBe('text /save/i')
+    expect(Scene.all.text(/save/i).description).toBe('all text /save/i')
+    expect(() =>
+      Scene.scene(
+        { update, view },
+        Scene.given(initialModel),
+        Scene.expect(Scene.text(/save/i)).toExist(),
+      ),
+    ).toThrow('text /save/i')
+  })
+
+  test('uses RegExp locators in scopes and Scene assertions', () => {
+    const firstButton = h('button', {}, 'Save 3 items')
+    const secondButton = h('button', {}, 'Save 3 items')
+    const tree = h('div', {}, [
+      h('section', { attrs: { 'data-testid': 'first' } }, [firstButton]),
+      h('section', { attrs: { 'data-testid': 'second' } }, [secondButton]),
+    ])
+    expect(
+      Option.getOrThrow(
+        Scene.within(
+          Scene.testId('second'),
+          Scene.text(/Save \d+ items/),
+        )(tree),
+      ),
+    ).toBe(secondButton)
+    Scene.scene(
+      { update, view },
+      Scene.given(initialModel),
+      Scene.expect(Scene.text(/Sign in/)).toExist(),
+    )
+  })
+
+  test.each([true, false])(
+    'accepts RegExp targets through public queries with exact=%s',
+    exact => {
+      const button = h('button', {}, 'Save')
+      const single = PublicScene.text(/Save/, { exact })
+      const multiple = PublicScene.all.text(/Save/, { exact })
+      expectTypeOf(single).toEqualTypeOf<PublicScene.Locator>()
+      expectTypeOf(multiple).toEqualTypeOf<PublicScene.LocatorAll>()
+      expect(Option.getOrThrow(single(button))).toBe(button)
+      expect(multiple(button)).toEqual([button])
+      expectTypeOf(
+        PublicScene.getByText(/Save/, { exact })(button),
+      ).toEqualTypeOf<Option.Option<VNode>>()
+      expectTypeOf(
+        PublicScene.getAllByText(/Save/, { exact })(button),
+      ).toEqualTypeOf<ReadonlyArray<VNode>>()
+      expect(
+        Option.getOrThrow(PublicScene.getByText(/Save/, { exact })(button)),
+      ).toBe(button)
+      expect(PublicScene.getAllByText(/Save/, { exact })(button)).toEqual([
+        button,
+      ])
+    },
+  )
+
+  test('keeps existing string matching behavior', () => {
+    const button = h('button', {}, 'Save 3 items')
+    expect(Scene.all.text('Save')(button)).toEqual([])
+    expect(Scene.all.text('Save', { exact: false })(button)).toEqual([button])
+    const link = h('a', {}, ['Hello', h('span', {}, '→')])
+    expect(Option.getOrThrow(Scene.text('Hello')(link))).toBe(link)
+    expect(Scene.all.text('Hello')(link)).toEqual([link])
+    expect(Scene.text('Hello').description).toBe('text "Hello"')
+    expect(Scene.all.text('Hello').description).toBe('all text "Hello"')
+  })
+
+  test('does not normalize whitespace or exclude hidden text for strings', () => {
+    const hidden = h('span', { attrs: { hidden: true } }, '  Save  ')
+    const tree = h('div', {}, [hidden])
+    expect(Option.getOrThrow(Scene.text('  Save  ')(tree))).toBe(hidden)
+    expect(Scene.all.text('  Save  ')(tree)).toEqual([tree, hidden])
+    expect(Option.isNone(Scene.text('Save')(tree))).toBe(true)
+  })
+
+  test('does not normalize whitespace or exclude hidden text for a RegExp', () => {
+    const hidden = h('span', { attrs: { hidden: true } }, '  Save  ')
+    const tree = h('div', {}, [hidden])
+    expect(Option.getOrThrow(Scene.text(/^  Save  $/)(tree))).toBe(hidden)
+    expect(Scene.all.text(/^  Save  $/)(tree)).toEqual([tree, hidden])
+    expect(Option.isNone(Scene.text(/^Save$/)(tree))).toBe(true)
+  })
+
+  test('continues to match an empty string', () => {
+    const empty = h('div', {})
+    expect(Option.getOrThrow(Scene.text('')(empty))).toBe(empty)
+    expect(Scene.all.text('')(empty)).toEqual([empty])
+  })
+
+  test('matches empty element text with an empty RegExp', () => {
+    const empty = h('div', {})
+    expect(Option.getOrThrow(Scene.text(/(?:)/)(empty))).toBe(empty)
+    expect(Scene.all.text(/(?:)/)(empty)).toEqual([empty])
   })
 })
 
@@ -3869,6 +4604,15 @@ describe('scene with pointer events', () => {
     )
   })
 
+  test('pointerDown passes a custom pointer ID to the handler', () => {
+    Scene.scene(
+      { update: pointerUpdate, view: pointerView },
+      Scene.given(pointerInitialModel),
+      Scene.pointerDown(Scene.label('pointer target'), { pointerId: 42 }),
+      Scene.expect(Scene.label('last pointer id')).toHaveText('42'),
+    )
+  })
+
   test('pointerDown defaults to mouse', () => {
     Scene.scene(
       { update: pointerUpdate, view: pointerView },
@@ -3972,7 +4716,7 @@ describe('scene mounts', () => {
   })
 
   test('expectExactMounts fails when an unexpected mount is rendered', () => {
-    const openModel = { ...mountInitialModel, isOpen: true }
+    const openModel = modifyFields(mountInitialModel, { isOpen: () => true })
     expect(() =>
       Scene.scene(
         { update: mountUpdate, view: mountView },
@@ -4007,7 +4751,7 @@ describe('scene mounts', () => {
   })
 
   test('resolveMount feeds the result Message through update', () => {
-    const openModel = { ...mountInitialModel, isOpen: true }
+    const openModel = modifyFields(mountInitialModel, { isOpen: () => true })
     Scene.scene(
       { update: mountUpdate, view: mountView },
       Scene.given(openModel),
@@ -4037,7 +4781,7 @@ describe('scene mounts', () => {
   })
 
   test('resolveAllMounts resolves a batch in order', () => {
-    const openModel = { ...mountInitialModel, isOpen: true }
+    const openModel = modifyFields(mountInitialModel, { isOpen: () => true })
     Scene.scene(
       { update: mountUpdate, view: mountView },
       Scene.given(openModel),
@@ -4052,7 +4796,7 @@ describe('scene mounts', () => {
   })
 
   test('resolved mounts that disappear between renders must be acknowledged with expectEnded', () => {
-    const openModel = { ...mountInitialModel, isOpen: true }
+    const openModel = modifyFields(mountInitialModel, { isOpen: () => true })
     Scene.scene(
       { update: mountUpdate, view: mountView },
       Scene.given(openModel),
@@ -4069,7 +4813,7 @@ describe('scene mounts', () => {
   })
 
   test('an interaction with an unresolved mount throws a clear error', () => {
-    const openModel = { ...mountInitialModel, isOpen: true }
+    const openModel = modifyFields(mountInitialModel, { isOpen: () => true })
     expect(() =>
       Scene.scene(
         { update: mountUpdate, view: mountView },
@@ -4089,7 +4833,7 @@ describe('scene mounts', () => {
   })
 
   test('a resolved mount stays resolved across re-renders', () => {
-    const openModel = { ...mountInitialModel, isOpen: true }
+    const openModel = modifyFields(mountInitialModel, { isOpen: () => true })
     Scene.scene(
       { update: mountUpdate, view: mountView },
       Scene.given(openModel),
@@ -4203,14 +4947,14 @@ describe('scene mounts', () => {
   })
 
   test('a pending mount whose element disappears must be acknowledged with expectEnded', () => {
-    const openModel = { ...mountInitialModel, isOpen: true }
+    const openModel = modifyFields(mountInitialModel, { isOpen: () => true })
 
     const closingUpdate = (
       model: typeof mountInitialModel,
       message: MountPanelMessage,
     ): Update.Return<typeof mountInitialModel, MountPanelMessage> =>
       message._tag === 'CompletedFocusButton'
-        ? { model: { ...model, isOpen: false } }
+        ? { model: modifyFields(model, { isOpen: () => false }) }
         : mountUpdate(model, message)
 
     Scene.scene(
@@ -4242,14 +4986,14 @@ describe('scene mounts', () => {
   })
 
   test('an unacknowledged unmount throws at end of scene', () => {
-    const openModel = { ...mountInitialModel, isOpen: true }
+    const openModel = modifyFields(mountInitialModel, { isOpen: () => true })
 
     const closingUpdate = (
       model: typeof mountInitialModel,
       message: MountPanelMessage,
     ): Update.Return<typeof mountInitialModel, MountPanelMessage> =>
       message._tag === 'CompletedFocusButton'
-        ? { model: { ...model, isOpen: false } }
+        ? { model: modifyFields(model, { isOpen: () => false }) }
         : mountUpdate(model, message)
 
     expect(() => {
@@ -4262,7 +5006,7 @@ describe('scene mounts', () => {
   })
 
   test('a previously resolved mount whose element disappears must still be acknowledged', () => {
-    const openModel = { ...mountInitialModel, isOpen: true }
+    const openModel = modifyFields(mountInitialModel, { isOpen: () => true })
     expect(() => {
       Scene.scene(
         { update: mountUpdate, view: mountView },
@@ -4288,7 +5032,7 @@ describe('scene mounts', () => {
   })
 
   test('an interaction throws when a previous unmount was not acknowledged', () => {
-    const openModel = { ...mountInitialModel, isOpen: true }
+    const openModel = modifyFields(mountInitialModel, { isOpen: () => true })
     expect(() => {
       Scene.scene(
         { update: mountUpdate, view: mountView },
@@ -4305,7 +5049,7 @@ describe('scene mounts', () => {
   })
 
   test('a same-key mount that disappears and reappears starts fresh as pending', () => {
-    const openModel = { ...mountInitialModel, isOpen: true }
+    const openModel = modifyFields(mountInitialModel, { isOpen: () => true })
     Scene.scene(
       { update: mountUpdate, view: mountView },
       Scene.given(openModel),
