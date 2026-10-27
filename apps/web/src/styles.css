@@ -1,0 +1,268 @@
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
+@import "@workspace/ui/globals.css";
+
+@layer base {
+	html {
+		scroll-padding-top: 6rem;
+	}
+	:root {
+		color-scheme: light;
+	}
+	:root.dark {
+		color-scheme: dark;
+	}
+	/* Geist Mono draws `=>` as an arrow. Code should show the characters you type. */
+	code,
+	pre,
+	.font-mono {
+		font-variant-ligatures: none;
+	}
+}
+
+/* Shiki writes both themes as CSS variables. The `dark` class picks one. */
+.shiki,
+.shiki span {
+	color: var(--shiki-light);
+}
+.dark .shiki,
+.dark .shiki span {
+	color: var(--shiki-dark);
+}
+.code-block pre {
+	tab-size: 2;
+	background: transparent;
+	width: max-content;
+	min-width: 100%;
+}
+
+/* Guides rendered from the package Markdown. */
+.prose-docs {
+	@apply text-[15px] leading-7 text-foreground/90;
+
+	& h2 {
+		@apply mt-12 mb-4 scroll-mt-20 text-2xl font-semibold tracking-tight text-foreground;
+	}
+	& h3 {
+		@apply mt-8 mb-3 scroll-mt-20 text-lg font-semibold tracking-tight text-foreground;
+	}
+	& h4 {
+		@apply mt-6 mb-2 font-semibold text-foreground;
+	}
+	& p {
+		@apply my-4;
+	}
+	& a {
+		@apply font-medium text-link underline decoration-link/30 underline-offset-4 transition-colors hover:decoration-link;
+	}
+	& ul {
+		@apply my-4 list-disc pl-6;
+	}
+	& ol {
+		@apply my-4 list-decimal pl-6;
+	}
+	& li {
+		@apply my-1.5 pl-1;
+	}
+	& li > ul,
+	& li > ol {
+		@apply my-1.5;
+	}
+	& strong {
+		@apply font-semibold text-foreground;
+	}
+	& :not(pre) > code {
+		@apply rounded-[4px] border bg-muted/60 px-1 py-0.5 font-mono text-[0.85em];
+	}
+	& blockquote {
+		@apply my-5 border-l-2 border-link pl-4 text-muted-foreground;
+	}
+	& hr {
+		@apply my-10;
+	}
+	& table {
+		@apply my-6 block w-full overflow-x-auto text-sm;
+	}
+	& th {
+		@apply border-b px-3 py-2 text-left font-semibold text-foreground;
+	}
+	& td {
+		@apply border-b px-3 py-2 align-top;
+	}
+	& th:first-child,
+	& td:first-child {
+		@apply pl-0;
+	}
+	& > div:first-child > :first-child {
+		@apply mt-0;
+	}
+}
+
+/* The floating nav and the phone menu. Nothing else on the site floats. */
+.glass {
+	@apply border border-foreground/10 bg-background/80 backdrop-blur-xl;
+	box-shadow: 0 8px 24px -12px oklch(0 0 0 / 0.25);
+}
+
+/* Large surfaces: flat, with a hairline border. */
+.surface {
+	@apply border border-foreground/12 bg-card;
+}
+
+/* Scenes rise into place as they enter the screen. */
+@media (prefers-reduced-motion: no-preference) {
+	@supports (animation-timeline: view()) {
+		@keyframes reveal {
+			from {
+				opacity: 0;
+				translate: 0 32px;
+			}
+		}
+		.reveal {
+			animation: reveal linear both;
+			animation-timeline: view();
+			animation-range: entry 0% entry 60%;
+		}
+	}
+}
+
+/* Scene two: features move into Programs as the reader scrolls through the stage. */
+.migrate-stage {
+	view-timeline-name: --migrate;
+}
+.feature-node .status-program {
+	opacity: 0;
+}
+@media (prefers-reduced-motion: no-preference) {
+	@supports (animation-timeline: view()) {
+		.migrate-stage {
+			height: 320vh;
+		}
+		.migrate-sticky {
+			position: sticky;
+			top: 0;
+			height: 100svh;
+		}
+		@keyframes feature-moves {
+			to {
+				border-color: color-mix(in oklch, var(--c-model) 60%, transparent);
+				background-color: color-mix(in oklch, var(--c-model) 6%, transparent);
+			}
+		}
+		@keyframes fade-out {
+			to {
+				opacity: 0;
+			}
+		}
+		@keyframes fade-in {
+			to {
+				opacity: 1;
+			}
+		}
+		.feature-node,
+		.feature-node .status-react,
+		.feature-node .status-program {
+			animation-timing-function: linear;
+			animation-fill-mode: both;
+			animation-timeline: --migrate;
+		}
+		.feature-node {
+			animation-name: feature-moves;
+		}
+		.feature-node .status-react {
+			animation-name: fade-out;
+		}
+		.feature-node .status-program {
+			animation-name: fade-in;
+		}
+		.feature-node:nth-child(2),
+		.feature-node:nth-child(2) span {
+			animation-range: contain 4% contain 14%;
+		}
+		.feature-node:nth-child(3),
+		.feature-node:nth-child(3) span {
+			animation-range: contain 30% contain 40%;
+		}
+		.feature-node:nth-child(1),
+		.feature-node:nth-child(1) span {
+			animation-range: contain 56% contain 66%;
+		}
+		.feature-node:nth-child(4),
+		.feature-node:nth-child(4) span {
+			animation-range: contain 82% contain 92%;
+		}
+		@keyframes caption {
+			0% {
+				opacity: 0;
+				translate: 0 12px;
+			}
+			15%,
+			85% {
+				opacity: 1;
+				translate: 0 0;
+			}
+			100% {
+				opacity: 0;
+				translate: 0 -12px;
+			}
+		}
+		.migrate-caption {
+			position: absolute;
+			inset-inline: 0;
+			opacity: 0;
+			animation: caption linear both;
+			animation-timeline: --migrate;
+		}
+		.migrate-caption:nth-child(1) {
+			animation-range: contain 0% contain 28%;
+		}
+		.migrate-caption:nth-child(2) {
+			animation-range: contain 27% contain 76%;
+		}
+		.migrate-caption:nth-child(3) {
+			animation-range: contain 75% contain 100%;
+		}
+	}
+}
+/* Without scroll-driven animations, show where the story ends. */
+@supports not (animation-timeline: view()) {
+	.feature-node {
+		border-color: var(--c-model);
+	}
+	.feature-node .status-react {
+		opacity: 0;
+	}
+	.feature-node .status-program {
+		opacity: 1;
+	}
+	.migrate-caption:not(:last-child) {
+		display: none;
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.feature-node {
+		border-color: var(--c-model);
+	}
+	.feature-node .status-react {
+		opacity: 0;
+	}
+	.feature-node .status-program {
+		opacity: 1;
+	}
+	.migrate-caption:not(:last-child) {
+		display: none;
+	}
+}
+
+/* The phone menu slides in. */
+@media (prefers-reduced-motion: no-preference) {
+	@keyframes sheet-in {
+		from {
+			opacity: 0;
+			translate: 0 -6px;
+		}
+	}
+	.sheet-panel {
+		animation: sheet-in 180ms ease-out both;
+	}
+}

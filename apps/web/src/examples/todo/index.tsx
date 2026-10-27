@@ -20,7 +20,7 @@ import { Filter, TodoItem } from "./model"
 import { TodoRepository } from "./repository"
 import * as TodoForm from "./todo-form"
 
-const todoRoute = getRouteApi("/todo")
+const todoRoute = getRouteApi("/examples/todo")
 
 const ItemsData = AsyncData.Schema(Schema.Array(TodoItem), Schema.String)
 
@@ -44,15 +44,15 @@ const Message = defineMessageUnion({
 	ClickedRetryLoad: {},
 	/** The route search changed, e.g. through a filter link or browser history. */
 	ChangedFilter: { filter: Filter },
-	/** Silent ack from the NavigateFilter Command — Model already updated in update. */
-	NavigationDone: {},
+	/** The NavigateFilter Command finished. update already changed the Model, so it does nothing. */
+	CompletedNavigateFilter: {},
 	SettledFetchTodos: {
 		result: Schema.Result(Schema.Array(TodoItem), Schema.String),
 	},
 	SettledWriteTodos: {
 		result: Schema.Result(Schema.Array(TodoItem), Schema.String),
 	},
-	SettledClearCompleted: {
+	SettledPersistClearCompleted: {
 		result: Schema.Result(Schema.Array(TodoItem), Schema.String),
 	},
 })
@@ -87,18 +87,18 @@ const startFetch = (model: Model): UpdateReturn =>
 		onSome: (next) => ({ model: modifyFields(model, { items: () => next }), commands: [FetchTodos()] }),
 	})
 
-/** Programmatic URL writes — the only place that calls `router.navigate`. */
+/** Writes the filter to the URL. This is the only place that calls `router.navigate`. */
 const NavigateFilter = Command.define("NavigateFilter", {
 	args: { filter: Filter },
-	messages: [Message.NavigationDone],
+	messages: [Message.CompletedNavigateFilter],
 	execute: ({ filter }) =>
 		Effect.promise(() =>
 			getRouter().navigate({
-				to: "/todo",
+				to: "/examples/todo",
 				search: { filter },
 				replace: true,
 			})
-		).pipe(Effect.as(Message.NavigationDone())),
+		).pipe(Effect.as(Message.CompletedNavigateFilter())),
 })
 
 /** Runs a repository call, keeping its failure as a user-facing message in the Result. */
@@ -151,10 +151,10 @@ const PersistRemove = Command.define("PersistRemove", {
 })
 
 const PersistClearCompleted = Command.define("PersistClearCompleted", {
-	messages: [Message.SettledClearCompleted],
+	messages: [Message.SettledPersistClearCompleted],
 	execute: callRepository("Couldn’t clear completed", (repo) =>
 		repo.updateTodos((todos) => todos.filter((item) => !item.done))
-	).pipe(Effect.map((result) => Message.SettledClearCompleted({ result }))),
+	).pipe(Effect.map((result) => Message.SettledPersistClearCompleted({ result }))),
 })
 
 /** Seeds the filter from the route search. Later search changes arrive as `ChangedFilter`. */
@@ -194,10 +194,10 @@ const update = (model: Model, message: Message): UpdateReturn =>
 		RemovedItem: ({ id }) => withRevalidate(model, PersistRemove({ id })),
 		ClickedClearCompleted: () => withRevalidate(model, PersistClearCompleted()),
 		ClickedRetryLoad: () => startFetch(model),
-		NavigationDone: () => ({ model }),
+		CompletedNavigateFilter: () => ({ model }),
 		SettledFetchTodos: ({ result }) => ({ model: applySettledItems(model, result) }),
 		SettledWriteTodos: ({ result }) => ({ model: applySettledItems(model, result) }),
-		SettledClearCompleted({ result }) {
+		SettledPersistClearCompleted({ result }) {
 			const next = applySettledItems(model, result)
 			if (model.filter === "completed" && Result.isSuccess(result)) {
 				return {
@@ -250,7 +250,7 @@ function FilterNav() {
 						nativeButton={false}
 						render={
 							<Link
-								to="/todo"
+								to="/examples/todo"
 								search={{ filter: link.filter }}
 							/>
 						}
@@ -282,7 +282,7 @@ function TodoRow(props: { item: TodoItem; disabled: boolean }) {
 	const checkboxId = `todo-${item.id}`
 
 	return (
-		<li className="group flex items-center gap-3 rounded-2xl px-2 py-2 transition-colors hover:bg-muted/60">
+		<li className="group flex items-center gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-muted/60">
 			<Checkbox
 				id={checkboxId}
 				checked={item.done}
@@ -377,10 +377,7 @@ function View() {
 	const send = useSend()
 
 	return (
-		<ExampleShell
-			title="Todo"
-			description="List state is AsyncData: load/refresh via Commands, settle Results back into the Model."
-		>
+		<ExampleShell slug="todo">
 			<div className="mx-auto flex w-full max-w-lg flex-1 flex-col px-6 pt-10 pb-16">
 				<TodoForm.Provider
 					from={TodoApp}

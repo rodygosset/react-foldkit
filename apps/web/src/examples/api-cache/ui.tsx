@@ -5,6 +5,7 @@ import { Array, DateTime, Option, Schema } from "effect"
 import * as AsyncData from "foldkit/asyncData"
 import type { ReactNode } from "react"
 import { ExampleShell } from "../../components/example-shell"
+import type { ExampleSlug } from "../../site/examples"
 import type { Post, PostDetail, Stats } from "./data"
 
 export const Tab = Schema.Literals(["Posts", "Stats"])
@@ -15,7 +16,7 @@ const formatFetchedAt = (fetchedAt: number): string =>
 
 function ErrorPanel(props: { error: string; onRetry: () => void }) {
 	return (
-		<div className="flex items-center justify-between gap-4 rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-destructive">
+		<div className="flex items-center justify-between gap-4 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-destructive">
 			<p className="text-sm">{props.error}</p>
 			<Button
 				variant="destructive"
@@ -37,7 +38,7 @@ export function AsyncDataPanel<TData, TError>(props: {
 }) {
 	return AsyncData.matchData(props.data, {
 		onEmpty: () => (
-			<div className="rounded-2xl bg-muted/60 px-4 py-8 text-center text-sm text-muted-foreground">
+			<div className="rounded-lg bg-muted/60 px-4 py-8 text-center text-sm text-muted-foreground">
 				{props.loadingText}
 			</div>
 		),
@@ -100,7 +101,7 @@ export function PostListItems(props: {
 				<li key={post.id}>
 					<button
 						type="button"
-						className="flex w-full items-center justify-between gap-4 rounded-2xl px-4 py-3 text-left transition-colors hover:bg-muted/60"
+						className="flex w-full items-center justify-between gap-4 rounded-lg px-4 py-3 text-left transition-colors hover:bg-muted/60"
 						onClick={() => props.onSelect(post.id)}
 					>
 						<div className="min-w-0">
@@ -130,7 +131,7 @@ export function BackButton(props: { onClick: () => void }) {
 
 export function PostDetailCard(props: { detail: PostDetail; fetchedAt: number; note: string }) {
 	return (
-		<article className="flex flex-col gap-3 rounded-2xl bg-muted/60 px-5 py-5">
+		<article className="flex flex-col gap-3 rounded-lg bg-muted/60 px-5 py-5">
 			<h2 className="text-2xl font-semibold tracking-tight">{props.detail.title}</h2>
 			<p className="text-sm text-muted-foreground">By {props.detail.author}</p>
 			<p className="leading-relaxed text-foreground/90">{props.detail.body}</p>
@@ -143,7 +144,7 @@ export function PostDetailCard(props: { detail: PostDetail; fetchedAt: number; n
 
 function StatCard(props: { label: string; value: string }) {
 	return (
-		<div className="flex flex-col gap-1 rounded-2xl bg-muted/60 px-4 py-3">
+		<div className="flex flex-col gap-1 rounded-lg bg-muted/60 px-4 py-3">
 			<p className="text-sm text-muted-foreground">{props.label}</p>
 			<p className="text-2xl font-semibold tracking-tight tabular-nums">{props.value}</p>
 		</div>
@@ -201,17 +202,13 @@ function TabList(props: { activeTab: Tab; onSelect: (tab: Tab) => void }) {
 
 /** Lays out an API cache example: the shell, the tab list, and the active tab's panel. */
 export function ApiCacheLayout(props: {
-	title: string
-	description: string
+	slug: ExampleSlug
 	activeTab: Tab
 	onSelectTab: (tab: Tab) => void
 	children: ReactNode
 }) {
 	return (
-		<ExampleShell
-			title={props.title}
-			description={props.description}
-		>
+		<ExampleShell slug={props.slug}>
 			<div className="mx-auto flex w-full max-w-lg flex-1 flex-col gap-6 px-6 pt-8 pb-16">
 				<TabList
 					activeTab={props.activeTab}

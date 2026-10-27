@@ -185,12 +185,18 @@ describe("MCP v2025-06-18 schema", () => {
     assert.strictEqual(message.content.type, "resource_link")
   })
 
-  it("omits later core annotation fields", () => {
+  it("does not expose future annotations or named extension capabilities", () => {
     const annotations = Schema.decodeUnknownSync(McpSchema2025_06_18.Annotations)({
       audience: ["user"],
       lastModified: "2026-07-26"
     })
+    const capabilities = Schema.decodeUnknownSync(McpSchema2025_06_18.ServerCapabilities)({
+      completions: {},
+      extensions: { "example/extension": { enabled: true } }
+    })
+
     assert.notProperty(annotations, "lastModified")
+    assert.notProperty(capabilities, "extensions")
   })
 })
 

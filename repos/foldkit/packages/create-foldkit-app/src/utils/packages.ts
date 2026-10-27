@@ -72,6 +72,7 @@ const ReleaseManifest = Schema.Struct({
 })
 
 const TEMPLATE_DEV_DEPENDENCIES = [
+  '@effect/tsgo',
   '@foldkit/devtools',
   '@foldkit/vite-plugin',
   '@foldkit/devtools-mcp',
@@ -79,6 +80,7 @@ const TEMPLATE_DEV_DEPENDENCIES = [
   'happy-dom',
   'oxfmt',
   'oxlint',
+  'oxlint-tsgolint',
   'vitest',
 ]
 
@@ -151,7 +153,7 @@ export const dependencyExample = (scaffold: Scaffold): string =>
 
 /**
  * The devDependencies a scaffold needs beyond the template tooling and the
- * example's own list. The server-rendered scaffolds ship Node build and host
+ * example's own list. The server-rendered scaffolds ship Node build
  * scripts, so they need `@types/node` to typecheck.
  */
 export const scaffoldDevDependencies = (

@@ -257,8 +257,7 @@ function View() {
 
 	return (
 		<ApiCacheLayout
-			title="API Cache (Query)"
-			description="The same Model-as-cache TEA as API Cache. Foldkit Query owns fetch completion, retry, deduplication, and keyed slots. reset clears post details when leaving a post. The parent folds Query Messages and handles user intent."
+			slug="api-cache-query"
 			activeTab={activeTab}
 			onSelectTab={(tab) => send.ClickedTab({ tab })}
 		>

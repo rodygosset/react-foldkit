@@ -10,115 +10,154 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as ApiCacheRouteImport } from './routes/api-cache'
-import { Route as ApiCacheHttpApiRouteImport } from './routes/api-cache-http-api'
-import { Route as ApiCacheQueryRouteImport } from './routes/api-cache-query'
-import { Route as CounterRouteImport } from './routes/counter'
-import { Route as StopwatchRouteImport } from './routes/stopwatch'
-import { Route as TodoRouteImport } from './routes/todo'
+import { Route as DocsIndexRouteImport } from './routes/docs/index'
+import { Route as DocsSlugRouteImport } from './routes/docs/$slug'
+import { Route as ExamplesIndexRouteImport } from './routes/examples/index'
+import { Route as ExamplesApiCacheRouteImport } from './routes/examples/api-cache'
+import { Route as ExamplesApiCacheHttpApiRouteImport } from './routes/examples/api-cache-http-api'
+import { Route as ExamplesApiCacheQueryRouteImport } from './routes/examples/api-cache-query'
+import { Route as ExamplesCounterRouteImport } from './routes/examples/counter'
+import { Route as ExamplesStopwatchRouteImport } from './routes/examples/stopwatch'
+import { Route as ExamplesTodoRouteImport } from './routes/examples/todo'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiCacheRoute = ApiCacheRouteImport.update({
-  id: '/api-cache',
-  path: '/api-cache',
+const DocsIndexRoute = DocsIndexRouteImport.update({
+  id: '/docs/',
+  path: '/docs/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiCacheHttpApiRoute = ApiCacheHttpApiRouteImport.update({
-  id: '/api-cache-http-api',
-  path: '/api-cache-http-api',
+const DocsSlugRoute = DocsSlugRouteImport.update({
+  id: '/docs/$slug',
+  path: '/docs/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiCacheQueryRoute = ApiCacheQueryRouteImport.update({
-  id: '/api-cache-query',
-  path: '/api-cache-query',
+const ExamplesIndexRoute = ExamplesIndexRouteImport.update({
+  id: '/examples/',
+  path: '/examples/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const CounterRoute = CounterRouteImport.update({
-  id: '/counter',
-  path: '/counter',
+const ExamplesApiCacheRoute = ExamplesApiCacheRouteImport.update({
+  id: '/examples/api-cache',
+  path: '/examples/api-cache',
   getParentRoute: () => rootRouteImport,
 } as any)
-const StopwatchRoute = StopwatchRouteImport.update({
-  id: '/stopwatch',
-  path: '/stopwatch',
+const ExamplesApiCacheHttpApiRoute = ExamplesApiCacheHttpApiRouteImport.update({
+  id: '/examples/api-cache-http-api',
+  path: '/examples/api-cache-http-api',
   getParentRoute: () => rootRouteImport,
 } as any)
-const TodoRoute = TodoRouteImport.update({
-  id: '/todo',
-  path: '/todo',
+const ExamplesApiCacheQueryRoute = ExamplesApiCacheQueryRouteImport.update({
+  id: '/examples/api-cache-query',
+  path: '/examples/api-cache-query',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ExamplesCounterRoute = ExamplesCounterRouteImport.update({
+  id: '/examples/counter',
+  path: '/examples/counter',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ExamplesStopwatchRoute = ExamplesStopwatchRouteImport.update({
+  id: '/examples/stopwatch',
+  path: '/examples/stopwatch',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ExamplesTodoRoute = ExamplesTodoRouteImport.update({
+  id: '/examples/todo',
+  path: '/examples/todo',
   getParentRoute: () => rootRouteImport,
 } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/api-cache': typeof ApiCacheRoute
-  '/api-cache-http-api': typeof ApiCacheHttpApiRoute
-  '/api-cache-query': typeof ApiCacheQueryRoute
-  '/counter': typeof CounterRoute
-  '/stopwatch': typeof StopwatchRoute
-  '/todo': typeof TodoRoute
+  '/docs/$slug': typeof DocsSlugRoute
+  '/examples/api-cache': typeof ExamplesApiCacheRoute
+  '/examples/api-cache-http-api': typeof ExamplesApiCacheHttpApiRoute
+  '/examples/api-cache-query': typeof ExamplesApiCacheQueryRoute
+  '/examples/counter': typeof ExamplesCounterRoute
+  '/examples/stopwatch': typeof ExamplesStopwatchRoute
+  '/examples/todo': typeof ExamplesTodoRoute
+  '/docs/': typeof DocsIndexRoute
+  '/examples/': typeof ExamplesIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/api-cache': typeof ApiCacheRoute
-  '/api-cache-http-api': typeof ApiCacheHttpApiRoute
-  '/api-cache-query': typeof ApiCacheQueryRoute
-  '/counter': typeof CounterRoute
-  '/stopwatch': typeof StopwatchRoute
-  '/todo': typeof TodoRoute
+  '/docs/$slug': typeof DocsSlugRoute
+  '/examples/api-cache': typeof ExamplesApiCacheRoute
+  '/examples/api-cache-http-api': typeof ExamplesApiCacheHttpApiRoute
+  '/examples/api-cache-query': typeof ExamplesApiCacheQueryRoute
+  '/examples/counter': typeof ExamplesCounterRoute
+  '/examples/stopwatch': typeof ExamplesStopwatchRoute
+  '/examples/todo': typeof ExamplesTodoRoute
+  '/docs': typeof DocsIndexRoute
+  '/examples': typeof ExamplesIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/api-cache': typeof ApiCacheRoute
-  '/api-cache-http-api': typeof ApiCacheHttpApiRoute
-  '/api-cache-query': typeof ApiCacheQueryRoute
-  '/counter': typeof CounterRoute
-  '/stopwatch': typeof StopwatchRoute
-  '/todo': typeof TodoRoute
+  '/docs/$slug': typeof DocsSlugRoute
+  '/examples/api-cache': typeof ExamplesApiCacheRoute
+  '/examples/api-cache-http-api': typeof ExamplesApiCacheHttpApiRoute
+  '/examples/api-cache-query': typeof ExamplesApiCacheQueryRoute
+  '/examples/counter': typeof ExamplesCounterRoute
+  '/examples/stopwatch': typeof ExamplesStopwatchRoute
+  '/examples/todo': typeof ExamplesTodoRoute
+  '/docs/': typeof DocsIndexRoute
+  '/examples/': typeof ExamplesIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
-    | '/api-cache'
-    | '/api-cache-http-api'
-    | '/api-cache-query'
-    | '/counter'
-    | '/stopwatch'
-    | '/todo'
+    | '/docs/$slug'
+    | '/examples/api-cache'
+    | '/examples/api-cache-http-api'
+    | '/examples/api-cache-query'
+    | '/examples/counter'
+    | '/examples/stopwatch'
+    | '/examples/todo'
+    | '/docs/'
+    | '/examples/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/api-cache'
-    | '/api-cache-http-api'
-    | '/api-cache-query'
-    | '/counter'
-    | '/stopwatch'
-    | '/todo'
+    | '/docs/$slug'
+    | '/examples/api-cache'
+    | '/examples/api-cache-http-api'
+    | '/examples/api-cache-query'
+    | '/examples/counter'
+    | '/examples/stopwatch'
+    | '/examples/todo'
+    | '/docs'
+    | '/examples'
   id:
     | '__root__'
     | '/'
-    | '/api-cache'
-    | '/api-cache-http-api'
-    | '/api-cache-query'
-    | '/counter'
-    | '/stopwatch'
-    | '/todo'
+    | '/docs/$slug'
+    | '/examples/api-cache'
+    | '/examples/api-cache-http-api'
+    | '/examples/api-cache-query'
+    | '/examples/counter'
+    | '/examples/stopwatch'
+    | '/examples/todo'
+    | '/docs/'
+    | '/examples/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  ApiCacheRoute: typeof ApiCacheRoute
-  ApiCacheHttpApiRoute: typeof ApiCacheHttpApiRoute
-  ApiCacheQueryRoute: typeof ApiCacheQueryRoute
-  CounterRoute: typeof CounterRoute
-  StopwatchRoute: typeof StopwatchRoute
-  TodoRoute: typeof TodoRoute
+  DocsSlugRoute: typeof DocsSlugRoute
+  ExamplesApiCacheRoute: typeof ExamplesApiCacheRoute
+  ExamplesApiCacheHttpApiRoute: typeof ExamplesApiCacheHttpApiRoute
+  ExamplesApiCacheQueryRoute: typeof ExamplesApiCacheQueryRoute
+  ExamplesCounterRoute: typeof ExamplesCounterRoute
+  ExamplesStopwatchRoute: typeof ExamplesStopwatchRoute
+  ExamplesTodoRoute: typeof ExamplesTodoRoute
+  DocsIndexRoute: typeof DocsIndexRoute
+  ExamplesIndexRoute: typeof ExamplesIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -130,46 +169,67 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api-cache': {
-      id: '/api-cache'
-      path: '/api-cache'
-      fullPath: '/api-cache'
-      preLoaderRoute: typeof ApiCacheRouteImport
+    '/docs/': {
+      id: '/docs/'
+      path: '/docs'
+      fullPath: '/docs/'
+      preLoaderRoute: typeof DocsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api-cache-http-api': {
-      id: '/api-cache-http-api'
-      path: '/api-cache-http-api'
-      fullPath: '/api-cache-http-api'
-      preLoaderRoute: typeof ApiCacheHttpApiRouteImport
+    '/docs/$slug': {
+      id: '/docs/$slug'
+      path: '/docs/$slug'
+      fullPath: '/docs/$slug'
+      preLoaderRoute: typeof DocsSlugRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api-cache-query': {
-      id: '/api-cache-query'
-      path: '/api-cache-query'
-      fullPath: '/api-cache-query'
-      preLoaderRoute: typeof ApiCacheQueryRouteImport
+    '/examples/': {
+      id: '/examples/'
+      path: '/examples'
+      fullPath: '/examples/'
+      preLoaderRoute: typeof ExamplesIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/counter': {
-      id: '/counter'
-      path: '/counter'
-      fullPath: '/counter'
-      preLoaderRoute: typeof CounterRouteImport
+    '/examples/api-cache': {
+      id: '/examples/api-cache'
+      path: '/examples/api-cache'
+      fullPath: '/examples/api-cache'
+      preLoaderRoute: typeof ExamplesApiCacheRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/stopwatch': {
-      id: '/stopwatch'
-      path: '/stopwatch'
-      fullPath: '/stopwatch'
-      preLoaderRoute: typeof StopwatchRouteImport
+    '/examples/api-cache-http-api': {
+      id: '/examples/api-cache-http-api'
+      path: '/examples/api-cache-http-api'
+      fullPath: '/examples/api-cache-http-api'
+      preLoaderRoute: typeof ExamplesApiCacheHttpApiRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/todo': {
-      id: '/todo'
-      path: '/todo'
-      fullPath: '/todo'
-      preLoaderRoute: typeof TodoRouteImport
+    '/examples/api-cache-query': {
+      id: '/examples/api-cache-query'
+      path: '/examples/api-cache-query'
+      fullPath: '/examples/api-cache-query'
+      preLoaderRoute: typeof ExamplesApiCacheQueryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/examples/counter': {
+      id: '/examples/counter'
+      path: '/examples/counter'
+      fullPath: '/examples/counter'
+      preLoaderRoute: typeof ExamplesCounterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/examples/stopwatch': {
+      id: '/examples/stopwatch'
+      path: '/examples/stopwatch'
+      fullPath: '/examples/stopwatch'
+      preLoaderRoute: typeof ExamplesStopwatchRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/examples/todo': {
+      id: '/examples/todo'
+      path: '/examples/todo'
+      fullPath: '/examples/todo'
+      preLoaderRoute: typeof ExamplesTodoRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -177,12 +237,15 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  ApiCacheRoute: ApiCacheRoute,
-  ApiCacheHttpApiRoute: ApiCacheHttpApiRoute,
-  ApiCacheQueryRoute: ApiCacheQueryRoute,
-  CounterRoute: CounterRoute,
-  StopwatchRoute: StopwatchRoute,
-  TodoRoute: TodoRoute,
+  DocsSlugRoute: DocsSlugRoute,
+  ExamplesApiCacheRoute: ExamplesApiCacheRoute,
+  ExamplesApiCacheHttpApiRoute: ExamplesApiCacheHttpApiRoute,
+  ExamplesApiCacheQueryRoute: ExamplesApiCacheQueryRoute,
+  ExamplesCounterRoute: ExamplesCounterRoute,
+  ExamplesStopwatchRoute: ExamplesStopwatchRoute,
+  ExamplesTodoRoute: ExamplesTodoRoute,
+  DocsIndexRoute: DocsIndexRoute,
+  ExamplesIndexRoute: ExamplesIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

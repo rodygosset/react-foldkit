@@ -1,6 +1,6 @@
 import { Option, Schema } from 'effect'
 import { type Update } from 'foldkit'
-import { evo } from 'foldkit/struct'
+import { modifyFields } from 'foldkit/struct'
 import type { View as SubmodelView } from 'foldkit/submodel'
 
 import {
@@ -42,7 +42,7 @@ export const init = (config: InitConfig): Model => baseInit(config)
  *  design. Clear the selection by toggling each value off. */
 export const update = makeUpdate<Model>({
   handleClose: model => ({
-    model: evo(closedBaseModel(model), { inputValue: () => '' }),
+    model: modifyFields(closedBaseModel(model), { inputValue: () => '' }),
   }),
 
   handleSelectedItem: (model, item) => ({
@@ -59,7 +59,8 @@ export const update = makeUpdate<Model>({
 type UpdateReturn = ReturnType<typeof update>
 
 /** Programmatically opens the Combobox, updating the Model and returning
- *  focus and modal Commands. Use this in domain-event handlers. */
+ *  focus and modal Commands. When it is already open, returns the Model
+ *  unchanged with no Commands. Use this in domain-event handlers. */
 export const open = (model: Model): UpdateReturn =>
   update(model, Message.Opened({ maybeActiveItemIndex: Option.none() }))
 

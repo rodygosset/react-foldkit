@@ -1,5 +1,5 @@
 import { Effect, Layer, Match, String } from 'effect'
-import { HttpClient, HttpClientResponse } from 'effect/unstable/http'
+import { HttpClient, HttpClientResponse } from 'effect/http'
 import { Command, given, message, model, story } from 'foldkit/story'
 import { expect, test } from 'vitest'
 
@@ -9,7 +9,7 @@ import {
   mockWeatherResponse,
   weatherData,
   weatherModel,
-} from './main.fixtures'
+} from './main.fixture'
 
 test('submitting the weather form fetches weather and shows result', () => {
   story(

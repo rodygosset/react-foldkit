@@ -575,9 +575,7 @@ export const toDate = (self: DateTime.DateTime): Date => {
     Number(parts[3].value),
     Number(parts[4].value),
     Number(parts[5].value),
-    parts[6]?.type === "fractionalSecond"
-      ? Number(parts[6].value)
-      : ((self.epochMilliseconds % 1000) + 1000) % 1000
+    Number(parts[6].value)
   )
   self.adjustedEpochMilliseconds = date.getTime()
   return date

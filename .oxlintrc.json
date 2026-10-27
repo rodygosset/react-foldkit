@@ -38,6 +38,15 @@
 			}
 		},
 		{
+			"files": ["apps/web/plugins/**"],
+			"rules": {
+				// The docs site's content plugin runs in Node at build time. It follows Vite's
+				// Promise-based hook API and reads the Markdown and source files from disk.
+				"effecttsgo/async-function": "off",
+				"effecttsgo/node-builtin-import": "off"
+			}
+		},
+		{
 			"files": ["packages/react-foldkit/test/package/**"],
 			"rules": {
 				// Built-package tests read the emitted files in dist at the Node filesystem boundary.
@@ -79,11 +88,14 @@
 		{
 			"files": [
 				"packages/react-foldkit/src/query.test.ts",
-				"apps/web/src/examples/api-cache-http-api/**"
+				"apps/web/src/examples/api-cache-http-api/**",
+				"apps/web/src/site/application.ts",
+				"apps/web/src/site/program.ts"
 			],
 			"rules": {
 				// Deliberate exercise of the unstable effect/http-api surface
-				// in tests and the http-api example.
+				// in tests and the http-api example. The docs site keeps its
+				// theme in the unstable effect/persistence KeyValueStore.
 				"effecttsgo/unstable-api-usage": "off"
 			}
 		}

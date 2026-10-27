@@ -36,7 +36,8 @@ All prose follows [the writing guide](docs/writing.md). This is required, not a 
 - The public barrels define the exports.
 - Don't reexport Foldkit vocabulary. Applications import it from `foldkit`, a peer dependency. `react-foldkit/scene` is the one exception. It reexports `foldkit/scene` and adapts the Scene runner, so a test moves to Foldkit by changing one import.
 - Follow [the JSDoc playbook](docs/jsdocPlaybook.md) for exported code.
-- Name implementation files and directories in camelCase. Name public ESLint rules in dash-case. Don't rename web app files. `check:filenames` checks the package names.
+- Name implementation files and directories in camelCase. Name public ESLint rules in dash-case. `check:filenames` checks the package names.
+- Name files in `apps/web` in kebab-case, like the files already there.
 - Don't edit `routeTree.gen.ts`, `dist`, `eslint/dist`, `.release`, or generated docs by hand. After an API or JSDoc change, build, run `docs:generate`, and review the generated diff.
 - Define HttpApi-backed Queries with `Query.define`, and read the client service inside `execute`.
 
@@ -51,7 +52,8 @@ To move to a new Foldkit release:
 1. Pin the same version in `packages/react-foldkit` and `apps/web`, and set the peer ranges to the versions you tested.
 2. Update the version in `scripts/checkDevToolsVendor.mjs`, then run `node scripts/checkDevToolsVendor.mjs --apply --write-lock` from `packages/react-foldkit`.
 3. Update the version in `scripts/sceneVendorManifest.json`. Copy any changed upstream Scene file over its `*.upstream.js` copy, record its new hash, and run `node scripts/checkSceneVendor.mjs --write`.
-4. Run `check:vendor`, `check:devtools-vendor`, and the full checks.
+4. Replace `repos/foldkit` with the tracked files of the release's `foldkit@<version>` tag, so agents read the source you install. Do the same for `repos/effect` when the `effect` version changes.
+5. Run `check:vendor`, `check:devtools-vendor`, and the full checks.
 
 ## Prepare releases
 

@@ -12,7 +12,7 @@
 		"typecheck": "turbo typecheck",
 		"test": "turbo test",
 		"prepare": "effect-tsgo patch --typescript --oxlint",
-		"check": "bun run build --filter=react-foldkit && bun run typecheck && bun run test --filter=react-foldkit && bun run lint && bun run --filter=react-foldkit test:types:package && bun run --filter=react-foldkit test:types:example && bun run --filter=react-foldkit test:package:built && bun run --filter=react-foldkit check:docs && bun run --filter=react-foldkit check:api",
+		"check": "bun run build --filter=react-foldkit && bun run typecheck && bun run test --filter=react-foldkit && bun run --filter=web test && bun run lint && bun run --filter=react-foldkit test:types:package && bun run --filter=react-foldkit test:types:example && bun run --filter=react-foldkit test:package:built && bun run --filter=react-foldkit check:docs && bun run --filter=react-foldkit check:api",
 		"check:release": "bun run check && bun run --filter=react-foldkit test:browser:cold && bun run --filter=react-foldkit test:consumer && bun run --filter=web build",
 		"changeset": "changeset",
 		"version:packages": "changeset version",

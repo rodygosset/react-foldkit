@@ -134,7 +134,6 @@ export const protocol = McpProtocol.make({
               protocolVersion: McpSchema.protocolVersion,
               capabilities: ({
                 experimental: result.capabilities.experimental,
-                extensions: result.capabilities.extensions,
                 logging: result.capabilities.logging ? {} : undefined,
                 completions: result.capabilities.completions ? {} : undefined,
                 prompts: result.capabilities.prompts,

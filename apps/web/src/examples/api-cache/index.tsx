@@ -313,8 +313,7 @@ function View() {
 
 	return (
 		<ApiCacheLayout
-			title="API Cache"
-			description="Query client patterns as ordinary Model state, update logic, and one Subscription."
+			slug="api-cache"
 			activeTab={activeTab}
 			onSelectTab={(tab) => send.ClickedTab({ tab })}
 		>

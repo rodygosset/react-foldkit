@@ -18,8 +18,8 @@ The examples below come from the [todo demo](https://github.com/rodygosset/react
 Validate the search with the same Schema the Model uses:
 
 ```ts
-// routes/todo.tsx
-export const Route = createFileRoute("/todo")({
+// routes/examples/todo.tsx
+export const Route = createFileRoute("/examples/todo")({
 	validateSearch: TodoSearch.pipe(Schema.toStandardSchemaV1),
 	component: Todo,
 })
@@ -28,7 +28,7 @@ export const Route = createFileRoute("/todo")({
 The route component passes the first value to `init`. `useInbound` sends every later change as a Message:
 
 ```tsx
-const todoRoute = getRouteApi("/todo")
+const todoRoute = getRouteApi("/examples/todo")
 
 function SyncFilter({ filter, children }: { readonly filter: Filter; readonly children: React.ReactNode }) {
 	useInbound(filter, (next) => Message.ChangedFilter({ filter: next }))
@@ -61,39 +61,40 @@ ChangedFilter: ({ filter }) => ({ model: modifyFields(model, { filter: () => fil
 A user click needs no Message of its own. Render the router's `<Link>`, and the change comes back through `useInbound`:
 
 ```tsx
-<Link to="/todo" search={{ filter: "active" }} />
+<Link to="/examples/todo" search={{ filter: "active" }} />
 ```
 
 ## Change the URL from update
 
-Keep one router instance in its own module, so a Command can reach it:
+Keep one router instance in its own module, so a Command can reach it. On the server, build a new router for each request instead. Server rendering handles requests at the same time, and a shared router would mix their state:
 
 ```ts
 // router.tsx
 let router: AppRouter | undefined
 
 export function getRouter(): AppRouter {
-	if (router === undefined) {
-		router = createAppRouter()
-	}
+	if (typeof window === "undefined") return createAppRouter()
+	router ??= createAppRouter()
 	return router
 }
 ```
+
+Commands run only in the browser, so they always get the shared router.
 
 Define a Command that calls `navigate`:
 
 ```ts
 const NavigateFilter = Command.define("NavigateFilter", {
 	args: { filter: Filter },
-	messages: [Message.NavigationDone],
+	messages: [Message.CompletedNavigateFilter],
 	execute: ({ filter }) =>
 		Effect.promise(() =>
 			getRouter().navigate({
-				to: "/todo",
+				to: "/examples/todo",
 				search: { filter },
 				replace: true,
 			})
-		).pipe(Effect.as(Message.NavigationDone())),
+		).pipe(Effect.as(Message.CompletedNavigateFilter())),
 })
 ```
 

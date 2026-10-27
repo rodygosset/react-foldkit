@@ -29,6 +29,24 @@ describe('injectIntoTemplate', () => {
     )
   })
 
+  it('injects the same rendered markup it validates', () => {
+    const initialHtml = rendered().html
+    const source = { html: initialHtml }
+    const application = {
+      get html() {
+        const { html } = source
+        source.html =
+          '<div data-foldkit-app="app" data-foldkit-build="build-one"><base href="https://example.com/"></div>'
+        return html
+      },
+      title: 'New Title',
+    }
+
+    const result = injectIntoTemplate(TEMPLATE, application)
+
+    expect(result).toContain(`<body>${initialHtml}</body>`)
+  })
+
   it('rejects a template with a duplicate container id', () => {
     const template =
       '<!doctype html><html lang="en"><head><title>old</title></head>' +
@@ -801,7 +819,7 @@ describe('runtime id uniqueness', () => {
     // A runtime id names one application for the whole page. Injecting two
     // default renders produced a page whose roots both answered to "app", so
     // whichever booted second would read the other's Flags payload and restore
-    // the other's HMR Model and scroll position.
+    // the other's preserved Model and scroll position.
     const first = injectIntoTemplate(
       twoRootTemplate,
       rendered({
@@ -822,9 +840,9 @@ describe('runtime id uniqueness', () => {
   })
 
   it('refuses a duplicate id for applications that declare no Flags', () => {
-    // The pairing is only one of the things a runtime id decides. HMR Model
-    // preservation and scroll restoration key on it too, so two Flags-free
-    // applications sharing one still take each other's state.
+    // The root-to-Flags pairing is only one of the things a runtime id decides.
+    // Model preservation and scroll restoration key on it too, so two
+    // Flags-free applications sharing one still take each other's state.
     const first = injectIntoTemplate(
       twoRootTemplate,
       rendered({

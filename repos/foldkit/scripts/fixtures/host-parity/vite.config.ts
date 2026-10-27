@@ -23,7 +23,11 @@ export default defineConfig(async () => {
   return {
     plugins: [
       foldkit({
-        ssr: { serverEntry: `/@fs/${SERVER_ENTRY}` },
+        ssr: {
+          serverEntry: `/@fs/${SERVER_ENTRY}`,
+          clientEntry: '/src/entry.ts',
+          build: true,
+        },
       }),
     ],
     resolve: {

@@ -15,15 +15,11 @@ import * as Dom from 'foldkit/dom'
 import type { ChildAttribute, Html } from 'foldkit/html'
 import { defineMessageUnion } from 'foldkit/message'
 import * as Mount from 'foldkit/mount'
-import { makeConstrainedEvo } from 'foldkit/struct'
+import { makeModifyFieldsFor } from 'foldkit/struct'
 import { type View as SubmodelView, defineView } from 'foldkit/submodel'
 import * as Update from 'foldkit/update'
 
-import {
-  AnchorConfig,
-  anchorSetup,
-  portalToContainingRoot,
-} from '../anchor/index.js'
+import { AnchorConfig, anchorSetup, portalBackdrop } from '../anchor/index.js'
 // NOTE: Animation imports are split across schema + update to avoid a circular
 // dependency: animation → html → runtime → devtools → listbox → animation.
 // The barrel (../animation) imports from html, which starts the cycle.
@@ -130,6 +126,7 @@ export const Message = defineMessageUnion({
   CompletedFocusItems: {},
   CompletedScrollIntoView: {},
   CompletedClickItem: {},
+  ClickedButton: {},
   IgnoredMouseClick: {},
   SuppressedSpaceScroll: {},
   SuppressedItemCommit: {},
@@ -153,6 +150,8 @@ export type RequestedItemClick = typeof Message.RequestedItemClick.Type
 export type Searched = typeof Message.Searched.Type
 export type CompletedDelayClearSearch =
   typeof Message.CompletedDelayClearSearch.Type
+/** A click on the Listbox trigger button. */
+export type ClickedButton = typeof Message.ClickedButton.Type
 export type IgnoredMouseClick = typeof Message.IgnoredMouseClick.Type
 export type SuppressedSpaceScroll = typeof Message.SuppressedSpaceScroll.Type
 export type SuppressedItemCommit = typeof Message.SuppressedItemCommit.Type
@@ -202,10 +201,10 @@ export const itemId = (id: string, index: number): string =>
 
 // HELPERS
 
-const constrainedEvo = makeConstrainedEvo<BaseModel>()
+const modifyBaseFields = makeModifyFieldsFor<BaseModel>()
 
 export const closedModel = <Model extends BaseModel>(model: Model): Model =>
-  constrainedEvo(model, {
+  modifyBaseFields(model, {
     isOpen: () => false,
     maybeActiveItemIndex: () => Option.none(),
     searchQuery: () => '',
@@ -306,21 +305,21 @@ export const DelayClearSearch = Command.define('DelayClearSearch', {
 export const DetectMovementOrAnimationEnd = Command.define(
   'DetectMovementOrAnimationEnd',
   {
-    args: { id: Schema.String },
+    args: { id: Schema.String, generation: Schema.Number },
     messages: [Message.GotAnimationMessage],
-    execute: ({ id }) =>
+    execute: ({ id, generation }) =>
       Effect.raceFirst(
         Dom.detectElementMovement(buttonSelector(id)).pipe(
           Effect.as(
             Message.GotAnimationMessage({
-              message: Animation.Message.EndedAnimation(),
+              message: Animation.Message.EndedAnimation({ generation }),
             }),
           ),
         ),
         Dom.waitForAnimationSettled(itemsSelector(id)).pipe(
           Effect.as(
             Message.GotAnimationMessage({
-              message: Animation.Message.EndedAnimation(),
+              message: Animation.Message.EndedAnimation({ generation }),
             }),
           ),
         ),
@@ -341,10 +340,12 @@ export const makeUpdate = <Model extends BaseModel>(
   const foldAnimationOutMessage = Animation.OutMessage.match<
     Update.Step<Model, Message>
   >({
-    StartedLeaveAnimating: () => model => ({
-      model,
-      commands: [DetectMovementOrAnimationEnd({ id: model.id })],
-    }),
+    StartedLeaveAnimating:
+      ({ generation }) =>
+      model => ({
+        model,
+        commands: [DetectMovementOrAnimationEnd({ id: model.id, generation })],
+      }),
     TransitionedOut: () => model => ({ model }),
   })
 
@@ -352,7 +353,7 @@ export const makeUpdate = <Model extends BaseModel>(
     update: animationUpdate,
     read: (model: Model) => Option.some(model.animation),
     write: (model, nextAnimation) =>
-      constrainedEvo(model, { animation: () => nextAnimation }),
+      modifyBaseFields(model, { animation: () => nextAnimation }),
     toParentMessage: message => Message.GotAnimationMessage({ message }),
     foldOutMessage: foldAnimationOutMessage,
   })
@@ -361,7 +362,7 @@ export const makeUpdate = <Model extends BaseModel>(
     update: animationShow,
     read: (model: Model) => Option.some(model.animation),
     write: (model, nextAnimation) =>
-      constrainedEvo(model, { animation: () => nextAnimation }),
+      modifyBaseFields(model, { animation: () => nextAnimation }),
     toParentMessage: message => Message.GotAnimationMessage({ message }),
   })
 
@@ -369,7 +370,7 @@ export const makeUpdate = <Model extends BaseModel>(
     update: animationHide,
     read: (model: Model) => Option.some(model.animation),
     write: (model, nextAnimation) =>
-      constrainedEvo(model, { animation: () => nextAnimation }),
+      modifyBaseFields(model, { animation: () => nextAnimation }),
     toParentMessage: message => Message.GotAnimationMessage({ message }),
   })
 
@@ -385,13 +386,13 @@ export const makeUpdate = <Model extends BaseModel>(
         }),
         foldAnimationShow,
         stepModel => ({
-          model: constrainedEvo(stepModel, { isOpen: () => true }),
+          model: modifyBaseFields(stepModel, { isOpen: () => true }),
         }),
       ])
     }
 
     return {
-      model: constrainedEvo(baseModel, { isOpen: () => true }),
+      model: modifyBaseFields(baseModel, { isOpen: () => true }),
       commands: openCommands,
     }
   }
@@ -457,9 +458,13 @@ export const makeUpdate = <Model extends BaseModel>(
       SuppressedItemCommit: () => ({ model }),
       CompletedAnchorListbox: () => ({ model }),
       CompletedPortalListboxBackdrop: () => ({ model }),
-      Opened: ({ maybeActiveItemIndex }) =>
-        openListbox(
-          constrainedEvo(model, {
+      Opened: ({ maybeActiveItemIndex }) => {
+        if (model.isOpen) {
+          return { model }
+        }
+
+        return openListbox(
+          modifyBaseFields(model, {
             maybeActiveItemIndex: () => maybeActiveItemIndex,
             activationTrigger: () =>
               Option.match(maybeActiveItemIndex, {
@@ -471,7 +476,8 @@ export const makeUpdate = <Model extends BaseModel>(
             maybeLastPointerPosition: () => Option.none(),
           }),
           openCommands,
-        ),
+        )
+      },
 
       Closed: () => closeListbox(model, closeWithFocusCommands),
 
@@ -486,7 +492,7 @@ export const makeUpdate = <Model extends BaseModel>(
       },
 
       ActivatedItem: ({ index, activationTrigger }) => ({
-        model: constrainedEvo(model, {
+        model: modifyBaseFields(model, {
           maybeActiveItemIndex: () => Option.some(index),
           activationTrigger: () => activationTrigger,
         }),
@@ -508,7 +514,7 @@ export const makeUpdate = <Model extends BaseModel>(
         }
 
         return {
-          model: constrainedEvo(model, {
+          model: modifyBaseFields(model, {
             maybeActiveItemIndex: () => Option.some(index),
             activationTrigger: () => 'Pointer' as const,
             maybeLastPointerPosition: () => Option.some({ screenX, screenY }),
@@ -519,7 +525,7 @@ export const makeUpdate = <Model extends BaseModel>(
       DeactivatedItem: () =>
         model.activationTrigger === 'Pointer'
           ? {
-              model: constrainedEvo(model, {
+              model: modifyBaseFields(model, {
                 maybeActiveItemIndex: () => Option.none(),
               }),
             }
@@ -549,7 +555,7 @@ export const makeUpdate = <Model extends BaseModel>(
         const nextSearchVersion = Number.increment(model.searchVersion)
 
         return {
-          model: constrainedEvo(model, {
+          model: modifyBaseFields(model, {
             searchQuery: () => nextSearchQuery,
             searchVersion: () => nextSearchVersion,
             maybeActiveItemIndex: () =>
@@ -564,14 +570,16 @@ export const makeUpdate = <Model extends BaseModel>(
           return { model }
         }
 
-        return { model: constrainedEvo(model, { searchQuery: () => '' }) }
+        return {
+          model: modifyBaseFields(model, { searchQuery: () => '' }),
+        }
       },
 
       GotAnimationMessage: ({ message: animationMessage }) =>
         foldAnimation(model, animationMessage),
 
       PressedPointerOnButton: ({ pointerType, button }) => {
-        const withPointerType = constrainedEvo(model, {
+        const withPointerType = modifyBaseFields(model, {
           maybeLastButtonPointerType: () => Option.some(pointerType),
         })
 
@@ -583,7 +591,7 @@ export const makeUpdate = <Model extends BaseModel>(
           return Update.combine(withPointerType, [
             stepModel => closeListbox(stepModel, closeWithFocusCommands),
             stepModel => ({
-              model: constrainedEvo(stepModel, {
+              model: modifyBaseFields(stepModel, {
                 maybeLastButtonPointerType: () => Option.some(pointerType),
               }),
             }),
@@ -591,7 +599,7 @@ export const makeUpdate = <Model extends BaseModel>(
         }
 
         return openListbox(
-          constrainedEvo(withPointerType, {
+          modifyBaseFields(withPointerType, {
             maybeActiveItemIndex: () => Option.none(),
             activationTrigger: () => 'Pointer' as const,
             searchQuery: () => '',
@@ -603,10 +611,36 @@ export const makeUpdate = <Model extends BaseModel>(
       },
 
       IgnoredMouseClick: () => ({
-        model: constrainedEvo(model, {
+        model: modifyBaseFields(model, {
           maybeLastButtonPointerType: () => Option.none(),
         }),
       }),
+      ClickedButton: () => {
+        if (
+          Option.exists(model.maybeLastButtonPointerType, Equal.equals('mouse'))
+        ) {
+          return {
+            model: modifyBaseFields(model, {
+              maybeLastButtonPointerType: () => Option.none(),
+            }),
+          }
+        }
+
+        if (model.isOpen) {
+          return closeListbox(model, closeWithFocusCommands)
+        }
+
+        return openListbox(
+          modifyBaseFields(model, {
+            maybeActiveItemIndex: () => Option.none(),
+            activationTrigger: () => 'Pointer',
+            searchQuery: () => '',
+            searchVersion: () => 0,
+            maybeLastPointerPosition: () => Option.none(),
+          }),
+          openCommands,
+        )
+      },
     })
   }
 
@@ -615,8 +649,9 @@ export const makeUpdate = <Model extends BaseModel>(
 
 /** The anchor-positioning Mount this Listbox renders on its items panel.
  *  The panel is always anchored to the button via Floating UI and portaled
- *  to the document body (opt out of portaling with `anchor.portal: false`),
- *  so it escapes ancestor stacking contexts and overflow clipping.
+ *  to the document body, or into the enclosing `<dialog>` when there is one
+ *  (opt out of portaling with `anchor.portal: false`), so it escapes ancestor
+ *  stacking contexts and overflow clipping.
  *
  *  It also carries the open-focus for the anchored panel. An anchored panel
  *  renders `visibility: hidden` until Floating UI resolves its first position,
@@ -654,7 +689,7 @@ export const PortalListboxBackdrop = Mount.define('PortalListboxBackdrop', {
   execute: ({ element }) =>
     Effect.gen(function* () {
       yield* Effect.acquireRelease(
-        Effect.sync(() => portalToContainingRoot(element)),
+        Effect.sync(() => portalBackdrop(element)),
         cleanup => Effect.sync(cleanup),
       )
       return Message.CompletedPortalListboxBackdrop()
@@ -777,7 +812,6 @@ export const makeView = <Model extends BaseModel>(behavior: ViewBehavior) => {
         animation: { transitionState },
         maybeActiveItemIndex,
         searchQuery,
-        maybeLastButtonPointerType,
       } = model
 
       const {
@@ -929,21 +963,6 @@ export const makeView = <Model extends BaseModel>(behavior: ViewBehavior) => {
       ): Option.Option<Message> =>
         Option.some(Message.PressedPointerOnButton({ pointerType, button }))
 
-      const handleButtonClick = (): Message => {
-        const isMouse = Option.exists(
-          maybeLastButtonPointerType,
-          type => type === 'mouse',
-        )
-
-        if (isMouse) {
-          return Message.IgnoredMouseClick()
-        } else if (isOpen) {
-          return Message.Closed()
-        } else {
-          return Message.Opened({ maybeActiveItemIndex: Option.none() })
-        }
-      }
-
       const handleSpaceKeyUp = (key: string): Option.Option<Message> =>
         OptionExt.when(key === ' ', Message.SuppressedSpaceScroll())
 
@@ -1030,7 +1049,7 @@ export const makeView = <Model extends BaseModel>(behavior: ViewBehavior) => {
         h.Type('button'),
         h.AriaHasPopup('listbox'),
         h.AriaExpanded(isVisible),
-        h.AriaControls(`${id}-items`),
+        ...(isVisible ? [h.AriaControls(`${id}-items`)] : []),
         ...buttonLabelAttributes,
         ...(isButtonEffectivelyDisabled
           ? [h.AriaDisabled(true), h.DataAttribute('disabled', '')]
@@ -1038,7 +1057,7 @@ export const makeView = <Model extends BaseModel>(behavior: ViewBehavior) => {
               h.OnPointerDown(handleButtonPointerDown),
               h.OnKeyDownPreventDefault(handleButtonKeyDown),
               h.OnKeyUpPreventDefault(handleSpaceKeyUp),
-              h.OnClick(handleButtonClick()),
+              h.OnClick(Message.ClickedButton()),
             ]),
         ...(isVisible
           ? [
@@ -1076,7 +1095,7 @@ export const makeView = <Model extends BaseModel>(behavior: ViewBehavior) => {
           : []),
         h.AriaLabelledBy(`${id}-button`),
         ...maybeActiveDescendant,
-        h.Tabindex(0),
+        h.Tabindex(-1),
         ...anchorAttributes,
         ...animationAttributes,
         ...(isLeaving
