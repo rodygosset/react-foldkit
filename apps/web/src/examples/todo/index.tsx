@@ -44,15 +44,15 @@ const Message = defineMessageUnion({
 	ClickedRetryLoad: {},
 	/** The route search changed, e.g. through a filter link or browser history. */
 	ChangedFilter: { filter: Filter },
-	/** Silent ack from the NavigateFilter Command — Model already updated in update. */
-	NavigationDone: {},
+	/** The NavigateFilter Command finished. update already changed the Model, so it does nothing. */
+	CompletedNavigateFilter: {},
 	SettledFetchTodos: {
 		result: Schema.Result(Schema.Array(TodoItem), Schema.String),
 	},
 	SettledWriteTodos: {
 		result: Schema.Result(Schema.Array(TodoItem), Schema.String),
 	},
-	SettledClearCompleted: {
+	SettledPersistClearCompleted: {
 		result: Schema.Result(Schema.Array(TodoItem), Schema.String),
 	},
 })
@@ -87,10 +87,10 @@ const startFetch = (model: Model): UpdateReturn =>
 		onSome: (next) => ({ model: modifyFields(model, { items: () => next }), commands: [FetchTodos()] }),
 	})
 
-/** Programmatic URL writes — the only place that calls `router.navigate`. */
+/** Writes the filter to the URL. This is the only place that calls `router.navigate`. */
 const NavigateFilter = Command.define("NavigateFilter", {
 	args: { filter: Filter },
-	messages: [Message.NavigationDone],
+	messages: [Message.CompletedNavigateFilter],
 	execute: ({ filter }) =>
 		Effect.promise(() =>
 			getRouter().navigate({
@@ -98,7 +98,7 @@ const NavigateFilter = Command.define("NavigateFilter", {
 				search: { filter },
 				replace: true,
 			})
-		).pipe(Effect.as(Message.NavigationDone())),
+		).pipe(Effect.as(Message.CompletedNavigateFilter())),
 })
 
 /** Runs a repository call, keeping its failure as a user-facing message in the Result. */
@@ -151,10 +151,10 @@ const PersistRemove = Command.define("PersistRemove", {
 })
 
 const PersistClearCompleted = Command.define("PersistClearCompleted", {
-	messages: [Message.SettledClearCompleted],
+	messages: [Message.SettledPersistClearCompleted],
 	execute: callRepository("Couldn’t clear completed", (repo) =>
 		repo.updateTodos((todos) => todos.filter((item) => !item.done))
-	).pipe(Effect.map((result) => Message.SettledClearCompleted({ result }))),
+	).pipe(Effect.map((result) => Message.SettledPersistClearCompleted({ result }))),
 })
 
 /** Seeds the filter from the route search. Later search changes arrive as `ChangedFilter`. */
@@ -194,10 +194,10 @@ const update = (model: Model, message: Message): UpdateReturn =>
 		RemovedItem: ({ id }) => withRevalidate(model, PersistRemove({ id })),
 		ClickedClearCompleted: () => withRevalidate(model, PersistClearCompleted()),
 		ClickedRetryLoad: () => startFetch(model),
-		NavigationDone: () => ({ model }),
+		CompletedNavigateFilter: () => ({ model }),
 		SettledFetchTodos: ({ result }) => ({ model: applySettledItems(model, result) }),
 		SettledWriteTodos: ({ result }) => ({ model: applySettledItems(model, result) }),
-		SettledClearCompleted({ result }) {
+		SettledPersistClearCompleted({ result }) {
 			const next = applySettledItems(model, result)
 			if (model.filter === "completed" && Result.isSuccess(result)) {
 				return {

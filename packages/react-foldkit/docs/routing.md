@@ -86,7 +86,7 @@ Define a Command that calls `navigate`:
 ```ts
 const NavigateFilter = Command.define("NavigateFilter", {
 	args: { filter: Filter },
-	messages: [Message.NavigationDone],
+	messages: [Message.CompletedNavigateFilter],
 	execute: ({ filter }) =>
 		Effect.promise(() =>
 			getRouter().navigate({
@@ -94,7 +94,7 @@ const NavigateFilter = Command.define("NavigateFilter", {
 				search: { filter },
 				replace: true,
 			})
-		).pipe(Effect.as(Message.NavigationDone())),
+		).pipe(Effect.as(Message.CompletedNavigateFilter())),
 })
 ```
 

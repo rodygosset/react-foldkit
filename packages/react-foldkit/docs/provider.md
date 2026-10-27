@@ -6,8 +6,8 @@ The examples use the counter from [Get started](../README.md#run-a-program-in-re
 
 ```ts
 const WaitToIncrement = Command.define("WaitToIncrement", {
-  messages: [Message.CompletedDelay],
-  execute: Effect.sleep("1 second").pipe(Effect.as(Message.CompletedDelay())),
+  messages: [Message.CompletedWaitToIncrement],
+  execute: Effect.sleep("1 second").pipe(Effect.as(Message.CompletedWaitToIncrement())),
 })
 ```
 
@@ -41,7 +41,7 @@ const Counter = Application.define(counter, {
 })
 ```
 
-Without any option, a stopped `WaitToIncrement` is dropped, and `update` never receives `CompletedDelay`.
+Without any option, a stopped `WaitToIncrement` is dropped, and `update` never receives `CompletedWaitToIncrement`.
 
 ## Send changing values with `useInbound`
 
