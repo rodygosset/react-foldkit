@@ -10,7 +10,7 @@
 		"url": "https://github.com/rodygosset/react-foldkit.git",
 		"directory": "packages/react-foldkit"
 	},
-	"homepage": "https://github.com/rodygosset/react-foldkit#readme",
+	"homepage": "https://react-foldkit.vercel.app",
 	"bugs": {
 		"url": "https://github.com/rodygosset/react-foldkit/issues"
 	},
