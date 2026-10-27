@@ -35,7 +35,7 @@ const installId = "virtual:install-command"
 
 /**
  * The light code theme, built from Foldkit's colors: View blue, Message violet, update amber,
- * Model teal, and Command coral. Dark mode uses Shiki's Vesper theme.
+ * Model teal, and Command coral. Dark mode uses `foldkitDark`.
  */
 const foldkitLight: ThemeRegistration = {
 	name: "foldkit-light",
@@ -80,17 +80,44 @@ const foldkitLight: ThemeRegistration = {
 	],
 }
 
+/**
+ * The dark code theme from the Foldkit website, `0x96f-dark` in its `shikiTheme.ts`. The site's
+ * CSS sets the code background, so only the token colors apply.
+ */
+const foldkitDark: ThemeRegistration = {
+	name: "foldkit-dark",
+	type: "dark",
+	colors: { "editor.background": "#1c1a20", "editor.foreground": "#E0DEE6" },
+	tokenColors: [
+		{ scope: ["comment", "punctuation.definition.comment"], settings: { foreground: "#8A869C" } },
+		{ scope: ["keyword", "storage", "storage.type"], settings: { foreground: "#FF7272" } },
+		{ scope: ["keyword.control.import", "keyword.control.from"], settings: { foreground: "#FF7272" } },
+		{ scope: ["string", "punctuation.definition.string"], settings: { foreground: "#BCDF59" } },
+		{
+			scope: ["constant", "constant.numeric", "variable.language", "support.constant"],
+			settings: { foreground: "#49CAE4" },
+		},
+		{ scope: ["entity.name", "entity.name.function", "support.function"], settings: { foreground: "#A093E2" } },
+		{ scope: ["variable.parameter", "variable.other"], settings: { foreground: "#FFCA58" } },
+		{ scope: ["entity.name.type", "support.type", "support.class"], settings: { foreground: "#49CAE4" } },
+		{ scope: ["entity.name.tag"], settings: { foreground: "#BCDF59" } },
+		{ scope: ["entity.other.attribute-name"], settings: { foreground: "#FFCA58" } },
+		{ scope: ["punctuation", "keyword.operator"], settings: { foreground: "#9E9BAA" } },
+		{ scope: ["variable.other.property"], settings: { foreground: "#E0DEE6" } },
+	],
+}
+
 let highlighterPromise: Promise<Highlighter> | undefined
 
 const getHighlighter = () =>
-	(highlighterPromise ??= createHighlighter({ themes: [foldkitLight, "vesper"], langs: [...languages] }))
+	(highlighterPromise ??= createHighlighter({ themes: [foldkitLight, foldkitDark], langs: [...languages] }))
 
 async function highlight(code: string, lang: string): Promise<string> {
 	const highlighter = await getHighlighter()
 	const known = (languages as ReadonlyArray<string>).includes(lang)
 	return highlighter.codeToHtml(code, {
 		lang: known ? lang : "text",
-		themes: { light: "foldkit-light", dark: "vesper" },
+		themes: { light: "foldkit-light", dark: "foldkit-dark" },
 		defaultColor: false,
 	})
 }
