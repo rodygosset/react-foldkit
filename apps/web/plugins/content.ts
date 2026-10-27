@@ -18,7 +18,7 @@ import remarkParse from "remark-parse"
 import remarkRehype from "remark-rehype"
 import rehypeSlug from "rehype-slug"
 import { createHighlighter } from "shiki"
-import type { Highlighter, ThemeRegistration } from "shiki"
+import type { Highlighter } from "shiki"
 import { unified } from "unified"
 import { visit } from "unist-util-visit"
 import type { Plugin } from "vite"
@@ -33,91 +33,17 @@ const guidesId = "virtual:guides"
 const guidePrefix = "virtual:guide/"
 const installId = "virtual:install-command"
 
-/**
- * The light code theme, built from Foldkit's colors: View blue, Message violet, update amber,
- * Model teal, and Command coral. Dark mode uses `foldkitDark`.
- */
-const foldkitLight: ThemeRegistration = {
-	name: "foldkit-light",
-	type: "light",
-	colors: { "editor.background": "#00000000", "editor.foreground": "#1e2331" },
-	tokenColors: [
-		{
-			scope: ["comment", "punctuation.definition.comment"],
-			settings: { foreground: "#8a90a0", fontStyle: "italic" },
-		},
-		{
-			scope: [
-				"keyword",
-				"storage",
-				"storage.type",
-				"storage.modifier",
-				"keyword.operator.new",
-				"keyword.operator.expression",
-			],
-			settings: { foreground: "#7445d1" },
-		},
-		{ scope: ["string", "string.template", "punctuation.definition.string"], settings: { foreground: "#0d7f72" } },
-		{
-			scope: ["entity.name.function", "support.function", "meta.function-call entity.name.function"],
-			settings: { foreground: "#2867c9" },
-		},
-		{ scope: ["constant.numeric", "constant.language", "variable.parameter"], settings: { foreground: "#9a6200" } },
-		{
-			scope: [
-				"entity.name.type",
-				"support.type",
-				"support.class",
-				"entity.name.class",
-				"entity.name.tag",
-				"support.class.component",
-			],
-			settings: { foreground: "#c2452b" },
-		},
-		{ scope: ["punctuation", "meta.brace", "keyword.operator"], settings: { foreground: "#5d6474" } },
-		{ scope: ["markup.deleted"], settings: { foreground: "#c2452b" } },
-		{ scope: ["markup.inserted"], settings: { foreground: "#0d7f72" } },
-	],
-}
-
-/**
- * The dark code theme from the Foldkit website, `0x96f-dark` in its `shikiTheme.ts`. The site's
- * CSS sets the code background, so only the token colors apply.
- */
-const foldkitDark: ThemeRegistration = {
-	name: "foldkit-dark",
-	type: "dark",
-	colors: { "editor.background": "#1c1a20", "editor.foreground": "#E0DEE6" },
-	tokenColors: [
-		{ scope: ["comment", "punctuation.definition.comment"], settings: { foreground: "#8A869C" } },
-		{ scope: ["keyword", "storage", "storage.type"], settings: { foreground: "#FF7272" } },
-		{ scope: ["keyword.control.import", "keyword.control.from"], settings: { foreground: "#FF7272" } },
-		{ scope: ["string", "punctuation.definition.string"], settings: { foreground: "#BCDF59" } },
-		{
-			scope: ["constant", "constant.numeric", "variable.language", "support.constant"],
-			settings: { foreground: "#49CAE4" },
-		},
-		{ scope: ["entity.name", "entity.name.function", "support.function"], settings: { foreground: "#A093E2" } },
-		{ scope: ["variable.parameter", "variable.other"], settings: { foreground: "#FFCA58" } },
-		{ scope: ["entity.name.type", "support.type", "support.class"], settings: { foreground: "#49CAE4" } },
-		{ scope: ["entity.name.tag"], settings: { foreground: "#BCDF59" } },
-		{ scope: ["entity.other.attribute-name"], settings: { foreground: "#FFCA58" } },
-		{ scope: ["punctuation", "keyword.operator"], settings: { foreground: "#9E9BAA" } },
-		{ scope: ["variable.other.property"], settings: { foreground: "#E0DEE6" } },
-	],
-}
-
 let highlighterPromise: Promise<Highlighter> | undefined
 
 const getHighlighter = () =>
-	(highlighterPromise ??= createHighlighter({ themes: [foldkitLight, foldkitDark], langs: [...languages] }))
+	(highlighterPromise ??= createHighlighter({ themes: ["github-light", "github-dark"], langs: [...languages] }))
 
 async function highlight(code: string, lang: string): Promise<string> {
 	const highlighter = await getHighlighter()
 	const known = (languages as ReadonlyArray<string>).includes(lang)
 	return highlighter.codeToHtml(code, {
 		lang: known ? lang : "text",
-		themes: { light: "foldkit-light", dark: "foldkit-dark" },
+		themes: { light: "github-light", dark: "github-dark" },
 		defaultColor: false,
 	})
 }
