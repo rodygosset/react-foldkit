@@ -14,8 +14,8 @@ describe("theme", function () {
 			message(Message.CompletedLoadTheme({ themePreference: "System", systemTheme: "Dark" })),
 			Command.expectExact(ApplyTheme({ theme: "Dark" })),
 			Command.resolve(ApplyTheme, Message.CompletedApplyTheme()),
-			model(function (model) {
-				expect(model.systemTheme).toBe("Dark")
+			model(function (nextModel) {
+				expect(nextModel.systemTheme).toBe("Dark")
 			})
 		)
 	})
@@ -67,8 +67,8 @@ describe("phone menu", function () {
 			update,
 			given(menuOpen),
 			message(Message.ChangedPath()),
-			model(function (model) {
-				expect(model.isMenuOpen).toBe(false)
+			model(function (nextModel) {
+				expect(nextModel.isMenuOpen).toBe(false)
 			})
 		)
 	})
@@ -78,8 +78,8 @@ describe("phone menu", function () {
 			update,
 			given(menuOpen),
 			message(Message.PressedEscape()),
-			model(function (model) {
-				expect(model.isMenuOpen).toBe(false)
+			model(function (nextModel) {
+				expect(nextModel.isMenuOpen).toBe(false)
 			})
 		)
 	})

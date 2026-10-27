@@ -6,6 +6,8 @@ import { CopyButton } from "./copy-button"
 export function CodeBlock(props: {
 	readonly snippetId: string
 	readonly snippet: HighlightedSnippet
+	/** The copy button's accessible name, such as "Copy React view". */
+	readonly copyLabel: string
 	readonly className?: string
 	/** Classes for the scrolling area, such as a maximum height. */
 	readonly scrollClassName?: string
@@ -24,6 +26,7 @@ export function CodeBlock(props: {
 			<CopyButton
 				snippetId={props.snippetId}
 				text={props.snippet.code}
+				label={props.copyLabel}
 				className="absolute top-2 right-2 border-border bg-background/90"
 			/>
 		</div>

@@ -3,6 +3,10 @@ import { Site } from "../application"
 import type { GuideBlock } from "../guides"
 import { CodeBlock } from "./code-block"
 
+/** How many code blocks come up to and including `index`, so each copy button gets its own name. */
+const codeNumberAt = (blocks: ReadonlyArray<GuideBlock>, index: number): number =>
+	blocks.slice(0, index + 1).filter((block) => block.kind === "code").length
+
 const isPlainClick = (event: React.MouseEvent): boolean =>
 	event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey
 
@@ -34,6 +38,7 @@ export function GuideContent(props: { readonly slug: string; readonly blocks: Re
 						key={index}
 						snippetId={`${props.slug}-${index}`}
 						snippet={block}
+						copyLabel={`Copy code example ${codeNumberAt(props.blocks, index)}`}
 						className="my-5"
 					/>
 				)

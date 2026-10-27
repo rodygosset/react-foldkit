@@ -1,4 +1,4 @@
-import { Array, Effect, Match, Number, Schema } from "effect"
+import { Array, Effect, Equal, Match, Number, Schema } from "effect"
 import * as Command from "foldkit/command"
 import { defineMessageUnion } from "foldkit/message"
 import { modifyFields } from "foldkit/struct"
@@ -36,7 +36,7 @@ export type Model = typeof Model.Type
 export const Message = defineMessageUnion({
 	ClickedAdd: { product: Product },
 	ClickedSave: {},
-	CompletedSaveCart: {},
+	CompletedSaveCart: { items: Schema.Array(Product) },
 })
 export type Message = typeof Message.Type
 
@@ -44,7 +44,7 @@ export type Message = typeof Message.Type
 export const SaveCart = Command.define("SaveCart", {
 	args: { items: Schema.Array(Product) },
 	messages: [Message.CompletedSaveCart],
-	execute: ({ items }) => Api.saveCart(items).pipe(Effect.as(Message.CompletedSaveCart())),
+	execute: ({ items }) => Api.saveCart(items).pipe(Effect.as(Message.CompletedSaveCart({ items }))),
 })
 
 const update = (model: Model, message: Message) =>
@@ -59,9 +59,9 @@ const update = (model: Model, message: Message) =>
 			model: modifyFields(model, { status: () => "Saving" }),
 			commands: [SaveCart({ items: model.items })],
 		}),
-		CompletedSaveCart: () => ({
-			model: modifyFields(model, { status: () => "Saved" }),
-		}),
+		// Items added during the save weren't in this request, so the cart stays unsaved.
+		CompletedSaveCart: ({ items }) =>
+			Equal.equals(items, model.items) ? { model: modifyFields(model, { status: () => "Saved" }) } : { model },
 	})
 
 export const initialModel: Model = { items: [], status: "Unsaved" }

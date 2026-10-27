@@ -55,6 +55,7 @@ function InstallCommand(props: { readonly snippetId: string }) {
 			<CopyButton
 				snippetId={props.snippetId}
 				text={installCommand.code}
+				label="Copy install command"
 			/>
 		</div>
 	)
@@ -130,7 +131,10 @@ function MigrationSection() {
 								className="feature-node relative rounded-xl border border-foreground/12 px-4 py-4 text-left sm:before:absolute sm:before:-top-6 sm:before:left-1/2 sm:before:h-6 sm:before:w-px sm:before:bg-foreground/15"
 							>
 								<p className="text-[15px] font-medium">{feature}</p>
-								<p className="relative mt-1 h-5 text-[13px]">
+								<p
+									aria-hidden
+									className="relative mt-1 h-5 text-[13px]"
+								>
 									<span className="status-react absolute inset-0 text-muted-foreground">
 										React state
 									</span>
@@ -172,6 +176,7 @@ function CodePanel(props: {
 			<CodeBlock
 				snippetId={props.snippetId}
 				snippet={props.snippet}
+				copyLabel={`Copy ${props.label}`}
 				className="flex-1 rounded-none border-0 bg-transparent"
 				scrollClassName="max-h-[460px] px-5 py-5"
 			/>

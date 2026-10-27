@@ -31,6 +31,7 @@ function SiteControls() {
 				<CopyButton
 					snippetId="install"
 					text={installCommand}
+					label="Copy install command"
 				/>
 			</main>
 		</SnippetCopy.Provider>
@@ -97,7 +98,7 @@ describe("copy button", function () {
 			{ update, view },
 			given(initialModel),
 
-			click(role("button", { name: "Copy code" })),
+			click(role("button", { name: "Copy install command" })),
 			Command.expectExact(SnippetCopy.CopySnippet({ snippetId: "install", text: installCommand })),
 			Command.resolve(
 				SnippetCopy.CopySnippet,
@@ -110,7 +111,7 @@ describe("copy button", function () {
 				SnippetCopy.WaitBeforeHidingCopiedIndicator,
 				SnippetCopy.Message.CompletedWaitBeforeHidingCopiedIndicator({ snippetId: "install" })
 			),
-			expect(role("button", { name: "Copy code" })).toExist()
+			expect(role("button", { name: "Copy install command" })).toExist()
 		)
 	})
 
@@ -119,9 +120,9 @@ describe("copy button", function () {
 			{ update, view },
 			given(initialModel),
 
-			click(role("button", { name: "Copy code" })),
+			click(role("button", { name: "Copy install command" })),
 			Command.resolve(SnippetCopy.CopySnippet, SnippetCopy.Message.FailedCopySnippet()),
-			expect(role("button", { name: "Copy code" })).toExist()
+			expect(role("button", { name: "Copy install command" })).toExist()
 		)
 	})
 })

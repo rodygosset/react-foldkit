@@ -146,7 +146,7 @@ export const update = (model: Model, message: Message) =>
 		ChangedPath: () => ({ model: modifyFields(model, { isMenuOpen: () => false }) }),
 		ClickedInternalLink: ({ href }) => ({ model, commands: [NavigateTo({ href })] }),
 		CompletedNavigateTo: () => ({ model }),
-		GotSnippetCopyMessage: ({ message }) => snippetCopy.fold(model, message),
+		GotSnippetCopyMessage: ({ message: snippetCopyMessage }) => snippetCopy.fold(model, snippetCopyMessage),
 	})
 
 // INIT
@@ -163,16 +163,15 @@ const init = (): UpdateReturn => ({ model: initialModel, commands: [LoadTheme()]
 // SUBSCRIPTION
 
 const subscriptions = Subscription.make<Model, Message, Services>()((entry) => ({
+	// Listens even while a theme is chosen, so choosing "System" again applies the current OS theme.
 	systemTheme: entry(
-		{ isSystemPreference: Schema.Boolean },
+		{},
 		{
-			modelToDependencies: (model) => ({ isSystemPreference: model.themePreference === "System" }),
-			dependenciesToStream: ({ isSystemPreference }) =>
-				isSystemPreference
-					? Stream.fromEventListener<MediaQueryListEvent>(matchMedia(darkSchemeQuery), "change").pipe(
-							Stream.map((event) => Message.ChangedSystemTheme({ theme: toResolvedTheme(event.matches) }))
-						)
-					: Stream.empty,
+			modelToDependencies: () => ({}),
+			dependenciesToStream: () =>
+				Stream.fromEventListener<MediaQueryListEvent>(matchMedia(darkSchemeQuery), "change").pipe(
+					Stream.map((event) => Message.ChangedSystemTheme({ theme: toResolvedTheme(event.matches) }))
+				),
 		}
 	),
 	escapeKey: entry(

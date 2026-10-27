@@ -3,6 +3,8 @@ import { Message, SaveCart, cart, initialModel } from "./program"
 import { test } from "vitest"
 import { view } from "./view"
 
+const socks = { name: "Wool socks", price: 12 }
+
 // The same steps as cart.test.tsx. Only the Scene import and the view changed.
 test("adds an item and saves the cart through a Command", function () {
 	scene(
@@ -14,10 +16,10 @@ test("adds an item and saves the cart through a Command", function () {
 		expect(role("paragraph")).toHaveText("1 in cart · €12"),
 
 		click(role("button", { name: "Save cart" })),
-		Command.expectExact(SaveCart({ items: [{ name: "Wool socks", price: 12 }] })),
+		Command.expectExact(SaveCart({ items: [socks] })),
 		expect(role("button", { name: "Saving..." })).toBeDisabled(),
 
-		Command.resolve(SaveCart, Message.CompletedSaveCart()),
+		Command.resolve(SaveCart, Message.CompletedSaveCart({ items: [socks] })),
 		expect(role("button", { name: "Saved" })).toExist()
 	)
 })

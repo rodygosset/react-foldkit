@@ -98,6 +98,7 @@ export function HeroCode() {
 				<CopyButton
 					snippetId={`hero-${activeTab}`}
 					text={active.snippet.code}
+					label={`Copy ${active.file}`}
 					className="ml-auto"
 				/>
 			</div>
